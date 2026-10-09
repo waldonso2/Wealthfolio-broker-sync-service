@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.4
+
+- **Fix: "Jetzt abrufen" did nothing for a broker with "Automatisch abrufen" off.** Each broker now has its own "Jetzt abrufen" button on the status page, which runs it even when automatic fetching is off; the general button is now "Alle abrufen" and, like the daily run, skips those brokers (the page says so). The status of such a broker shows its last result plus "automatischer Abruf aus" instead of only "aus".
+- After removing duplicates, the holdings/cash check on the status page is discarded (it was computed with the duplicates) and recomputed by the broker's next run; the message says to click "Jetzt abrufen".
+
 ## 0.3.3
 
 - **Fix: removing duplicates stopped after the first transfer leg.** Wealthfolio deletes both legs of a linked transfer pair when one is deleted; deleting the second leg then failed ("not found") and aborted the whole removal. The partner leg is now skipped, "not found" counts as removed, and one transaction failing no longer stops the others - the page lists what couldn't be removed.

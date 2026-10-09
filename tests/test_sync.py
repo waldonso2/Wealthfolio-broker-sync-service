@@ -231,3 +231,14 @@ def test_a_run_waits_briefly_for_the_lock_and_closes_stale_runs(tmp_path):
     t.join(10)
     runs = syncer.state.runs()
     assert [r.status for r in runs] == ["ok", "aborted"]
+
+
+def test_automatic_fetch_off_skips_the_broker_unless_it_is_requested_by_name(tmp_path):
+    wf = FakeWealthfolio()
+    syncer, _ = setup(tmp_path, wf)
+    cfg = config_mod.load(tmp_path)
+    cfg.brokers["dummy"].enabled = False
+    config_mod.save(tmp_path, cfg)
+    assert syncer.run() == [] and wf.activities == []  # timer and "Alle abrufen"
+    [r] = syncer.run(["dummy"])  # the broker's own button
+    assert (r.status, r.created) == ("ok", 3)

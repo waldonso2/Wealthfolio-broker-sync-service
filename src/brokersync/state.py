@@ -135,6 +135,11 @@ class State:
             self.db.execute("INSERT OR REPLACE INTO reconcile VALUES (?, ?, ?, ?)",
                             (broker, json.dumps(deviations), json.dumps(keep), now()))
 
+    def clear_reconcile(self, broker: str) -> None:
+        """Forget the last check (out of date, e.g. after removing duplicates); the next run recomputes it."""
+        with self.db:
+            self.db.execute("DELETE FROM reconcile WHERE broker = ?", (broker,))
+
     def reconcile(self, broker: str) -> dict | None:
         row = self.db.execute("SELECT deviations, notified, at FROM reconcile WHERE broker = ?", (broker,)).fetchone()
         if not row:

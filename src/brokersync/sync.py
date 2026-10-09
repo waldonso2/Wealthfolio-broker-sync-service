@@ -114,7 +114,11 @@ class Syncer:
             for key, bcfg in cfg.brokers.items():
                 if only and key not in only:
                     continue
-                if not bcfg.enabled or key not in self.adapters:
+                if key not in self.adapters:
+                    continue
+                # "Automatisch abrufen" off: the timer and the general button skip
+                # the broker, a request for exactly this broker still runs it.
+                if not bcfg.enabled and not (only and key in only):
                     continue
                 results.append(self._run_broker(cfg, key))
             return results

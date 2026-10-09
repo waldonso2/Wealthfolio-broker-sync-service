@@ -82,6 +82,13 @@ def test_assistant_from_first_visit_to_first_sync(tmp_path):
     assert len(wf.activities) == 7  # no duplicates
     assert "DUMMY_SPECIAL_EVENT" in client.get("/unknown").text
 
+    # Automatic fetch off: still shown with its last result, fetched by its own button.
+    r = client.post("/brokers/dummy", data={"csrf": token, "cred_username": "max", "cash_account_id": "acc-cash",
+                                            "portfolio_account_id": "acc-depot"})
+    page = client.get("/").text
+    assert "automatischer Abruf aus" in page and "überspringen Broker" in page and "OK" in page
+    assert 'name="broker" value="dummy"' in page
+
 
 def test_login_required_and_csrf_checked(tmp_path):
     client, _, _ = make(tmp_path)
@@ -132,7 +139,7 @@ def test_status_follows_the_real_state_of_the_sync(tmp_path):
     stale = State(tmp_path)
     stale.start_run("dummy")
     page = client.get("/").text
-    assert "abgebrochen" in page and "läuft" not in page and "Jetzt abrufen" in page
+    assert "abgebrochen" in page and "läuft" not in page and "Alle abrufen" in page
     assert 'http-equiv="refresh"' not in page
     assert "Dienst wurde während des Abrufs beendet" in stale.runs()[0].message
 

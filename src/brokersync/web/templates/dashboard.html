@@ -18,9 +18,9 @@
   <div class="broker">
     <div>
       <strong>{{ b.label }}</strong>
-      {% if not b.config.enabled %}<span class="status off">aus</span>
-      {% elif b.last %}<span class="status {{ b.last.status }}">{{ STATUS[b.last.status] }}</span>
+      {% if b.last %}<span class="status {{ b.last.status }}">{{ STATUS[b.last.status] }}</span>
       {% else %}<span class="status off">noch nie abgerufen</span>{% endif %}
+      {% if not b.config.enabled %}<span class="status off">automatischer Abruf aus</span>{% endif %}
       {% if b.last %}
       <div class="muted">Letzter Abruf: {{ b.last.started_at | local }} ·
         {{ b.last.created }} neu, {{ b.last.existing }} schon vorhanden{% if b.last.failed %}, {{ b.last.failed }} fehlgeschlagen{% endif %}{% if b.last.unknown %}, <a href="/unknown">{{ b.last.unknown }} unbekannt</a>{% endif %}</div>
@@ -44,6 +44,13 @@
     </div>
     <div class="actions" style="margin:0">
       {% if b.last and b.last.status == "needs_auth" %}<a class="button" href="/brokers/{{ b.key }}/login">Jetzt anmelden</a>{% endif %}
+      {% if b.has_credentials %}
+      <form method="post" action="/run" style="margin:0">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="broker" value="{{ b.key }}">
+        <button class="secondary" {% if running %}disabled{% endif %}>Jetzt abrufen</button>
+      </form>
+      {% endif %}
       <a class="button secondary" href="/brokers/{{ b.key }}">Einstellungen</a>
     </div>
   </div>
@@ -52,8 +59,11 @@
   {% endfor %}
   <form method="post" action="/run" class="actions">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <button {% if running %}disabled{% endif %}>{% if running %}Abruf läuft …{% else %}Jetzt abrufen{% endif %}</button>
+    <button {% if running %}disabled{% endif %}>{% if running %}Abruf läuft …{% else %}Alle abrufen{% endif %}</button>
   </form>
+  {% if brokers | selectattr("has_credentials") | rejectattr("config.enabled") | list %}
+  <p class="muted">„Alle abrufen“ und der tägliche Lauf überspringen Broker mit ausgeschaltetem automatischem Abruf – die rufst du mit ihrem eigenen „Jetzt abrufen“ ab.</p>
+  {% endif %}
   <p class="muted">Automatischer Abruf: {% if next_run %}nächster Lauf {{ next_run }}{% else %}täglich{% endif %}.
   {% if unknown %} · <a href="/unknown">{{ unknown }} unbekannte Buchungen</a>{% endif %}</p>
 </div>

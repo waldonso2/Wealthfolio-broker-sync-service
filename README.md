@@ -73,7 +73,7 @@ ntfy-App öffnen, *Thema abonnieren* und den Themennamen von dieser Seite eintra
 
 ### 6. Erster Abruf
 
-In der Übersicht **Jetzt abrufen** klicken. Danach siehst du je Broker, was neu angelegt wurde und was schon in Wealthfolio war.
+In der Übersicht **Alle abrufen** klicken (oder bei einem Broker **Jetzt abrufen**). Danach siehst du je Broker, was neu angelegt wurde und was schon in Wealthfolio war. Broker mit ausgeschaltetem *Automatisch abrufen* überspringt der tägliche Lauf und „Alle abrufen“ – sie rufst du mit ihrem eigenen Button ab.
 
 <img src="docs/screenshots/07-nach-dem-abruf.png" width="560" alt="Übersicht nach dem ersten Abruf">
 
