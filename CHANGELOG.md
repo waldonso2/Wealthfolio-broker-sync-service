@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+- **New broker: Scalable Capital**, through Scalable's official command line [Scalable CLI](https://github.com/ScalableCapital/scalable-cli) (`sc`) instead of the web app's internal API. Enable it once in Scalable's web platform under *Profil → Sicherheit → Agentic Investing*; log in from the service's page with a link and a code confirmed in the browser. The CLI runs in read-only mode and only read commands are used.
+- Trades, savings plans, distributions, interest, taxes, fees, deposits and withdrawals are booked like the addon's Scalable CSV import, so CSV-imported activities are recognised. A depot migration that moves positions out and back in is skipped; cancellations, single security transfers, fund swaps and ELTIFs are reported as unknown. Positions and cash are checked against Wealthfolio after each run.
+- The CLI's session is kept encrypted in the vault and renews itself; when Scalable asks for a new login, the daily run sends the link by ntfy and waits ten minutes for the confirmation.
+- Install and update fetch `sc` from Scalable's GitHub release (`brokersync install-sc`) and install it only when Scalable's minisign signature and the checksum are valid. If that fails, everything except Scalable keeps working.
+- A dividend without a share count is booked with quantity 1, like the addon does for Scalable.
+
 ## 0.3.8
 
 - Internal: the FinTS part of the DKB adapter is now a shared `FintsAdapter`, so further FinTS banks (Deutsche Bank, comdirect as a fallback) only need a short profile ([importer-addon#44](https://github.com/waldonso2/wealthfolio-importer-addon/issues/44)). DKB behaves exactly as before: same transaction ids, same messages, same settings.

@@ -3,6 +3,7 @@
 <div class="card">
   <h1>Anmeldung bei {{ adapter.label }}</h1>
   <p>{{ challenge.message }}</p>
+  {% if challenge.url %}<p><a class="button" href="{{ challenge.url }}" target="_blank" rel="noopener noreferrer">Link öffnen</a></p>{% endif %}
   <form method="post">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     {% if challenge.kind == "code" %}
@@ -11,7 +12,7 @@
     <div class="actions"><button>Bestätigen</button></div>
     {% else %}
     <input type="hidden" name="code" value="">
-    <div class="actions"><button>Ich habe in der App bestätigt</button></div>
+    <div class="actions"><button>{{ "Ich habe bestätigt" if challenge.url else "Ich habe in der App bestätigt" }}</button></div>
     {% endif %}
   </form>
 </div>
