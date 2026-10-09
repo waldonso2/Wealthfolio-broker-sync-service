@@ -138,7 +138,9 @@ Der Dienst liest deine Trade-Republic-Timeline über die inoffizielle Schnittste
 
 Reine Hinweise (Order angelegt/storniert, Dokumente, Adressänderung …) und stornierte Buchungen übernimmt der Dienst nicht.
 
-**CSV-Import und Dienst zusammen:** Was du schon per CSV importiert hast, erkennt der Dienst (gleiche Art, gleiches Wertpapier, gleicher Betrag, höchstens 36 Stunden auseinander) und legt es nicht noch einmal an.
+**CSV-Import und Dienst zusammen:** Was du schon per CSV importiert hast, erkennt der Dienst und legt es nicht noch einmal an: gleiche Art, gleicher Betrag, höchstens 36 Stunden auseinander, bei Käufen und Verkäufen dieselbe Stückzahl. Das Wertpapier darf dabei unter einem anderen Symbol stehen (im Addon zugeordneter Ticker, im Dienst die ISIN).
+
+**Duplikate aus Version 0.3.0/0.3.1:** Diese Versionen haben per CSV importierte Käufe, Verkäufe und Dividenden ein zweites Mal angelegt. Die Seite *Duplikate* zeigt sie neben der CSV-Buchung und löscht nach deiner Bestätigung nur die Kopie des Dienstes.
 
 ## Abgleich mit Wealthfolio
 

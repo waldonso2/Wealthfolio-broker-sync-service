@@ -122,6 +122,15 @@ def to_transactions(events: list[dict]) -> list[Transaction]:
     return out
 
 
+def portfolio_positions(portfolio: dict | None) -> list[dict]:
+    """Positions of a compactPortfolioByType answer: grouped in categories (current
+    format, field "isin"); a flat "positions" list in the older compactPortfolio."""
+    portfolio = portfolio or {}
+    if "categories" in portfolio:
+        return [p for cat in portfolio.get("categories") or [] for p in cat.get("positions") or []]
+    return list(portfolio.get("positions") or [])
+
+
 def _cash_label(raw: dict, inbound: bool) -> str:
     if raw.get("subtitle"):
         return raw["subtitle"]
@@ -341,8 +350,9 @@ class TradeRepublicAdapter(BrokerAdapter):
             portfolio = self._replay.get("portfolio", {})
         else:
             portfolio = self._run(self._one(self._api.compact_portfolio()))
-        return [Position(p.get("instrumentId", ""), p.get("name", ""), _dec(p.get("netSize")) or Decimal(0), "EUR")
-                for p in (portfolio or {}).get("positions", [])]
+        return [Position(p.get("isin") or p.get("instrumentId", ""), p.get("name", ""),
+                         _dec(p.get("netSize")) or Decimal(0), "EUR")
+                for p in portfolio_positions(portfolio)]
 
     def get_accounts(self) -> list[BrokerAccount]:
         return [BrokerAccount("tr", "Trade Republic", "EUR")]

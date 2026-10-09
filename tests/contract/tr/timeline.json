@@ -1955,11 +1955,16 @@
    }
   ],
   "portfolio": {
-   "positions": [
+   "categories": [
     {
-     "instrumentId": "US67066G1040",
-     "netSize": "0.685102",
-     "averageBuyIn": "160.21"
+     "categoryType": "stocksAndETFs",
+     "positions": [
+      {
+       "isin": "US67066G1040",
+       "netSize": "0.685102",
+       "averageBuyIn": "160.21"
+      }
+     ]
     }
    ]
   }

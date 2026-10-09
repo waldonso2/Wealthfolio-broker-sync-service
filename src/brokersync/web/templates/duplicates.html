@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% block title %}Duplikate{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Doppelte Buchungen</h1>
+  <p>Hier stehen Buchungen, die der Dienst angelegt hat, obwohl es sie schon aus dem CSV- oder PDF-Import des Addons gab. Bis Version 0.3.1 erkannte der Dienst Wertpapiere nur am Symbol; das Addon führt sie aber unter dem zugeordneten Ticker, der Dienst unter der ISIN.</p>
+  <p class="muted">Gelöscht wird nur die Kopie des Dienstes (Kommentar „[SYNC …]“) samt ihrer Übertragsbuchungen. Deine CSV-/PDF-Buchung bleibt, und der Dienst legt den Vorgang nicht noch einmal an.</p>
+  {% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error }}</div>{% endif %}
+  {% for r in report %}
+  <h2 style="margin-top:20px">{{ r.label }}: {{ r.found | length }} doppelt</h2>
+  {% if r.found %}
+  <div class="table"><table>
+    <tr><th>Datum</th><th>Art</th><th>Betrag</th><th>Vom Dienst</th><th>Schon vorhanden (CSV/PDF)</th></tr>
+    {% for d in r.found[:300] %}
+    <tr><td>{{ d.sync.date[:10] }}</td><td>{{ d.sync.activityType }}</td><td>{{ d.sync.amount }}</td>
+      <td>{{ d.sync.assetSymbol }} – {{ d.sync.comment }}</td><td>{{ d.original.assetSymbol }} – {{ d.original.comment }}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% if r.found | length > 300 %}<p class="muted">… und {{ r.found | length - 300 }} weitere.</p>{% endif %}
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="broker" value="{{ r.key }}">
+    <label class="check"><input type="checkbox" name="confirm" value="1"> Ich habe die Liste geprüft – die Kopien des Dienstes aus Wealthfolio löschen</label>
+    <div class="actions"><button>{{ r.found | length }} Duplikate löschen</button></div>
+  </form>
+  {% else %}<p class="muted">Keine.</p>{% endif %}
+  {% endfor %}
+</div>
+{% endblock %}

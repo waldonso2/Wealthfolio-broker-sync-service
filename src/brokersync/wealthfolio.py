@@ -117,6 +117,10 @@ class WealthfolioClient:
             raise WealthfolioError(f"Wealthfolio rejected the activity ({payload.get('activityType')}): {detail}")
         return r.json()
 
+    def delete_activity(self, activity_id: str) -> None:
+        r = self._request("DELETE", f"/activities/{activity_id}")
+        _raise(r)
+
     def holdings(self, account_id: str) -> list[dict]:
         """Current holdings of an account, cash included (``holdingType`` "cash"/"security")."""
         r = self._request("GET", "/holdings", params={"accountId": account_id})

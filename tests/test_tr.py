@@ -271,3 +271,85 @@ def test_dashboard_shows_the_holdings_check(tmp_path):
     page = client.get("/").text
     assert "Abgleich mit Wealthfolio" in page and "weicht ab" in page
     assert re.search(r"<td>Cash EUR</td><td>1234.56</td>", page)
+
+
+def test_positions_in_the_current_and_the_older_format():
+    from brokersync.adapters.tr import portfolio_positions
+
+    assert [p.isin for p in TradeRepublicAdapter.replay(RECORDING).get_positions()] == ["US67066G1040"]
+    new = {"categories": [{"positions": [{"isin": "A"}]}, {"positions": [{"isin": "B"}]}]}
+    assert [p["isin"] for p in portfolio_positions(new)] == ["A", "B"]
+    assert portfolio_positions({"positions": [{"instrumentId": "C"}]}) == [{"instrumentId": "C"}]
+    assert portfolio_positions(None) == []
+
+
+# ── CSV-imported securities under a mapped ticker ───────────────────────────
+def add_csv_buy(wf, *, date="2026-09-02T09:00:00.000Z", symbol="NVDA"):
+    """What the addon's CSV import booked for the NVIDIA buy, with the ticker the user mapped."""
+    leg = dict(quantity="1", unitPrice="1", amount="111", currency="EUR", assetSymbol="$CASH-EUR")
+    wf.add_existing(accountId="acc-cash", activityType="TRANSFER_OUT", date=date, comment="Funds for buy", **leg)
+    wf.add_existing(accountId="acc-depot", activityType="TRANSFER_IN", date=date, comment="Funds from Cash", **leg)
+    return wf.add_existing(accountId="acc-depot", activityType="BUY", date=date, quantity="0.685102",
+                           unitPrice="160.56", amount="111", fee="1", currency="EUR", comment="NVIDIA - Buy",
+                           assetSymbol=symbol, assetId=symbol)
+
+
+def test_a_csv_buy_under_a_ticker_is_recognised(tmp_path):
+    syncer, wf, _ = setup_sync(tmp_path)
+    add_csv_buy(wf)
+    syncer.run()
+    buys = [a for a in wf.activities if a["activityType"] == "BUY" and "0.685102" == a["quantity"]]
+    assert [b["assetSymbol"] for b in buys] == ["NVDA"]  # not booked a second time under the ISIN
+
+
+def test_dividend_with_another_symbol_matches_only_when_unambiguous():
+    from brokersync.dedup import ExistingIndex
+
+    payload = {"accountId": "p", "activityType": "DIVIDEND", "activityDate": "2026-09-05T10:00:00.000Z",
+               "amount": "2.24", "asset": {"symbol": "US20030N1019"}}
+    one = {"id": "x", "accountId": "p", "activityType": "DIVIDEND", "date": "2026-09-05T08:00:00Z", "amount": "2.24",
+           "assetSymbol": "CMCSA"}
+    assert ExistingIndex([one]).find("[SYNC tr:1]", [payload]) == "x"
+    two = [one, {**one, "id": "y", "assetSymbol": "OTHER"}]
+    assert ExistingIndex(two).find("[SYNC tr:1]", [payload]) is None
+
+
+def test_duplicates_from_before_the_fix_are_found_and_only_the_sync_copy_removed(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from brokersync.web.app import create_app
+
+    syncer, wf, _ = setup_sync(tmp_path)
+    csv_buy = add_csv_buy(wf)
+    # What 0.3.1 booked on top: the same buy under the ISIN, with its transfer legs.
+    ref = " [SYNC tr:00000000-0000-4000-8000-000000000002]"
+    for acc, t in (("acc-cash", "TRANSFER_OUT"), ("acc-depot", "TRANSFER_IN")):
+        wf.add_existing(accountId=acc, activityType=t, date="2026-09-02T09:00:10.000Z", quantity="1", unitPrice="1",
+                        amount="111", currency="EUR", assetSymbol="$CASH-EUR", comment=f"Funds{ref}",
+                        sourceGroupId="sync-tr-00000000-0000-4000-8000-000000000002")
+    sync_buy = wf.add_existing(accountId="acc-depot", activityType="BUY", date="2026-09-02T09:00:12.000Z",
+                               quantity="0.685102", unitPrice="160.560033", amount="111", fee="1", currency="EUR",
+                               comment=f"Kauforder NVIDIA{ref}", assetSymbol="US67066G1040",
+                               assetId="US67066G1040")
+    syncer.state.mark("tr", "00000000-0000-4000-8000-000000000002", "imported", [sync_buy["id"]])
+
+    app = create_app(tmp_path, wealthfolio=lambda u, p: WealthfolioClient(u, p, transport=wf.transport()),
+                     adapters={"tr": ReplayTR}, notifier=RecordingNotifier(), run_in_thread=False)
+    client = TestClient(app)
+    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    page = client.get("/duplicates").text
+    assert "Trade Republic: 1 doppelt" in page and "NVDA" in page and "US67066G1040" in page
+    import re
+
+    csrf = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+    r = client.post("/duplicates", data={"csrf": csrf, "broker": "tr"})
+    assert "bestätige" in r.text and wf.deleted == []
+    r = client.post("/duplicates", data={"csrf": csrf, "broker": "tr", "confirm": "1"})
+    assert "1 doppelte Vorgänge entfernt (3 Buchungen)" in r.text
+    assert len(wf.deleted) == 3 and sync_buy["id"] == wf.deleted[-1]
+    assert any(a["id"] == csv_buy["id"] for a in wf.activities)
+    assert "Trade Republic: 0 doppelt" in client.get("/duplicates").text
+    # The removed transaction is "existing" now: the next sync doesn't create it again.
+    syncer.run()
+    assert [a["assetSymbol"] for a in wf.activities if a["activityType"] == "BUY" and a["quantity"] == "0.685102"] \
+        == ["NVDA"]

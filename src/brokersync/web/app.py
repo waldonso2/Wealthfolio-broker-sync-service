@@ -25,10 +25,12 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from .. import __version__
 from .. import config as config_mod
+from .. import duplicates as duplicates_mod
 from ..adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
+from ..mapping import Accounts
 from ..notify import Notifier
 from ..state import State
-from ..sync import UNMATCHED_SECURITIES, AlreadyRunning, Syncer, is_running
+from ..sync import UNMATCHED_SECURITIES, AlreadyRunning, Syncer, is_running, run_lock
 from ..vault import Vault, hash_password, verify_password
 from ..wealthfolio import WealthfolioClient, WealthfolioError
 
@@ -379,6 +381,47 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
         return redirect(request, "/", "Benachrichtigungen gespeichert.")
 
     # ── unknown events, securities ──────────────────────────────────────────
+    # ── duplicates of CSV/PDF imports ───────────────────────────────────────
+    def duplicate_report(c: config_mod.Config):
+        report, error = [], None
+        try:
+            with wf_client(c) as wf:
+                for key, b in c.brokers.items():
+                    if key in adapters and b.cash_account_id and b.portfolio_account_id:
+                        found = duplicates_mod.find(wf, key, Accounts(b.cash_account_id, b.portfolio_account_id))
+                        report.append({"key": key, "label": adapters[key].label, "found": found})
+        except WealthfolioError as e:
+            error = str(e)
+        return report, error
+
+    @app.get("/duplicates", response_class=HTMLResponse)
+    def duplicates_page(request: Request):
+        report, error = duplicate_report(cfg())
+        return render(request, "duplicates.html", report=report, wf_error=error)
+
+    @app.post("/duplicates")
+    def duplicates_remove(request: Request, broker: str = Form(...), confirm: str = Form("")):
+        if not confirm:
+            return redirect(request, "/duplicates", "Bitte bestätige das Löschen mit dem Häkchen.", "error")
+        c = cfg()
+        b = c.brokers.get(broker)
+        if broker not in adapters or b is None:
+            return redirect(request, "/duplicates", "Unbekannter Broker.", "error")
+        try:
+            # Not while a sync runs: it could create what is being removed.
+            with run_lock(data_dir, wait=5), wf_client(c) as wf:
+                found = duplicates_mod.find(wf, broker, Accounts(b.cash_account_id, b.portfolio_account_id))
+                deleted, done = duplicates_mod.remove(wf, found)
+        except AlreadyRunning:
+            return redirect(request, "/duplicates", "Gerade läuft ein Abruf - bitte gleich noch einmal.", "warn")
+        except WealthfolioError as e:
+            return redirect(request, "/duplicates", f"Wealthfolio: {e}", "error")
+        for d in found:
+            if d.tx_id in done:
+                state.mark(broker, d.tx_id, "existing", [d.original["id"]])
+        message = f"{len(done)} doppelte Vorgänge entfernt ({deleted} Buchungen). Die CSV-/PDF-Buchungen bleiben."
+        return redirect(request, "/duplicates", message)
+
     @app.get("/unknown", response_class=HTMLResponse)
     def unknown_page(request: Request):
         return render(request, "unknown.html", events=state.unknown_events())

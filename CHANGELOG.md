@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2
+
+- **Fix: trades and dividends imported by CSV were booked a second time.** The check against existing activities required the same symbol, but the addon books a security under the ticker the user mapped, the sync under the ISIN. A trade now also matches with another symbol when share count, amount (±0.02) and time (≤36 h) agree; a dividend when it is the only candidate.
+- **New page "Duplikate":** lists the activities the sync created although the CSV/PDF import already had them, side by side, and - after confirmation - deletes only the sync's copies (with their transfer legs). The transaction is then marked as existing and not created again.
+- **Fix: Trade Republic positions were read as empty.** Trade Republic groups them in categories now (`categories[].positions[]`, field `isin`); the holdings check showed every position as 0 at Trade Republic.
+
 ## 0.3.1
 
 - Updates can no longer leave the service unable to start: the update keeps the previous Python environment until the new one is completely installed, puts it back if the install fails (network, disk, a broken package), restarts the previous version and says so. Before, a failed install left no environment at all and the service restarted in a loop ("Unable to locate executable .../venv/bin/brokersync").
