@@ -61,6 +61,8 @@ Zugangsdaten eintragen und die beiden Wealthfolio-Konten wählen. Mit *Buchungen
 
 Nach dem Speichern meldet sich der Dienst beim Broker an. Will der Broker eine TAN oder eine Bestätigung in seiner App, fragt die Seite danach. (Beim Dummy lautet der Code `000000`.)
 
+> **Testbuchungen des Dummys** tragen das Datum des Tages, an dem du dich beim Dummy anmeldest, liegen ein paar Stunden davor und sind mit **TEST** gekennzeichnet: im Text („TEST Kauf“ …) und im Kommentar (`[SYNC dummy:TEST-…]`). In Wealthfolio findest du sie unter *Activities* ganz oben und kannst sie danach löschen. Der tägliche Abruf legt sie nicht erneut an; eine neue Anmeldung beim Dummy an einem anderen Tag erzeugt einen neuen Satz.
+
 <img src="docs/screenshots/05-tan.png" width="560" alt="TAN eingeben">
 
 ### 5. Benachrichtigungen
