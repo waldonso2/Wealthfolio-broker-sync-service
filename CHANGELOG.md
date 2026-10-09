@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.8
+
+- Internal: the FinTS part of the DKB adapter is now a shared `FintsAdapter`, so further FinTS banks (Deutsche Bank, comdirect as a fallback) only need a short profile ([importer-addon#44](https://github.com/waldonso2/wealthfolio-importer-addon/issues/44)). DKB behaves exactly as before: same transaction ids, same messages, same settings.
+- A bank whose bank code differs per branch gets a *Bankleitzahl* field; a TAN to type in (instead of a confirmation in the app) is asked for in the web UI.
+
 ## 0.3.7
 
 - **The test broker "Dummy" is gone.** With Trade Republic and DKB there are real brokers to try the service with, and the dummy did harm: set up on the same Wealthfolio accounts as a real broker, it booked its test transactions there (a fake position, cash too high) and left permanent "unknown" events.
