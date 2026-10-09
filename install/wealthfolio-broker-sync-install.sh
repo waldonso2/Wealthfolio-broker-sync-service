@@ -29,13 +29,4 @@ msg_ok "Started Service"
 motd_ssh
 customize
 
-# `update` in the container (and PVE Scripts Local's update button) must run
-# this repository's script, not one from community-scripts/ProxmoxVE.
-cat <<'UPDATE' >/usr/bin/update
-#!/usr/bin/env bash
-set -a; [ -f /etc/profile.d/90-http-proxy.sh ] && . /etc/profile.d/90-http-proxy.sh; set +a
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/waldonso2/wealthfolio-broker-sync-service/main/ct/wealthfolio-broker-sync.sh)"
-UPDATE
-chmod +x /usr/bin/update
-
 cleanup_lxc

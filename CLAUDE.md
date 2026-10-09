@@ -1,6 +1,6 @@
 # Wealthfolio Broker Sync
 
-Service that fetches broker transactions and writes them, deduplicated, into a self-hosted Wealthfolio via its REST API. Installed as an LXC through PVE Scripts Local (community-scripts layout). Companion of the Broker Importer addon (`waldonso2/wealthfolio-importer-addon`); the backlog lives there (#35, base #36, adapters #37 DKB, #38 Trade Republic, #39 Scalable Capital).
+Service that fetches broker transactions and writes them, deduplicated, into a self-hosted Wealthfolio via its REST API. Installed as an LXC with one line in the Proxmox shell (community-scripts layout and engine); PVE Scripts Local can't list it, because its catalog only shows scripts from the official community-scripts database. Companion of the Broker Importer addon (`waldonso2/wealthfolio-importer-addon`); the backlog lives there (#35, base #36, adapters #37 DKB, #38 Trade Republic, #39 Scalable Capital).
 
 ## Commands
 
@@ -28,7 +28,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | `src/brokersync/config.py` / `state.py` | Non-secret config (`data/config.json`, written by the UI only) / SQLite sync state, runs, unknown events |
 | `src/brokersync/notify.py` | ntfy |
 | `src/brokersync/web/` | FastAPI + Jinja2 UI (German texts), CSRF via a dependency, own login |
-| `ct/`, `install/`, `json/` | community-scripts files for PVE Scripts Local |
+| `ct/`, `install/`, `json/` | community-scripts files (`json/` is the catalog entry for a later submission to community-scripts) |
 | `deploy/` | `setup.sh` (venv + units, used by install and update), systemd units, reset-password helper |
 | `tests/` | `fakes.py` (in-memory Wealthfolio), unit/e2e tests, `contract/<adapter>/*.json` recorded cases, `fixtures/wealthfolio/` recorded API answers |
 
@@ -42,7 +42,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 - **Unknown event types** become `Kind.UNKNOWN`: stored, listed in the UI, notified once — never dropped, never booked.
 - **One broker failing never stops the others**; it is reported via ntfy with a link (`public_url` + path).
 - **Secrets only in the vault**, never in `config.json`, logs, exceptions shown to the user, or the repo. Test data is fabricated — no real statements, names, IBANs or account numbers.
-- `ct/wealthfolio-broker-sync.sh` line 2 must stay the exact `misc/build.func` source line: PVE Scripts Local rewrites that line to its bundled build.func, which then runs our `install/` script. `test_packaging.py` checks this.
+- `ct/wealthfolio-broker-sync.sh` exports `COMMUNITY_SCRIPTS_URL` (this repo's raw `main`) **before** sourcing `community-scripts/core`'s `core/build.func`: the engine resolves `install/<slug>-install.sh` and writes the container's `update` command from it. Without it both point to community-scripts/ProxmoxVE. `test_packaging.py` checks this, and that the install line in the README matches.
 
 ## Adding a broker
 

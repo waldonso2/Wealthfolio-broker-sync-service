@@ -1,5 +1,5 @@
-"""The community-scripts layout PVE Scripts Local expects - a mistake here
-only shows up when someone clicks "Install", so it is checked here."""
+"""The community-scripts layout the install line relies on - a mistake here
+only shows up when someone runs the install on Proxmox, so it is checked here."""
 
 import json
 import re
@@ -10,10 +10,7 @@ import brokersync
 
 ROOT = Path(__file__).parent.parent
 SLUG = "wealthfolio-broker-sync"
-# PVE Scripts Local rewrites exactly this line to its bundled build.func
-# (scriptDownloader.js, modifyScriptContent); anything else would fetch the
-# install script from community-scripts/ProxmoxVE instead of this repository.
-BUILD_FUNC_LINE = "source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)"
+RAW = "https://raw.githubusercontent.com/waldonso2/wealthfolio-broker-sync-service/main"
 
 
 def test_catalog_entry_matches_the_scripts():
@@ -25,18 +22,24 @@ def test_catalog_entry_matches_the_scripts():
     assert meta["interface_port"] == 8090
 
 
-def test_ct_script_is_rewritable_by_pve_scripts_local():
-    ct = (ROOT / "ct" / f"{SLUG}.sh").read_text().splitlines()
-    assert ct[1] == BUILD_FUNC_LINE
+def test_ct_script_loads_the_engine_with_this_repository_as_script_source():
+    ct = (ROOT / "ct" / f"{SLUG}.sh").read_text()
+    lines = [ln for ln in ct.splitlines() if ln and not ln.startswith("#")]
+    # COMMUNITY_SCRIPTS_URL must be set before the engine is sourced: build.func
+    # resolves install/<slug>-install.sh and writes the container's `update`
+    # command from it. Without it both come from community-scripts/ProxmoxVE.
+    assert lines[0] == f'export COMMUNITY_SCRIPTS_URL="${{COMMUNITY_SCRIPTS_URL:-{RAW}}}"'
+    assert lines[1].startswith("source <(curl -fsSL ") and "/core/build.func" in lines[1]
+    assert "community-scripts/core/main" in lines[1]
     # build.func derives the install script name from APP: lower case, no spaces.
-    app = re.search(r'^APP="([^"]+)"', "\n".join(ct), re.M).group(1)
+    app = re.search(r'^APP="([^"]+)"', ct, re.M).group(1)
     assert app.lower().replace(" ", "") == SLUG
 
 
-def test_update_points_to_this_repository():
-    install = (ROOT / "install" / f"{SLUG}-install.sh").read_text()
-    assert f"waldonso2/wealthfolio-broker-sync-service/main/ct/{SLUG}.sh" in install
-    assert install.index("customize") < install.index("/usr/bin/update")
+def test_install_line_in_the_docs_matches_the_script():
+    line = f'bash -c "$(curl -fsSL {RAW}/ct/{SLUG}.sh)"'
+    assert line in (ROOT / "README.md").read_text()
+    assert line in (ROOT / "ct" / f"{SLUG}.sh").read_text()
 
 
 def test_units_and_setup_agree_on_paths():

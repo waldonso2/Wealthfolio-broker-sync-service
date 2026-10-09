@@ -1,3 +1,3 @@
 """Wealthfolio Broker Sync: broker transactions → self-hosted Wealthfolio."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
