@@ -143,3 +143,11 @@ def test_status_follows_the_real_state_of_the_sync(tmp_path):
         page = client.get("/").text
         assert "Abruf läuft" in page and 'http-equiv="refresh"' in page
         assert stale.runs()[0].status == "running"
+
+
+def test_version_is_shown_in_the_header(tmp_path):
+    import brokersync
+
+    client, _, _ = make(tmp_path)
+    for path in ("/setup-password", "/login"):
+        assert f'<span class="version">v{brokersync.__version__}</span>' in client.get(path).text

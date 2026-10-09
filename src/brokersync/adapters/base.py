@@ -59,6 +59,9 @@ class BrokerAdapter(ABC):
     key: ClassVar[str]
     label: ClassVar[str]
     credential_fields: ClassVar[list[CredentialField]] = []
+    # True if get_positions() is the complete list of holdings: then the sync
+    # compares it with Wealthfolio (a missing position counts as 0 shares).
+    reports_positions: ClassVar[bool] = False
 
     def __init__(self, credentials: dict[str, str], session: dict | None = None):
         self.credentials = credentials

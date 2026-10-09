@@ -92,6 +92,8 @@ class FakeWealthfolio:
             }
             self.activities.append(a)
             return httpx.Response(200, json=a)
+        if path == "/api/v1/holdings":
+            return httpx.Response(200, json=self.holdings(request.url.params["accountId"]))
         if path == "/api/v1/activities/search":
             body = json.loads(request.content)
             ids = body.get("accountIdFilter") or []
@@ -101,3 +103,29 @@ class FakeWealthfolio:
             page = rows[body["page"] * size:(body["page"] + 1) * size]
             return httpx.Response(200, json={"data": page, "meta": {"totalRowCount": len(rows)}})
         return httpx.Response(404, json={"code": 404, "message": "Not found"})
+
+    # Cash effect of each type, as Wealthfolio computes it from ``amount``.
+    CASH_SIGN = {"DEPOSIT": 1, "TRANSFER_IN": 1, "SELL": 1, "DIVIDEND": 1, "INTEREST": 1, "CREDIT": 1,
+                 "WITHDRAWAL": -1, "TRANSFER_OUT": -1, "BUY": -1, "FEE": -1, "TAX": -1}
+
+    def holdings(self, account_id: str) -> list[dict]:
+        from decimal import Decimal
+
+        cash: dict[str, Decimal] = {}
+        shares: dict[str, Decimal] = {}
+        for a in self.activities:
+            if a["accountId"] != account_id:
+                continue
+            t = a["activityType"]
+            symbol = a.get("assetSymbol") or ""
+            if t in ("TRANSFER_IN", "TRANSFER_OUT") and not symbol.startswith("$CASH-"):
+                continue
+            cash[a["currency"]] = cash.get(a["currency"], Decimal(0)) + self.CASH_SIGN[t] * Decimal(a["amount"] or 0)
+            if t in ("BUY", "SELL"):
+                q = Decimal(a["quantity"]) * (1 if t == "BUY" else -1)
+                shares[symbol] = shares.get(symbol, Decimal(0)) + q
+        out = [{"holdingType": "cash", "localCurrency": c, "quantity": str(v), "instrument": {"symbol": c}}
+               for c, v in cash.items()]
+        out += [{"holdingType": "security", "localCurrency": "EUR", "quantity": str(q),
+                 "instrument": {"symbol": s, "name": s}} for s, q in shares.items() if q]
+        return out

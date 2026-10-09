@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+- **Trade Republic** (waldonso2/wealthfolio-importer-addon#38), read-only via pytr 0.4.10: web login confirmed in the Trade Republic app (or with an authenticator code) without logging out the phone; the session is kept and resumed, and a scheduled run asks for a new confirmation via ntfy when it has expired. Timeline events are booked like the addon's CSV import: trades and savings plans with fee and tax, dividends net with withholding tax, Saveback as a bonus-funded buy, interest, Vorabpauschale, tax corrections, deposits, card payments and refunds, transfers (with transfer patterns). Corporate actions, securities transfers and private markets are reported for the CSV import; informational and cancelled events are skipped.
+- **Holdings check** after every run (all brokers): the broker's cash and - for Trade Republic and the dummy - positions against Wealthfolio's holdings, shown on the status page and reported via ntfy when a deviation lasts two runs.
+- The dummy reports its positions, so the check can be tried with it.
+
+## 0.2.1
+
+- The web UI shows the installed version in the header, next to the name (previously only in the footer).
+
 ## 0.2.0
 
 - **DKB** (waldonso2/wealthfolio-importer-addon#37): giro account via FinTS (python-fints), read-only. Balance and transactions; confirmation in the DKB app in the web UI, or with a ntfy message and a few minutes' wait during the daily run. Deposits, card payments/withdrawals, interest and fees are booked on the DKB cash account; outbound transfers to own accounts become transfers via the new *Überträge* page (transfer patterns as in the addon).

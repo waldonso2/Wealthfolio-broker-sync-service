@@ -26,6 +26,18 @@
         {{ b.last.created }} neu, {{ b.last.existing }} schon vorhanden{% if b.last.failed %}, {{ b.last.failed }} fehlgeschlagen{% endif %}{% if b.last.unknown %}, <a href="/unknown">{{ b.last.unknown }} unbekannt</a>{% endif %}</div>
       {% if b.last.message and b.last.status != "ok" %}<pre class="muted">{{ b.last.message }}</pre>{% endif %}
       {% endif %}
+      {% if b.reconcile %}
+        {% if b.reconcile.deviations %}
+        <div class="muted"><strong>Abgleich mit Wealthfolio</strong> ({{ b.reconcile.at | local }}) – weicht ab:</div>
+        <div class="table"><table>
+          <tr><th>Wert</th><th>{{ b.label }}</th><th>Wealthfolio</th></tr>
+          {% for d in b.reconcile.deviations %}<tr><td>{{ d.name }}</td><td>{{ d.broker }}</td><td>{{ d.wealthfolio }}</td></tr>{% endfor %}
+        </table></div>
+        <div class="muted">Direkt nach neuen Buchungen kann Wealthfolio noch rechnen; gemeldet wird erst, was beim nächsten Abruf noch abweicht. Fehlende Buchungen (z.&nbsp;B. Kapitalmaßnahmen) per CSV-Import im Addon nachholen.</div>
+        {% else %}
+        <div class="muted">Abgleich mit Wealthfolio: Bestand und Cash stimmen ({{ b.reconcile.at | local }}).</div>
+        {% endif %}
+      {% endif %}
       {% if b.balances %}
       <div class="muted">Saldo laut {{ b.label }}: {% for x in b.balances %}{{ x.amount | money }} {{ x.currency }}{% if not loop.last %}, {% endif %}{% endfor %} (Stand {{ b.balances[0].at | local }}) – zum Vergleich mit dem Verrechnungskonto in Wealthfolio</div>
       {% endif %}

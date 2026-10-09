@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import fcntl
 import logging
+import os
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -24,8 +25,9 @@ from . import config as config_mod
 from .adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from .dedup import ExistingIndex
 from .mapping import Accounts, MappingError, SecurityMapping, TransferPattern, to_activities, tx_ref
-from .model import Kind, Transaction
+from .model import CashBalance, Kind, Position, Transaction
 from .notify import Notifier
+from .reconcile import compare
 from .state import State
 from .vault import Vault
 from .wealthfolio import Duplicate, WealthfolioClient, WealthfolioError
@@ -91,6 +93,8 @@ class Syncer:
         self.state = State(self.data_dir)
         self.adapters = adapters or ADAPTERS
         self._wealthfolio = wealthfolio or (lambda url, pw: WealthfolioClient(url, pw))
+        # Seconds to give Wealthfolio to recalculate holdings before the check.
+        self.recalc_wait = float(os.environ.get("BROKERSYNC_RECALC_WAIT", "5"))
         self._notifier = notifier
 
     def notifier(self, cfg: config_mod.Config) -> Notifier:
@@ -162,14 +166,16 @@ class Syncer:
             raise AdapterError("No Wealthfolio accounts assigned - finish the setup for this broker.")
         secrets = self.vault.load()
         stored = secrets.get("brokers", {}).get(key, {})
-        adapter = self.adapters[key](stored.get("credentials", {}), stored.get("session"))
-        label = self.adapters[key].label
+        adapter_cls = self.adapters[key]
+        adapter = adapter_cls(stored.get("credentials", {}), stored.get("session"))
+        label = adapter_cls.label
         adapter.on_user_action = lambda message: self.notifier(cfg).send(
             f"{label}: Bestätigung nötig", message, link=self.link(cfg, "/"), priority="high", tags="key")
         try:
             adapter.login()
             transactions = adapter.get_transactions(self._since(key, bcfg))
-            self._record_balance(key, adapter)
+            cash = self._broker_cash(key, adapter)
+            positions = self._broker_positions(key, adapter) if adapter_cls.reports_positions else None
         finally:
             # Keep whatever session the adapter has, even half-way through a login.
             adapter.close()
@@ -179,38 +185,71 @@ class Syncer:
         todo = [t for t in transactions if t.id not in known]
         self._report_unknown(cfg, key, [t for t in todo if t.kind == Kind.UNKNOWN], result)
         todo = [t for t in todo if t.kind != Kind.UNKNOWN]
-        if not todo:
-            return
 
         accounts = Accounts(bcfg.cash_account_id, bcfg.portfolio_account_id)
         mappings = {isin: SecurityMapping(m.get("symbol") or isin, m.get("exchangeMic"), m.get("name"))
                     for isin, m in cfg.security_mappings.items()}
         patterns = [TransferPattern.from_config(p) for p in cfg.transfer_patterns]
         with self._wealthfolio(cfg.wealthfolio_url, secrets.get("wealthfolio_password")) as wf:
-            # Wide enough for a settlement a few days after the trade (SECURITIES_CASH).
-            margin = timedelta(days=SETTLEMENT_DAYS + 1)
-            first = min(t.datetime for t in todo) - margin
-            last = max(t.datetime for t in todo) + margin
-            existing = ExistingIndex(wf.search_activities([accounts.cash, accounts.portfolio], first.date(),
-                                                          last.date()))
             unmatched: list[Transaction] = []
-            for tx in sorted(todo, key=lambda t: t.datetime):
-                if tx.kind == Kind.SECURITIES_CASH:
-                    if not self._settle_securities_cash(key, tx, accounts, existing, result):
-                        unmatched.append(tx)
-                    continue
-                self._sync_tx(wf, key, tx, accounts, mappings, patterns, existing, result)
+            if todo:
+                # Wide enough for a settlement a few days after the trade (SECURITIES_CASH).
+                margin = timedelta(days=SETTLEMENT_DAYS + 1)
+                first = min(t.datetime for t in todo) - margin
+                last = max(t.datetime for t in todo) + margin
+                existing = ExistingIndex(wf.search_activities([accounts.cash, accounts.portfolio], first.date(),
+                                                              last.date()))
+                for tx in sorted(todo, key=lambda t: t.datetime):
+                    if tx.kind == Kind.SECURITIES_CASH:
+                        if not self._settle_securities_cash(key, tx, accounts, existing, result):
+                            unmatched.append(tx)
+                        continue
+                    self._sync_tx(wf, key, tx, accounts, mappings, patterns, existing, result)
+            if cash is not None and not result.failed:
+                if result.created:
+                    time.sleep(self.recalc_wait)  # Wealthfolio recalculates holdings in the background
+                self._reconcile(cfg, key, wf, accounts, cash, positions, mappings)
         self._report_unmatched(cfg, key, unmatched, result)
 
-    def _record_balance(self, key: str, adapter: BrokerAdapter) -> None:
-        # The broker's balance, shown next to the run so it can be compared with
+    def _broker_cash(self, key: str, adapter: BrokerAdapter) -> list[CashBalance] | None:
+        # The broker's balance, shown next to the run and compared with
         # Wealthfolio's. Not worth failing the run for.
         try:
             balances = adapter.get_cash()
         except (AdapterError, AuthRequired, NotImplementedError) as e:
             log.info("%s: no balance: %s", key, e)
-            return
+            return None
         self.state.set_balances(key, [(b.currency, str(b.amount)) for b in balances])
+        return balances
+
+    def _broker_positions(self, key: str, adapter: BrokerAdapter) -> list[Position] | None:
+        try:
+            return adapter.get_positions()
+        except (AdapterError, AuthRequired, NotImplementedError) as e:
+            log.info("%s: no positions: %s", key, e)
+            return None
+
+    def _reconcile(self, cfg: config_mod.Config, key: str, wf: WealthfolioClient, accounts: Accounts,
+                   cash: list[CashBalance], positions: list[Position] | None,
+                   mappings: dict[str, SecurityMapping]) -> None:
+        try:
+            wf_cash = wf.holdings(accounts.cash)
+            wf_portfolio = wf.holdings(accounts.portfolio) if positions is not None else []
+        except WealthfolioError as e:
+            log.info("%s: no holdings for the check: %s", key, e)
+            return
+        deviations = [d.as_dict() for d in compare(cash, positions, wf_cash, wf_portfolio,
+                                                   {i: m.symbol for i, m in mappings.items()})]
+        previous = self.state.reconcile(key) or {}
+        # Report only what shows up twice in a row (not a recalculation in
+        # progress), and each set of deviations only once.
+        persistent = [d for d in deviations if d in previous.get("deviations", [])]
+        if persistent and persistent != previous.get("notified"):
+            lines = [f"{d['name']}: {self.adapters[key].label} {d['broker']}, Wealthfolio {d['wealthfolio']}"
+                     for d in persistent[:6]]
+            self.notifier(cfg).send(f"{self.adapters[key].label}: Bestand weicht ab", "\n".join(lines),
+                                    link=self.link(cfg, "/"), tags="scales")
+        self.state.set_reconcile(key, deviations, notified=persistent)
 
     def _settle_securities_cash(self, key: str, tx: Transaction, accounts: Accounts, existing: ExistingIndex,
                                 result: BrokerResult) -> bool:

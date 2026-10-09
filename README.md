@@ -8,7 +8,7 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 - **Benachrichtigung aufs Handy** (ntfy), wenn eine TAN fällig ist oder etwas nicht klappt
 - **Bucht wie das [Broker Importer Addon](https://github.com/waldonso2/wealthfolio-importer-addon)**: Was du schon per CSV oder PDF importiert hast, wird erkannt und nicht doppelt angelegt
 
-> **Stand:** **DKB** (Girokonto per FinTS) und ein **Test-Broker („Dummy“)** zum Ausprobieren. Trade Republic ([#38](https://github.com/waldonso2/wealthfolio-importer-addon/issues/38)) und Scalable Capital ([#39](https://github.com/waldonso2/wealthfolio-importer-addon/issues/39)) folgen.
+> **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS) und ein **Test-Broker („Dummy“)** zum Ausprobieren. Scalable Capital ([#39](https://github.com/waldonso2/wealthfolio-importer-addon/issues/39)) folgt.
 
 ## Was du brauchst
 
@@ -110,6 +110,40 @@ Der Dienst liest dein **DKB-Girokonto** per FinTS (HBCI), dieselbe Schnittstelle
 
 **Sicherheit:** Lehnt die DKB Anmeldename oder PIN ab, versucht der Dienst es nicht noch einmal, bis du die Zugangsdaten neu speicherst. Nach drei Fehlversuchen sperrt die DKB sonst das Online-Banking.
 
+## Trade Republic
+
+Der Dienst liest deine Trade-Republic-Timeline über die inoffizielle Schnittstelle der App, mit dem Open-Source-Projekt [pytr](https://github.com/pytr-org/pytr). Er liest nur; Orders oder Auszahlungen kann er nicht auslösen.
+
+> **Bitte beachten:** Trade Republic bietet keine offizielle Schnittstelle. Die genutzte kann sich jederzeit ändern, dann klappt der Abruf bis zu einem Update nicht. Ein automatisierter Zugriff ist von Trade Republic vermutlich nicht vorgesehen. Wer das nicht möchte, nutzt weiter den CSV-Import im Addon.
+
+**Einrichten** unter *Broker → Trade Republic*:
+
+- **Telefonnummer** mit Ländervorwahl (z. B. `+4917612345678`) und die **PIN** der App.
+- **Konten:** dasselbe Trade-Republic-Verrechnungs- und Depotkonto wie beim CSV-Import im Addon.
+
+**Anmelden:** Die Anmeldung läuft wie im Browser auf app.traderepublic.com. Trade Republic schickt eine Anfrage in die App, die bestätigst du, und dann klickst du *Ich habe in der App bestätigt*. Die Handy-App bleibt dabei angemeldet. Nutzt dein Konto eine Authenticator-App, fragt die Seite nach deren Code. Die Sitzung hält eine Weile; läuft sie ab, schickt der tägliche Abruf eine ntfy-Nachricht und wartet zwei Minuten auf deine Bestätigung in der App.
+
+**Was gebucht wird** – nach denselben Regeln wie der CSV-Import des Addons:
+
+| In der Timeline | In Wealthfolio |
+|---|---|
+| Kauf, Sparplan, Verkauf | Kauf/Verkauf auf dem Depotkonto mit Gebühr und Steuer in eigenen Feldern, Geld per Übertrag vom bzw. zum Verrechnungskonto |
+| Dividende, Ausschüttung | eine Dividende mit Nettobetrag und Quellensteuer, Geld per Übertrag aufs Verrechnungskonto |
+| Saveback | Bonus (CREDIT/BONUS) auf dem Depotkonto, der den Kauf bezahlt – ohne Abbuchung vom Verrechnungskonto |
+| Zinsen | Zinsen (INTEREST) mit Steuer |
+| Vorabpauschale / Steuerkorrektur | Steuer (TAX) / Steuererstattung (CREDIT/TAX_REFUND) |
+| Einzahlung, Kartenerstattung | Einzahlung (DEPOSIT) |
+| Kartenzahlung, Überweisung | Auszahlung (WITHDRAWAL) oder – mit Eintrag unter *Überträge* – Übertrag aufs eigene Konto |
+| Aktiensplit, Spin-off, Tausch, Depotübertrag, Private Markets | **nicht gebucht**, als unbekannt gemeldet – diese Kapitalmaßnahmen bildet der CSV-Import im Addon ab |
+
+Reine Hinweise (Order angelegt/storniert, Dokumente, Adressänderung …) und stornierte Buchungen übernimmt der Dienst nicht.
+
+**CSV-Import und Dienst zusammen:** Was du schon per CSV importiert hast, erkennt der Dienst (gleiche Art, gleiches Wertpapier, gleicher Betrag, höchstens 36 Stunden auseinander) und legt es nicht noch einmal an.
+
+## Abgleich mit Wealthfolio
+
+Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in Wealthfolio: das Guthaben mit dem Cash des Verrechnungskontos und, bei Trade Republic und beim Dummy, jede Position mit dem Bestand des Depotkontos. Die Übersicht zeigt das Ergebnis. Eine Abweichung, die auch beim nächsten Abruf noch besteht, kommt als ntfy-Nachricht. Direkt nach neuen Buchungen rechnet Wealthfolio noch. Typische Ursachen: eine Kapitalmaßnahme, die per CSV-Import nachzuholen ist, oder Buchungen aus der Zeit vor dem ersten Abruf.
+
 ## Im Alltag
 
 | Was passiert | Was du tust |
@@ -141,6 +175,11 @@ Für Mitwirkende: [CLAUDE.md](CLAUDE.md) beschreibt Aufbau, Regeln und wie ein n
 - Python-Dienst `brokersync` (FastAPI-Oberfläche auf Port 8090, `brokersync run` für den systemd-Timer) unter `/opt/wealthfolio-broker-sync`; Daten in `/opt/wealthfolio-broker-sync/data` (Konfiguration, verschlüsselte Zugangsdaten, Sync-Status), läuft als eigener Benutzer `brokersync`.
 - Wealthfolio wird über seine REST-API (`/api/v1`) mit dem Wealthfolio-Passwort angesprochen.
 - Releases: Ein neuer Stand wird installierbar, sobald die Version in `pyproject.toml` erhöht und nach `main` gemergt ist; der Release-Workflow legt dann das GitHub-Release an, aus dem Installation und Update laden.
+
+## Danke
+
+- [pytr](https://github.com/pytr-org/pytr) (MIT) für die Anbindung an Trade Republic; die Testfälle für Trade Republic folgen dem Format seiner Test-Ereignisse.
+- [python-fints](https://github.com/raphaelm/python-fints) (LGPL) für FinTS.
 
 ## Lizenz
 
