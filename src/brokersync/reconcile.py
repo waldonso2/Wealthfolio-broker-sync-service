@@ -4,8 +4,8 @@ pre-import check (``reconcile.ts``), but against the live accounts.
 - **Cash:** the broker's balance per currency vs. Wealthfolio's cash holding on
   the cash account.
 - **Positions** (brokers that report them): shares per ISIN vs. Wealthfolio's
-  holdings on the securities account, matched by the symbol the sync books
-  (the ISIN, or its security mapping).
+  holdings on the securities account, matched by the asset the ISIN is booked
+  under (learned from its trades, ``brokersync.assets``), else by symbol.
 
 Wealthfolio recalculates holdings in the background after new activities, so
 a single deviation right after a sync may be a recalculation in progress; the
@@ -48,8 +48,14 @@ def _fmt(d: Decimal) -> str:
 
 
 def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: list[dict],
-            wf_portfolio: list[dict], symbol_of: dict[str, str]) -> list[Deviation]:
-    """Deviations between broker and Wealthfolio; ``symbol_of`` maps ISIN → booked symbol."""
+            wf_portfolio: list[dict], symbol_of: dict[str, str],
+            asset_of: dict[str, str] | None = None) -> list[Deviation]:
+    """Deviations between broker and Wealthfolio.
+
+    A position is found by its asset (``asset_of``: ISIN → Wealthfolio asset id,
+    see ``brokersync.assets``), else by the symbol it is booked under
+    (``symbol_of``: ISIN → mapped symbol, else the ISIN).
+    """
     out: list[Deviation] = []
     wf_cash_by_ccy: dict[str, Decimal] = {}
     for h in wf_cash:
@@ -63,22 +69,29 @@ def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: 
 
     if positions is None:
         return out
+    # Per asset: (shares, name); found by asset id or by symbol.
     wf_shares: dict[str, tuple[Decimal, str]] = {}
+    by_symbol: dict[str, str] = {}
     for h in wf_portfolio:
         if (h.get("holdingType") or "").lower() != "security" or h.get("isClosed"):
             continue
         inst = h.get("instrument") or {}
         symbol = inst.get("symbol") or ""
-        qty, _ = wf_shares.get(symbol, (Decimal(0), ""))
-        wf_shares[symbol] = (qty + _dec(h.get("quantity")), inst.get("name") or symbol)
+        key = inst.get("id") or symbol
+        qty, _ = wf_shares.get(key, (Decimal(0), ""))
+        wf_shares[key] = (qty + _dec(h.get("quantity")), inst.get("name") or symbol)
+        by_symbol.setdefault(symbol, key)
     seen: set[str] = set()
     for p in positions:
-        symbol = symbol_of.get(p.isin, p.isin)
-        seen.add(symbol)
-        have, _ = wf_shares.get(symbol, (Decimal(0), ""))
+        key = (asset_of or {}).get(p.isin)
+        if key not in wf_shares:
+            symbol = symbol_of.get(p.isin, p.isin)
+            key = by_symbol.get(symbol, symbol)
+        seen.add(key)
+        have, _ = wf_shares.get(key, (Decimal(0), ""))
         if abs(have - p.shares) > SHARES_TOLERANCE:
-            out.append(Deviation("position", p.isin, p.name or symbol, _fmt(p.shares), _fmt(have)))
-    for symbol, (qty, name) in wf_shares.items():
-        if symbol not in seen and abs(qty) > SHARES_TOLERANCE:
-            out.append(Deviation("position", symbol, name, "0", _fmt(qty)))
+            out.append(Deviation("position", p.isin, p.name or key, _fmt(p.shares), _fmt(have)))
+    for key, (qty, name) in wf_shares.items():
+        if key not in seen and abs(qty) > SHARES_TOLERANCE:
+            out.append(Deviation("position", key, name, "0", _fmt(qty)))
     return out

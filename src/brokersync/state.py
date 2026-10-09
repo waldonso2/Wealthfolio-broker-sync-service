@@ -50,6 +50,22 @@ CREATE TABLE IF NOT EXISTS balances (
   at TEXT NOT NULL,
   PRIMARY KEY (broker, currency)
 );
+-- The Wealthfolio asset a broker's ISIN is booked under (learned from the
+-- activities of its trades and dividends): the addon books under the ticker
+-- the user mapped, which Wealthfolio's holdings don't link to an ISIN.
+CREATE TABLE IF NOT EXISTS assets (
+  broker TEXT NOT NULL,
+  isin TEXT NOT NULL,
+  asset_id TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  exchange_mic TEXT,
+  name TEXT,
+  PRIMARY KEY (broker, isin)
+);
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS unknown_events (
   broker TEXT NOT NULL,
   tx_id TEXT NOT NULL,
@@ -100,6 +116,30 @@ class State:
                 "INSERT OR REPLACE INTO synced VALUES (?, ?, ?, ?, ?)",
                 (broker, tx_id, status, json.dumps(activity_ids), now()),
             )
+
+    def activity_ids(self, broker: str, tx_id: str) -> list[str]:
+        row = self.db.execute("SELECT activity_ids FROM synced WHERE broker = ? AND tx_id = ?",
+                              (broker, tx_id)).fetchone()
+        return json.loads(row[0]) if row else []
+
+    # ── assets per ISIN ─────────────────────────────────────────────────────
+    def assets(self, broker: str) -> dict[str, dict]:
+        rows = self.db.execute("SELECT isin, asset_id, symbol, exchange_mic, name FROM assets WHERE broker = ?",
+                               (broker,))
+        return {i: {"asset_id": a, "symbol": s, "exchange_mic": m, "name": n} for i, a, s, m, n in rows}
+
+    def set_asset(self, broker: str, isin: str, asset_id: str, symbol: str, exchange_mic: str | None,
+                  name: str | None) -> None:
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO assets VALUES (?, ?, ?, ?, ?, ?)",
+                            (broker, isin, asset_id, symbol, exchange_mic, name))
+
+    def flag(self, key: str) -> bool:
+        return self.db.execute("SELECT 1 FROM meta WHERE key = ?", (key,)).fetchone() is not None
+
+    def set_flag(self, key: str) -> None:
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, now()))
 
     # ── unknown events ──────────────────────────────────────────────────────
     def add_unknown(self, broker: str, tx_id: str, raw_type: str, occurred_at: str, payload: dict) -> bool:

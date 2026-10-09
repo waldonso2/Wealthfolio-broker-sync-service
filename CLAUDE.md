@@ -26,6 +26,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | `src/brokersync/wealthfolio.py` | REST client: password login → `wf_session` JWT sent as Bearer; accounts, create, search |
 | `src/brokersync/vault.py` | Fernet-encrypted secrets (`data/secrets.enc`, key `data/secret.key` 0600), UI password hash |
 | `src/brokersync/config.py` / `state.py` | Non-secret config (`data/config.json`, written by the UI only) / SQLite sync state, runs, unknown events |
+| `src/brokersync/assets.py` | ISIN → Wealthfolio asset, learned from the activities of trades/dividends (holdings carry no ISIN, the addon books under mapped tickers); used for the holdings check and to book new trades onto the same asset |
 | `src/brokersync/reconcile.py` | Broker cash/positions vs. Wealthfolio holdings (`GET /holdings?accountId=`) after each run; reported when a deviation lasts two runs |
 | `src/brokersync/duplicates.py` | Finds activities the sync created on top of CSV/PDF imports (same rules as `ExistingIndex`) and removes only the sync's copies; UI page *Duplikate*, confirmation required |
 | `src/brokersync/notify.py` | ntfy |

@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from . import assets as assets_mod
 from . import config as config_mod
 from .adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from .dedup import ExistingIndex
@@ -175,9 +176,13 @@ class Syncer:
         label = adapter_cls.label
         adapter.on_user_action = lambda message: self.notifier(cfg).send(
             f"{label}: Bestätigung nötig", message, link=self.link(cfg, "/"), priority="high", tags="key")
+        # Once, for brokers with positions: the whole history, to learn the
+        # Wealthfolio asset of every ISIN (brokersync.assets) for the check.
+        backfill = adapter_cls.reports_positions and not self.state.flag(f"assets-learned:{key}")
+        since = self._start(bcfg) if backfill else self._since(key, bcfg)
         try:
             adapter.login()
-            transactions = adapter.get_transactions(self._since(key, bcfg))
+            transactions = adapter.get_transactions(since)
             cash = self._broker_cash(key, adapter)
             positions = self._broker_positions(key, adapter) if adapter_cls.reports_positions else None
         finally:
@@ -191,8 +196,10 @@ class Syncer:
         todo = [t for t in todo if t.kind != Kind.UNKNOWN]
 
         accounts = Accounts(bcfg.cash_account_id, bcfg.portfolio_account_id)
-        mappings = {isin: SecurityMapping(m.get("symbol") or isin, m.get("exchangeMic"), m.get("name"))
-                    for isin, m in cfg.security_mappings.items()}
+        # The user's mappings win over the assets learned from earlier activities.
+        mappings = assets_mod.mappings(self.state, key)
+        mappings.update({isin: SecurityMapping(m.get("symbol") or isin, m.get("exchangeMic"), m.get("name"))
+                         for isin, m in cfg.security_mappings.items()})
         patterns = [TransferPattern.from_config(p) for p in cfg.transfer_patterns]
         with self._wealthfolio(cfg.wealthfolio_url, secrets.get("wealthfolio_password")) as wf:
             unmatched: list[Transaction] = []
@@ -209,6 +216,12 @@ class Syncer:
                             unmatched.append(tx)
                         continue
                     self._sync_tx(wf, key, tx, accounts, mappings, patterns, existing, result)
+            try:
+                assets_mod.learn(self.state, key, transactions, wf, accounts)
+                if backfill:
+                    self.state.set_flag(f"assets-learned:{key}")
+            except WealthfolioError as e:
+                log.info("%s: assets not learned: %s", key, e)
             if cash is not None and not result.failed:
                 if result.created:
                     time.sleep(self.recalc_wait)  # Wealthfolio recalculates holdings in the background
@@ -243,7 +256,8 @@ class Syncer:
             log.info("%s: no holdings for the check: %s", key, e)
             return
         deviations = [d.as_dict() for d in compare(cash, positions, wf_cash, wf_portfolio,
-                                                   {i: m.symbol for i, m in mappings.items()})]
+                                                   {i: m.symbol for i, m in mappings.items()},
+                                                   {i: a["asset_id"] for i, a in self.state.assets(key).items()})]
         previous = self.state.reconcile(key) or {}
         # Report only what shows up twice in a row (not a recalculation in
         # progress), and each set of deviations only once.
@@ -295,6 +309,10 @@ class Syncer:
             if open_since and open_since - timedelta(days=1) < since:
                 since = open_since - timedelta(days=1)
             return since
+        return self._start(bcfg)
+
+    @staticmethod
+    def _start(bcfg: config_mod.BrokerConfig) -> datetime | None:
         if bcfg.start_date:
             return datetime.fromisoformat(bcfg.start_date).replace(tzinfo=UTC)
         return None

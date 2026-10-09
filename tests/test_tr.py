@@ -284,14 +284,14 @@ def test_positions_in_the_current_and_the_older_format():
 
 
 # ── CSV-imported securities under a mapped ticker ───────────────────────────
-def add_csv_buy(wf, *, date="2026-09-02T09:00:00.000Z", symbol="NVDA"):
+def add_csv_buy(wf, *, date="2026-09-02T09:00:00.000Z", symbol="NVDA", asset_id=None):
     """What the addon's CSV import booked for the NVIDIA buy, with the ticker the user mapped."""
     leg = dict(quantity="1", unitPrice="1", amount="111", currency="EUR", assetSymbol="$CASH-EUR")
     wf.add_existing(accountId="acc-cash", activityType="TRANSFER_OUT", date=date, comment="Funds for buy", **leg)
     wf.add_existing(accountId="acc-depot", activityType="TRANSFER_IN", date=date, comment="Funds from Cash", **leg)
     return wf.add_existing(accountId="acc-depot", activityType="BUY", date=date, quantity="0.685102",
                            unitPrice="160.56", amount="111", fee="1", currency="EUR", comment="NVIDIA - Buy",
-                           assetSymbol=symbol, assetId=symbol)
+                           assetSymbol=symbol, assetId=asset_id or symbol, assetName="NVIDIA Corp.")
 
 
 def test_a_csv_buy_under_a_ticker_is_recognised(tmp_path):
@@ -404,3 +404,42 @@ def test_login_with_a_valid_session_says_no_confirmation_was_needed(tmp_path, ap
     r = client.get("/brokers/tr/login")
     assert "Sitzung ist noch gültig" in r.text
     assert FakeApi.instances[-1].calls == ["resume"]
+
+
+def test_positions_are_compared_by_the_asset_the_csv_import_booked(tmp_path):
+    # Wealthfolio's holdings carry no ISIN, and the addon books under the user's ticker:
+    # the asset is learned from the CSV buy the sync recognised.
+    syncer, wf, _ = setup_sync(tmp_path)
+    add_csv_buy(wf, symbol="NVDA.US", asset_id="asset-nvda")
+    syncer.run()
+    assert syncer.state.assets("tr")["US67066G1040"] == {"asset_id": "asset-nvda", "symbol": "NVDA.US",
+                                                         "exchange_mic": None, "name": "NVIDIA Corp."}
+    devs = syncer.state.reconcile("tr")["deviations"]
+    assert not any(d["key"] in ("US67066G1040", "asset-nvda") for d in devs)
+    # The next NVIDIA trade is booked onto that asset, not under the ISIN.
+    from brokersync import assets
+
+    tx = next(t for t in txs() if t.isin == "US67066G1040" and t.kind == Kind.BUY)
+    acts = to_activities(tx, "tr", Accounts("c", "p"), assets.mappings(syncer.state, "tr"))
+    assert acts[-1]["asset"]["id"] == "asset-nvda" and acts[-1]["asset"]["symbol"] == "NVDA.US"
+
+
+def test_an_existing_install_fetches_the_whole_history_once_to_learn_the_assets(tmp_path):
+    seen = []
+
+    class Recording(ReplayTR):
+        def get_transactions(self, since):
+            seen.append(since)
+            return super().get_transactions(since)
+
+    syncer, wf, _ = setup_sync(tmp_path)
+    syncer.adapters = {"tr": Recording}
+    syncer.run()
+    syncer.run()
+    syncer.state.db.execute("DELETE FROM meta")  # as after the update to this version
+    syncer.state.db.commit()
+    syncer.run()
+    syncer.run()
+    start = seen[0]
+    assert start.date().isoformat() == "2026-08-01"
+    assert seen[1] != start and seen[2] == start and seen[3] != start
