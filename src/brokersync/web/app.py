@@ -178,6 +178,7 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
                 "has_credentials": bool(secrets_.get("brokers", {}).get(key, {}).get("credentials")),
                 "last": state.last_run(key),
                 "balances": state.balances(key),
+                "reconcile": state.reconcile(key),
             })
         steps = [
             ("Wealthfolio verbinden", "/setup/wealthfolio", bool(c.wealthfolio_url and _wf_done(secrets_, c))),

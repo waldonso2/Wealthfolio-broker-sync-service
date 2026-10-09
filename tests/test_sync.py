@@ -79,6 +79,8 @@ def test_first_run_books_everything_second_run_nothing(tmp_path):
     assert [(t, link) for t, _, link in notifier.sent] == [
         ("Dummy (Test): 1 unbekannte Buchungen", "http://sync.local:8090/unknown")]
     assert syncer.state.unknown_events()[0]["raw_type"] == "DUMMY_SPECIAL_EVENT"
+    # Holdings check: 502.68 EUR cash and 5 shares, as the dummy reports.
+    assert syncer.state.reconcile("dummy")["deviations"] == []
 
     posted = len(wf.created)
     [r2] = syncer.run()

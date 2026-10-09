@@ -1,0 +1,2123 @@
+{
+ "description": "Timeline events in Trade Republic's format (structure from pytr's MIT-licensed test events, ids, dates and names replaced): deposit, buy, savings plan, sell, dividend, card payment and refund, outgoing transfer, interest, Saveback, Vorabpauschale, tax correction, split (unknown), address change (skipped), cancelled transfer (skipped)",
+ "recording": {
+  "events": [
+   {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "timestamp": "2026-09-01T17:07:26.374+0000",
+    "title": "Erika Mustermann",
+    "icon": "logos/timeline_plus_circle/v2",
+    "badge": null,
+    "subtitle": null,
+    "amount": {
+     "currency": "EUR",
+     "value": 200.0,
+     "fractionDigits": 2
+    },
+    "subAmount": null,
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000001"
+    },
+    "eventType": "timeline_legacy_migrated_events",
+    "hidden": false,
+    "deleted": false,
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "sections": [
+      {
+       "title": "Du hast 200,00 € erhalten",
+       "data": {
+        "icon": "logos/timeline_plus_circle/v2",
+        "subtitleText": null,
+        "timestamp": "2024-06-03T17:07:26.374+0000",
+        "status": "executed"
+       },
+       "action": null,
+       "type": "header"
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Status",
+         "detail": {
+          "text": "Abgeschlossen",
+          "functionalStyle": "EXECUTED",
+          "type": "status"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Von",
+         "detail": {
+          "text": "Erika Mustermann",
+          "trend": null,
+          "action": null,
+          "displayValue": null,
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "IBAN",
+         "detail": {
+          "text": "00000000-0000-4000-8000-000000000001",
+          "trend": null,
+          "action": null,
+          "displayValue": null,
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "action": null,
+       "type": "table"
+      }
+     ]
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000002",
+    "timestamp": "2026-09-02T19:29:43.928+0000",
+    "title": "NVIDIA",
+    "icon": "logos/US67066G1040/v2",
+    "badge": null,
+    "subtitle": "Kauforder",
+    "amount": {
+     "currency": "EUR",
+     "value": -111.0,
+     "fractionDigits": 2
+    },
+    "subAmount": null,
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000002"
+    },
+    "eventType": "trading_trade_executed",
+    "hidden": false,
+    "deleted": false,
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000002",
+     "sections": [
+      {
+       "title": "Du hast 111,00 € investiert",
+       "data": {
+        "icon": "logos/US67066G1040/v2",
+        "timestamp": "2025-10-10T19:29:43.928252Z",
+        "status": "executed"
+       },
+       "action": {
+        "payload": "US67066G1040",
+        "type": "instrumentDetail"
+       },
+       "type": "header"
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Portfolio",
+         "detail": {
+          "text": "Brokerage",
+          "displayValue": {
+           "text": "Brokerage"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Kauf",
+         "detail": {
+          "text": "Ausgeführt",
+          "functionalStyle": "EXECUTED",
+          "type": "status"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Asset",
+         "detail": {
+          "text": "NVIDIA",
+          "displayValue": {
+           "text": "NVIDIA"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Transaktion",
+         "detail": {
+          "text": "0,685102 ×  160,56 €",
+          "action": {
+           "payload": {
+            "id": "00000000-0000-0000-0000-000000000000",
+            "sections": [
+             {
+              "title": "Transaktion",
+              "type": "title"
+             },
+             {
+              "data": [
+               {
+                "title": "Aktien",
+                "detail": {
+                 "text": "0,685102",
+                 "displayValue": {
+                  "text": "0,685102"
+                 },
+                 "type": "text"
+                },
+                "style": "plain"
+               },
+               {
+                "title": "Aktienkurs",
+                "detail": {
+                 "text": "160,56 €",
+                 "displayValue": {
+                  "text": "160,56 €"
+                 },
+                 "type": "text"
+                },
+                "style": "plain"
+               },
+               {
+                "title": "Summe",
+                "detail": {
+                 "text": "110,00 €",
+                 "displayValue": {
+                  "text": "110,00 €"
+                 },
+                 "type": "text"
+                },
+                "style": "plain"
+               }
+              ],
+              "type": "table"
+             }
+            ]
+           },
+           "type": "infoPage"
+          },
+          "displayValue": {
+           "text": "160,56 €",
+           "prefix": "0,685102 × "
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Gebühr",
+         "detail": {
+          "text": "1,00 €",
+          "displayValue": {
+           "text": "1,00 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Summe",
+         "detail": {
+          "text": "111,00 €",
+          "displayValue": {
+           "text": "111,00 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Dokumente",
+       "data": [
+        {
+         "title": "Abrechnung",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "085e4556-22b9-4af6-977b-f34fb90d1dee",
+         "postboxType": "SECURITIES_SETTLEMENT"
+        },
+        {
+         "title": "Kosteninformation",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "2ea881b8-e8e7-4d4d-8df9-07d2d9cab6a8",
+         "postboxType": "EQUITIES_BUY_EX_ANTE"
+        }
+       ],
+       "type": "documents"
+      }
+     ]
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000003",
+    "timestamp": "2026-09-03T08:26:13.657+0000",
+    "title": "DroneShield",
+    "icon": "logos/AU000000DRO2/v2",
+    "badge": null,
+    "subtitle": "Sparplan ausgeführt",
+    "amount": {
+     "currency": "EUR",
+     "value": -19.0,
+     "fractionDigits": 2
+    },
+    "subAmount": null,
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000003"
+    },
+    "eventType": "trading_savingsplan_executed",
+    "hidden": false,
+    "deleted": false,
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000003",
+     "sections": [
+      {
+       "title": "Du hast 19,00 € gespart",
+       "data": {
+        "icon": "logos/AU000000DRO2/v2",
+        "timestamp": "2025-10-23T08:26:13.65787Z",
+        "status": "executed"
+       },
+       "action": {
+        "payload": "AU000000DRO2",
+        "type": "instrumentDetail"
+       },
+       "type": "header"
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Sparplan",
+         "detail": {
+          "text": "Ausgeführt",
+          "functionalStyle": "EXECUTED",
+          "type": "status"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Zahlung",
+         "detail": {
+          "text": "Cash",
+          "icon": "logos/bank_traderepublic/v2",
+          "type": "iconWithText"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Asset",
+         "detail": {
+          "text": "DroneShield",
+          "displayValue": {
+           "text": "DroneShield"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Transaktion",
+         "detail": {
+          "text": "6,921675 ×  2,75 €",
+          "action": {
+           "payload": {
+            "id": "00000000-0000-0000-0000-000000000000",
+            "sections": [
+             {
+              "title": "Transaktion",
+              "type": "title"
+             },
+             {
+              "data": [
+               {
+                "title": "Aktien",
+                "detail": {
+                 "text": "6,921675",
+                 "displayValue": {
+                  "text": "6,921675"
+                 },
+                 "type": "text"
+                },
+                "style": "plain"
+               },
+               {
+                "title": "Aktienkurs",
+                "detail": {
+                 "text": "2,75 €",
+                 "displayValue": {
+                  "text": "2,75 €"
+                 },
+                 "type": "text"
+                },
+                "style": "plain"
+               },
+               {
+                "title": "Summe",
+                "detail": {
+                 "text": "19,00 €",
+                 "displayValue": {
+                  "text": "19,00 €"
+                 },
+                 "type": "text"
+                },
+                "style": "plain"
+               }
+              ],
+              "type": "table"
+             }
+            ]
+           },
+           "type": "infoPage"
+          },
+          "displayValue": {
+           "text": "2,75 €",
+           "prefix": "6,921675 × "
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Gebühr",
+         "detail": {
+          "text": "Kostenlos",
+          "displayValue": {
+           "text": "Kostenlos"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Summe",
+         "detail": {
+          "text": "19,00 €",
+          "displayValue": {
+           "text": "19,00 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Sparplan",
+       "data": [
+        {
+         "title": "",
+         "detail": {
+          "title": "DroneShield",
+          "timestamp": "2025-10-23T08:26:13.65787Z",
+          "amount": "19,00 €",
+          "icon": "logos/AU000000DRO2/v2",
+          "status": "executed",
+          "action": {
+           "payload": {
+            "savingsPlanId": "31e81415-c9ed-48b2-996b-5f3a2a6c32b1"
+           },
+           "type": "openSavingsPlanOverview"
+          },
+          "subtitle": "Wöchentlich",
+          "type": "embeddedTimelineItem"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Dokumente",
+       "data": [
+        {
+         "title": "Abrechnungsausführung",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "f58e3844-a6f9-4f81-9bd0-8b49d8e5984e",
+         "postboxType": "SECURITIES_SETTLEMENT_SAVINGS_PLAN"
+        }
+       ],
+       "type": "documents"
+      }
+     ]
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000004",
+    "timestamp": "2026-09-04T18:38:36.065+0000",
+    "title": "Tencent Holdings (ADR)",
+    "icon": "logos/US88032Q1094/v2",
+    "badge": null,
+    "subtitle": "Verkaufsorder",
+    "amount": {
+     "currency": "EUR",
+     "value": 200.93,
+     "fractionDigits": 2
+    },
+    "subAmount": null,
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000004"
+    },
+    "eventType": "trading_trade_executed",
+    "hidden": false,
+    "deleted": false,
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000004",
+     "sections": [
+      {
+       "title": "Du hast 200,93 € erhalten",
+       "data": {
+        "icon": "logos/US88032Q1094/v2",
+        "timestamp": "2025-05-12T18:38:36.065535045Z",
+        "status": "executed"
+       },
+       "action": {
+        "payload": "US88032Q1094",
+        "type": "instrumentDetail"
+       },
+       "type": "header"
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Portfolio",
+         "detail": {
+          "text": "Brokerage",
+          "displayValue": {
+           "text": "Brokerage"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Verkaufen",
+         "detail": {
+          "text": "Ausgeführt",
+          "functionalStyle": "EXECUTED",
+          "type": "status"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Asset",
+         "detail": {
+          "text": "Tencent Holdings (ADR)",
+          "displayValue": {
+           "text": "Tencent Holdings (ADR)"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Transaktion",
+         "detail": {
+          "text": "3,454506 ×  58,50 €",
+          "action": {
+           "payload": {
+            "id": "00000000-0000-0000-0000-000000000000",
+            "sections": [
+             {
+              "title": "Transaktion",
+              "type": "title"
+             },
+             {
+              "data": [
+               {
+                "title": "Aktien",
+                "detail": {
+                 "text": "3,454506",
+                 "displayValue": {
+                  "text": "3,454506"
+                 },
+                 "type": "text"
+                },
+                "style": "plain"
+               },
+               {
+                "title": "Aktienkurs",
+                "detail": {
+                 "text": "58,50 €",
+                 "displayValue": {
+                  "text": "58,50 €"
+                 },
+                 "type": "text"
+                },
+                "style": "plain"
+               },
+               {
+                "title": "Summe",
+                "detail": {
+                 "text": "202,09 €",
+                 "displayValue": {
+                  "text": "202,09 €"
+                 },
+                 "type": "text"
+                },
+                "style": "plain"
+               }
+              ],
+              "type": "table"
+             }
+            ]
+           },
+           "type": "infoPage"
+          },
+          "displayValue": {
+           "text": "58,50 €",
+           "prefix": "3,454506 × "
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Steuer",
+         "detail": {
+          "text": "0,16 €",
+          "displayValue": {
+           "text": "0,16 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Gebühr",
+         "detail": {
+          "text": "1,00 €",
+          "displayValue": {
+           "text": "1,00 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Summe",
+         "detail": {
+          "text": "200,93 €",
+          "displayValue": {
+           "text": "200,93 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Performance",
+       "data": [
+        {
+         "title": "Rendite",
+         "detail": {
+          "text": "0,31 %",
+          "trend": "positive",
+          "displayValue": {
+           "text": "0,31 %"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Gewinn",
+         "detail": {
+          "text": "0,62 €",
+          "trend": "positive",
+          "displayValue": {
+           "text": "0,62 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "horizontalTable"
+      },
+      {
+       "title": "Dokumente",
+       "data": [
+        {
+         "title": "Kosteninformation 1",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "8b7b76a5-32f6-4243-ae06-d0002bc549d4",
+         "postboxType": "EQUITIES_SELL_EX_ANTE"
+        },
+        {
+         "title": "Kosteninformation 2",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "cbb6b836-d19a-4760-88a5-b33ec707431c",
+         "postboxType": "EQUITIES_SELL_EX_ANTE"
+        },
+        {
+         "title": "Abrechnung 1",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "4b15144e-0886-4114-9d01-d95f064f950d",
+         "postboxType": "SECURITIES_SETTLEMENT"
+        },
+        {
+         "title": "Abrechnung 2",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "74f4790f-2f36-484f-ba06-7d4df50f1f32",
+         "postboxType": "SECURITIES_SETTLEMENT"
+        }
+       ],
+       "type": "documents"
+      }
+     ]
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000005",
+    "timestamp": "2026-09-05T14:19:56.295+0000",
+    "title": "Comcast (A)",
+    "icon": "logos/US20030N1019/v2",
+    "badge": null,
+    "subtitle": "Bardividende",
+    "amount": {
+     "currency": "EUR",
+     "value": 2.24,
+     "fractionDigits": 2
+    },
+    "subAmount": null,
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000005"
+    },
+    "eventType": "ssp_corporate_action_invoice_cash",
+    "hidden": false,
+    "deleted": false,
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000005",
+     "sections": [
+      {
+       "title": "Du hast 2,24 € erhalten",
+       "data": {
+        "icon": "logos/US20030N1019/v2",
+        "timestamp": "2025-10-23T14:19:56.295Z",
+        "status": "executed"
+       },
+       "type": "header"
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Status",
+         "detail": {
+          "text": "Ausgeführt",
+          "functionalStyle": "EXECUTED",
+          "type": "status"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Event",
+         "detail": {
+          "text": "Bardividende",
+          "displayValue": {
+           "text": "Bardividende"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Wertpapier",
+         "detail": {
+          "text": "Comcast (A)",
+          "displayValue": {
+           "text": "Comcast (A)"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Geschäft",
+       "data": [
+        {
+         "title": "Aktien",
+         "detail": {
+          "text": "10.640298",
+          "displayValue": {
+           "text": "10.640298"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Dividende pro Aktie",
+         "detail": {
+          "text": "0,33 $",
+          "displayValue": {
+           "text": "0,33 $"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Steuer",
+         "detail": {
+          "text": "-0,78 €",
+          "displayValue": {
+           "text": "-0,78 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Gesamt",
+         "detail": {
+          "text": "2,24 €",
+          "displayValue": {
+           "text": "2,24 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Dokumente",
+       "data": [
+        {
+         "title": "Dokumente",
+         "detail": "23.10.2025",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "974b4871-2481-4751-b183-c36c2f960e4a",
+         "postboxType": "CA_INCOME_INVOICE"
+        }
+       ],
+       "type": "documents"
+      }
+     ]
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000006",
+    "timestamp": "2026-09-06T15:10:48.618+0000",
+    "title": "REWE",
+    "icon": "logos/merchant-4f7a75cd-9cbb-493f-b7fa-d259620b178b/v2",
+    "badge": null,
+    "subtitle": null,
+    "amount": {
+     "currency": "EUR",
+     "value": -4.28,
+     "fractionDigits": 2
+    },
+    "subAmount": null,
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000006"
+    },
+    "hidden": false,
+    "deleted": false,
+    "eventType": "CARD_TRANSACTION",
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000006",
+     "sections": [
+      {
+       "title": "Du hast 4,28 € ausgegeben",
+       "data": {
+        "icon": {
+         "asset": "logos/merchant-4f7a75cd-9cbb-493f-b7fa-d259620b178b/v2",
+         "badge": null
+        },
+        "timestamp": "2024-06-03T15:10:48.618Z",
+        "status": "executed"
+       },
+       "type": "header"
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Kartenzahlung",
+         "detail": {
+          "text": "Fertig",
+          "functionalStyle": "EXECUTED",
+          "type": "status"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Bezahlt mit",
+         "detail": {
+          "text": "Apple Pay",
+          "icon": "logos/bank_applepay/v2",
+          "action": {
+           "payload": {
+            "id": "850e7618-377e-4043-8956-4ab387928223",
+            "sections": [
+             {
+              "title": "Bezahlt mit Apple Pay",
+              "type": "title"
+             },
+             {
+              "data": [
+               {
+                "title": "Name des Geräts",
+                "detail": {
+                 "text": "Maximilians iPhone",
+                 "displayValue": {
+                  "text": "Maximilians iPhone"
+                 },
+                 "type": "text"
+                },
+                "style": "plain"
+               },
+               {
+                "title": "Gerätetyp",
+                "detail": {
+                 "text": "Smartphone",
+                 "displayValue": {
+                  "text": "Smartphone"
+                 },
+                 "type": "text"
+                },
+                "style": "plain"
+               },
+               {
+                "title": "Apple Pay-Karte",
+                "detail": {
+                 "text": "··9419",
+                 "displayValue": {
+                  "text": "··9419"
+                 },
+                 "type": "text"
+                },
+                "style": "plain"
+               }
+              ],
+              "type": "table"
+             },
+             {
+              "text": "Wenn du Apple Pay nutzt, erhält der Händler eine sichere, gerätespezifische Kartennummer. Deshalb kann es sein, dass die letzten vier Ziffern auf dem Beleg nicht mit denen auf deiner Karte übereinstimmen.",
+              "style": "disclaimer",
+              "type": "text"
+             }
+            ]
+           },
+           "displayMode": "bottomSheet",
+           "type": "infoPage"
+          },
+          "type": "iconWithText"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Händler",
+         "detail": {
+          "text": "REWE",
+          "displayValue": {
+           "text": "REWE"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Gesamt",
+         "detail": {
+          "text": "4,28 €",
+          "displayValue": {
+           "text": "4,28 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Vorteile",
+       "data": [
+        {
+         "title": "S&P 500 Information Tech USD (Acc)",
+         "detail": {
+          "title": "S&P 500 Information Tech USD (Acc)",
+          "timestamp": "2024-06-03T15:10:49.641732Z",
+          "amount": "0,05 €",
+          "icon": {
+           "asset": "logos/IE00B3WJKG14/v2",
+           "badge": null
+          },
+          "status": "executed",
+          "action": {
+           "type": "benefitsSavebackOverview"
+          },
+          "subtitle": "Saveback · 1%",
+          "type": "embeddedTimelineItem"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Dokumente",
+       "data": [
+        {
+         "title": "Transaktionsbeleg",
+         "action": {
+          "payload": {
+           "path": "api/v1/card/transactions/timelineDocuments/00000000-0000-4000-8000-000000000006",
+           "title": "Herunterladen",
+           "shareable": true
+          },
+          "type": "authenticatedBrowserModal"
+         },
+         "id": "00000000-0000-4000-8000-000000000006",
+         "postboxType": ""
+        }
+       ],
+       "type": "documents"
+      }
+     ]
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000007",
+    "timestamp": "2026-09-07T07:23:44.511+0000",
+    "title": "Decathlon",
+    "icon": "logos/merchant-a938525e-f1ec-4094-98f3-ad441e120e58/v2",
+    "badge": null,
+    "subtitle": null,
+    "amount": {
+     "currency": "EUR",
+     "value": 24.99,
+     "fractionDigits": 2
+    },
+    "subAmount": null,
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000007"
+    },
+    "eventType": "card_refund",
+    "hidden": false,
+    "deleted": false,
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000007",
+     "sections": [
+      {
+       "title": "Du hast 24,99 € erhalten",
+       "data": {
+        "icon": "logos/merchant-a938525e-f1ec-4094-98f3-ad441e120e58/v2",
+        "timestamp": "2025-08-17T07:23:44.511Z",
+        "status": "executed"
+       },
+       "type": "header"
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Kartenerstattung",
+         "detail": {
+          "text": "Fertig",
+          "functionalStyle": "EXECUTED",
+          "type": "status"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Zahlung",
+         "detail": {
+          "text": "··5891",
+          "icon": "logos/bank_traderepublic/v2",
+          "type": "iconWithText"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Händler",
+         "detail": {
+          "text": "Decathlon",
+          "displayValue": {
+           "text": "Decathlon"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Gesamt",
+         "detail": {
+          "text": "+24,99 €",
+          "displayValue": {
+           "text": "+24,99 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      }
+     ]
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000008",
+    "timestamp": "2026-09-08T09:35:47.370+0000",
+    "title": "Max Mustermann",
+    "icon": "logos/contacts-C-Lightblue/v2",
+    "badge": null,
+    "subtitle": "Gesendet",
+    "amount": {
+     "currency": "EUR",
+     "value": -50.3,
+     "fractionDigits": 2
+    },
+    "subAmount": null,
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000008"
+    },
+    "eventType": "OUTGOING_TRANSFER",
+    "hidden": false,
+    "deleted": false,
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000008",
+     "sections": [
+      {
+       "title": "Du hast -50,30 € an Max Mustermann gesendet",
+       "data": {
+        "icon": "logos/contacts-C-Lightblue/v2",
+        "timestamp": "2024-07-21T09:35:47.37Z",
+        "status": "executed"
+       },
+       "type": "header"
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Status",
+         "detail": {
+          "text": "Ausgeführt",
+          "functionalStyle": "EXECUTED",
+          "type": "status"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Gesendet mit",
+         "detail": {
+          "text": "Cash",
+          "icon": "logos/bank_traderepublic/v2",
+          "type": "iconWithText"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Referenz",
+         "detail": {
+          "text": "Sent via Trade Republic",
+          "displayValue": {
+           "text": "Sent via Trade Republic"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Empfänger",
+       "data": [
+        {
+         "title": "Name",
+         "detail": {
+          "text": "Max Mustermann",
+          "displayValue": {
+           "text": "Max Mustermann"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "IBAN",
+         "detail": {
+          "text": "DE12345",
+          "displayValue": {
+           "text": "DE12345"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Dokument",
+       "data": [
+        {
+         "title": "Transaktionsbestätigung",
+         "detail": "22.07.2024",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "325de7ad-a645-442f-bb14-09a4de5f7fbf",
+         "postboxType": "OUTGOING_TRANSFER"
+        }
+       ],
+       "type": "documents"
+      }
+     ]
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000009",
+    "timestamp": "2026-09-09T06:46:37.846+0000",
+    "title": "Zinsen",
+    "icon": "logos/timeline_interest_new/v2",
+    "badge": null,
+    "subtitle": "2 % p.a.",
+    "amount": {
+     "currency": "EUR",
+     "value": 4.87,
+     "fractionDigits": 2
+    },
+    "subAmount": null,
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000009"
+    },
+    "eventType": "INTEREST_PAYOUT",
+    "hidden": false,
+    "deleted": false,
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000009",
+     "sections": [
+      {
+       "title": "Du hast 4,87 € erhalten",
+       "data": {
+        "icon": "logos/timeline_interest_new/v2",
+        "timestamp": "2025-07-01T06:46:42.342175Z",
+        "status": "executed"
+       },
+       "type": "header"
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Status",
+         "detail": {
+          "text": "Ausgeführt",
+          "functionalStyle": "EXECUTED",
+          "type": "status"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Durchschnittssaldo",
+         "detail": {
+          "text": "3.900,38 €",
+          "displayValue": {
+           "text": "3.900,38 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Jährliche Rate",
+         "detail": {
+          "text": "2.00 %",
+          "displayValue": {
+           "text": "2.00 %"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Asset",
+         "detail": {
+          "text": "Cash",
+          "displayValue": {
+           "text": "Cash"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Status",
+       "steps": [
+        {
+         "leading": {
+          "avatar": {
+           "status": "completed",
+           "type": "bullet"
+          },
+          "connection": {
+           "order": "first"
+          }
+         },
+         "content": {
+          "title": "Zinsberechnung",
+          "timestamp": "2025-07-01T06:46:42.342175Z"
+         }
+        },
+        {
+         "leading": {
+          "avatar": {
+           "status": "completed",
+           "type": "bullet"
+          },
+          "connection": {
+           "order": "last"
+          }
+         },
+         "content": {
+          "title": "Zinszahlung",
+          "timestamp": "2025-07-01T06:46:42.342175Z"
+         }
+        }
+       ],
+       "type": "steps"
+      },
+      {
+       "title": "Transaktion",
+       "data": [
+        {
+         "title": "Angesammelt",
+         "detail": {
+          "text": "6,74 €",
+          "displayValue": {
+           "text": "6,74 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Steuern",
+         "detail": {
+          "text": "1,87 €",
+          "displayValue": {
+           "text": "1,87 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Gesamt",
+         "detail": {
+          "text": "4,87 €",
+          "displayValue": {
+           "text": "4,87 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Dokument",
+       "data": [
+        {
+         "title": "Abrechnung",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "3a982728-a476-44cd-bce9-aaa520b55f6f",
+         "postboxType": ""
+        }
+       ],
+       "type": "documents"
+      }
+     ]
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000010",
+    "timestamp": "2026-09-10T13:54:23.344+0000",
+    "title": "S&P 500 Information Tech USD (Acc)",
+    "icon": "logos/IE00B3WJKG14/v2",
+    "badge": null,
+    "subtitle": "Saveback",
+    "amount": {
+     "currency": "EUR",
+     "value": -15.0,
+     "fractionDigits": 2
+    },
+    "subAmount": null,
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000010"
+    },
+    "eventType": "benefits_saveback_execution",
+    "hidden": false,
+    "deleted": false,
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000010",
+     "sections": [
+      {
+       "title": "Du hast 15,00 € erhalten",
+       "data": {
+        "icon": "logos/IE00B3WJKG14/v2",
+        "timestamp": "2025-04-02T13:54:23.344+0000",
+        "status": "executed"
+       },
+       "action": {
+        "payload": "IE00B3WJKG14",
+        "type": "instrumentDetail"
+       },
+       "type": "header"
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Saveback",
+         "detail": {
+          "text": "Abgeschlossen",
+          "functionalStyle": "EXECUTED",
+          "type": "status"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Asset",
+         "detail": {
+          "text": "S&P 500 Information Tech USD (Acc)",
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Transaktion",
+         "detail": {
+          "text": "",
+          "displayValue": {
+           "text": "27,45 €",
+           "prefix": "0.546348 x "
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Gebühr",
+         "detail": {
+          "text": "Kostenlos",
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Gesamt",
+         "detail": {
+          "text": "15,00 €",
+          "type": "text"
+         },
+         "style": "highlighted"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Dokumente",
+       "data": [
+        {
+         "title": "Wertpapierabrechnung",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "8886fc15-a3e4-40c1-9604-e8e27f8ed992",
+         "postboxType": "SECURITIES_SETTLEMENT_SAVINGS_PLAN"
+        },
+        {
+         "title": "Kosteninformation",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "001c5873-ddf6-42be-9eaa-19df21ef82f8",
+         "postboxType": "COSTS_INFO_SAVINGS_PLAN_V2"
+        }
+       ],
+       "type": "documents"
+      }
+     ]
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000011",
+    "timestamp": "2026-09-11T14:54:28.155+0000",
+    "title": "MSCI China USD (Acc)",
+    "icon": "logos/IE00BJ5JPG56/v2",
+    "badge": null,
+    "subtitle": "Vorabpauschale",
+    "amount": {
+     "currency": "EUR",
+     "value": -0.19,
+     "fractionDigits": 2
+    },
+    "subAmount": null,
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000011"
+    },
+    "eventType": "ssp_corporate_action_invoice_cash",
+    "hidden": false,
+    "deleted": false,
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000011",
+     "sections": [
+      {
+       "title": "Du hast -0,19 € bezahlt",
+       "data": {
+        "icon": "logos/IE00BJ5JPG56/v2",
+        "timestamp": "2025-01-28T14:54:28.155Z",
+        "status": "executed"
+       },
+       "type": "header"
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Status",
+         "detail": {
+          "text": "Ausgeführt",
+          "functionalStyle": "EXECUTED",
+          "type": "status"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Event",
+         "detail": {
+          "text": "Vorabpauschale",
+          "displayValue": {
+           "text": "Vorabpauschale"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Wertpapier",
+         "detail": {
+          "text": "MSCI China USD (Acc)",
+          "displayValue": {
+           "text": "MSCI China USD (Acc)"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Geschäft",
+       "data": [
+        {
+         "title": "Bruttoertrag",
+         "detail": {
+          "text": "0,00 €",
+          "displayValue": {
+           "text": "0,00 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Steuer",
+         "detail": {
+          "text": "-0,19 €",
+          "displayValue": {
+           "text": "-0,19 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Gesamt",
+         "detail": {
+          "text": "-0,19 €",
+          "displayValue": {
+           "text": "-0,19 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Dokumente",
+       "data": [
+        {
+         "title": "Vorabpauschale",
+         "detail": "28.02.2025",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "4e227b8e-63c5-49a1-8e0b-adf8aaa6b81a",
+         "postboxType": "CA_VOPA_INVOICE"
+        }
+       ],
+       "type": "documents"
+      }
+     ]
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000012",
+    "timestamp": "2026-09-12T00:00:16.000+0000",
+    "title": "Steuerkorrektur",
+    "icon": "logos/timeline_person/v2",
+    "badge": null,
+    "subtitle": null,
+    "amount": {
+     "currency": "EUR",
+     "value": 2.87,
+     "fractionDigits": 2
+    },
+    "subAmount": null,
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000012"
+    },
+    "eventType": "ssp_tax_correction_invoice",
+    "hidden": false,
+    "deleted": false,
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000012",
+     "sections": [
+      {
+       "title": "Du hast 2,87 € erhalten",
+       "data": {
+        "icon": "logos/timeline_person/v2",
+        "timestamp": "2025-10-28T00:00:16Z",
+        "status": "executed"
+       },
+       "type": "header"
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Status",
+         "detail": {
+          "text": "Ausgeführt",
+          "functionalStyle": "EXECUTED",
+          "type": "status"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Event",
+         "detail": {
+          "text": "Steuerkorrektur",
+          "displayValue": {
+           "text": "Steuerkorrektur"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Geschäft",
+       "data": [
+        {
+         "title": "Gesamt",
+         "detail": {
+          "text": "2,87 €",
+          "displayValue": {
+           "text": "2,87 €"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Dokumente",
+       "data": [
+        {
+         "title": "Steuerabrechnung",
+         "detail": "28.10.2025",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "8bdb11ab-9406-4d11-845f-81e2371d87a0",
+         "postboxType": "TAX_OPTIMIZATION_INVOICE"
+        }
+       ],
+       "type": "documents"
+      }
+     ]
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000013",
+    "timestamp": "2026-09-13T08:06:40.347+0000",
+    "title": "Chipotle Mexican Grill",
+    "icon": "logos/US1696561059/v2",
+    "subtitle": "Aktiensplit",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000013"
+    },
+    "eventType": "ssp_corporate_action_invoice_shares",
+    "source": "timelineActivity",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000013",
+     "sections": [
+      {
+       "title": "Du hast Aktien aus einer Kapitalmaßnahme erhalten\n",
+       "data": {
+        "icon": "logos/US1696561059/v2",
+        "timestamp": "2024-06-26T08:06:40.347Z",
+        "status": "executed"
+       },
+       "type": "header"
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Status",
+         "detail": {
+          "text": "Ausgeführt",
+          "functionalStyle": "EXECUTED",
+          "type": "status"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Orderart",
+         "detail": {
+          "text": "Aktiensplit",
+          "displayValue": {
+           "text": "Aktiensplit"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Wertpapier",
+         "detail": {
+          "text": "Chipotle",
+          "displayValue": {
+           "text": "Chipotle"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Aktien hinzugefügt",
+         "detail": {
+          "text": "49.000000",
+          "displayValue": {
+           "text": "49.000000"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      },
+      {
+       "title": "Dokumente",
+       "data": [
+        {
+         "title": "Dokumente",
+         "detail": "26.06.2024",
+         "action": {
+          "payload": "",
+          "type": "browserModal"
+         },
+         "id": "327ea786-399b-406b-988a-0f47e7c68f38",
+         "postboxType": "CA_SECURITIES_INVOICE"
+        }
+       ],
+       "type": "documents"
+      }
+     ]
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000014",
+    "timestamp": "2026-09-14T14:58:01.873+0000",
+    "title": "Adresse",
+    "icon": "logos/timeline_flag/v2",
+    "subtitle": "Geändert",
+    "action": null,
+    "eventType": "ADDRESS_CHANGED",
+    "hidden": false,
+    "deleted": false,
+    "source": "timelineActivity"
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000015",
+    "timestamp": "2026-09-15T11:55:12.959+0000",
+    "title": "MSCI World USD (Dist)",
+    "icon": "logos/IE00BK1PV551/v2",
+    "subtitle": "Aktien übertragen",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000015"
+    },
+    "source": "timelineActivity",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000015",
+     "sections": [
+      {
+       "type": "header",
+       "title": "You transferred 14 shares",
+       "data": {
+        "status": "canceled",
+        "icon": "logos/IE00BK1PV551/v2",
+        "timestamp": "2024-11-16T11:55:12.959548322Z"
+       }
+      },
+      {
+       "type": "banner",
+       "title": "Shares not accepted",
+       "description": "Your outgoing transfer was rejected since your receiving bank didn't accept your shares within 21 days."
+      },
+      {
+       "type": "table",
+       "title": "Overview",
+       "data": [
+        {
+         "title": "Status",
+         "style": "plain",
+         "detail": {
+          "type": "status",
+          "text": "Rejected",
+          "functionalStyle": "CANCELED"
+         }
+        },
+        {
+         "title": "Asset",
+         "style": "plain",
+         "detail": {
+          "type": "text",
+          "text": "MSCI World USD (Dist)"
+         }
+        },
+        {
+         "title": "Action",
+         "style": "plain",
+         "detail": {
+          "type": "text",
+          "text": "Securities transfer"
+         }
+        },
+        {
+         "title": "BIC",
+         "style": "plain",
+         "detail": {
+          "type": "text",
+          "text": "BDWBDEMMXXX"
+         }
+        }
+       ]
+      },
+      {
+       "type": "table",
+       "title": "Transaction",
+       "data": [
+        {
+         "title": "Shares",
+         "style": "plain",
+         "detail": {
+          "type": "text",
+          "text": "14"
+         }
+        },
+        {
+         "title": "Fee",
+         "style": "plain",
+         "detail": {
+          "type": "text",
+          "text": "Free"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "cash": [
+   {
+    "accountNumber": "0000000000",
+    "currencyId": "EUR",
+    "amount": 1234.56
+   }
+  ],
+  "portfolio": {
+   "positions": [
+    {
+     "instrumentId": "US67066G1040",
+     "netSize": "0.685102",
+     "averageBuyIn": "160.21"
+    }
+   ]
+  }
+ },
+ "since": "2026-08-01T00:00:00+00:00",
+ "expected": [
+  {
+   "id": "00000000-0000-4000-8000-000000000001",
+   "kind": "DEPOSIT",
+   "datetime": "2026-09-01T17:07:26.374000+00:00",
+   "currency": "EUR",
+   "net": "200",
+   "label": "Einzahlung",
+   "counterparty": "Erika Mustermann",
+   "counterparty_iban": "00000000-0000-4000-8000-000000000001",
+   "raw_type": "TIMELINE_LEGACY_MIGRATED_EVENTS"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000002",
+   "kind": "BUY",
+   "datetime": "2026-09-02T19:29:43.928000+00:00",
+   "currency": "EUR",
+   "net": "111",
+   "isin": "US67066G1040",
+   "name": "NVIDIA",
+   "shares": "0.685102",
+   "gross": "110",
+   "fee": "1",
+   "label": "Kauforder",
+   "raw_type": "TRADING_TRADE_EXECUTED"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000003",
+   "kind": "BUY",
+   "datetime": "2026-09-03T08:26:13.657000+00:00",
+   "currency": "EUR",
+   "net": "19",
+   "isin": "AU000000DRO2",
+   "name": "DroneShield",
+   "shares": "6.921675",
+   "gross": "19",
+   "label": "Sparplan ausgeführt",
+   "raw_type": "TRADING_SAVINGSPLAN_EXECUTED"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000004",
+   "kind": "SELL",
+   "datetime": "2026-09-04T18:38:36.065000+00:00",
+   "currency": "EUR",
+   "net": "200.93",
+   "isin": "US88032Q1094",
+   "name": "Tencent Holdings (ADR)",
+   "shares": "3.454506",
+   "gross": "202.09",
+   "fee": "1",
+   "tax": "0.16",
+   "label": "Verkaufsorder",
+   "raw_type": "TRADING_TRADE_EXECUTED"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000005",
+   "kind": "DIVIDEND",
+   "datetime": "2026-09-05T14:19:56.295000+00:00",
+   "currency": "EUR",
+   "net": "2.24",
+   "isin": "US20030N1019",
+   "name": "Comcast (A)",
+   "shares": "10.640298",
+   "gross": "3.02",
+   "tax": "0.78",
+   "label": "Bardividende",
+   "raw_type": "SSP_CORPORATE_ACTION_INVOICE_CASH"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000006",
+   "kind": "WITHDRAWAL",
+   "datetime": "2026-09-06T15:10:48.618000+00:00",
+   "currency": "EUR",
+   "net": "4.28",
+   "label": "Kartenzahlung",
+   "counterparty": "REWE",
+   "raw_type": "CARD_TRANSACTION"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000007",
+   "kind": "DEPOSIT",
+   "datetime": "2026-09-07T07:23:44.511000+00:00",
+   "currency": "EUR",
+   "net": "24.99",
+   "label": "Kartenerstattung",
+   "counterparty": "Decathlon",
+   "raw_type": "CARD_REFUND"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000008",
+   "kind": "WITHDRAWAL",
+   "datetime": "2026-09-08T09:35:47.370000+00:00",
+   "currency": "EUR",
+   "net": "50.3",
+   "label": "Gesendet",
+   "counterparty": "Max Mustermann",
+   "counterparty_iban": "DE12345",
+   "raw_type": "OUTGOING_TRANSFER"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000009",
+   "kind": "INTEREST",
+   "datetime": "2026-09-09T06:46:37.846000+00:00",
+   "currency": "EUR",
+   "net": "4.87",
+   "name": "Zinsen",
+   "gross": "6.74",
+   "tax": "1.87",
+   "label": "2 % p.a.",
+   "raw_type": "INTEREST_PAYOUT"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000010",
+   "kind": "BUY",
+   "datetime": "2026-09-10T13:54:23.344000+00:00",
+   "currency": "EUR",
+   "net": "15",
+   "isin": "IE00B3WJKG14",
+   "name": "S&P 500 Information Tech USD (Acc)",
+   "shares": "0.546348",
+   "gross": "15",
+   "label": "Saveback",
+   "bonus_funded": true,
+   "raw_type": "BENEFITS_SAVEBACK_EXECUTION"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000011",
+   "kind": "TAX",
+   "datetime": "2026-09-11T14:54:28.155000+00:00",
+   "currency": "EUR",
+   "net": "0.19",
+   "name": "MSCI China USD (Acc) IE00BJ5JPG56",
+   "label": "Vorabpauschale",
+   "raw_type": "SSP_CORPORATE_ACTION_INVOICE_CASH"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000012",
+   "kind": "TAX_REFUND",
+   "datetime": "2026-09-12T00:00:16+00:00",
+   "currency": "EUR",
+   "net": "2.87",
+   "name": "Steuerkorrektur",
+   "label": "Steuerkorrektur",
+   "raw_type": "SSP_TAX_CORRECTION_INVOICE"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000013",
+   "kind": "UNKNOWN",
+   "datetime": "2026-09-13T08:06:40.347000+00:00",
+   "currency": "EUR",
+   "net": "0",
+   "label": "Aktiensplit",
+   "raw_type": "SSP_CORPORATE_ACTION_INVOICE_SHARES (SPLIT)"
+  }
+ ]
+}

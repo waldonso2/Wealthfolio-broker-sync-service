@@ -23,6 +23,8 @@ class Kind(StrEnum):
     FEE = "FEE"
     TAX = "TAX"
     TAX_REFUND = "TAX_REFUND"
+    # Money the broker gives (Trade Republic referral bonus): cash CREDIT/BONUS.
+    BONUS = "BONUS"
     # Cash side of a securities trade or payout on a bank account (e.g. the DKB
     # giro debit for a depot buy). Booked by the securities side (PDF import,
     # depot adapter) as a transfer pair, so the sync only checks that it is
@@ -87,6 +89,9 @@ class Transaction:
     counterparty: str = ""
     counterparty_iban: str = ""
     text: str = ""
+    # A buy the broker paid for (Trade Republic Saveback): booked as a bonus
+    # credit on the securities account that funds the buy, no cash transfer.
+    bonus_funded: bool = False
     # Signed amount for SECURITIES_CASH: negative = paid out of the account.
     signed: Decimal | None = None
     # The broker's raw event type, shown for UNKNOWN events.
@@ -100,7 +105,7 @@ def to_dict(tx: Transaction) -> dict:
     out = {}
     for name in Transaction.__dataclass_fields__:
         v = getattr(tx, name)
-        if name == "raw" or v is None or v == "":
+        if name == "raw" or v is None or v == "" or v is False:
             continue
         if isinstance(v, Decimal):
             if name in ("fee", "tax") and v == 0:

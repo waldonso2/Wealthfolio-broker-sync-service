@@ -19,13 +19,14 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | Path | Purpose |
 |---|---|
 | `src/brokersync/model.py` | Broker-neutral `Transaction` (Decimal amounts), `Kind`, `Position`, `CashBalance` |
-| `src/brokersync/adapters/` | `base.py` interface (read-only; `login` / `complete_login` for TAN; `on_user_action` for app confirmations during scheduled runs; `close`; `replay` for contract tests), `dkb.py` (python-fints: MT940/camt → `Transaction`, decoupled TAN, PIN lock-out guard), `dummy.py`, registry in `__init__.py` |
+| `src/brokersync/adapters/` | `base.py` interface (read-only; `login` / `complete_login` for TAN; `on_user_action` for app confirmations during scheduled runs; `close`; `replay` for contract tests), `dkb.py` (python-fints: MT940/camt → `Transaction`, decoupled TAN, PIN lock-out guard), `tr.py` (pytr, pinned: v2 web login confirmed in the app, cookies in the session, timeline + details → pytr's `Event` → `Transaction`), `dummy.py`, registry in `__init__.py`; `reports_positions` marks adapters whose positions are complete |
 | `src/brokersync/mapping.py` | Transaction → Wealthfolio `NewActivity` payloads — port of the addon's rules |
 | `src/brokersync/dedup.py` | Check against existing Wealthfolio activities (port of the addon's `matchExisting`) |
 | `src/brokersync/sync.py` | One run over all enabled brokers: login, fetch, dedupe, create, report |
 | `src/brokersync/wealthfolio.py` | REST client: password login → `wf_session` JWT sent as Bearer; accounts, create, search |
 | `src/brokersync/vault.py` | Fernet-encrypted secrets (`data/secrets.enc`, key `data/secret.key` 0600), UI password hash |
 | `src/brokersync/config.py` / `state.py` | Non-secret config (`data/config.json`, written by the UI only) / SQLite sync state, runs, unknown events |
+| `src/brokersync/reconcile.py` | Broker cash/positions vs. Wealthfolio holdings (`GET /holdings?accountId=`) after each run; reported when a deviation lasts two runs |
 | `src/brokersync/notify.py` | ntfy |
 | `src/brokersync/web/` | FastAPI + Jinja2 UI (German texts), CSRF via a dependency, own login |
 | `ct/`, `install/`, `json/` | community-scripts files (`json/` is the catalog entry for a later submission to community-scripts) |
@@ -42,6 +43,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 - **Bank-side cash of securities is never booked twice.** A giro booking that settles a depot trade or payout is `Kind.SECURITIES_CASH`: the sync only looks for the transfer leg the securities side (the addon's PDF import, later a depot adapter) put on the cash account (`ExistingIndex.find_settlement`, ±0.02, ≤6 days). Unmatched ones are reported (`UNMATCHED_SECURITIES`), not marked synced, and keep the fetch window open (`State.oldest_open`) until they match.
 - **Transfer patterns** (`Config.transfer_patterns`, UI *Überträge*) follow the addon: only outbound money (WITHDRAWAL) checks them; inbound is always DEPOSIT.
 - **Never risk a bank lock-out:** after a rejected PIN an adapter sets `pin_rejected` in its session and refuses to contact the bank until the credentials are saved anew (`Vault.set_broker_credentials` clears the session).
+- **Trade Republic events go through pytr's `Event.from_dict`** (the parser pytr's exports use), then `tr.to_transactions` maps them like the addon's `transform.ts`. Events pytr lists as informational (`events_known_ignored*`) and cancelled ones are skipped; everything else it can't book (corporate actions, securities transfers, private markets) is `UNKNOWN`. pytr is pinned (`pytr==…`): update it deliberately and re-run the contract case. Unknown payloads keep only eventType/title/subtitle/status.
 - **Unknown event types** become `Kind.UNKNOWN`: stored, listed in the UI, notified once — never dropped, never booked.
 - **One broker failing never stops the others**; it is reported via ntfy with a link (`public_url` + path).
 - **Test data that can reach a real Wealthfolio** (the dummy adapter, anything a user tests with) is dated today — the dummy uses the day of its login, fixed in the session so the daily timer doesn't book it again — and marked **TEST** in every activity's comment (the dummy's transaction ids start with `TEST-`), so the user finds and deletes it easily. Fixtures for automated tests may use fixed dates.

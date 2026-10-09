@@ -190,6 +190,9 @@ def to_activities(
         return [cash(accounts.cash, "FEE", 0, tx.net, f"{tx.label or 'Fee'}{_name(tx)}{_text(tx)}{ref}")]
     if tx.kind == Kind.TAX:
         return [cash(accounts.cash, "TAX", 0, tx.net, f"{tx.label or 'Tax'}{_name(tx)}{ref}")]
+    if tx.kind == Kind.BONUS:
+        return [cash(accounts.cash, "CREDIT", 0, tx.net, f"{tx.label or 'Bonus'}{_name(tx)}{_text(tx)}{ref}",
+                     subtype="BONUS")]
     if tx.kind == Kind.TAX_REFUND:
         return [cash(accounts.cash, "CREDIT", 0, tx.net, f"{tx.label or 'Tax refund'}{_name(tx)}{ref}",
                      subtype="TAX_REFUND")]
@@ -251,6 +254,14 @@ def to_activities(
         "comment": f"{label} {tx.name}{ref}",
         "asset": asset,
     })
+
+    if tx.kind == Kind.BUY and tx.bonus_funded:
+        # As the addon's STOCKPERK-funded buy: the broker's money arrives on the
+        # securities account as a bonus and pays the buy there.
+        out.append(cash(accounts.portfolio, "CREDIT", -1, tx.net, f"{label} bonus for {tx.isin} ({tx.name}){ref}",
+                        subtype="BONUS"))
+        out.append(trade)
+        return out
 
     if tx.kind == Kind.BUY:
         out.append(cash(accounts.cash, "TRANSFER_OUT", -2, tx.net,

@@ -117,6 +117,12 @@ class WealthfolioClient:
             raise WealthfolioError(f"Wealthfolio rejected the activity ({payload.get('activityType')}): {detail}")
         return r.json()
 
+    def holdings(self, account_id: str) -> list[dict]:
+        """Current holdings of an account, cash included (``holdingType`` "cash"/"security")."""
+        r = self._request("GET", "/holdings", params={"accountId": account_id})
+        _raise(r)
+        return r.json()
+
     def search_activities(self, account_ids: list[str], date_from: date, date_to: date,
                           page_size: int = 500) -> list[dict]:
         """All activities of the accounts between the two dates (inclusive)."""

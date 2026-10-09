@@ -37,6 +37,12 @@ CREATE TABLE IF NOT EXISTS runs (
   unknown INTEGER NOT NULL DEFAULT 0,
   message TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS reconcile (
+  broker TEXT PRIMARY KEY,
+  deviations TEXT NOT NULL,
+  notified TEXT NOT NULL DEFAULT '[]',
+  at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS balances (
   broker TEXT NOT NULL,
   currency TEXT NOT NULL,
@@ -121,6 +127,19 @@ class State:
             self.db.execute("DELETE FROM balances WHERE broker = ?", (broker,))
             self.db.executemany("INSERT INTO balances VALUES (?, ?, ?, ?)",
                                 [(broker, c, a, now()) for c, a in balances])
+
+    def set_reconcile(self, broker: str, deviations: list[dict], notified: list[dict] | None = None) -> None:
+        old = self.reconcile(broker)
+        keep = notified if notified is not None else (old or {}).get("notified", [])
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO reconcile VALUES (?, ?, ?, ?)",
+                            (broker, json.dumps(deviations), json.dumps(keep), now()))
+
+    def reconcile(self, broker: str) -> dict | None:
+        row = self.db.execute("SELECT deviations, notified, at FROM reconcile WHERE broker = ?", (broker,)).fetchone()
+        if not row:
+            return None
+        return {"deviations": json.loads(row[0]), "notified": json.loads(row[1]), "at": row[2]}
 
     def balances(self, broker: str) -> list[dict]:
         rows = self.db.execute("SELECT currency, amount, at FROM balances WHERE broker = ? ORDER BY currency",

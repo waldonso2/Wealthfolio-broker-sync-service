@@ -97,6 +97,8 @@ class DummyAdapter(BrokerAdapter):
         CredentialField("username", "Benutzername", help="Beliebig - der Dummy prüft nichts."),
     ]
 
+    reports_positions = True
+
     def login(self) -> None:
         if self.credentials.get("fail") == "yes":
             raise AdapterError("Dummy broker is down (simulated)")
