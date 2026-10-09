@@ -134,7 +134,7 @@ def _check_amounts(tx: Transaction) -> None:
                 f"Market value, fee and tax ({fmt(expected)}) don't add up to the booked amount ({fmt(tx.net)})."
             )
     if tx.kind == Kind.DIVIDEND:
-        if not tx.isin or not tx.shares or tx.shares <= 0:
+        if not tx.isin or (tx.shares is not None and tx.shares <= 0):
             raise MappingError("ISIN or share count missing.")
     if tx.kind in (Kind.DIVIDEND, Kind.INTEREST) and tx.gross is not None:
         if abs(tx.gross - tx.tax - tx.net) > TOLERANCE:
@@ -241,7 +241,8 @@ def to_activities(
             "activityType": "DIVIDEND",
             "activityDate": iso(tx.datetime),
             "currency": ccy,
-            "quantity": fmt(tx.shares),
+            # Scalable reports no share count for a payout: quantity 1, like the addon.
+            "quantity": fmt(tx.shares) if tx.shares else "1",
             "amount": fmt(tx.net - refund),
             "tax": tax_field,
             "comment": f"{label} {tx.name}{ref}",

@@ -1,0 +1,530 @@
+{
+ "description": "Fabricated sc --json answers: trades, savings plan, cash types, a depot migration that cancels out, a cancellation, an unpaired transfer, an ELTIF and a pending order.",
+ "recording": {
+  "transactions": [
+   {
+    "items": [
+     {
+      "id": "sc-0019",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-04-24T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerCashTransactionSummary",
+      "type": "CASH_TRANSACTION",
+      "cash_transaction_type": "TAX_RETURN",
+      "amount": "7.50",
+      "description": "Test"
+     },
+     {
+      "id": "sc-0018",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-04-23T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerCashTransactionSummary",
+      "type": "CASH_TRANSACTION",
+      "cash_transaction_type": "TAX",
+      "amount": "2.10",
+      "description": "Steuerkorrektur"
+     },
+     {
+      "id": "sc-0017",
+      "currency": "EUR",
+      "status": "PENDING",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-04-22T10:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerSecurityTransactionSummary",
+      "type": "SECURITY_TRANSACTION",
+      "side": "BUY",
+      "amount": "-100",
+      "isin": "IE00TEST0001",
+      "quantity": "1",
+      "security_transaction_type": "SINGLE",
+      "description": "Testfonds"
+     },
+     {
+      "id": "sc-0016",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-04-21T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerEltifTransactionSummary",
+      "type": "ELTIF_TRANSACTION",
+      "security_transaction_type": "SINGLE",
+      "side": "BUY",
+      "isin": "LU00TEST0003",
+      "amount": "-1000",
+      "eltif_quantity": "10"
+     },
+     {
+      "id": "sc-0015",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-04-20T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerNonTradeSecurityTransactionSummary",
+      "type": "NON_TRADE_SECURITY_TRANSACTION",
+      "non_trade_security_transaction_type": "TRANSFER_IN",
+      "isin": "LU00TEST0003",
+      "quantity": "3",
+      "amount": "300",
+      "description": "Umbuchung"
+     },
+     {
+      "id": "sc-0014",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-04-03T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerCashTransactionSummary",
+      "type": "CASH_TRANSACTION",
+      "cash_transaction_type": "WITHDRAWAL",
+      "amount": "-50",
+      "description": "Depotwechsel"
+     },
+     {
+      "id": "sc-0013",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-04-02T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerCashTransactionSummary",
+      "type": "CASH_TRANSACTION",
+      "cash_transaction_type": "DEPOSIT",
+      "amount": "50",
+      "description": "SWITCH-0000 Depotwechsel"
+     },
+     {
+      "id": "sc-0012",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-04-02T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerNonTradeSecurityTransactionSummary",
+      "type": "NON_TRADE_SECURITY_TRANSACTION",
+      "non_trade_security_transaction_type": "TRANSFER_IN",
+      "isin": "US00TEST0002",
+      "quantity": "10",
+      "amount": "1000",
+      "description": "Umbuchung"
+     },
+     {
+      "id": "sc-0011",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-04-01T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerNonTradeSecurityTransactionSummary",
+      "type": "NON_TRADE_SECURITY_TRANSACTION",
+      "non_trade_security_transaction_type": "TRANSFER_OUT",
+      "isin": "US00TEST0002",
+      "quantity": "10",
+      "amount": "-1000",
+      "description": "Umbuchung"
+     },
+     {
+      "id": "sc-0010",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-03-11T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerCashTransactionSummary",
+      "type": "CASH_TRANSACTION",
+      "cash_transaction_type": "WITHDRAWAL",
+      "amount": "-200",
+      "description": "Auszahlung Test"
+     },
+     {
+      "id": "sc-0009",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-03-10T14:01:02Z",
+      "documents": [],
+      "summary_type": "BrokerSecurityTransactionSummary",
+      "type": "SECURITY_TRANSACTION",
+      "side": "SELL",
+      "amount": "188.45",
+      "isin": "IE00TEST0001",
+      "quantity": "2",
+      "security_transaction_type": "SINGLE",
+      "description": "Testfonds"
+     },
+     {
+      "id": "sc-0008",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-03-03T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerCashTransactionSummary",
+      "type": "CASH_TRANSACTION",
+      "cash_transaction_type": "FEE",
+      "amount": "-4.99",
+      "description": "Entgelt PRIME+ Broker"
+     },
+     {
+      "id": "sc-0007",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-03-02T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerCashTransactionSummary",
+      "type": "CASH_TRANSACTION",
+      "cash_transaction_type": "TAX",
+      "amount": "-12.30",
+      "description": "Vorabpauschale"
+     },
+     {
+      "id": "sc-0006",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-03-01T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerCashTransactionSummary",
+      "type": "CASH_TRANSACTION",
+      "cash_transaction_type": "INTEREST",
+      "amount": "0.42",
+      "description": "Test"
+     }
+    ],
+    "cursor": "c2",
+    "total": 24
+   },
+   {
+    "items": [
+     {
+      "id": "sc-0005",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": true,
+      "last_event_datetime": "2026-02-03T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerCashTransactionSummary",
+      "type": "CASH_TRANSACTION",
+      "cash_transaction_type": "DISTRIBUTION",
+      "amount": "-3.68",
+      "description": "TEST Fonds World",
+      "related_isin": "IE00TEST0001"
+     },
+     {
+      "id": "sc-0004",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-02-02T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerCashTransactionSummary",
+      "type": "CASH_TRANSACTION",
+      "cash_transaction_type": "DISTRIBUTION",
+      "amount": "3.68",
+      "description": "TEST Fonds World",
+      "related_isin": "IE00TEST0001"
+     },
+     {
+      "id": "sc-0003",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-01-15T08:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerSecurityTransactionSummary",
+      "type": "SECURITY_TRANSACTION",
+      "side": "BUY",
+      "amount": "-25",
+      "isin": "IE00TEST0001",
+      "quantity": "0.25",
+      "security_transaction_type": "SAVINGS_PLAN",
+      "description": "Testfonds"
+     },
+     {
+      "id": "sc-0002",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-01-06T09:12:34Z",
+      "documents": [],
+      "summary_type": "BrokerSecurityTransactionSummary",
+      "type": "SECURITY_TRANSACTION",
+      "side": "BUY",
+      "amount": "-501",
+      "isin": "IE00TEST0001",
+      "quantity": "5",
+      "security_transaction_type": "SINGLE",
+      "description": "Testfonds"
+     },
+     {
+      "id": "sc-0001",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-01-05T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerCashTransactionSummary",
+      "type": "CASH_TRANSACTION",
+      "cash_transaction_type": "DEPOSIT",
+      "amount": "1000",
+      "description": "Einzahlung Test"
+     }
+    ],
+    "cursor": null,
+    "total": 24
+   }
+  ],
+  "details": {
+   "sc-0002": {
+    "id": "sc-0002",
+    "detail_type": "security_trade",
+    "security": {
+     "isin": "IE00TEST0001",
+     "name": "TEST Fonds World",
+     "security_type": "FUND"
+    },
+    "security_trade": {
+     "number_of_shares": {
+      "filled": "5",
+      "total": "5"
+     },
+     "trade_transaction_amounts": {
+      "market_valuation": "500",
+      "tax_amount": "0",
+      "transaction_fee": "0.99",
+      "venue_fee": "0.01",
+      "crypto_spread_fee": null
+     }
+    }
+   },
+   "sc-0003": {
+    "id": "sc-0003",
+    "detail_type": "security_trade",
+    "security": {
+     "isin": "IE00TEST0001",
+     "name": "TEST Fonds World",
+     "security_type": "FUND"
+    },
+    "security_trade": {
+     "number_of_shares": {
+      "filled": "0.25",
+      "total": "0.25"
+     },
+     "trade_transaction_amounts": {
+      "market_valuation": "25",
+      "tax_amount": "0",
+      "transaction_fee": "0",
+      "venue_fee": "0",
+      "crypto_spread_fee": null
+     }
+    }
+   },
+   "sc-0009": {
+    "id": "sc-0009",
+    "detail_type": "security_trade",
+    "security": {
+     "isin": "IE00TEST0001",
+     "name": "TEST Fonds World",
+     "security_type": "FUND"
+    },
+    "security_trade": {
+     "number_of_shares": {
+      "filled": "2",
+      "total": "2"
+     },
+     "trade_transaction_amounts": {
+      "market_valuation": "200",
+      "tax_amount": "10.55",
+      "transaction_fee": "1",
+      "venue_fee": "0",
+      "crypto_spread_fee": null
+     }
+    }
+   },
+   "sc-0004": {
+    "id": "sc-0004",
+    "detail_type": "cash",
+    "security": {
+     "isin": "IE00TEST0001",
+     "name": "TEST Fonds World"
+    },
+    "cash": {
+     "cash_transaction_type": "DISTRIBUTION",
+     "amount": "3.68",
+     "tax_details": {
+      "gross_amount": "5",
+      "tax_amount": "1.32"
+     }
+    }
+   }
+  },
+  "holdings": {
+   "items": [
+    {
+     "isin": "IE00TEST0001",
+     "name": "TEST Fonds World",
+     "quantity": "3.25",
+     "valuation": "331.5",
+     "valuation_currency": "EUR"
+    }
+   ]
+  },
+  "cash": {
+   "cash_balance": "508.25"
+  }
+ },
+ "since": null,
+ "expected": [
+  {
+   "id": "sc-0001",
+   "kind": "DEPOSIT",
+   "datetime": "2026-01-05T00:00:00+00:00",
+   "currency": "EUR",
+   "net": "1000",
+   "label": "Einlage",
+   "text": "Einzahlung Test"
+  },
+  {
+   "id": "sc-0002",
+   "kind": "BUY",
+   "datetime": "2026-01-06T09:12:34+00:00",
+   "currency": "EUR",
+   "net": "501",
+   "isin": "IE00TEST0001",
+   "name": "TEST Fonds World",
+   "shares": "5",
+   "gross": "500",
+   "fee": "1",
+   "label": "Kauf"
+  },
+  {
+   "id": "sc-0003",
+   "kind": "BUY",
+   "datetime": "2026-01-15T08:00:00+00:00",
+   "currency": "EUR",
+   "net": "25",
+   "isin": "IE00TEST0001",
+   "name": "TEST Fonds World",
+   "shares": "0.25",
+   "gross": "25",
+   "label": "Sparplan"
+  },
+  {
+   "id": "sc-0004",
+   "kind": "DIVIDEND",
+   "datetime": "2026-02-02T00:00:00+00:00",
+   "currency": "EUR",
+   "net": "3.68",
+   "isin": "IE00TEST0001",
+   "name": "TEST Fonds World",
+   "gross": "5",
+   "tax": "1.32",
+   "label": "Dividende"
+  },
+  {
+   "id": "sc-0005",
+   "kind": "UNKNOWN",
+   "datetime": "2026-02-03T00:00:00+00:00",
+   "currency": "EUR",
+   "net": "0",
+   "isin": "IE00TEST0001",
+   "label": "DISTRIBUTION_CANCELLATION",
+   "raw_type": "DISTRIBUTION_CANCELLATION"
+  },
+  {
+   "id": "sc-0006",
+   "kind": "INTEREST",
+   "datetime": "2026-03-01T00:00:00+00:00",
+   "currency": "EUR",
+   "net": "0.42",
+   "label": "Zinsen"
+  },
+  {
+   "id": "sc-0007",
+   "kind": "TAX",
+   "datetime": "2026-03-02T00:00:00+00:00",
+   "currency": "EUR",
+   "net": "12.3",
+   "label": "Steuer"
+  },
+  {
+   "id": "sc-0008",
+   "kind": "FEE",
+   "datetime": "2026-03-03T00:00:00+00:00",
+   "currency": "EUR",
+   "net": "4.99",
+   "label": "Gebühr",
+   "text": "Entgelt PRIME+ Broker"
+  },
+  {
+   "id": "sc-0009",
+   "kind": "SELL",
+   "datetime": "2026-03-10T14:01:02+00:00",
+   "currency": "EUR",
+   "net": "188.45",
+   "isin": "IE00TEST0001",
+   "name": "TEST Fonds World",
+   "shares": "2",
+   "gross": "200",
+   "fee": "1",
+   "tax": "10.55",
+   "label": "Verkauf"
+  },
+  {
+   "id": "sc-0010",
+   "kind": "WITHDRAWAL",
+   "datetime": "2026-03-11T00:00:00+00:00",
+   "currency": "EUR",
+   "net": "200",
+   "label": "Entnahme",
+   "text": "Auszahlung Test"
+  },
+  {
+   "id": "sc-0015",
+   "kind": "UNKNOWN",
+   "datetime": "2026-04-20T00:00:00+00:00",
+   "currency": "EUR",
+   "net": "0",
+   "isin": "LU00TEST0003",
+   "label": "TRANSFER_IN",
+   "raw_type": "TRANSFER_IN"
+  },
+  {
+   "id": "sc-0016",
+   "kind": "UNKNOWN",
+   "datetime": "2026-04-21T00:00:00+00:00",
+   "currency": "EUR",
+   "net": "0",
+   "isin": "LU00TEST0003",
+   "label": "ELTIF_TRANSACTION",
+   "raw_type": "ELTIF_TRANSACTION"
+  },
+  {
+   "id": "sc-0018",
+   "kind": "TAX_REFUND",
+   "datetime": "2026-04-23T00:00:00+00:00",
+   "currency": "EUR",
+   "net": "2.1",
+   "label": "Steuer"
+  },
+  {
+   "id": "sc-0019",
+   "kind": "TAX_REFUND",
+   "datetime": "2026-04-24T00:00:00+00:00",
+   "currency": "EUR",
+   "net": "7.5",
+   "label": "Steuerrückerstattung",
+   "text": "Test"
+  }
+ ]
+}

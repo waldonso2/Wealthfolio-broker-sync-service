@@ -20,6 +20,8 @@ def main(argv: list[str] | None = None) -> int:
     run = sub.add_parser("run", help="sync all enabled brokers once")
     run.add_argument("--broker", action="append", help="only this broker (repeatable)")
     sub.add_parser("reset-ui-password", help="forget the web UI password; the next visit sets a new one")
+    sc = sub.add_parser("install-sc", help="install or update Scalable's official CLI (sc), signature-checked")
+    sc.add_argument("--dir", default="/opt/wealthfolio-broker-sync/bin")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -50,6 +52,18 @@ def main(argv: list[str] | None = None) -> int:
 
         Vault(data_dir()).update(lambda d: d.pop("ui_password_hash", None))
         print("Web UI password removed. Open the web UI to set a new one.")
+        return 0
+    if args.cmd == "install-sc":
+        from pathlib import Path
+
+        from .sc_install import InstallError, install
+
+        try:
+            version, new = install(Path(args.dir))
+        except (InstallError, OSError) as e:
+            print(f"Scalable CLI not installed: {e}", file=sys.stderr)
+            return 1
+        print(f"Scalable CLI {version} {'installed' if new else 'is up to date'} in {args.dir}.")
         return 0
     return 2
 

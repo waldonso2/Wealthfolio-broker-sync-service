@@ -84,3 +84,18 @@ def test_version_and_missing_command(capsys):
     with pytest.raises(SystemExit) as e:
         cli.main([])
     assert e.value.code == 2
+
+
+def test_install_sc_reports_and_fails_softly(tmp_path, monkeypatch, capsys):
+    from brokersync import sc_install
+
+    monkeypatch.setattr(sc_install, "install", lambda d: ("v1.1.0", True))
+    assert cli.main(["install-sc", "--dir", str(tmp_path)]) == 0
+    assert "Scalable CLI v1.1.0 installed" in capsys.readouterr().out
+
+    def broken(d):
+        raise sc_install.InstallError("Checksum doesn't match.")
+
+    monkeypatch.setattr(sc_install, "install", broken)
+    assert cli.main(["install-sc", "--dir", str(tmp_path)]) == 1
+    assert "Checksum doesn't match" in capsys.readouterr().err

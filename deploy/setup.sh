@@ -29,6 +29,11 @@ if ! { python3 -m venv "$BASE/venv" &&
 fi
 rm -rf "$BASE/venv.old"
 
+# Scalable's official CLI (sc), used by the Scalable Capital adapter. Signature-
+# checked; a failure only affects Scalable, so it doesn't stop the install.
+"$BASE/venv/bin/brokersync" install-sc --dir "$BASE/bin" ||
+  echo "Warning: the Scalable CLI could not be installed - Scalable Capital won't work until the next update." >&2
+
 install -m 644 "$APP"/deploy/systemd/*.service "$APP"/deploy/systemd/*.timer /etc/systemd/system/
 install -m 755 "$APP/deploy/brokersync-reset-password" /usr/local/bin/brokersync-reset-password
 systemctl daemon-reload

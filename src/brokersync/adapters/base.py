@@ -38,9 +38,11 @@ class CredentialField:
 
 @dataclass(frozen=True)
 class Challenge:
-    # "code": the user types a code; "confirm": the user confirms in an app.
+    # "code": the user types a code; "confirm": the user confirms in an app
+    # or, when ``url`` is set, on that page in the browser.
     kind: str
     message: str
+    url: str = ""
 
 
 class AuthRequired(Exception):
