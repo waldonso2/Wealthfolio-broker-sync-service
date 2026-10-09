@@ -34,6 +34,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | `src/brokersync/web/` | FastAPI + Jinja2 UI (German texts), CSRF via a dependency, own login |
 | `ct/`, `install/`, `json/` | community-scripts files (`json/` is the catalog entry for a later submission to community-scripts) |
 | `deploy/` | `setup.sh` (venv + units, used by install and update), systemd units, reset-password helper |
+| `ARCHITECTURE.md` | Overview for contributors: components, run sequence, dedup layers, data files, routes |
 | `src/brokersync/retired.py` | On start (`Syncer.__init__`): removes config, vault entries and sync state of brokers that no longer exist (`dummy` up to 0.3.6); their Wealthfolio activities stay, the overview shows once how many and how to find them |
 | `tests/` | `fakes.py` (in-memory Wealthfolio), `fake_broker.py` (test-only broker with a TAN step; no test broker ships), unit/e2e tests, `contract/<adapter>/*.json` recorded cases, `fixtures/wealthfolio/` recorded API answers |
 
