@@ -144,7 +144,7 @@ Reine Hinweise (Order angelegt/storniert, Dokumente, Adressänderung …) und st
 
 ## Abgleich mit Wealthfolio
 
-Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in Wealthfolio: das Guthaben mit dem Cash des Verrechnungskontos und, bei Trade Republic und beim Dummy, jede Position mit dem Bestand des Depotkontos. Die Übersicht zeigt das Ergebnis. Eine Abweichung, die auch beim nächsten Abruf noch besteht, kommt als ntfy-Nachricht. Direkt nach neuen Buchungen rechnet Wealthfolio noch. Typische Ursachen: eine Kapitalmaßnahme, die per CSV-Import nachzuholen ist, oder Buchungen aus der Zeit vor dem ersten Abruf.
+Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in Wealthfolio: das Guthaben mit dem Cash des Verrechnungskontos, ob das Depotkonto kein Bargeld hält (es muss 0 sein) und keine Position „$CASH“ in einem der Konten steht, und, bei Trade Republic und beim Dummy, jede Position mit dem Bestand des Depotkontos. Die Übersicht zeigt das Ergebnis. Eine Abweichung, die auch beim nächsten Abruf noch besteht, kommt als ntfy-Nachricht. Direkt nach neuen Buchungen rechnet Wealthfolio noch. Typische Ursachen: eine Kapitalmaßnahme, die per CSV-Import nachzuholen ist, oder Buchungen aus der Zeit vor dem ersten Abruf.
 
 ## Im Alltag
 

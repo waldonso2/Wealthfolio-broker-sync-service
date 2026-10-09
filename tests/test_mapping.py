@@ -63,7 +63,8 @@ def test_buy_funds_the_depot_with_a_grouped_transfer_pair():
     assert "tax" not in buy
     assert buy["comment"] == "Kauf Test World Equity EUR (Acc) [SYNC tr:e5f6-0789]"
     assert buy["asset"] == {"symbol": "IE00TEST0001", "name": "Test World Equity EUR (Acc)", "quoteCcy": "EUR"}
-    assert all(a["asset"]["symbol"] == "$CASH-EUR" for a in acts[:2])
+    # Without an asset: with one, Wealthfolio books a securities transfer that moves no money.
+    assert all("asset" not in a for a in acts[:2])
     assert cash_by_account(acts) == {"cash": D("-3016")}
 
 
@@ -96,6 +97,7 @@ def test_cash_only_kinds_book_on_the_cash_account():
                           (Kind.TAX, "TAX"), (Kind.INTEREST, "INTEREST")]:
         acts = to_activities(Transaction("x", kind, DT, "EUR", D("12.5"), label="L"), "dkb", ACC)
         assert [(a["accountId"], a["activityType"], a["amount"]) for a in acts] == [("cash", wf_type, "12.5")]
+        assert "asset" not in acts[0]
     refund = to_activities(Transaction("r", Kind.TAX_REFUND, DT, "EUR", D("3")), "dkb", ACC)
     assert (refund[0]["activityType"], refund[0]["subtype"]) == ("CREDIT", "TAX_REFUND")
     interest = to_activities(Transaction("i", Kind.INTEREST, DT, "EUR", D("7.36"), gross=D("10"), tax=D("2.64")),
@@ -118,3 +120,10 @@ def test_security_mapping_replaces_the_isin():
 def test_inconsistent_transactions_are_rejected(bad):
     with pytest.raises(MappingError):
         to_activities(tx(**bad), "tr", ACC)
+
+
+def test_cash_symbols():
+    from brokersync.mapping import is_cash_symbol
+
+    assert all(is_cash_symbol(s) for s in ("$CASH-EUR", "$cash-usd", " CASH:GBP ", "CASH_EUR", "$CASH"))
+    assert not any(is_cash_symbol(s) for s in ("CASH", "NVDA", "$CASHX", "IE00TEST0001", "", None))

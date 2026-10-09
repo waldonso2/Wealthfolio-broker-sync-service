@@ -17,17 +17,25 @@ CSV/PDF imports book the same way:
   tax field, so it is its own CREDIT/TAX_REFUND.
 - Comments end in ``[SYNC <broker>:<id>]`` and are part of the fingerprint:
   never reword them, or every synced activity reappears as new.
+- Cash activities (deposits, transfers, fees, ...) carry no asset, like the
+  addon's imports (Wealthfolio's import drops its ``$CASH-<ccy>`` placeholder).
+  Created with an asset, a TRANSFER_IN/TRANSFER_OUT is a *securities* transfer
+  of that asset and moves no money; ``brokersync.repair`` fixes the ones
+  versions before 0.3.6 created that way.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from .model import Kind, Transaction
 
-CASH_SYMBOL_PREFIX = "$CASH-"
+# "$CASH-EUR", "CASH:USD", ... as Wealthfolio's is_cash_symbol, plus the bare
+# "$CASH" its holdings show for such an asset ("CASH" alone is a ticker).
+CASH_SYMBOL = re.compile(r"^(\$CASH|\$?CASH[-_:][A-Z]{3})$")
 # Booked net must match gross ± fee ± tax within this.
 TOLERANCE = Decimal("0.01")
 
@@ -70,6 +78,11 @@ def match_pattern(tx: Transaction, patterns: list[TransferPattern]) -> TransferP
             if test(p):
                 return p
     return None
+
+
+def is_cash_symbol(symbol: str | None) -> bool:
+    """A cash placeholder instead of a security: ``$CASH-EUR``, ``CASH:USD``, ``$CASH``."""
+    return bool(symbol) and bool(CASH_SYMBOL.match(symbol.strip().upper()))
 
 
 class MappingError(Exception):
@@ -162,7 +175,6 @@ def to_activities(
             "amount": fmt(amount),
             "tax": fmt(tax) if tax else None,
             "comment": comment,
-            "asset": {"symbol": f"{CASH_SYMBOL_PREFIX}{ccy}"},
             "sourceGroupId": source_group,
         }
         return _clean(p)

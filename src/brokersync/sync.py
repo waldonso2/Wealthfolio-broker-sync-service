@@ -23,6 +23,7 @@ from pathlib import Path
 
 from . import assets as assets_mod
 from . import config as config_mod
+from . import repair as repair_mod
 from .adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from .dedup import ExistingIndex
 from .mapping import Accounts, MappingError, SecurityMapping, TransferPattern, to_activities, tx_ref
@@ -202,6 +203,8 @@ class Syncer:
                          for isin, m in cfg.security_mappings.items()})
         patterns = [TransferPattern.from_config(p) for p in cfg.transfer_patterns]
         with self._wealthfolio(cfg.wealthfolio_url, secrets.get("wealthfolio_password")) as wf:
+            # Before the check against existing activities: it then sees them repaired.
+            repaired = self._repair_cash_assets(key, wf, accounts)
             unmatched: list[Transaction] = []
             if todo:
                 # Wide enough for a settlement a few days after the trade (SECURITIES_CASH).
@@ -223,10 +226,28 @@ class Syncer:
             except WealthfolioError as e:
                 log.info("%s: assets not learned: %s", key, e)
             if cash is not None and not result.failed:
-                if result.created:
+                if result.created or repaired:
                     time.sleep(self.recalc_wait)  # Wealthfolio recalculates holdings in the background
                 self._reconcile(cfg, key, wf, accounts, cash, positions, mappings)
         self._report_unmatched(cfg, key, unmatched, result)
+
+    def _repair_cash_assets(self, key: str, wf: WealthfolioClient, accounts: Accounts) -> int:
+        """Once per broker: the cash activities older versions created with a $CASH asset (brokersync.repair).
+
+        Until they are repaired nothing is booked: the sync would re-send a
+        transaction of theirs without the asset, which Wealthfolio doesn't
+        recognise as the same activity.
+        """
+        flag = f"cash-assets-repaired:{key}"
+        if self.state.flag(flag):
+            return 0
+        updated, errors = repair_mod.repair(wf, key, accounts)
+        if errors:
+            raise WealthfolioError(
+                f"{len(errors)} Überträge aus früheren Versionen konnten nicht korrigiert werden (nichts gebucht, "
+                f"der nächste Abruf versucht es erneut): " + "; ".join(errors[:3]))
+        self.state.set_flag(flag)
+        return updated
 
     def _broker_cash(self, key: str, adapter: BrokerAdapter) -> list[CashBalance] | None:
         # The broker's balance, shown next to the run and compared with
@@ -251,7 +272,7 @@ class Syncer:
                    mappings: dict[str, SecurityMapping]) -> None:
         try:
             wf_cash = wf.holdings(accounts.cash)
-            wf_portfolio = wf.holdings(accounts.portfolio) if positions is not None else []
+            wf_portfolio = wf.holdings(accounts.portfolio)
         except WealthfolioError as e:
             log.info("%s: no holdings for the check: %s", key, e)
             return
