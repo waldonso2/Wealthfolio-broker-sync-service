@@ -411,7 +411,7 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
             # Not while a sync runs: it could create what is being removed.
             with run_lock(data_dir, wait=5), wf_client(c) as wf:
                 found = duplicates_mod.find(wf, broker, Accounts(b.cash_account_id, b.portfolio_account_id))
-                deleted, done = duplicates_mod.remove(wf, found)
+                deleted, done, errors = duplicates_mod.remove(wf, found)
         except AlreadyRunning:
             return redirect(request, "/duplicates", "Gerade läuft ein Abruf - bitte gleich noch einmal.", "warn")
         except WealthfolioError as e:
@@ -420,6 +420,9 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
             if d.tx_id in done:
                 state.mark(broker, d.tx_id, "existing", [d.original["id"]])
         message = f"{len(done)} doppelte Vorgänge entfernt ({deleted} Buchungen). Die CSV-/PDF-Buchungen bleiben."
+        if errors:
+            message += f" {len(errors)} nicht entfernt: " + "; ".join(errors[:3])
+            return redirect(request, "/duplicates", message, "warn")
         return redirect(request, "/duplicates", message)
 
     @app.get("/unknown", response_class=HTMLResponse)
