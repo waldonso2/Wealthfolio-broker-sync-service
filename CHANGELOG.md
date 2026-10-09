@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.6
+
+- **Fix: the transfers between securities and cash account moved no money.** Every cash activity was created with the asset `$CASH-<ccy>`, and Wealthfolio books a TRANSFER_IN/TRANSFER_OUT with an asset as a *securities* transfer of that asset. So a buy was paid from the securities account's own cash, sale proceeds and dividends stayed there, the cash account was short by the same amount and showed a position "$CASH". Cash activities now carry no asset, like the addon's imports.
+- **Existing installations are repaired automatically:** the first run of each broker after the update removes the `$CASH` asset from the sync's own activities in Wealthfolio (updated in place, not deleted and created again); Wealthfolio then recalculates the portfolio. Until that has worked the broker books nothing, the run is reported as failed and the next one tries again.
+- The holdings check now also reports cash on the securities account (it should be 0) and any "$CASH" position, on either account.
+
 ## 0.3.5
 
 - **Fix: the holdings check listed every position twice** - once with the broker's shares and Wealthfolio 0, once with 0 and Wealthfolio's shares. Wealthfolio's holdings carry no ISIN and the addon books under the ticker the user mapped, so the check compared the ISIN with the ticker. The sync now learns which Wealthfolio asset an ISIN is booked under from the activities of its trades and dividends (its own or the CSV/PDF ones it recognised) and compares positions by that asset.

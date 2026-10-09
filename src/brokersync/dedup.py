@@ -22,7 +22,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
-from .mapping import CASH_SYMBOL_PREFIX
+from .mapping import is_cash_symbol
 
 MATCH_WINDOW_SECONDS = 36 * 60 * 60
 AMOUNT_TOLERANCE = Decimal("0.02")
@@ -73,7 +73,8 @@ class ExistingIndex:
         amount = _dec(a.get("amount")) or Decimal(0)
         quantity = _dec(a.get("quantity"))
         symbol = a.get("asset", {}).get("symbol", "")
-        is_cash = symbol.startswith(CASH_SYMBOL_PREFIX)
+        # Cash activities carry no asset (older sync versions: a $CASH one).
+        is_cash = not symbol or is_cash_symbol(symbol)
 
         def same_substance(e: dict) -> bool:
             if e["id"] in self.used or e.get("accountId") != a["accountId"]:

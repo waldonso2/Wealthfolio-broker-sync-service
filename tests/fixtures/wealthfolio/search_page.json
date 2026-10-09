@@ -7,11 +7,11 @@
    "assetPricingMode": "MARKET", "instrumentType": "EQUITY", "assetContractMultiplier": null, "sourceSystem": null,
    "sourceRecordId": null, "sourceGroupId": null, "idempotencyKey": "x", "importRunId": null,
    "isUserModified": false, "metadata": null},
-  {"id": "a2", "accountId": "b", "assetId": "$CASH-EUR", "activityType": "TRANSFER_IN", "subtype": null,
+  {"id": "a2", "accountId": "b", "assetId": "", "activityType": "TRANSFER_IN", "subtype": null,
    "status": "POSTED", "date": "2026-01-05T10:14:59Z", "quantity": "1", "unitPrice": "1", "currency": "EUR",
    "fee": null, "tax": null, "amount": "501", "needsReview": false, "comment": "Funds [SYNC dummy:dummy-0002]",
    "fxRate": null, "createdAt": "2026-10-09T06:00:01Z", "updatedAt": "2026-10-09T06:00:01Z", "accountName": "Depot",
-   "accountCurrency": "EUR", "assetSymbol": "$CASH-EUR", "assetName": null, "exchangeMic": null,
+   "accountCurrency": "EUR", "assetSymbol": "", "assetName": null, "exchangeMic": null,
    "assetPricingMode": "NONE", "instrumentType": null, "assetContractMultiplier": null, "sourceSystem": null,
    "sourceRecordId": null, "sourceGroupId": "sync-dummy-dummy-0002", "idempotencyKey": "y", "importRunId": null,
    "isUserModified": false, "metadata": null}

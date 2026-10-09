@@ -117,6 +117,17 @@ class WealthfolioClient:
             raise WealthfolioError(f"Wealthfolio rejected the activity ({payload.get('activityType')}): {detail}")
         return r.json()
 
+    def update_activity(self, payload: dict) -> dict:
+        """``PUT /activities``: ``id`` plus the fields; ``asset: {}`` removes the asset.
+
+        Wealthfolio keeps the other leg of a linked transfer pair in step and
+        recalculates the portfolio afterwards.
+        """
+        r = self._request("PUT", "/activities", json=payload)
+        if r.status_code >= 400:
+            raise WealthfolioError(f"Wealthfolio rejected the update ({payload.get('activityType')}): {_detail(r)}")
+        return r.json()
+
     def delete_activity(self, activity_id: str) -> None:
         r = self._request("DELETE", f"/activities/{activity_id}")
         _raise(r)

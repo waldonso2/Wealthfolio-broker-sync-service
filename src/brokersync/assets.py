@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from .mapping import Accounts, SecurityMapping
+from .mapping import Accounts, SecurityMapping, is_cash_symbol
 from .model import Kind, Transaction
 from .state import State
 from .wealthfolio import WealthfolioClient
@@ -55,7 +55,7 @@ def learn(state: State, broker: str, transactions: list[Transaction], wf: Wealth
     for a in activities:
         isins = wanted.get(a.get("id", ""))
         asset_id = a.get("assetId") or ""
-        if not isins or a.get("activityType") not in SECURITY_TYPES or not asset_id or asset_id.startswith("$CASH"):
+        if not isins or a.get("activityType") not in SECURITY_TYPES or not asset_id or is_cash_symbol(asset_id):
             continue
         symbol = a.get("assetSymbol") or asset_id
         for isin in isins:

@@ -1,5 +1,5 @@
 {"id": "8f1c2d3e-0000-4000-8000-000000000001", "accountId": "0b6f8a52-1111-4c1e-9c33-000000000001",
- "assetId": "$CASH-EUR", "activityType": "DEPOSIT", "subtype": null, "status": "POSTED",
+ "assetId": "", "activityType": "DEPOSIT", "subtype": null, "status": "POSTED",
  "activityDate": "2026-01-02T09:00:00Z", "quantity": "1", "unitPrice": "1", "amount": "1000", "fee": null,
  "tax": null, "currency": "EUR", "fxRate": null, "notes": "Einzahlung [SYNC dummy:dummy-0001]",
  "sourceGroupId": null, "needsReview": false, "isUserModified": false,
