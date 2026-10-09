@@ -120,3 +120,26 @@ def test_notifications_and_securities(tmp_path):
 def test_healthz_is_public(tmp_path):
     client, _, _ = make(tmp_path)
     assert client.get("/healthz").json()["ok"] is True
+
+
+def test_status_follows_the_real_state_of_the_sync(tmp_path):
+    from brokersync.state import State
+    from brokersync.sync import run_lock
+
+    client, _, _ = make(tmp_path)
+    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    # A run the process died in the middle of (restart, update, crash).
+    stale = State(tmp_path)
+    stale.start_run("dummy")
+    page = client.get("/").text
+    assert "abgebrochen" in page and "läuft" not in page and "Jetzt abrufen" in page
+    assert 'http-equiv="refresh"' not in page
+    assert "Dienst wurde während des Abrufs beendet" in stale.runs()[0].message
+
+    # A sync in progress elsewhere (the timer): shown as running, page refreshes itself,
+    # and its run is not closed as stale.
+    stale.start_run("dummy")
+    with run_lock(tmp_path):
+        page = client.get("/").text
+        assert "Abruf läuft" in page and 'http-equiv="refresh"' in page
+        assert stale.runs()[0].status == "running"

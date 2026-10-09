@@ -213,3 +213,19 @@ def test_a_failed_sweep_after_a_created_dividend_is_completed(tmp_path):
     div_group = [a["activityType"] for a in wf.activities if "TEST-20260105-3" in a["comment"]]
     assert sorted(div_group) == ["DIVIDEND", "TRANSFER_IN", "TRANSFER_OUT"]
     assert len([a for a in wf.activities if a["activityType"] == "BUY"]) == 1
+
+
+def test_a_run_waits_briefly_for_the_lock_and_closes_stale_runs(tmp_path):
+    import threading
+    import time
+
+    wf = FakeWealthfolio()
+    syncer, _ = setup(tmp_path, wf)
+    syncer.state.start_run("dummy")  # left over by a crashed process
+    with run_lock(tmp_path):
+        t = threading.Thread(target=syncer.run)
+        t.start()
+        time.sleep(0.3)  # the status page holds the lock briefly
+    t.join(10)
+    runs = syncer.state.runs()
+    assert [r.status for r in runs] == ["ok", "aborted"]

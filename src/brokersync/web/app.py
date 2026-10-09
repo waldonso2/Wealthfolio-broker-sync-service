@@ -27,7 +27,7 @@ from .. import config as config_mod
 from ..adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from ..notify import Notifier
 from ..state import State
-from ..sync import AlreadyRunning, Syncer
+from ..sync import AlreadyRunning, Syncer, is_running
 from ..vault import Vault, hash_password, verify_password
 from ..wealthfolio import WealthfolioClient, WealthfolioError
 
@@ -37,7 +37,8 @@ TIMER = "wealthfolio-broker-sync-run.timer"
 PUBLIC = {"/login", "/setup-password", "/healthz"}
 # Times are shown in German time; the container usually runs in UTC.
 TZ = ZoneInfo(os.environ.get("BROKERSYNC_TZ", "Europe/Berlin"))
-STATUS_LABEL = {"ok": "OK", "needs_auth": "Anmeldung nötig", "error": "Fehler", "running": "läuft"}
+STATUS_LABEL = {"ok": "OK", "needs_auth": "Anmeldung nötig", "error": "Fehler", "running": "läuft",
+                "aborted": "abgebrochen"}
 
 
 def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[BrokerAdapter]] | None = None,
@@ -157,6 +158,11 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
     # ── dashboard ───────────────────────────────────────────────────────────
     @app.get("/", response_class=HTMLResponse)
     def dashboard(request: Request):
+        # A run whose process died stays at 'running' in the database; close it
+        # unless a sync (here or the timer's) really is in progress.
+        if not running.is_set():
+            syncer.cleanup()
+        busy = running.is_set() or is_running(data_dir)
         c = cfg()
         secrets_ = vault.load()
         brokers = []
@@ -176,7 +182,7 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
             ("Erster Abruf", "#run", any(b["last"] for b in brokers)),
         ]
         return render(request, "dashboard.html", brokers=brokers, steps=steps, all_done=all(s[2] for s in steps),
-                      running=running.is_set(),
+                      running=busy,
                       next_run=_next_timer_run(), unknown=len(state.unknown_events()), runs=state.runs(limit=10))
 
     @app.post("/run")
@@ -186,7 +192,6 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
         only = [broker] if broker else None
 
         def work():
-            running.set()
             try:
                 syncer.run(only)
             except AlreadyRunning:
@@ -196,9 +201,10 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
             finally:
                 running.clear()
 
+        running.set()  # before the thread starts, so the next page view already shows it
         if run_in_thread:
             threading.Thread(target=work, daemon=True).start()
-            return redirect(request, "/", "Abruf gestartet. Lade die Seite gleich neu, um das Ergebnis zu sehen.")
+            return redirect(request, "/", "Abruf gestartet. Die Seite aktualisiert sich, bis er fertig ist.")
         work()
         return redirect(request, "/", "Abruf beendet.")
 
