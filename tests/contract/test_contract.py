@@ -39,8 +39,8 @@ def test_every_recorded_transaction_can_be_booked(path):
     case = json.loads(path.read_text())
     adapter = ADAPTERS[path.parent.name].replay(case["recording"])
     for tx in adapter.get_transactions(None):
-        if tx.kind == Kind.UNKNOWN:
-            continue
+        if tx.kind in (Kind.UNKNOWN, Kind.SECURITIES_CASH):
+            continue  # reported, or booked by the securities side
         try:
             to_activities(tx, path.parent.name, Accounts("cash", "depot"))
         except MappingError as e:

@@ -26,6 +26,9 @@
         {{ b.last.created }} neu, {{ b.last.existing }} schon vorhanden{% if b.last.failed %}, {{ b.last.failed }} fehlgeschlagen{% endif %}{% if b.last.unknown %}, <a href="/unknown">{{ b.last.unknown }} unbekannt</a>{% endif %}</div>
       {% if b.last.message and b.last.status != "ok" %}<pre class="muted">{{ b.last.message }}</pre>{% endif %}
       {% endif %}
+      {% if b.balances %}
+      <div class="muted">Saldo laut {{ b.label }}: {% for x in b.balances %}{{ x.amount | money }} {{ x.currency }}{% if not loop.last %}, {% endif %}{% endfor %} (Stand {{ b.balances[0].at | local }}) – zum Vergleich mit dem Verrechnungskonto in Wealthfolio</div>
+      {% endif %}
     </div>
     <div class="actions" style="margin:0">
       {% if b.last and b.last.status == "needs_auth" %}<a class="button" href="/brokers/{{ b.key }}/login">Jetzt anmelden</a>{% endif %}

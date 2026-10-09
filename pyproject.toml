@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wealthfolio-broker-sync"
-version = "0.1.3"
+version = "0.2.0"
 description = "Fetches transactions from brokers and writes them, deduplicated, into a self-hosted Wealthfolio"
 readme = "README.md"
 license = "MIT"
@@ -12,6 +12,7 @@ requires-python = ">=3.11"
 dependencies = [
   "cryptography>=43",
   "fastapi>=0.115",
+  "fints>=5.0,<6",
   "httpx>=0.27",
   "itsdangerous>=2.2",
   "jinja2>=3.1",

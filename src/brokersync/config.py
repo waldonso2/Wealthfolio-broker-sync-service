@@ -37,6 +37,11 @@ class Config:
     brokers: dict[str, BrokerConfig] = field(default_factory=dict)
     # ISIN -> {"symbol", "exchangeMic", "name"}, like the addon's securityMappings.
     security_mappings: dict[str, dict] = field(default_factory=dict)
+    # Outbound bank transfers to own accounts, like the addon's transferPatterns:
+    # [{"label", "iban", "keyword", "destinationAccountId"}]. A matched outbound
+    # transfer is booked as TRANSFER_OUT (plus TRANSFER_IN on the destination
+    # account, if one is set) instead of a withdrawal.
+    transfer_patterns: list[dict] = field(default_factory=list)
 
     def broker(self, key: str) -> BrokerConfig:
         return self.brokers.setdefault(key, BrokerConfig())

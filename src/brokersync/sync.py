@@ -23,7 +23,7 @@ from pathlib import Path
 from . import config as config_mod
 from .adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from .dedup import ExistingIndex
-from .mapping import Accounts, MappingError, SecurityMapping, to_activities, tx_ref
+from .mapping import Accounts, MappingError, SecurityMapping, TransferPattern, to_activities, tx_ref
 from .model import Kind, Transaction
 from .notify import Notifier
 from .state import State
@@ -34,6 +34,9 @@ log = logging.getLogger(__name__)
 
 # Re-fetch this much before the last successful run: brokers book late.
 OVERLAP = timedelta(days=7)
+# A bank's securities settlement lies at most this many days from the trade.
+SETTLEMENT_DAYS = 6
+UNMATCHED_SECURITIES = "WERTPAPIER_OHNE_GEGENSTUECK"
 
 
 class AlreadyRunning(Exception):
@@ -160,15 +163,17 @@ class Syncer:
         secrets = self.vault.load()
         stored = secrets.get("brokers", {}).get(key, {})
         adapter = self.adapters[key](stored.get("credentials", {}), stored.get("session"))
+        label = self.adapters[key].label
+        adapter.on_user_action = lambda message: self.notifier(cfg).send(
+            f"{label}: Bestätigung nötig", message, link=self.link(cfg, "/"), priority="high", tags="key")
         try:
             adapter.login()
+            transactions = adapter.get_transactions(self._since(key, bcfg))
+            self._record_balance(key, adapter)
         finally:
             # Keep whatever session the adapter has, even half-way through a login.
+            adapter.close()
             self.vault.set_broker_session(key, adapter.session_state())
-
-        since = self._since(key, bcfg)
-        transactions = adapter.get_transactions(since)
-        self.vault.set_broker_session(key, adapter.session_state())
 
         known = self.state.known(key)
         todo = [t for t in transactions if t.id not in known]
@@ -180,26 +185,82 @@ class Syncer:
         accounts = Accounts(bcfg.cash_account_id, bcfg.portfolio_account_id)
         mappings = {isin: SecurityMapping(m.get("symbol") or isin, m.get("exchangeMic"), m.get("name"))
                     for isin, m in cfg.security_mappings.items()}
+        patterns = [TransferPattern.from_config(p) for p in cfg.transfer_patterns]
         with self._wealthfolio(cfg.wealthfolio_url, secrets.get("wealthfolio_password")) as wf:
-            first = min(t.datetime for t in todo) - timedelta(days=2)
-            last = max(t.datetime for t in todo) + timedelta(days=2)
+            # Wide enough for a settlement a few days after the trade (SECURITIES_CASH).
+            margin = timedelta(days=SETTLEMENT_DAYS + 1)
+            first = min(t.datetime for t in todo) - margin
+            last = max(t.datetime for t in todo) + margin
             existing = ExistingIndex(wf.search_activities([accounts.cash, accounts.portfolio], first.date(),
                                                           last.date()))
+            unmatched: list[Transaction] = []
             for tx in sorted(todo, key=lambda t: t.datetime):
-                self._sync_tx(wf, key, tx, accounts, mappings, existing, result)
+                if tx.kind == Kind.SECURITIES_CASH:
+                    if not self._settle_securities_cash(key, tx, accounts, existing, result):
+                        unmatched.append(tx)
+                    continue
+                self._sync_tx(wf, key, tx, accounts, mappings, patterns, existing, result)
+        self._report_unmatched(cfg, key, unmatched, result)
+
+    def _record_balance(self, key: str, adapter: BrokerAdapter) -> None:
+        # The broker's balance, shown next to the run so it can be compared with
+        # Wealthfolio's. Not worth failing the run for.
+        try:
+            balances = adapter.get_cash()
+        except (AdapterError, AuthRequired, NotImplementedError) as e:
+            log.info("%s: no balance: %s", key, e)
+            return
+        self.state.set_balances(key, [(b.currency, str(b.amount)) for b in balances])
+
+    def _settle_securities_cash(self, key: str, tx: Transaction, accounts: Accounts, existing: ExistingIndex,
+                                result: BrokerResult) -> bool:
+        """A bank booking for a securities trade/payout: there if the securities side booked its transfer."""
+        signed = tx.signed if tx.signed is not None else -tx.net
+        match = existing.find_settlement(accounts.cash, signed, tx.datetime, SETTLEMENT_DAYS)
+        if not match:
+            return False
+        self.state.mark(key, tx.id, "existing", [match])
+        self.state.resolve_unknown(key, tx.id)
+        result.existing += 1
+        return True
+
+    def _report_unmatched(self, cfg: config_mod.Config, key: str, events: list[Transaction],
+                          result: BrokerResult) -> None:
+        # Not marked as synced: once the PDF statement is imported, the next run finds it.
+        new = [t for t in events if self.state.add_unknown(
+            key, t.id, UNMATCHED_SECURITIES, t.datetime.isoformat(),
+            {"betrag": str(t.signed if t.signed is not None else -t.net), "buchungstext": t.label,
+             "verwendungszweck": t.text[:200]})]
+        result.unknown += len(events)
+        if new:
+            total = ", ".join(f"{t.signed if t.signed is not None else -t.net} {t.currency}" for t in new[:5])
+            self.notifier(cfg).send(
+                f"{self.adapters[key].label}: Wertpapier-Buchung ohne Gegenstück",
+                f"{len(new)} Buchung(en) ({total}) gehören zu Wertpapiergeschäften, die noch nicht in Wealthfolio "
+                "sind. Importiere die PDF-Abrechnung mit dem Broker Importer Addon; danach erkennt der nächste "
+                "Abruf sie.",
+                link=self.link(cfg, "/unknown"), tags="question",
+            )
 
     def _since(self, key: str, bcfg: config_mod.BrokerConfig) -> datetime | None:
         last = self.state.last_success(key)
         if last:
-            return last - OVERLAP
+            since = last - OVERLAP
+            # Unmatched securities settlements stay in the window until the
+            # securities side (PDF import) books them and the check finds them.
+            open_since = self.state.oldest_open(key, UNMATCHED_SECURITIES)
+            if open_since and open_since - timedelta(days=1) < since:
+                since = open_since - timedelta(days=1)
+            return since
         if bcfg.start_date:
             return datetime.fromisoformat(bcfg.start_date).replace(tzinfo=UTC)
         return None
 
     def _sync_tx(self, wf: WealthfolioClient, key: str, tx: Transaction, accounts: Accounts,
-                 mappings: dict[str, SecurityMapping], existing: ExistingIndex, result: BrokerResult) -> None:
+                 mappings: dict[str, SecurityMapping], patterns: list[TransferPattern], existing: ExistingIndex,
+                 result: BrokerResult) -> None:
         try:
-            payloads = to_activities(tx, key, accounts, mappings)
+            payloads = to_activities(tx, key, accounts, mappings, patterns)
         except MappingError as e:
             result.failed += 1
             result.messages.append(f"{tx.datetime.date()} {tx.label or tx.kind} {tx.name}: {e}")

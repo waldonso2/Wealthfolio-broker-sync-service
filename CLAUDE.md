@@ -19,7 +19,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | Path | Purpose |
 |---|---|
 | `src/brokersync/model.py` | Broker-neutral `Transaction` (Decimal amounts), `Kind`, `Position`, `CashBalance` |
-| `src/brokersync/adapters/` | `base.py` interface (read-only; `login` / `complete_login` for TAN; `replay` for contract tests), `dummy.py`, registry in `__init__.py` |
+| `src/brokersync/adapters/` | `base.py` interface (read-only; `login` / `complete_login` for TAN; `on_user_action` for app confirmations during scheduled runs; `close`; `replay` for contract tests), `dkb.py` (python-fints: MT940/camt → `Transaction`, decoupled TAN, PIN lock-out guard), `dummy.py`, registry in `__init__.py` |
 | `src/brokersync/mapping.py` | Transaction → Wealthfolio `NewActivity` payloads — port of the addon's rules |
 | `src/brokersync/dedup.py` | Check against existing Wealthfolio activities (port of the addon's `matchExisting`) |
 | `src/brokersync/sync.py` | One run over all enabled brokers: login, fetch, dedupe, create, report |
@@ -39,6 +39,9 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 - **Dedup layers:** state DB (`synced`), Wealthfolio's fingerprint ("Duplicate activity detected" → `Duplicate`, not an error), `dedup.ExistingIndex` for activities from CSV/PDF imports. Activities carrying our own `[SYNC …]` reference are *not* matched there: the whole transaction is re-sent so an interrupted run is completed.
 - **A transaction is marked synced only when all its activities exist.** Failures stay unmarked and are retried; a run with failures is not a "success", so the next run fetches from before it.
 - **Adapters are read-only** (AC 7 of #35): no endpoint that trades, transfers or changes settings.
+- **Bank-side cash of securities is never booked twice.** A giro booking that settles a depot trade or payout is `Kind.SECURITIES_CASH`: the sync only looks for the transfer leg the securities side (the addon's PDF import, later a depot adapter) put on the cash account (`ExistingIndex.find_settlement`, ±0.02, ≤6 days). Unmatched ones are reported (`UNMATCHED_SECURITIES`), not marked synced, and keep the fetch window open (`State.oldest_open`) until they match.
+- **Transfer patterns** (`Config.transfer_patterns`, UI *Überträge*) follow the addon: only outbound money (WITHDRAWAL) checks them; inbound is always DEPOSIT.
+- **Never risk a bank lock-out:** after a rejected PIN an adapter sets `pin_rejected` in its session and refuses to contact the bank until the credentials are saved anew (`Vault.set_broker_credentials` clears the session).
 - **Unknown event types** become `Kind.UNKNOWN`: stored, listed in the UI, notified once — never dropped, never booked.
 - **One broker failing never stops the others**; it is reported via ntfy with a link (`public_url` + path).
 - **Test data that can reach a real Wealthfolio** (the dummy adapter, anything a user tests with) is dated today — the dummy uses the day of its login, fixed in the session so the daily timer doesn't book it again — and marked **TEST** in every activity's comment (the dummy's transaction ids start with `TEST-`), so the user finds and deletes it easily. Fixtures for automated tests may use fixed dates.

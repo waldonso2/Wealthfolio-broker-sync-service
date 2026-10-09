@@ -37,6 +37,13 @@ CREATE TABLE IF NOT EXISTS runs (
   unknown INTEGER NOT NULL DEFAULT 0,
   message TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS balances (
+  broker TEXT NOT NULL,
+  currency TEXT NOT NULL,
+  amount TEXT NOT NULL,
+  at TEXT NOT NULL,
+  PRIMARY KEY (broker, currency)
+);
 CREATE TABLE IF NOT EXISTS unknown_events (
   broker TEXT NOT NULL,
   tx_id TEXT NOT NULL,
@@ -97,6 +104,28 @@ class State:
                 (broker, tx_id, raw_type, occurred_at, json.dumps(payload, default=str), now()),
             )
         return cur.rowcount == 1
+
+    def oldest_open(self, broker: str, raw_type: str) -> datetime | None:
+        """When the oldest still open event of this type happened (e.g. an unmatched settlement)."""
+        row = self.db.execute("SELECT MIN(occurred_at) FROM unknown_events WHERE broker = ? AND raw_type = ?",
+                              (broker, raw_type)).fetchone()
+        return datetime.fromisoformat(row[0]) if row and row[0] else None
+
+    def resolve_unknown(self, broker: str, tx_id: str) -> None:
+        with self.db:
+            self.db.execute("DELETE FROM unknown_events WHERE broker = ? AND tx_id = ?", (broker, tx_id))
+
+    # ── balances ────────────────────────────────────────────────────────────
+    def set_balances(self, broker: str, balances: list[tuple[str, str]]) -> None:
+        with self.db:
+            self.db.execute("DELETE FROM balances WHERE broker = ?", (broker,))
+            self.db.executemany("INSERT INTO balances VALUES (?, ?, ?, ?)",
+                                [(broker, c, a, now()) for c, a in balances])
+
+    def balances(self, broker: str) -> list[dict]:
+        rows = self.db.execute("SELECT currency, amount, at FROM balances WHERE broker = ? ORDER BY currency",
+                               (broker,))
+        return [{"currency": c, "amount": a, "at": t} for c, a, t in rows]
 
     def unknown_events(self, broker: str | None = None) -> list[dict]:
         sql = "SELECT broker, tx_id, raw_type, occurred_at, payload, first_seen FROM unknown_events"

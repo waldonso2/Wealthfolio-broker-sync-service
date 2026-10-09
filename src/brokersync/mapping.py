@@ -45,6 +45,32 @@ class SecurityMapping:
     name: str | None = None
 
 
+@dataclass(frozen=True)
+class TransferPattern:
+    label: str
+    iban: str = ""
+    keyword: str = ""
+    destination_account_id: str = ""
+
+    @classmethod
+    def from_config(cls, d: dict) -> TransferPattern:
+        return cls(d.get("label", ""), (d.get("iban") or "").replace(" ", "").upper(), d.get("keyword") or "",
+                   d.get("destinationAccountId") or "")
+
+
+def match_pattern(tx: Transaction, patterns: list[TransferPattern]) -> TransferPattern | None:
+    """Same order as the addon's matchPattern: IBAN exact, IBAN in the text, keyword in the text."""
+    text = f"{tx.counterparty} {tx.text}".upper()
+    iban = tx.counterparty_iban.replace(" ", "").upper()
+    for test in (lambda p: p.iban and p.iban == iban,
+                 lambda p: p.iban and p.iban in text.replace(" ", ""),
+                 lambda p: p.keyword and p.keyword.upper() in text):
+        for p in patterns:
+            if test(p):
+                return p
+    return None
+
+
 class MappingError(Exception):
     """The transaction can't be booked as reported (amounts don't add up, data missing)."""
 
@@ -108,10 +134,13 @@ def to_activities(
     broker: str,
     accounts: Accounts,
     mappings: dict[str, SecurityMapping] | None = None,
+    patterns: list[TransferPattern] | None = None,
 ) -> list[dict]:
     """Wealthfolio ``NewActivity`` payloads for one transaction, in booking order."""
     if tx.kind == Kind.UNKNOWN:
         raise MappingError(f"Unknown event type {tx.raw_type or tx.label!r}.")
+    if tx.kind == Kind.SECURITIES_CASH:
+        raise MappingError("The cash side of a securities transaction is booked by the securities side.")
     _check_amounts(tx)
     mappings = mappings or {}
     ref = tx_ref(broker, tx)
@@ -142,18 +171,31 @@ def to_activities(
 
     # Cash-only kinds live on the cash account.
     if tx.kind == Kind.DEPOSIT:
-        return [cash(accounts.cash, "DEPOSIT", 0, tx.net, f"{tx.label or 'Deposit'}{_name(tx)}{ref}")]
+        return [cash(accounts.cash, "DEPOSIT", 0, tx.net, f"{tx.label or 'Deposit'}{_name(tx)}{_text(tx)}{ref}")]
     if tx.kind == Kind.WITHDRAWAL:
-        return [cash(accounts.cash, "WITHDRAWAL", 0, tx.net, f"{tx.label or 'Withdrawal'}{_name(tx)}{ref}")]
+        # Only outbound money checks the transfer patterns (addon rule): an
+        # inbound transfer is always a deposit.
+        p = match_pattern(tx, patterns or [])
+        if p:
+            what = tx.text or tx.label or "Transfer"
+            out.append(cash(accounts.cash, "TRANSFER_OUT", 0, tx.net, f"-> {p.label}: {what}{_name(tx, ' (')}{ref}",
+                            source_group=gid if p.destination_account_id else None))
+            if p.destination_account_id:
+                out.append(cash(p.destination_account_id, "TRANSFER_IN", 0, tx.net,
+                                f"<- {broker.upper()}: {what}{ref}", source_group=gid))
+            return out
+        return [cash(accounts.cash, "WITHDRAWAL", 0, tx.net,
+                     f"{tx.label or 'Withdrawal'}{_name(tx)}{_text(tx)}{ref}")]
     if tx.kind == Kind.FEE:
-        return [cash(accounts.cash, "FEE", 0, tx.net, f"{tx.label or 'Fee'}{_name(tx)}{ref}")]
+        return [cash(accounts.cash, "FEE", 0, tx.net, f"{tx.label or 'Fee'}{_name(tx)}{_text(tx)}{ref}")]
     if tx.kind == Kind.TAX:
         return [cash(accounts.cash, "TAX", 0, tx.net, f"{tx.label or 'Tax'}{_name(tx)}{ref}")]
     if tx.kind == Kind.TAX_REFUND:
         return [cash(accounts.cash, "CREDIT", 0, tx.net, f"{tx.label or 'Tax refund'}{_name(tx)}{ref}",
                      subtype="TAX_REFUND")]
     if tx.kind == Kind.INTEREST:
-        out.append(cash(accounts.cash, "INTEREST", 0, tx.net - refund, f"{tx.label or 'Interest'}{_name(tx)}{ref}",
+        out.append(cash(accounts.cash, "INTEREST", 0, tx.net - refund,
+                        f"{tx.label or 'Interest'}{_name(tx)}{_text(tx)}{ref}",
                         tax=tx.tax if tx.tax > 0 else None))
         if refund:
             out.append(cash(accounts.cash, "CREDIT", 0, refund, f"Tax refund on interest{ref}", subtype="TAX_REFUND"))
@@ -227,8 +269,17 @@ def to_activities(
     return out
 
 
-def _name(tx: Transaction) -> str:
-    return f" {tx.name}" if tx.name else ""
+def _name(tx: Transaction, sep: str = " ") -> str:
+    name = tx.name or tx.counterparty
+    if not name:
+        return ""
+    return f"{sep}{name})" if sep == " (" else f"{sep}{name}"
+
+
+def _text(tx: Transaction) -> str:
+    # Purpose of a bank transaction, shortened: Wealthfolio shows the comment in one line.
+    text = " ".join(tx.text.split())
+    return f": {text[:120]}" if text else ""
 
 
 def _clean(d: dict) -> dict:

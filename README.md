@@ -8,7 +8,7 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 - **Benachrichtigung aufs Handy** (ntfy), wenn eine TAN fällig ist oder etwas nicht klappt
 - **Bucht wie das [Broker Importer Addon](https://github.com/waldonso2/wealthfolio-importer-addon)**: Was du schon per CSV oder PDF importiert hast, wird erkannt und nicht doppelt angelegt
 
-> **Stand:** Version 0.1 ist die Basis mit einem **Test-Broker („Dummy“)**, mit dem du alles einmal ausprobieren kannst. Die echten Broker folgen: DKB ([#37](https://github.com/waldonso2/wealthfolio-importer-addon/issues/37)), Trade Republic ([#38](https://github.com/waldonso2/wealthfolio-importer-addon/issues/38)), Scalable Capital ([#39](https://github.com/waldonso2/wealthfolio-importer-addon/issues/39)).
+> **Stand:** **DKB** (Girokonto per FinTS) und ein **Test-Broker („Dummy“)** zum Ausprobieren. Trade Republic ([#38](https://github.com/waldonso2/wealthfolio-importer-addon/issues/38)) und Scalable Capital ([#39](https://github.com/waldonso2/wealthfolio-importer-addon/issues/39)) folgen.
 
 ## Was du brauchst
 
@@ -78,6 +78,37 @@ In der Übersicht **Jetzt abrufen** klicken. Danach siehst du je Broker, was neu
 <img src="docs/screenshots/07-nach-dem-abruf.png" width="560" alt="Übersicht nach dem ersten Abruf">
 
 Ab jetzt läuft der Abruf jeden Morgen zwischen 6:00 und 6:45 Uhr.
+
+## DKB
+
+Der Dienst liest dein **DKB-Girokonto** per FinTS (HBCI), dieselbe Schnittstelle, die Finanzprogramme wie Hibiscus oder MoneyMoney nutzen. Er liest nur; Überweisungen kann er nicht auslösen.
+
+**Einrichten** unter *Broker → DKB*:
+
+- **Anmeldename und PIN:** dieselben wie im DKB-Banking.
+- **IBAN des Girokontos:** nur nötig, wenn du bei der DKB mehrere Konten hast.
+- **FinTS-Produkt-ID:** Banken verlangen für FinTS eine bei der Deutschen Kreditwirtschaft registrierte Produkt-ID. Sobald dieser Dienst eine hat, ist sie fest eingebaut und das Feld entfällt. Bis dahin trägst du hier eine registrierte Produkt-ID ein.
+- **Konten:** dasselbe DKB-Verrechnungs- und Depotkonto wie beim PDF-Import im Addon.
+
+**Freigabe in der DKB-App:** Bei der ersten Anmeldung und danach in Abständen (nach den PSD2-Regeln meist alle 90 Tage) will die DKB eine Bestätigung in der DKB-App. In der Oberfläche bestätigst du in der App und klickst dann *Ich habe in der App bestätigt*. Läuft gerade der tägliche Abruf, schickt der Dienst eine ntfy-Nachricht und wartet drei Minuten auf deine Freigabe.
+
+**Was gebucht wird:**
+
+| Auf dem Girokonto | In Wealthfolio (DKB-Verrechnungskonto) |
+|---|---|
+| Gutschrift, Gehalt, eingehende Überweisung | Einzahlung (DEPOSIT) – eingehendes Geld ist immer eine Einzahlung, wie im Addon |
+| Kartenzahlung, Lastschrift, ausgehende Überweisung | Auszahlung (WITHDRAWAL), also eine Ausgabe |
+| Ausgehende Überweisung auf ein eigenes Konto | Übertrag (TRANSFER_OUT, mit Gegenbuchung auf dem gewählten Konto), wenn unter *Überträge* eingetragen – wie die Transfer-Muster im Addon |
+| Habenzinsen / Kontoführungsentgelt beim Rechnungsabschluss | Zinsen (INTEREST) / Gebühr (FEE) |
+| Wertpapierabrechnung, Ertragsgutschrift, Dividende | **nichts** – siehe unten |
+
+**Wertpapiere:** Käufe, Verkäufe und Ausschüttungen deines DKB-Depots bucht der PDF-Import des Addons, samt der Abbuchung bzw. Gutschrift auf dem Verrechnungskonto. Damit nichts doppelt zählt, bucht der Dienst diese Girokonto-Umsätze nicht noch einmal. Er prüft nur, ob der PDF-Import sie schon gebucht hat (gleicher Betrag, höchstens 6 Tage auseinander). Fehlt das Gegenstück, bekommst du eine Nachricht: PDF-Abrechnung mit dem Addon importieren, der nächste Abruf erkennt sie dann. Ob die DKB Depotbestände über FinTS liefert, ist noch nicht geprüft; bis dahin bleibt dafür der PDF-Import.
+
+**Zeitraum:** Ohne Datum unter *Buchungen übernehmen ab* holt der erste Abruf die letzten 89 Tage. Für ältere Umsätze verlangt die DKB eine Freigabe in der App.
+
+**Saldo:** Die Übersicht zeigt nach jedem Abruf den Saldo laut DKB. Er sollte mit dem DKB-Verrechnungskonto in Wealthfolio übereinstimmen.
+
+**Sicherheit:** Lehnt die DKB Anmeldename oder PIN ab, versucht der Dienst es nicht noch einmal, bis du die Zugangsdaten neu speicherst. Nach drei Fehlversuchen sperrt die DKB sonst das Online-Banking.
 
 ## Im Alltag
 

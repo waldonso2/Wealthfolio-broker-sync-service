@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% block title %}Überträge{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Überträge auf eigene Konten</h1>
+  <p>Eine ausgehende Überweisung zählt in Wealthfolio sonst als Ausgabe. Geht sie auf ein eigenes Konto (z.&nbsp;B. dein Trade-Republic-Verrechnungskonto), trag es hier ein – wie die Transfer-Muster im Broker Importer Addon. Dann wird sie als Übertrag gebucht, mit dem Gegenstück auf dem gewählten Wealthfolio-Konto.</p>
+  <p class="muted">Eingehende Überweisungen bleiben immer Einzahlungen (wie im Addon).</p>
+  {% if patterns %}
+  <div class="table"><table>
+    <tr><th>Name</th><th>IBAN</th><th>Stichwort</th><th>Gegenkonto in Wealthfolio</th><th></th></tr>
+    {% for p in patterns %}
+    <tr><td>{{ p.label }}</td><td><code>{{ p.iban }}</code></td><td>{{ p.keyword }}</td>
+      <td>{{ names.get(p.destinationAccountId, "– nur als Übertrag markieren –" if not p.destinationAccountId else p.destinationAccountId) }}</td>
+      <td><form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link" name="delete" value="{{ loop.index0 }}">Entfernen</button></form></td></tr>
+    {% endfor %}
+  </table></div>
+  {% endif %}
+  {% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error }}</div>{% endif %}
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="label">Name</label><input type="text" id="label" name="label" placeholder="Trade Republic" required>
+    <label for="iban">IBAN des Empfängers</label><input type="text" id="iban" name="iban" placeholder="DE…">
+    <label for="keyword">oder Stichwort im Verwendungszweck</label><input type="text" id="keyword" name="keyword">
+    <label for="dest">Gegenkonto in Wealthfolio</label>
+    <select id="dest" name="destination"><option value="">– nur als Übertrag markieren –</option>
+      {% for a in accounts %}<option value="{{ a.id }}">{{ a.name }} ({{ a.currency }})</option>{% endfor %}
+    </select>
+    <div class="actions"><button>Hinzufügen</button></div>
+  </form>
+</div>
+{% endblock %}

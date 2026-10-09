@@ -92,3 +92,28 @@ class ExistingIndex:
             self.used.add(e["id"])
             return e["id"]
         return None
+
+    def find_settlement(self, cash_account: str, signed: Decimal, when: datetime, days: int) -> str | None:
+        """The transfer leg the securities side booked on the cash account for a bank settlement.
+
+        A debit (``signed`` < 0) pays a buy: TRANSFER_OUT to the depot. A credit
+        is the proceeds of a sale or a payout: TRANSFER_IN from the depot.
+        """
+        want = "TRANSFER_OUT" if signed < 0 else "TRANSFER_IN"
+        amount = abs(signed)
+        best = None
+        for e in self.existing:
+            if e["id"] in self.used or e.get("accountId") != cash_account or e.get("activityType") != want:
+                continue
+            existing_amount = _dec(e.get("amount"))
+            if existing_amount is None or abs(existing_amount - amount) > AMOUNT_TOLERANCE:
+                continue
+            gap = abs((_when(e["date"]) - when).total_seconds())
+            if gap > days * 86400:
+                continue
+            if best is None or gap < best[0]:
+                best = (gap, e["id"])
+        if best is None:
+            return None
+        self.used.add(best[1])
+        return best[1]

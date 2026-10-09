@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
+from .dkb import DkbAdapter
 from .dummy import DummyAdapter
 
 ADAPTERS: dict[str, type[BrokerAdapter]] = {
+    DkbAdapter.key: DkbAdapter,
     DummyAdapter.key: DummyAdapter,
 }
 
