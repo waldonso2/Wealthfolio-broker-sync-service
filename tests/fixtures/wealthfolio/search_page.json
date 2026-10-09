@@ -1,7 +1,7 @@
 {"data": [
   {"id": "a1", "accountId": "b", "assetId": "IE00B4L5Y983", "activityType": "BUY", "subtype": null, "status": "POSTED",
    "date": "2026-01-05T10:15:00Z", "quantity": "5", "unitPrice": "100", "currency": "EUR", "fee": "1", "tax": null,
-   "amount": "501", "needsReview": false, "comment": "Kauf Testfonds [SYNC dummy:dummy-0002]", "fxRate": null,
+   "amount": "501", "needsReview": false, "comment": "Kauf Testfonds [SYNC fake:fake-0002]", "fxRate": null,
    "createdAt": "2026-10-09T06:00:01Z", "updatedAt": "2026-10-09T06:00:01Z", "accountName": "Depot",
    "accountCurrency": "EUR", "assetSymbol": "IE00B4L5Y983", "assetName": "Testfonds", "exchangeMic": null,
    "assetPricingMode": "MARKET", "instrumentType": "EQUITY", "assetContractMultiplier": null, "sourceSystem": null,
@@ -9,10 +9,10 @@
    "isUserModified": false, "metadata": null},
   {"id": "a2", "accountId": "b", "assetId": "", "activityType": "TRANSFER_IN", "subtype": null,
    "status": "POSTED", "date": "2026-01-05T10:14:59Z", "quantity": "1", "unitPrice": "1", "currency": "EUR",
-   "fee": null, "tax": null, "amount": "501", "needsReview": false, "comment": "Funds [SYNC dummy:dummy-0002]",
+   "fee": null, "tax": null, "amount": "501", "needsReview": false, "comment": "Funds [SYNC fake:fake-0002]",
    "fxRate": null, "createdAt": "2026-10-09T06:00:01Z", "updatedAt": "2026-10-09T06:00:01Z", "accountName": "Depot",
    "accountCurrency": "EUR", "assetSymbol": "", "assetName": null, "exchangeMic": null,
    "assetPricingMode": "NONE", "instrumentType": null, "assetContractMultiplier": null, "sourceSystem": null,
-   "sourceRecordId": null, "sourceGroupId": "sync-dummy-dummy-0002", "idempotencyKey": "y", "importRunId": null,
+   "sourceRecordId": null, "sourceGroupId": "sync-fake-fake-0002", "idempotencyKey": "y", "importRunId": null,
    "isUserModified": false, "metadata": null}
 ], "meta": {"totalRowCount": 2}}

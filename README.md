@@ -8,13 +8,13 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 - **Benachrichtigung aufs Handy** (ntfy), wenn eine TAN fällig ist oder etwas nicht klappt
 - **Bucht wie das [Broker Importer Addon](https://github.com/waldonso2/wealthfolio-importer-addon)**: Was du schon per CSV oder PDF importiert hast, wird erkannt und nicht doppelt angelegt
 
-> **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS) und ein **Test-Broker („Dummy“)** zum Ausprobieren. Scalable Capital ([#39](https://github.com/waldonso2/wealthfolio-importer-addon/issues/39)) folgt.
+> **Stand:** **Trade Republic** und **DKB** (Girokonto per FinTS). Scalable Capital ([#39](https://github.com/waldonso2/wealthfolio-importer-addon/issues/39)) folgt.
 
 ## Was du brauchst
 
 - einen **Proxmox-Server** (VE 8 oder 9)
 - **Wealthfolio** als selbst gehostete Version (z. B. über das Community-Skript „Wealthfolio“) und das Wealthfolio-Passwort
-- in Wealthfolio je Broker **zwei Konten**: ein Verrechnungskonto (Cash) und ein Depotkonto – dieselben wie beim Broker Importer Addon. Für den Test mit dem Dummy legst du am besten zwei Testkonten an, z. B. „Test Cash“ und „Test Depot“.
+- in Wealthfolio je Broker **zwei Konten**: ein Verrechnungskonto (Cash) und ein Depotkonto – dieselben wie beim Broker Importer Addon.
 - optional die App **ntfy** auf dem Handy ([Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy), [iOS](https://apps.apple.com/app/ntfy/id1625396347))
 
 ## Installation
@@ -59,9 +59,7 @@ Zugangsdaten eintragen und die beiden Wealthfolio-Konten wählen. Mit *Buchungen
 
 ### 4. Beim Broker anmelden
 
-Nach dem Speichern meldet sich der Dienst beim Broker an. Will der Broker eine TAN oder eine Bestätigung in seiner App, fragt die Seite danach. (Beim Dummy lautet der Code `000000`.)
-
-> **Testbuchungen des Dummys** tragen das Datum des Tages, an dem du dich beim Dummy anmeldest, liegen ein paar Stunden davor und sind mit **TEST** gekennzeichnet: im Text („TEST Kauf“ …) und im Kommentar (`[SYNC dummy:TEST-…]`). In Wealthfolio findest du sie unter *Activities* ganz oben und kannst sie danach löschen. Der tägliche Abruf legt sie nicht erneut an; eine neue Anmeldung beim Dummy an einem anderen Tag erzeugt einen neuen Satz.
+Nach dem Speichern meldet sich der Dienst beim Broker an. Will der Broker eine TAN oder eine Bestätigung in seiner App, fragt die Seite danach.
 
 <img src="docs/screenshots/05-tan.png" width="560" alt="TAN eingeben">
 
@@ -144,7 +142,7 @@ Reine Hinweise (Order angelegt/storniert, Dokumente, Adressänderung …) und st
 
 ## Abgleich mit Wealthfolio
 
-Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in Wealthfolio: das Guthaben mit dem Cash des Verrechnungskontos, ob das Depotkonto kein Bargeld hält (es muss 0 sein) und keine Position „$CASH“ in einem der Konten steht, und, bei Trade Republic und beim Dummy, jede Position mit dem Bestand des Depotkontos. Die Übersicht zeigt das Ergebnis. Eine Abweichung, die auch beim nächsten Abruf noch besteht, kommt als ntfy-Nachricht. Direkt nach neuen Buchungen rechnet Wealthfolio noch. Typische Ursachen: eine Kapitalmaßnahme, die per CSV-Import nachzuholen ist, oder Buchungen aus der Zeit vor dem ersten Abruf.
+Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in Wealthfolio: das Guthaben mit dem Cash des Verrechnungskontos, ob das Depotkonto kein Bargeld hält (es muss 0 sein) und keine Position „$CASH“ in einem der Konten steht, und, bei Trade Republic, jede Position mit dem Bestand des Depotkontos. Die Übersicht zeigt das Ergebnis. Eine Abweichung, die auch beim nächsten Abruf noch besteht, kommt als ntfy-Nachricht. Direkt nach neuen Buchungen rechnet Wealthfolio noch. Typische Ursachen: eine Kapitalmaßnahme, die per CSV-Import nachzuholen ist, oder Buchungen aus der Zeit vor dem ersten Abruf.
 
 ## Im Alltag
 

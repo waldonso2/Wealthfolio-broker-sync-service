@@ -6,13 +6,13 @@ import pytest
 
 from brokersync import config as config_mod
 from brokersync.adapters import AdapterError, BrokerAdapter
-from brokersync.adapters.dummy import DummyAdapter
 from brokersync.model import Kind, Transaction
 from brokersync.notify import Notifier
 from brokersync.sync import AlreadyRunning, Syncer, run_lock
 from brokersync.vault import Vault
 from brokersync.wealthfolio import WealthfolioClient
 
+from .fake_broker import FakeBroker
 from .fakes import PASSWORD, FakeWealthfolio
 
 
@@ -46,11 +46,11 @@ class BrokenAdapter(BrokerAdapter):
         return []
 
 
-# Login to the dummy at 16:00 German time: deposit 13:00, buy 14:00, dividend 15:00.
+# Login to the fake broker at 16:00 German time: deposit 13:00, buy 14:00, dividend 15:00.
 ANCHOR = "2026-01-05T15:00:00+00:00"
 
 
-def setup(tmp_path, wf: FakeWealthfolio, brokers=("dummy",), confirmed=True):
+def setup(tmp_path, wf: FakeWealthfolio, brokers=("fake",), confirmed=True):
     cfg = config_mod.Config(wealthfolio_url="http://wf.local:8080", public_url="http://sync.local:8090")
     for key in brokers:
         cfg.brokers[key] = config_mod.BrokerConfig(enabled=True, cash_account_id="acc-cash",
@@ -61,10 +61,10 @@ def setup(tmp_path, wf: FakeWealthfolio, brokers=("dummy",), confirmed=True):
     for key in brokers:
         vault.set_broker_credentials(key, {"username": "test"})
     if confirmed:
-        vault.set_broker_session("dummy", {"confirmed": True, "anchor": ANCHOR})
+        vault.set_broker_session("fake", {"confirmed": True, "anchor": ANCHOR})
     notifier = RecordingNotifier()
     syncer = Syncer(tmp_path, wealthfolio=lambda url, pw: WealthfolioClient(url, pw, transport=wf.transport()),
-                    notifier=notifier, adapters={"dummy": DummyAdapter, "broken": BrokenAdapter})
+                    notifier=notifier, adapters={"fake": FakeBroker, "broken": BrokenAdapter})
     return syncer, notifier
 
 
@@ -77,10 +77,10 @@ def test_first_run_books_everything_second_run_nothing(tmp_path):
     assert types == ["DEPOSIT", "TRANSFER_OUT", "TRANSFER_IN", "BUY", "DIVIDEND", "TRANSFER_OUT", "TRANSFER_IN"]
     # The unknown event is reported once, with a link to the list.
     assert [(t, link) for t, _, link in notifier.sent] == [
-        ("Dummy (Test): 1 unbekannte Buchungen", "http://sync.local:8090/unknown")]
-    assert syncer.state.unknown_events()[0]["raw_type"] == "DUMMY_SPECIAL_EVENT"
-    # Holdings check: 502.68 EUR cash and 5 shares, as the dummy reports.
-    assert syncer.state.reconcile("dummy")["deviations"] == []
+        ("Testbroker: 1 unbekannte Buchungen", "http://sync.local:8090/unknown")]
+    assert syncer.state.unknown_events()[0]["raw_type"] == "FAKE_SPECIAL_EVENT"
+    # Holdings check: 502.68 EUR cash and 5 shares, as the fake broker reports.
+    assert syncer.state.reconcile("fake")["deviations"] == []
 
     posted = len(wf.created)
     [r2] = syncer.run()
@@ -128,16 +128,16 @@ def test_partial_failure_is_retried_without_duplicating_created_legs(tmp_path):
     [r2] = syncer.run()
     assert (r2.status, r2.created) == ("ok", 1)
     # Each transfer leg of the buy exists once.
-    legs = [a for a in wf.activities if a.get("sourceGroupId") == "sync-dummy-TEST-20260105-2"]
+    legs = [a for a in wf.activities if a.get("sourceGroupId") == "sync-fake-TEST-20260105-2"]
     assert sorted(a["activityType"] for a in legs) == ["TRANSFER_IN", "TRANSFER_OUT"]
 
 
 def test_a_failing_broker_is_reported_and_the_others_still_run(tmp_path):
     wf = FakeWealthfolio()
-    syncer, notifier = setup(tmp_path, wf, brokers=("broken", "dummy"))
+    syncer, notifier = setup(tmp_path, wf, brokers=("broken", "fake"))
     results = {r.broker: r for r in syncer.run()}
     assert results["broken"].status == "error"
-    assert results["dummy"].status == "ok" and results["dummy"].created == 3
+    assert results["fake"].status == "ok" and results["fake"].created == 3
     assert ("Kaputt: Abruf fehlgeschlagen", "broker is down", "http://sync.local:8090/") in notifier.sent
 
 
@@ -146,24 +146,24 @@ def test_needs_auth_notifies_with_the_login_link(tmp_path):
     syncer, notifier = setup(tmp_path, wf, confirmed=False)
     [r] = syncer.run()
     assert r.status == "needs_auth"
-    assert notifier.sent[0][0] == "Dummy (Test): Anmeldung nötig"
-    assert notifier.sent[0][2] == "http://sync.local:8090/brokers/dummy/login"
+    assert notifier.sent[0][0] == "Testbroker: Anmeldung nötig"
+    assert notifier.sent[0][2] == "http://sync.local:8090/brokers/fake/login"
     assert wf.created == []
 
 
 def test_since_uses_last_success_with_overlap(tmp_path):
     seen = []
 
-    class Recording(DummyAdapter):
+    class Recording(FakeBroker):
         def get_transactions(self, since):
             seen.append(since)
             return []
 
     wf = FakeWealthfolio()
     syncer, _ = setup(tmp_path, wf)
-    syncer.adapters = {"dummy": Recording}
+    syncer.adapters = {"fake": Recording}
     cfg = config_mod.load(tmp_path)
-    cfg.brokers["dummy"].start_date = "2026-01-01"
+    cfg.brokers["fake"].start_date = "2026-01-01"
     config_mod.save(tmp_path, cfg)
     syncer.run()
     syncer.run()
@@ -172,14 +172,14 @@ def test_since_uses_last_success_with_overlap(tmp_path):
 
 
 def test_inconsistent_transactions_fail_visibly(tmp_path):
-    class Bad(DummyAdapter):
+    class Bad(FakeBroker):
         def get_transactions(self, since):
             return [Transaction("b1", Kind.BUY, datetime(2026, 2, 1, tzinfo=UTC), "EUR", D("999"), isin="IE00B4L5Y983",
                                 name="X", shares=D(1), gross=D(100), label="Kauf")]
 
     wf = FakeWealthfolio()
     syncer, _ = setup(tmp_path, wf)
-    syncer.adapters = {"dummy": Bad}
+    syncer.adapters = {"fake": Bad}
     [r] = syncer.run()
     assert (r.status, r.failed) == ("error", 1)
     assert "don't add up" in r.messages[0]
@@ -201,7 +201,7 @@ def test_wealthfolio_unreachable_is_an_error_not_a_crash(tmp_path):
     syncer._wealthfolio = lambda url, pw: WealthfolioClient(url, pw, transport=httpx.MockTransport(down))
     [r] = syncer.run()
     assert r.status == "error" and "not reachable" in r.messages[0]
-    assert notifier.sent[-1][0] == "Dummy (Test): Abruf fehlgeschlagen"
+    assert notifier.sent[-1][0] == "Testbroker: Abruf fehlgeschlagen"
 
 
 def test_a_failed_sweep_after_a_created_dividend_is_completed(tmp_path):
@@ -223,7 +223,7 @@ def test_a_run_waits_briefly_for_the_lock_and_closes_stale_runs(tmp_path):
 
     wf = FakeWealthfolio()
     syncer, _ = setup(tmp_path, wf)
-    syncer.state.start_run("dummy")  # left over by a crashed process
+    syncer.state.start_run("fake")  # left over by a crashed process
     with run_lock(tmp_path):
         t = threading.Thread(target=syncer.run)
         t.start()
@@ -237,10 +237,10 @@ def test_automatic_fetch_off_skips_the_broker_unless_it_is_requested_by_name(tmp
     wf = FakeWealthfolio()
     syncer, _ = setup(tmp_path, wf)
     cfg = config_mod.load(tmp_path)
-    cfg.brokers["dummy"].enabled = False
+    cfg.brokers["fake"].enabled = False
     config_mod.save(tmp_path, cfg)
     assert syncer.run() == [] and wf.activities == []  # timer and "Alle abrufen"
-    [r] = syncer.run(["dummy"])  # the broker's own button
+    [r] = syncer.run(["fake"])  # the broker's own button
     assert (r.status, r.created) == ("ok", 3)
 
 
@@ -278,15 +278,16 @@ def test_buy_sell_and_dividend_leave_no_cash_on_the_depot_and_no_cash_position(t
 
 
 def add_old_sync_run(wf):
-    """What 0.3.5 booked for the dummy: every cash activity with a "$CASH-EUR" asset."""
-    from brokersync.adapters.dummy import transactions
+    """What 0.3.5 booked for the fake broker: every cash activity with a "$CASH-EUR" asset."""
     from brokersync.mapping import Accounts, to_activities
+
+    from .fake_broker import transactions
 
     client = WealthfolioClient("http://wf", PASSWORD, transport=wf.transport())
     for tx in transactions(datetime.fromisoformat(ANCHOR)):
         if tx.kind == Kind.UNKNOWN:
             continue
-        for p in to_activities(tx, "dummy", Accounts("acc-cash", "acc-depot")):
+        for p in to_activities(tx, "fake", Accounts("acc-cash", "acc-depot")):
             if "asset" not in p:
                 p["asset"] = {"symbol": "$CASH-EUR"}
             client.create_activity(p)
@@ -328,7 +329,7 @@ def test_transfers_with_a_cash_asset_are_repaired_once(tmp_path):
             {k: v for k, v in old.items() if not k.startswith("asset") and k != "_fp"}
     assert holdings(wf, "acc-depot") == ({"EUR": D(0)}, {"IE00B4L5Y983": D(5)})
     assert holdings(wf, "acc-cash") == ({"EUR": D("502.68")}, {})
-    assert syncer.state.reconcile("dummy")["deviations"] == []
+    assert syncer.state.reconcile("fake")["deviations"] == []
     assert not [t for t, _, _ in notifier.sent if "fehlgeschlagen" in t]
     # Once: the next run doesn't even look.
     updates = len(wf.updated)
@@ -348,7 +349,7 @@ def test_a_failed_repair_is_reported_and_tried_again(tmp_path):
     # Nothing booked: re-sent without the asset, the transfers would be booked a second time.
     assert r.status == "error" and "5 Überträge" in r.messages[0] and "locked" in r.messages[0]
     assert len(wf.activities) == count
-    assert [t for t, _, _ in notifier.sent if "fehlgeschlagen" in t] == ["Dummy (Test): Abruf fehlgeschlagen"]
+    assert [t for t, _, _ in notifier.sent if "fehlgeschlagen" in t] == ["Testbroker: Abruf fehlgeschlagen"]
     wf.handle = real
     [r] = syncer.run()
     assert r.status == "ok" and len(wf.activities) == count

@@ -20,8 +20,8 @@ PASSWORD = "wf-test-password"
 TOKEN = "jwt-test-token"
 
 ACCOUNTS = [
-    {"id": "acc-cash", "name": "Dummy Cash", "currency": "EUR", "accountType": "CASH", "isActive": True},
-    {"id": "acc-depot", "name": "Dummy Depot", "currency": "EUR", "accountType": "SECURITIES", "isActive": True},
+    {"id": "acc-cash", "name": "Test Cash", "currency": "EUR", "accountType": "CASH", "isActive": True},
+    {"id": "acc-depot", "name": "Test Depot", "currency": "EUR", "accountType": "SECURITIES", "isActive": True},
     {"id": "acc-old", "name": "Altes Konto", "currency": "EUR", "accountType": "CASH", "isActive": False},
 ]
 

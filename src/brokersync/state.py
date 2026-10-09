@@ -141,6 +141,28 @@ class State:
         with self.db:
             self.db.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, now()))
 
+    def meta(self, key: str) -> str | None:
+        row = self.db.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, value))
+
+    def delete_meta(self, key: str) -> None:
+        with self.db:
+            self.db.execute("DELETE FROM meta WHERE key = ?", (key,))
+
+    def forget_broker(self, broker: str) -> int:
+        """Remove everything stored for a broker; returns how many activities its sync created."""
+        created = sum(len(json.loads(ids)) for (ids,) in self.db.execute(
+            "SELECT activity_ids FROM synced WHERE broker = ? AND status = 'imported'", (broker,)))
+        with self.db:
+            for table in ("synced", "runs", "reconcile", "balances", "assets", "unknown_events"):
+                self.db.execute(f"DELETE FROM {table} WHERE broker = ?", (broker,))
+            self.db.execute("DELETE FROM meta WHERE key LIKE ?", (f"%:{broker}",))
+        return created
+
     # ── unknown events ──────────────────────────────────────────────────────
     def add_unknown(self, broker: str, tx_id: str, raw_type: str, occurred_at: str, payload: dict) -> bool:
         """Store an unknown event; True if it wasn't known yet (so it gets reported once).

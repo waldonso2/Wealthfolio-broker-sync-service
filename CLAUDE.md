@@ -19,7 +19,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | Path | Purpose |
 |---|---|
 | `src/brokersync/model.py` | Broker-neutral `Transaction` (Decimal amounts), `Kind`, `Position`, `CashBalance` |
-| `src/brokersync/adapters/` | `base.py` interface (read-only; `login` / `complete_login` for TAN; `on_user_action` for app confirmations during scheduled runs; `close`; `replay` for contract tests), `dkb.py` (python-fints: MT940/camt → `Transaction`, decoupled TAN, PIN lock-out guard), `tr.py` (pytr, pinned: v2 web login confirmed in the app, cookies in the session, timeline + details → pytr's `Event` → `Transaction`), `dummy.py`, registry in `__init__.py`; `reports_positions` marks adapters whose positions are complete |
+| `src/brokersync/adapters/` | `base.py` interface (read-only; `login` / `complete_login` for TAN; `on_user_action` for app confirmations during scheduled runs; `close`; `replay` for contract tests), `dkb.py` (python-fints: MT940/camt → `Transaction`, decoupled TAN, PIN lock-out guard), `tr.py` (pytr, pinned: v2 web login confirmed in the app, cookies in the session, timeline + details → pytr's `Event` → `Transaction`), registry in `__init__.py`; `reports_positions` marks adapters whose positions are complete |
 | `src/brokersync/mapping.py` | Transaction → Wealthfolio `NewActivity` payloads — port of the addon's rules |
 | `src/brokersync/dedup.py` | Check against existing Wealthfolio activities (port of the addon's `matchExisting`) |
 | `src/brokersync/sync.py` | One run over all enabled brokers: login, fetch, dedupe, create, report |
@@ -34,7 +34,8 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | `src/brokersync/web/` | FastAPI + Jinja2 UI (German texts), CSRF via a dependency, own login |
 | `ct/`, `install/`, `json/` | community-scripts files (`json/` is the catalog entry for a later submission to community-scripts) |
 | `deploy/` | `setup.sh` (venv + units, used by install and update), systemd units, reset-password helper |
-| `tests/` | `fakes.py` (in-memory Wealthfolio), unit/e2e tests, `contract/<adapter>/*.json` recorded cases, `fixtures/wealthfolio/` recorded API answers |
+| `src/brokersync/retired.py` | On start (`Syncer.__init__`): removes config, vault entries and sync state of brokers that no longer exist (`dummy` up to 0.3.6); their Wealthfolio activities stay, the overview shows once how many and how to find them |
+| `tests/` | `fakes.py` (in-memory Wealthfolio), `fake_broker.py` (test-only broker with a TAN step; no test broker ships), unit/e2e tests, `contract/<adapter>/*.json` recorded cases, `fixtures/wealthfolio/` recorded API answers |
 
 ## Invariants (keep them)
 
@@ -49,7 +50,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 - **Trade Republic events go through pytr's `Event.from_dict`** (the parser pytr's exports use), then `tr.to_transactions` maps them like the addon's `transform.ts`. Events pytr lists as informational (`events_known_ignored*`) and cancelled ones are skipped; everything else it can't book (corporate actions, securities transfers, private markets) is `UNKNOWN`. pytr is pinned (`pytr==…`): update it deliberately and re-run the contract case. Unknown payloads keep only eventType/title/subtitle/status and the amount (`betrag`), so the user can book them by hand.
 - **Unknown event types** become `Kind.UNKNOWN`: stored, listed in the UI, notified once — never dropped, never booked.
 - **One broker failing never stops the others**; it is reported via ntfy with a link (`public_url` + path).
-- **Test data that can reach a real Wealthfolio** (the dummy adapter, anything a user tests with) is dated today — the dummy uses the day of its login, fixed in the session so the daily timer doesn't book it again — and marked **TEST** in every activity's comment (the dummy's transaction ids start with `TEST-`), so the user finds and deletes it easily. Fixtures for automated tests may use fixed dates.
+- **No test broker ships.** Test brokers live under `tests/` only (`fake_broker.py`); a broker the user can set up must be a real one - the old "Dummy" booked test data into real accounts. Anything that could still reach a real Wealthfolio as test data is marked **TEST** in every activity's comment.
 - **Secrets only in the vault**, never in `config.json`, logs, exceptions shown to the user, or the repo. Test data is fabricated — no real statements, names, IBANs or account numbers.
 - `ct/wealthfolio-broker-sync.sh` exports `COMMUNITY_SCRIPTS_URL` (this repo's raw `main`) **before** sourcing `community-scripts/core`'s `core/build.func`: the engine resolves `install/<slug>-install.sh` and writes the container's `update` command from it. Without it both point to community-scripts/ProxmoxVE. `test_packaging.py` checks this, and that the install line in the README matches.
 

@@ -24,6 +24,7 @@ from pathlib import Path
 from . import assets as assets_mod
 from . import config as config_mod
 from . import repair as repair_mod
+from . import retired
 from .adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from .dedup import ExistingIndex
 from .mapping import Accounts, MappingError, SecurityMapping, TransferPattern, to_activities, tx_ref
@@ -93,6 +94,7 @@ class Syncer:
         self.data_dir = Path(data_dir)
         self.vault = Vault(self.data_dir)
         self.state = State(self.data_dir)
+        retired.clean_up(self.data_dir, self.state, self.vault)
         self.adapters = adapters or ADAPTERS
         self._wealthfolio = wealthfolio or (lambda url, pw: WealthfolioClient(url, pw))
         # Seconds to give Wealthfolio to recalculate holdings before the check.

@@ -1,6 +1,6 @@
 # Contract tests
 
-One folder per adapter (`dummy/`, later `dkb/`, `trade-republic/`, `scalable/`), one JSON file per case:
+One folder per adapter key (`dkb/`, `tr/`, later `scalable/`), one JSON file per case:
 
 ```json
 {
