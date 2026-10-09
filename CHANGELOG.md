@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.7
+
+- **The test broker "Dummy" is gone.** With Trade Republic and DKB there are real brokers to try the service with, and the dummy did harm: set up on the same Wealthfolio accounts as a real broker, it booked its test transactions there (a fake position, cash too high) and left permanent "unknown" events.
+- On the first start after the update, its settings, saved login, sync state, runs, unknown events and holdings check are removed; the other brokers are untouched. What it booked in Wealthfolio stays - the overview says once how many activities that are and how to find them (comment `[SYNC dummy:`), so you can delete them yourself.
+- The tests use a test-only broker under `tests/` instead, which isn't installed.
+- README screenshots show Trade Republic instead of the dummy.
+
 ## 0.3.6
 
 - **Fix: the transfers between securities and cash account moved no money.** Every cash activity was created with the asset `$CASH-<ccy>`, and Wealthfolio books a TRANSFER_IN/TRANSFER_OUT with an asset as a *securities* transfer of that asset. So a buy was paid from the securities account's own cash, sale proceeds and dividends stayed there, the cash account was short by the same amount and showed a position "$CASH". Cash activities now carry no asset, like the addon's imports.

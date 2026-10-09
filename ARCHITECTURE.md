@@ -48,11 +48,12 @@ flowchart TB
   sync --> reconcile["reconcile.py<br/>Bestandsabgleich"]
   sync --> assets["assets.py<br/>ISIN → Wealthfolio-Asset"]
   sync --> repair["repair.py<br/>$CASH-Asset entfernen (einmalig)"]
+  sync --> retired["retired.py<br/>entfernte Broker aufräumen"]
   sync --> notify["notify.py<br/>ntfy"]
   sync --> state["state.py"] & vault["vault.py"] & config["config.py"]
   web --> duplicates["duplicates.py<br/>Bereinigung"]
   subgraph adapters["adapters/"]
-    base["base.py<br/>BrokerAdapter"] --- dkb["dkb.py"] & tr["tr.py"] & dummy["dummy.py"]
+    base["base.py<br/>BrokerAdapter"] --- dkb["dkb.py"] & tr["tr.py"]
   end
   adapters --> model["model.py<br/>Transaction, Kind, Position, CashBalance"]
   mapping --> model
@@ -167,7 +168,8 @@ Alle Adapter erben von `BrokerAdapter` (`adapters/base.py`) und **lesen nur**: S
 |---|---|---|
 | `dkb` | FinTS über python-fints | Freigabe in der DKB-App (decoupled). Ids sind Hashes des Buchungsinhalts plus Zähler. Wertpapier-Gegenbuchungen auf dem Giro werden zu `SECURITIES_CASH` |
 | `tr` | WebSocket der Trade-Republic-App über pytr (fest gepinnt) | Web-Login mit Bestätigung in der App. Timeline (Transaktionen und Aktivitätslog, seitenweise bis `since`), Details in Batches zu 20. Geparst mit pytrs `Event.from_dict` |
-| `dummy` | — | Testdaten mit dem heutigen Datum und „TEST“ im Kommentar, zum Ausprobieren gegen ein echtes Wealthfolio |
+
+Einen Test-Broker liefert der Dienst nicht aus; die Tests nutzen `tests/fake_broker.py`. Den früheren Test-Broker „Dummy“ (bis 0.3.6) räumt `retired.py` beim Start auf: Einstellungen, Zugangsdaten, Sync-Status, Läufe, unbekannte Buchungen und Abgleich werden gelöscht. Seine Buchungen in Wealthfolio bleiben; die Übersicht zeigt einmal, wie viele es sind und wie man sie findet (`[SYNC dummy:`).
 
 Jeder Adapter hat `replay(recording)` für Contract-Tests (`tests/contract/<adapter>/`). Er antwortet dann aus einer Aufzeichnung statt vom Broker.
 
@@ -201,7 +203,7 @@ Alles liegt in `BROKERSYNC_DATA` (Standard `/opt/wealthfolio-broker-sync/data`, 
 | `unknown_events` | unbekannte Buchungen und offene Wertpapier-Gegenbuchungen, mit einer Nutzlast ohne persönliche Daten |
 | `balances`, `reconcile` | letzter Kontostand des Brokers und Abweichungen, samt dem, was schon gemeldet wurde |
 | `assets` | ISIN → Wealthfolio-Asset je Broker |
-| `meta` | Flags, z. B. `assets-learned:<broker>`, `cash-assets-repaired:<broker>` |
+| `meta` | Flags, z. B. `assets-learned:<broker>`, `cash-assets-repaired:<broker>`, und der Hinweis `retired-notice:<broker>` zu einem entfernten Broker |
 
 Geheimnisse stehen nur im Vault. Sie landen weder in `config.json` noch in Logs, Fehlermeldungen oder im Repository.
 
@@ -223,6 +225,7 @@ FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login
 | `/securities` | Zuordnung ISIN → Tickersymbol und Börse |
 | `/unknown` | unbekannte Buchungen und offene Wertpapier-Gegenbuchungen |
 | `/duplicates` | Duplikate finden und die Kopien des Syncs nach Bestätigung löschen |
+| `/retired/dismiss` | Hinweis zu einem entfernten Broker (z. B. dem Dummy) ausblenden |
 
 ## Fehlerbehandlung
 
@@ -252,9 +255,9 @@ FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login
 | `test_mapping.py` | Buchungsregeln des Addons |
 | `test_sync.py` | Ablauf, Wiederholung nach Teilfehlern, verlorener Status, Importe des Addons, Sperre, Fehler eines Brokers, Reparatur alter `$CASH`-Überträge |
 | `test_dkb.py`, `test_tr.py` | Adapter gegen nachgebaute python-fints- bzw. pytr-Clients: Login, PIN-Schutz, Fehlerpfade, WebSocket-Paging, Abgleich, Duplikate |
-| `test_dummy.py` | Testdaten: heutiges Datum, „TEST“ im Kommentar |
+| `fake_broker.py` | ein erfundener Broker mit TAN-Schritt, nur für die Tests |
 | `test_wealthfolio.py` | REST-Client gegen aufgezeichnete Antworten (`tests/fixtures/wealthfolio/`) |
-| `test_web.py` | Oberfläche von der ersten Seite bis zum ersten Abruf, Login und CSRF |
+| `test_web.py` | Oberfläche von der ersten Seite bis zum ersten Abruf, Login und CSRF, Aufräumen des alten Dummys |
 | `test_cli.py` | `run`, `serve`, `reset-ui-password`, Exit-Codes |
 | `test_vault_notify.py` | Verschlüsselung, ntfy |
 | `test_packaging.py` | community-scripts-Dateien, Installationszeile, Versionen |

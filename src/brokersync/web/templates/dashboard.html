@@ -1,6 +1,19 @@
 {% extends "base.html" %}{% block title %}Übersicht{% endblock %}
 {% block head %}{% if running %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
 {% block content %}
+{% for n in retired_notices %}
+<div class="card">
+  <h2>{{ n.label }} entfernt</h2>
+  <p>Den Test-Broker „{{ n.label }}“ gibt es nicht mehr; seine Einstellungen, Läufe und unbekannten Buchungen sind gelöscht.
+  Er hat {{ n.activities }} Buchungen in Wealthfolio angelegt – die bleiben, bis du sie selbst löschst.
+  Du findest sie unter <em>Activities</em> mit dem Suchbegriff <code>{{ n.search }}</code> im Kommentar.</p>
+  <form method="post" action="/retired/dismiss" class="actions">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="broker" value="{{ n.key }}">
+    <button class="secondary">Erledigt, ausblenden</button>
+  </form>
+</div>
+{% endfor %}
 {% if not all_done %}
 <div class="card">
   <h2>Einrichtung</h2>

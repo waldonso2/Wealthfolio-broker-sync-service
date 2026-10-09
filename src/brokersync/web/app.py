@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from .. import __version__
+from .. import __version__, retired
 from .. import config as config_mod
 from .. import duplicates as duplicates_mod
 from ..adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
@@ -190,7 +190,13 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
         ]
         return render(request, "dashboard.html", brokers=brokers, steps=steps, all_done=all(s[2] for s in steps),
                       running=busy,
-                      next_run=_next_timer_run(), unknown=len(state.unknown_events()), runs=state.runs(limit=10))
+                      next_run=_next_timer_run(), unknown=len(state.unknown_events()), runs=state.runs(limit=10),
+                      retired_notices=retired.notices(state))
+
+    @app.post("/retired/dismiss")
+    def retired_dismiss(request: Request, broker: str = Form(...)):
+        retired.dismiss(state, broker)
+        return redirect(request, "/")
 
     @app.post("/run")
     def run_now(request: Request, broker: str = Form("")):

@@ -11,7 +11,7 @@ from brokersync.vault import Vault, hash_password, verify_password
 def test_secrets_are_encrypted_at_rest(tmp_path):
     v = Vault(tmp_path)
     v.update(lambda d: d.__setitem__("wealthfolio_password", "super-secret-pw"))
-    v.set_broker_credentials("dummy", {"pin": "13579"})
+    v.set_broker_credentials("fake", {"pin": "13579"})
     raw = (tmp_path / "secrets.enc").read_bytes()
     assert b"super-secret-pw" not in raw and b"13579" not in raw
     assert stat.S_IMODE((tmp_path / "secret.key").stat().st_mode) == 0o600
@@ -21,9 +21,9 @@ def test_secrets_are_encrypted_at_rest(tmp_path):
 
 def test_new_credentials_reset_the_session(tmp_path):
     v = Vault(tmp_path)
-    v.set_broker_session("dummy", {"confirmed": True})
-    v.set_broker_credentials("dummy", {"username": "x"})
-    assert v.broker("dummy") == {"credentials": {"username": "x"}, "session": {}}
+    v.set_broker_session("fake", {"confirmed": True})
+    v.set_broker_credentials("fake", {"username": "x"})
+    assert v.broker("fake") == {"credentials": {"username": "x"}, "session": {}}
 
 
 def test_ui_password_hash():
@@ -42,14 +42,14 @@ def test_ntfy_message_with_link_and_utf8_title():
         return httpx.Response(200, json={"id": "1"})
 
     n = Notifier("https://ntfy.example/", "topic-1", "tk", transport=httpx.MockTransport(handler))
-    assert n.send("TAN für Dummy fällig", "Bitte anmelden", link="http://sync/brokers/dummy/login", tags="key")
+    assert n.send("TAN für Testbroker fällig", "Bitte anmelden", link="http://sync/brokers/fake/login", tags="key")
     r = seen[0]
     assert str(r.url) == "https://ntfy.example/topic-1"
-    assert r.headers["click"] == "http://sync/brokers/dummy/login"
+    assert r.headers["click"] == "http://sync/brokers/fake/login"
     assert r.headers["authorization"] == "Bearer tk"
     title = r.headers["title"]
     assert title.startswith("=?UTF-8?B?")
-    assert base64.b64decode(title[10:-2]).decode() == "TAN für Dummy fällig"
+    assert base64.b64decode(title[10:-2]).decode() == "TAN für Testbroker fällig"
     assert r.content.decode() == "Bitte anmelden"
 
 

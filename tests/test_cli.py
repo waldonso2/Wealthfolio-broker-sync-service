@@ -32,10 +32,10 @@ def fake_syncer(monkeypatch, results=None, error=None):
 
 
 def test_run_prints_a_line_per_broker_and_exits_0_when_all_went_well(data, monkeypatch, capsys):
-    calls = fake_syncer(monkeypatch, [BrokerResult("dummy", "ok", created=3, existing=1)])
+    calls = fake_syncer(monkeypatch, [BrokerResult("fake", "ok", created=3, existing=1)])
     assert cli.main(["run"]) == 0
     assert calls == [("init", data), ("run", None)]
-    assert capsys.readouterr().out == "dummy: ok - 3 neu, 1 schon vorhanden, 0 fehlgeschlagen, 0 unbekannt\n"
+    assert capsys.readouterr().out == "fake: ok - 3 neu, 1 schon vorhanden, 0 fehlgeschlagen, 0 unbekannt\n"
 
 
 def test_run_exits_1_when_a_broker_failed_so_systemd_shows_it(data, monkeypatch):
