@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # 3.11: oldest supported; 3.13: Debian 13 in the LXC.
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[dev]"
+      - run: ruff check src tests
+      - run: pytest -q
+
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck ct/*.sh install/*.sh deploy/setup.sh deploy/brokersync-reset-password
+      - name: catalog JSON
+        run: python3 -m json.tool json/wealthfolio-broker-sync.json > /dev/null
+      - name: install from the release tarball layout
+        run: |
+          git archive --format=tar.gz --prefix=app/ HEAD > /tmp/app.tar.gz
+          mkdir /tmp/rel && tar -xzf /tmp/app.tar.gz -C /tmp/rel
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install --quiet /tmp/rel/app
+          /tmp/venv/bin/brokersync --version

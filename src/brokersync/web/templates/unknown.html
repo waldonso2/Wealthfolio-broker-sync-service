@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}Unbekannte Buchungen{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Unbekannte Buchungen</h1>
+  <p>Diese Buchungen kennt der Dienst noch nicht. Sie wurden <strong>nicht</strong> nach Wealthfolio übernommen – trage sie bei Bedarf von Hand ein. Ein Fehlerbericht mit dem Typ hilft, sie künftig zu unterstützen.</p>
+  {% if events %}
+  <div class="table"><table>
+    <tr><th>Datum</th><th>Broker</th><th>Typ</th><th>Details</th></tr>
+    {% for e in events %}
+    <tr><td>{{ e.occurred_at[:10] }}</td><td>{{ adapters[e.broker].label if e.broker in adapters else e.broker }}</td><td><code>{{ e.raw_type }}</code></td><td><pre>{{ e.payload | tojson(indent=1) }}</pre></td></tr>
+    {% endfor %}
+  </table></div>
+  {% else %}<p class="muted">Keine.</p>{% endif %}
+</div>
+{% endblock %}

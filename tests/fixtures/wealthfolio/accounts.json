@@ -1,0 +1,8 @@
+[
+  {"id": "0b6f8a52-1111-4c1e-9c33-000000000001", "name": "TR Cash", "accountType": "CASH", "group": null,
+   "currency": "EUR", "isDefault": false, "isActive": true, "isArchived": false, "trackingMode": "TRANSACTIONS",
+   "createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-01-01T00:00:00Z", "platformId": null},
+  {"id": "0b6f8a52-1111-4c1e-9c33-000000000002", "name": "TR Depot", "accountType": "SECURITIES", "group": null,
+   "currency": "EUR", "isDefault": false, "isActive": true, "isArchived": false, "trackingMode": "TRANSACTIONS",
+   "createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-01-01T00:00:00Z", "platformId": null}
+]

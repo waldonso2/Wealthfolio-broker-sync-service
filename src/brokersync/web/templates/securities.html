@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block title %}Wertpapiere{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Wertpapiere</h1>
+  <p>Broker melden Wertpapiere per ISIN. Soll Wealthfolio ein Wertpapier unter einem anderen Symbol führen (z.&nbsp;B. dem Ticker, wie im Addon zugeordnet), trage es hier ein. Ohne Eintrag wird die ISIN verwendet.</p>
+  {% if mappings %}
+  <div class="table"><table>
+    <tr><th>ISIN</th><th>Symbol</th><th>Börse (MIC)</th><th></th></tr>
+    {% for isin, m in mappings.items() %}
+    <tr><td><code>{{ isin }}</code></td><td>{{ m.symbol }}</td><td>{{ m.exchangeMic or "" }}</td>
+      <td><form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ isin }}"><button class="link" name="delete" value="1">Entfernen</button></form></td></tr>
+    {% endfor %}
+  </table></div>
+  {% endif %}
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="isin">ISIN</label><input type="text" id="isin" name="isin" required pattern="[A-Za-z]{2}[A-Za-z0-9]{9}[0-9]">
+    <label for="symbol">Symbol in Wealthfolio</label><input type="text" id="symbol" name="symbol" required>
+    <label for="mic">Börse (MIC, optional)</label><input type="text" id="mic" name="exchange_mic" placeholder="XETR">
+    <div class="actions"><button>Hinzufügen</button></div>
+  </form>
+</div>
+{% endblock %}

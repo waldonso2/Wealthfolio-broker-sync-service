@@ -1,0 +1,42 @@
+name: Release
+
+# Publishes a GitHub release when the version in pyproject.toml has no tag yet.
+# The install and update scripts deploy the latest release, so a merge to main
+# without a version bump changes nothing for users.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e ".[dev]"
+      - run: ruff check src tests
+      - run: pytest -q
+      - name: Version
+        id: v
+        run: |
+          VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Release notes
+        if: steps.v.outputs.exists == 'false'
+        run: |
+          awk -v v="## ${{ steps.v.outputs.version }}" '$0 ~ "^## " { p = index($0, v) == 1 } p' CHANGELOG.md > notes.md
+          cat notes.md
+      - name: Create release
+        if: steps.v.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "v${{ steps.v.outputs.version }}" --title "v${{ steps.v.outputs.version }}" --notes-file notes.md --target "$GITHUB_SHA"

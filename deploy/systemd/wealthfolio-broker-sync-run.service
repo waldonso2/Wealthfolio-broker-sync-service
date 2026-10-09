@@ -1,0 +1,17 @@
+[Unit]
+Description=Wealthfolio Broker Sync (scheduled sync)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=brokersync
+Group=brokersync
+Environment=BROKERSYNC_DATA=/opt/wealthfolio-broker-sync/data
+ExecStart=/opt/wealthfolio-broker-sync/venv/bin/brokersync run
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/wealthfolio-broker-sync/data
+UMask=0077
