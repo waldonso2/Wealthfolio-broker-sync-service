@@ -23,11 +23,12 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | `src/brokersync/mapping.py` | Transaction → Wealthfolio `NewActivity` payloads — port of the addon's rules |
 | `src/brokersync/dedup.py` | Check against existing Wealthfolio activities (port of the addon's `matchExisting`) |
 | `src/brokersync/sync.py` | One run over all enabled brokers: login, fetch, dedupe, create, report |
-| `src/brokersync/wealthfolio.py` | REST client: password login → `wf_session` JWT sent as Bearer; accounts, create, search |
+| `src/brokersync/wealthfolio.py` | REST client: password login → `wf_session` JWT sent as Bearer; accounts, create, update, delete, search, holdings |
 | `src/brokersync/vault.py` | Fernet-encrypted secrets (`data/secrets.enc`, key `data/secret.key` 0600), UI password hash |
 | `src/brokersync/config.py` / `state.py` | Non-secret config (`data/config.json`, written by the UI only) / SQLite sync state, runs, unknown events |
 | `src/brokersync/assets.py` | ISIN → Wealthfolio asset, learned from the activities of trades/dividends (holdings carry no ISIN, the addon books under mapped tickers); used for the holdings check and to book new trades onto the same asset |
-| `src/brokersync/reconcile.py` | Broker cash/positions vs. Wealthfolio holdings (`GET /holdings?accountId=`) after each run; reported when a deviation lasts two runs |
+| `src/brokersync/reconcile.py` | Broker cash/positions vs. Wealthfolio holdings (`GET /holdings?accountId=`) after each run, plus cash on the securities account (must be 0) and `$CASH` positions; reported when a deviation lasts two runs |
+| `src/brokersync/repair.py` | Once per broker (state flag): removes the `$CASH` asset from the sync's own cash activities (PUT `/activities`, `asset: {}`); the broker books nothing until it worked |
 | `src/brokersync/duplicates.py` | Finds activities the sync created on top of CSV/PDF imports (same rules as `ExistingIndex`) and removes only the sync's copies; UI page *Duplikate*, confirmation required |
 | `src/brokersync/notify.py` | ntfy |
 | `src/brokersync/web/` | FastAPI + Jinja2 UI (German texts), CSRF via a dependency, own login |
@@ -38,7 +39,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 
 ## Invariants (keep them)
 
-- **Book exactly like the addon** (`src/pdf/activities.ts`, `src/common.ts` there): two-account model, every internal TRANSFER_OUT/TRANSFER_IN pair shares a `sourceGroupId`, BUY/SELL `amount = trade_final_cash(...)`, fee/tax in their own fields, tax refund = CREDIT/TAX_REFUND, cash activities use symbol `$CASH-<ccy>` with quantity/unitPrice 1. When the addon's rules change, change `mapping.py` and its tests too.
+- **Book exactly like the addon** (`src/pdf/activities.ts`, `src/common.ts` there): two-account model, every internal TRANSFER_OUT/TRANSFER_IN pair shares a `sourceGroupId`, BUY/SELL `amount = trade_final_cash(...)`, fee/tax in their own fields, tax refund = CREDIT/TAX_REFUND, cash activities carry **no asset** (quantity/unitPrice 1) - with an asset Wealthfolio books a TRANSFER_IN/OUT as a securities transfer that moves no money; `repair.py` fixes the `$CASH-<ccy>` ones versions before 0.3.6 created. When the addon's rules change, change `mapping.py` and its tests too.
 - **Comments are part of Wealthfolio's duplicate fingerprint.** Every activity ends in `[SYNC <broker>:<tx id>]`; never reword existing comment texts, or synced activities reappear as new.
 - **Dedup layers:** state DB (`synced`), Wealthfolio's fingerprint ("Duplicate activity detected" → `Duplicate`, not an error), `dedup.ExistingIndex` for activities from CSV/PDF imports. Never require the same symbol there: the addon books securities under the user's mapped ticker, the sync under the ISIN - trades match on share count + amount + time, dividends with another symbol only when unambiguous. Activities carrying our own `[SYNC …]` reference are *not* matched there: the whole transaction is re-sent so an interrupted run is completed.
 - **A transaction is marked synced only when all its activities exist.** Failures stay unmarked and are retried; a run with failures is not a "success", so the next run fetches from before it.

@@ -47,6 +47,7 @@ flowchart TB
   sync --> wf["wealthfolio.py<br/>REST-Client"]
   sync --> reconcile["reconcile.py<br/>Bestandsabgleich"]
   sync --> assets["assets.py<br/>ISIN → Wealthfolio-Asset"]
+  sync --> repair["repair.py<br/>$CASH-Asset entfernen (einmalig)"]
   sync --> notify["notify.py<br/>ntfy"]
   sync --> state["state.py"] & vault["vault.py"] & config["config.py"]
   web --> duplicates["duplicates.py<br/>Bereinigung"]
@@ -88,6 +89,7 @@ sequenceDiagram
   S->>S: Session verschlüsselt speichern (auch nach Fehlern)
   S->>S: schon synchronisierte Ids (state.synced) weglassen
   S->>S: Kind.UNKNOWN speichern und einmal melden
+  S->>W: einmalig je Broker: $CASH-Asset alter Cash-Aktivitäten entfernen (repair.py)
   S->>W: Aktivitäten der Konten im Zeitraum laden (ExistingIndex)
   loop jede neue Transaktion, chronologisch
     alt SECURITIES_CASH
@@ -139,11 +141,13 @@ Jeder Broker hat in Wealthfolio zwei Konten: ein **Cash-Konto** und ein **Depot*
 | `BUY` | Cash `TRANSFER_OUT` → Depot `TRANSFER_IN` (gemeinsame `sourceGroupId`), Depot `BUY` |
 | `SELL`, `DIVIDEND` | Depot `SELL`/`DIVIDEND`, dann zurück aufs Cash-Konto (Übertragspaar) |
 | `BUY` mit `bonus_funded` (Saveback) | `BUY` ohne Übertrag vom Cash-Konto |
-| `DEPOSIT`, `WITHDRAWAL`, `INTEREST`, `FEE`, `TAX` | eine Aktivität auf dem Cash-Konto (`$CASH-<Währung>`, Menge und Preis 1) |
+| `DEPOSIT`, `WITHDRAWAL`, `INTEREST`, `FEE`, `TAX` | eine Aktivität auf dem Cash-Konto (ohne Asset, Menge und Preis 1) |
 | `TAX_REFUND` | `CREDIT` mit Subtyp `TAX_REFUND` |
 | `WITHDRAWAL` auf ein eigenes Konto (*Überträge*) | `TRANSFER_OUT` → `TRANSFER_IN` auf das Zielkonto |
 | `SECURITIES_CASH` | nichts. Der Sync sucht nur den Übertrag, den die Wertpapierseite gebucht hat |
 | `UNKNOWN` | nichts. Gespeichert, auf der Seite *Unbekannt* gelistet, einmal gemeldet |
+
+**Cash-Aktivitäten tragen kein Asset**, auch die Überträge nicht, genau wie die Importe des Addons. Mit Asset bucht Wealthfolio ein `TRANSFER_IN`/`TRANSFER_OUT` als Wertpapierübertrag dieses Assets, und es fließt kein Geld. Versionen vor 0.3.6 haben Cash-Aktivitäten mit dem Asset `$CASH-<Währung>` angelegt. `repair.py` ändert die eigenen davon einmal je Broker auf „kein Asset“ (`PUT /activities` mit `asset: {}`), statt sie zu löschen und neu anzulegen; Ids, Sync-Status und Übertragspaare bleiben so erhalten. Bis das geklappt hat, bucht der Sync für diesen Broker nichts. Ein erneut gesendeter Übertrag ohne Asset würde sonst nicht als dieselbe Aktivität erkannt und doppelt gebucht. Erledigt ist die Reparatur, wenn das Flag `cash-assets-repaired:<broker>` gesetzt ist.
 
 Beträge sind durchgehend `Decimal`. Gebühr und Steuer stehen in eigenen Feldern, der Betrag eines Kaufs oder Verkaufs ist `trade_final_cash(...)`. Das entspricht genau den Regeln des Addons (`src/pdf/activities.ts`, `src/common.ts`).
 
@@ -171,8 +175,9 @@ Jeder Adapter hat `replay(recording)` für Contract-Tests (`tests/contract/<adap
 
 Nach jedem Lauf ohne Fehler vergleicht `reconcile.py` den Kontostand und, bei Adaptern mit `reports_positions`, die Positionen des Brokers mit `GET /holdings` in Wealthfolio:
 
+- **Zusätzliche Prüfungen:** Cash auf dem Depotkonto muss 0 sein, weil jede Zahlung dort vom Cash-Konto kommt oder dorthin zurückgeht. Eine `$CASH`-Position auf einem der beiden Konten weist auf einen alten Übertrag hin, der kein Geld bewegt hat.
 - **Positionen ohne ISIN:** Wealthfolio-Positionen tragen keine ISIN. `assets.py` lernt deshalb aus den Aktivitäten von Käufen und Dividenden, unter welchem Asset eine ISIN gebucht ist. Eigene Zuordnungen auf der Seite *Wertpapiere* haben Vorrang.
-- **Neuberechnung abwarten:** Wurde etwas angelegt, wartet der Sync kurz (`BROKERSYNC_RECALC_WAIT`, Standard 5 s), weil Wealthfolio die Bestände im Hintergrund neu berechnet.
+- **Neuberechnung abwarten:** Wurde etwas angelegt oder repariert, wartet der Sync kurz (`BROKERSYNC_RECALC_WAIT`, Standard 5 s), weil Wealthfolio die Bestände im Hintergrund neu berechnet.
 - **Gemeldet wird nur, was bleibt:** erst eine Abweichung, die zwei Läufe in Folge besteht, und dieselbe Menge von Abweichungen nur einmal.
 
 ## Daten und Geheimnisse
@@ -196,7 +201,7 @@ Alles liegt in `BROKERSYNC_DATA` (Standard `/opt/wealthfolio-broker-sync/data`, 
 | `unknown_events` | unbekannte Buchungen und offene Wertpapier-Gegenbuchungen, mit einer Nutzlast ohne persönliche Daten |
 | `balances`, `reconcile` | letzter Kontostand des Brokers und Abweichungen, samt dem, was schon gemeldet wurde |
 | `assets` | ISIN → Wealthfolio-Asset je Broker |
-| `meta` | Flags, z. B. `assets-learned:<broker>` |
+| `meta` | Flags, z. B. `assets-learned:<broker>`, `cash-assets-repaired:<broker>` |
 
 Geheimnisse stehen nur im Vault. Sie landen weder in `config.json` noch in Logs, Fehlermeldungen oder im Repository.
 
@@ -225,7 +230,7 @@ FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login
 |---|---|---|
 | Broker will TAN oder Bestätigung | `needs_auth` | ntfy mit Link auf `/brokers/<key>/login` |
 | `AdapterError` (Broker nicht erreichbar, PIN abgelehnt, Konto fehlt) | `error` | ntfy mit Link auf die Übersicht |
-| `WealthfolioError` (nicht erreichbar, Passwort falsch) | `error` | ebenso |
+| `WealthfolioError` (nicht erreichbar, Passwort falsch, alte Überträge nicht reparierbar) | `error` | ebenso |
 | unerwartete Exception im Adapter | `error` mit „Unexpected error“; die Session bleibt gespeichert, die anderen Broker laufen weiter | ebenso, plus Stacktrace im Journal |
 | einzelne Aktivität abgelehnt | `error` mit Zähler `failed`; die Transaktion bleibt offen und wird im nächsten Lauf wiederholt | Liste der ersten fünf |
 | Kontostand oder Positionen nicht lesbar, Wealthfolio liefert keine Bestände | Lauf bleibt `ok`, nur der Abgleich entfällt | — |
@@ -243,9 +248,9 @@ FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login
 
 | Datei | Prüft |
 |---|---|
-| `tests/fakes.py` | ein Wealthfolio im Speicher (`httpx.MockTransport`): Login, Fingerprint-Duplikate, Suche, Löschen von Übertragspaaren, Bestände |
+| `tests/fakes.py` | ein Wealthfolio im Speicher (`httpx.MockTransport`): Login, Fingerprint-Duplikate, Suche, Ändern, Löschen von Übertragspaaren, Bestände (Überträge mit Asset sind Wertpapierüberträge) |
 | `test_mapping.py` | Buchungsregeln des Addons |
-| `test_sync.py` | Ablauf, Wiederholung nach Teilfehlern, verlorener Status, Importe des Addons, Sperre, Fehler eines Brokers |
+| `test_sync.py` | Ablauf, Wiederholung nach Teilfehlern, verlorener Status, Importe des Addons, Sperre, Fehler eines Brokers, Reparatur alter `$CASH`-Überträge |
 | `test_dkb.py`, `test_tr.py` | Adapter gegen nachgebaute python-fints- bzw. pytr-Clients: Login, PIN-Schutz, Fehlerpfade, WebSocket-Paging, Abgleich, Duplikate |
 | `test_dummy.py` | Testdaten: heutiges Datum, „TEST“ im Kommentar |
 | `test_wealthfolio.py` | REST-Client gegen aufgezeichnete Antworten (`tests/fixtures/wealthfolio/`) |

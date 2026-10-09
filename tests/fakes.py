@@ -3,7 +3,10 @@
 It behaves like the real server where the sync depends on it: password login
 with a ``wf_session`` cookie, Bearer auth, accounts, one-by-one creation with
 duplicate rejection by fingerprint (account, type, date, asset, quantity, unit
-price, amount, fee, currency, comment), and search by account and date.
+price, amount, fee, currency, comment), update (``asset: {}`` removes the
+asset), search by account and date, and holdings: a TRANSFER_IN/TRANSFER_OUT
+*with* an asset is a securities transfer of that asset (moves no money, even
+for a ``$CASH-EUR`` placeholder), one without an asset moves money.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ class FakeWealthfolio:
         self.activities: list[dict] = []
         self.created: list[dict] = []  # payloads as received
         self.deleted: list[str] = []
+        self.updated: list[dict] = []  # payloads as received
         self.fail_types: set[str] = set()
         self.logins = 0
         self.expire_next = False
@@ -43,7 +47,7 @@ class FakeWealthfolio:
 
     @staticmethod
     def fingerprint(p: dict) -> tuple:
-        return (p["accountId"], p["activityType"], p["activityDate"], p.get("asset", {}).get("symbol"),
+        return (p["accountId"], p["activityType"], p["activityDate"], (p.get("asset") or {}).get("symbol"),
                 p.get("quantity"), p.get("unitPrice"), p.get("amount"), p.get("fee"), p["currency"],
                 p.get("comment"))
 
@@ -87,7 +91,7 @@ class FakeWealthfolio:
                 "currency": p["currency"],
                 "comment": p.get("comment"),
                 "assetSymbol": p.get("asset", {}).get("symbol", ""),
-                # Like Wealthfolio: an asset id books onto that existing asset.
+                # Like Wealthfolio: an asset id books onto that existing asset; no asset is "".
                 "assetId": p.get("asset", {}).get("id") or p.get("asset", {}).get("symbol", ""),
                 "assetName": p.get("asset", {}).get("name"),
                 "sourceGroupId": p.get("sourceGroupId"),
@@ -95,6 +99,26 @@ class FakeWealthfolio:
             }
             self.activities.append(a)
             return httpx.Response(200, json=a)
+        if path == "/api/v1/activities" and request.method == "PUT":
+            p = json.loads(request.content)
+            self.updated.append(p)
+            found = [a for a in self.activities if a["id"] == p["id"]]
+            if not found:
+                return httpx.Response(400, json={"code": 400, "message": "Record not found"})
+            a = found[0]
+            fields = {"accountId": "accountId", "activityType": "activityType", "subtype": "subtype",
+                      "activityDate": "date", "currency": "currency", "quantity": "quantity",
+                      "unitPrice": "unitPrice", "amount": "amount", "fee": "fee", "tax": "tax", "comment": "comment"}
+            a.update({old: p[new] for new, old in fields.items() if new in p})
+            if p.get("asset") == {}:
+                a.update(assetSymbol="", assetId="", assetName=None)
+            elif "asset" in p:
+                a.update(assetSymbol=p["asset"].get("symbol", ""),
+                         assetId=p["asset"].get("id") or p["asset"].get("symbol", ""))
+            a["_fp"] = (a["accountId"], a["activityType"], a["date"], a.get("assetSymbol") or None,
+                        a.get("quantity"), a.get("unitPrice"), a.get("amount"), a.get("fee"), a["currency"],
+                        a.get("comment"))
+            return httpx.Response(200, json={k: v for k, v in a.items() if k != "_fp"})
         if path.startswith("/api/v1/activities/") and request.method == "DELETE":
             activity_id = path.rsplit("/", 1)[1]
             gone = [a for a in self.activities if a["id"] == activity_id]
@@ -136,12 +160,16 @@ class FakeWealthfolio:
                 continue
             t = a["activityType"]
             symbol = a.get("assetSymbol") or ""
-            if t in ("TRANSFER_IN", "TRANSFER_OUT") and not symbol.startswith("$CASH-"):
+            asset = a.get("assetId") or symbol
+            if t in ("TRANSFER_IN", "TRANSFER_OUT") and asset:
+                # A securities transfer, also of a "$CASH-EUR" asset: shares, no money.
+                q = Decimal(a["quantity"] or 0) * (1 if t == "TRANSFER_IN" else -1)
+                shares[asset] = shares.get(asset, Decimal(0)) + q
+                symbols.setdefault(asset, symbol or asset)
                 continue
             cash[a["currency"]] = cash.get(a["currency"], Decimal(0)) + self.CASH_SIGN[t] * Decimal(a["amount"] or 0)
             if t in ("BUY", "SELL"):
                 q = Decimal(a["quantity"]) * (1 if t == "BUY" else -1)
-                asset = a.get("assetId") or symbol
                 shares[asset] = shares.get(asset, Decimal(0)) + q
                 symbols.setdefault(asset, symbol)
         out = [{"holdingType": "cash", "localCurrency": c, "quantity": str(v), "instrument": {"symbol": c}}

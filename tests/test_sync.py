@@ -109,7 +109,7 @@ def test_activities_from_the_addons_csv_import_are_recognised(tmp_path):
                     unitPrice="100", amount="501", fee="1", currency="EUR", comment="Buy Testfonds [13:00:31.123]",
                     assetSymbol="IE00B4L5Y983", assetId="IE00B4L5Y983")
     wf.add_existing(accountId="acc-cash", activityType="DEPOSIT", date="2026-01-05T12:00:05.000Z", quantity="1",
-                    unitPrice="1", amount="1000", currency="EUR", comment="Einzahlung", assetSymbol="$CASH-EUR")
+                    unitPrice="1", amount="1000", currency="EUR", comment="Einzahlung", assetSymbol="", assetId="")
     syncer, _ = setup(tmp_path, wf)
     [r] = syncer.run()
     assert (r.created, r.existing) == (1, 2)
@@ -324,3 +324,105 @@ def test_holdings_wealthfolio_cannot_answer_do_not_fail_the_run(tmp_path):
     assert syncer.state.balances("dummy")  # the broker's balance is still shown
     assert syncer.state.reconcile("dummy") is None
     assert not any("Bestand" in t for t, _, _ in notifier.sent)
+
+
+def holdings(wf, account):
+    cash = {h["localCurrency"]: D(h["quantity"]) for h in wf.holdings(account) if h["holdingType"] == "cash"}
+    securities = {h["instrument"]["symbol"]: D(h["quantity"]) for h in wf.holdings(account)
+                  if h["holdingType"] == "security"}
+    return cash, securities
+
+
+def test_buy_sell_and_dividend_leave_no_cash_on_the_depot_and_no_cash_position(tmp_path):
+    from brokersync.mapping import Accounts, to_activities
+
+    wf = FakeWealthfolio()
+    client = WealthfolioClient("http://wf", PASSWORD, transport=wf.transport())
+    when = datetime(2026, 1, 5, 10, tzinfo=UTC)
+    common = dict(datetime=when, currency="EUR", isin="IE00TEST0001", name="Testfonds")
+    for tx in (Transaction("d", Kind.DEPOSIT, when, "EUR", D("1000")),
+               Transaction("b", Kind.BUY, net=D("501"), shares=D("5"), gross=D("500"), fee=D("1"), **common),
+               Transaction("s", Kind.SELL, net=D("199"), shares=D("2"), gross=D("200"), fee=D("1"), **common),
+               Transaction("v", Kind.DIVIDEND, net=D("3.68"), shares=D("3"), gross=D("5"), tax=D("1.32"), **common)):
+        for p in to_activities(tx, "tr", Accounts("acc-cash", "acc-depot")):
+            client.create_activity(p)
+    assert holdings(wf, "acc-depot") == ({"EUR": D(0)}, {"IE00TEST0001": D(3)})
+    assert holdings(wf, "acc-cash") == ({"EUR": D("701.68")}, {})
+
+
+def add_old_sync_run(wf):
+    """What 0.3.5 booked for the dummy: every cash activity with a "$CASH-EUR" asset."""
+    from brokersync.adapters.dummy import transactions
+    from brokersync.mapping import Accounts, to_activities
+
+    client = WealthfolioClient("http://wf", PASSWORD, transport=wf.transport())
+    for tx in transactions(datetime.fromisoformat(ANCHOR)):
+        if tx.kind == Kind.UNKNOWN:
+            continue
+        for p in to_activities(tx, "dummy", Accounts("acc-cash", "acc-depot")):
+            if "asset" not in p:
+                p["asset"] = {"symbol": "$CASH-EUR"}
+            client.create_activity(p)
+
+
+def test_the_holdings_check_reports_cash_on_the_depot_and_a_cash_position():
+    from brokersync.model import CashBalance
+    from brokersync.reconcile import compare
+
+    wf = FakeWealthfolio()
+    add_old_sync_run(wf)
+    # The transfers moved no money: the depot paid the buy itself and kept the dividend.
+    assert holdings(wf, "acc-depot") == ({"EUR": D("-497.32")}, {"IE00B4L5Y983": D(5)})
+    assert holdings(wf, "acc-cash") == ({"EUR": D("1000")}, {})
+    found = compare([CashBalance("EUR", D("502.68"))], None, wf.holdings("acc-cash"), wf.holdings("acc-depot"), {})
+    assert [(d.key, d.name, d.broker, d.wealthfolio) for d in found] == [
+        ("EUR", "Cash EUR", "502.68", "1000"), ("depot:EUR", "Cash EUR im Depotkonto", "0", "-497.32")]
+    # Five transfers in, one out, as seen in a real installation: a "$CASH" position.
+    cash_position = {"holdingType": "security", "quantity": "5", "instrument": {"id": "$CASH", "symbol": "$CASH"}}
+    found = compare([], [], [cash_position], [], {})
+    assert [(d.key, d.name, d.broker, d.wealthfolio) for d in found] == [
+        ("Cash-Konto:$CASH", "Position $CASH im Cash-Konto", "0", "5")]
+
+
+def test_transfers_with_a_cash_asset_are_repaired_once(tmp_path):
+    wf = FakeWealthfolio()
+    add_old_sync_run(wf)
+    before = {a["id"]: dict(a) for a in wf.activities}
+    syncer, notifier = setup(tmp_path, wf)
+    [r] = syncer.run()
+    # Updated in place, not deleted and created again; nothing new booked on top.
+    assert r.status == "ok" and wf.deleted == [] and (r.created, r.existing) == (0, 3)
+    assert {a["id"] for a in wf.activities} == set(before)
+    assert len(wf.updated) == 5 and all(u["asset"] == {} for u in wf.updated)
+    assert {before[u["id"]]["activityType"] for u in wf.updated} == {"DEPOSIT", "TRANSFER_IN", "TRANSFER_OUT"}
+    for a in wf.activities:
+        old = before[a["id"]]
+        assert {k: v for k, v in a.items() if not k.startswith("asset") and k != "_fp"} == \
+            {k: v for k, v in old.items() if not k.startswith("asset") and k != "_fp"}
+    assert holdings(wf, "acc-depot") == ({"EUR": D(0)}, {"IE00B4L5Y983": D(5)})
+    assert holdings(wf, "acc-cash") == ({"EUR": D("502.68")}, {})
+    assert syncer.state.reconcile("dummy")["deviations"] == []
+    assert not [t for t, _, _ in notifier.sent if "fehlgeschlagen" in t]
+    # Once: the next run doesn't even look.
+    updates = len(wf.updated)
+    syncer.run()
+    assert len(wf.updated) == updates
+
+
+def test_a_failed_repair_is_reported_and_tried_again(tmp_path):
+    wf = FakeWealthfolio()
+    add_old_sync_run(wf)
+    syncer, notifier = setup(tmp_path, wf)
+    real = wf.handle
+    wf.handle = lambda req: httpx.Response(400, json={"code": 400, "message": "locked"}) \
+        if req.method == "PUT" else real(req)
+    count = len(wf.activities)
+    [r] = syncer.run()
+    # Nothing booked: re-sent without the asset, the transfers would be booked a second time.
+    assert r.status == "error" and "5 Überträge" in r.messages[0] and "locked" in r.messages[0]
+    assert len(wf.activities) == count
+    assert [t for t, _, _ in notifier.sent if "fehlgeschlagen" in t] == ["Dummy (Test): Abruf fehlgeschlagen"]
+    wf.handle = real
+    [r] = syncer.run()
+    assert r.status == "ok" and len(wf.activities) == count
+    assert holdings(wf, "acc-depot")[0] == {"EUR": D(0)}

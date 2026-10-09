@@ -294,7 +294,7 @@ def test_positions_in_the_current_and_the_older_format():
 # ── CSV-imported securities under a mapped ticker ───────────────────────────
 def add_csv_buy(wf, *, date="2026-09-02T09:00:00.000Z", symbol="NVDA", asset_id=None):
     """What the addon's CSV import booked for the NVIDIA buy, with the ticker the user mapped."""
-    leg = dict(quantity="1", unitPrice="1", amount="111", currency="EUR", assetSymbol="$CASH-EUR")
+    leg = dict(quantity="1", unitPrice="1", amount="111", currency="EUR", assetSymbol="", assetId="")
     wf.add_existing(accountId="acc-cash", activityType="TRANSFER_OUT", date=date, comment="Funds for buy", **leg)
     wf.add_existing(accountId="acc-depot", activityType="TRANSFER_IN", date=date, comment="Funds from Cash", **leg)
     return wf.add_existing(accountId="acc-depot", activityType="BUY", date=date, quantity="0.685102",

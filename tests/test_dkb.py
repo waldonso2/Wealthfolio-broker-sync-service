@@ -195,7 +195,7 @@ def test_sync_books_the_giro_and_checks_securities_against_the_pdf_import(tmp_pa
     wf.add_existing(accountId="acc-cash", activityType="TRANSFER_OUT", date="2026-09-08T09:05:58.000Z",
                     quantity="1", unitPrice="1", amount="1001", currency="EUR",
                     comment="Funds for IE00TEST0001 (TEST Fonds World) buy -> Portfolio [PDF 123]",
-                    assetSymbol="$CASH-EUR")
+                    assetSymbol="", assetId="")
     [r2] = syncer.run()
     assert (r2.created, r2.existing, r2.unknown) == (0, 1, 0)
     assert syncer.state.unknown_events() == []

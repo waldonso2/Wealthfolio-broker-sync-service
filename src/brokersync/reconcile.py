@@ -3,9 +3,13 @@ pre-import check (``reconcile.ts``), but against the live accounts.
 
 - **Cash:** the broker's balance per currency vs. Wealthfolio's cash holding on
   the cash account.
+- **Cash on the securities account:** always 0 - every payment there is
+  funded from / swept to the cash account (``brokersync.mapping``).
 - **Positions** (brokers that report them): shares per ISIN vs. Wealthfolio's
   holdings on the securities account, matched by the asset the ISIN is booked
   under (learned from its trades, ``brokersync.assets``), else by symbol.
+- **A "$CASH" position** on either account: a transfer booked as a securities
+  transfer of a cash placeholder, which moved no money (``brokersync.repair``).
 
 Wealthfolio recalculates holdings in the background after new activities, so
 a single deviation right after a sync may be a recalculation in progress; the
@@ -17,6 +21,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from decimal import Decimal, InvalidOperation
 
+from .mapping import is_cash_symbol
 from .model import CashBalance, Position
 
 CASH_TOLERANCE = Decimal("0.01")
@@ -47,6 +52,19 @@ def _fmt(d: Decimal) -> str:
     return s.rstrip("0").rstrip(".") if "." in s else s
 
 
+def _cash(holdings: list[dict]) -> dict[str, Decimal]:
+    out: dict[str, Decimal] = {}
+    for h in holdings:
+        if (h.get("holdingType") or "").lower() == "cash":
+            ccy = h.get("localCurrency") or (h.get("instrument") or {}).get("currency") or ""
+            out[ccy] = out.get(ccy, Decimal(0)) + _dec(h.get("quantity"))
+    return out
+
+
+def _is_security(h: dict) -> bool:
+    return (h.get("holdingType") or "").lower() == "security" and not h.get("isClosed")
+
+
 def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: list[dict],
             wf_portfolio: list[dict], symbol_of: dict[str, str],
             asset_of: dict[str, str] | None = None) -> list[Deviation]:
@@ -57,15 +75,22 @@ def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: 
     (``symbol_of``: ISIN → mapped symbol, else the ISIN).
     """
     out: list[Deviation] = []
-    wf_cash_by_ccy: dict[str, Decimal] = {}
-    for h in wf_cash:
-        if (h.get("holdingType") or "").lower() == "cash":
-            ccy = h.get("localCurrency") or (h.get("instrument") or {}).get("currency") or ""
-            wf_cash_by_ccy[ccy] = wf_cash_by_ccy.get(ccy, Decimal(0)) + _dec(h.get("quantity"))
+    wf_cash_by_ccy = _cash(wf_cash)
     for c in cash:
         have = wf_cash_by_ccy.get(c.currency, Decimal(0))
         if abs(have - c.amount) > CASH_TOLERANCE:
             out.append(Deviation("cash", c.currency, f"Cash {c.currency}", _fmt(c.amount), _fmt(have)))
+    for ccy, have in _cash(wf_portfolio).items():
+        if abs(have) > CASH_TOLERANCE:
+            out.append(Deviation("cash", f"depot:{ccy}", f"Cash {ccy} im Depotkonto", "0", _fmt(have)))
+    for where, holdings in (("Cash-Konto", wf_cash), ("Depotkonto", wf_portfolio)):
+        for h in holdings:
+            inst = h.get("instrument") or {}
+            if _is_security(h) and (is_cash_symbol(inst.get("symbol")) or is_cash_symbol(inst.get("id"))) \
+                    and abs(_dec(h.get("quantity"))) > SHARES_TOLERANCE:
+                symbol = inst.get("symbol") or inst.get("id")
+                out.append(Deviation("position", f"{where}:{symbol}", f"Position {symbol} im {where}", "0",
+                                     _fmt(_dec(h.get("quantity")))))
 
     if positions is None:
         return out
@@ -73,9 +98,9 @@ def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: 
     wf_shares: dict[str, tuple[Decimal, str]] = {}
     by_symbol: dict[str, str] = {}
     for h in wf_portfolio:
-        if (h.get("holdingType") or "").lower() != "security" or h.get("isClosed"):
-            continue
         inst = h.get("instrument") or {}
+        if not _is_security(h) or is_cash_symbol(inst.get("symbol")) or is_cash_symbol(inst.get("id")):
+            continue  # $CASH positions are reported above
         symbol = inst.get("symbol") or ""
         key = inst.get("id") or symbol
         qty, _ = wf_shares.get(key, (Decimal(0), ""))
