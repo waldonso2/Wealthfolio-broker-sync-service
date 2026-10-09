@@ -143,13 +143,21 @@ class State:
 
     # ── unknown events ──────────────────────────────────────────────────────
     def add_unknown(self, broker: str, tx_id: str, raw_type: str, occurred_at: str, payload: dict) -> bool:
-        """Store an unknown event; True if it wasn't known yet (so it gets reported once)."""
+        """Store an unknown event; True if it wasn't known yet (so it gets reported once).
+
+        A known one gets the current payload (a newer version may show more).
+        """
+        data = json.dumps(payload, default=str)
         with self.db:
             cur = self.db.execute(
                 "INSERT OR IGNORE INTO unknown_events VALUES (?, ?, ?, ?, ?, ?)",
-                (broker, tx_id, raw_type, occurred_at, json.dumps(payload, default=str), now()),
+                (broker, tx_id, raw_type, occurred_at, data, now()),
             )
-        return cur.rowcount == 1
+            if cur.rowcount == 1:
+                return True
+            self.db.execute("UPDATE unknown_events SET payload = ? WHERE broker = ? AND tx_id = ?",
+                            (data, broker, tx_id))
+        return False
 
     def oldest_open(self, broker: str, raw_type: str) -> datetime | None:
         """When the oldest still open event of this type happened (e.g. an unmatched settlement)."""

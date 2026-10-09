@@ -175,11 +175,15 @@ def _unknown(raw: dict, raw_type: str) -> Transaction:
         when = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(UTC)
     except ValueError:
         when = datetime.now(UTC)
-    # Only what identifies the event type - no names, amounts or ids beyond the event's own.
+    # What identifies the event type, and its amount so it can be booked by hand -
+    # no counterparties, account numbers or ids beyond the event's own.
+    payload = {"eventType": raw.get("eventType"), "title": raw.get("title"), "subtitle": raw.get("subtitle"),
+               "status": raw.get("status")}
+    amount = raw.get("amount") or {}
+    if amount.get("value") is not None:
+        payload["betrag"] = f"{amount['value']} {amount.get('currency') or 'EUR'}"
     return Transaction(id=raw.get("id", ""), kind=Kind.UNKNOWN, datetime=when, currency=_currency(raw),
-                       net=Decimal(0), label=_label(raw), raw_type=raw_type,
-                       raw={"eventType": raw.get("eventType"), "title": raw.get("title"),
-                            "subtitle": raw.get("subtitle"), "status": raw.get("status")})
+                       net=Decimal(0), label=_label(raw), raw_type=raw_type, raw=payload)
 
 
 class TradeRepublicAdapter(BrokerAdapter):

@@ -84,6 +84,13 @@ def test_unknown_and_informational_events():
     unknown = [t for t in out if t.kind == Kind.UNKNOWN]
     assert [t.raw_type for t in unknown] == ["SSP_CORPORATE_ACTION_INVOICE_SHARES (SPLIT)"]
     assert set(unknown[0].raw) == {"eventType", "title", "subtitle", "status"}  # nothing personal
+    # With an amount, it is shown so the event can be booked by hand - still nothing personal.
+    from brokersync.adapters.tr import _unknown
+
+    bonus = _unknown({"id": "x", "eventType": "REFERRAL_FIRST_TRADE_EXECUTED_INVITER", "title": "Einladung",
+                      "subtitle": "Empfehlungsbonus erhalten", "amount": {"value": 15.0, "currency": "EUR"},
+                      "details": {"sections": [{"title": "IBAN", "detail": {"text": "DE00 0000"}}]}}, "REFERRAL")
+    assert bonus.raw["betrag"] == "15.0 EUR" and "DE00" not in json.dumps(bonus.raw)
     ids = {t.id for t in out}
     assert "00000000-0000-4000-8000-000000000014" not in ids  # address change: informational
     assert "00000000-0000-4000-8000-000000000015" not in ids  # cancelled transfer
