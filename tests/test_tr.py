@@ -337,6 +337,7 @@ def test_duplicates_from_before_the_fix_are_found_and_only_the_sync_copy_removed
                      adapters={"tr": ReplayTR}, notifier=RecordingNotifier(), run_in_thread=False)
     client = TestClient(app)
     client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    syncer.state.set_reconcile("tr", [{"name": "Cash EUR", "broker": "1", "wealthfolio": "2"}])
     page = client.get("/duplicates").text
     assert "Trade Republic: 1 doppelt" in page and "NVDA" in page and "US67066G1040" in page
     import re
@@ -345,7 +346,9 @@ def test_duplicates_from_before_the_fix_are_found_and_only_the_sync_copy_removed
     r = client.post("/duplicates", data={"csrf": csrf, "broker": "tr"})
     assert "bestätige" in r.text and wf.deleted == []
     r = client.post("/duplicates", data={"csrf": csrf, "broker": "tr", "confirm": "1"})
-    assert "1 doppelte Vorgänge entfernt (3 Buchungen)" in r.text
+    assert "1 doppelte Vorgänge entfernt (3 Buchungen)" in r.text and "neu berechnet" in r.text
+    # The check was computed with the duplicates in it: gone until the next run.
+    assert syncer.state.reconcile("tr") is None
     assert len(wf.deleted) == 3 and sync_buy["id"] == wf.deleted[-1]
     assert any(a["id"] == csv_buy["id"] for a in wf.activities)
     assert "Trade Republic: 0 doppelt" in client.get("/duplicates").text

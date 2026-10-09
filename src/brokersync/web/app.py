@@ -421,6 +421,11 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
             if d.tx_id in done:
                 state.mark(broker, d.tx_id, "existing", [d.original["id"]])
         message = f"{len(done)} doppelte Vorgänge entfernt ({deleted} Buchungen). Die CSV-/PDF-Buchungen bleiben."
+        if done:
+            # The check on the status page was computed with the duplicates in it.
+            state.clear_reconcile(broker)
+            message += (f" Der Abgleich wird beim nächsten Abruf neu berechnet - auf der Startseite bei "
+                        f"{adapters[broker].label} „Jetzt abrufen“ klicken.")
         if errors:
             message += f" {len(errors)} nicht entfernt: " + "; ".join(errors[:3])
             return redirect(request, "/duplicates", message, "warn")
