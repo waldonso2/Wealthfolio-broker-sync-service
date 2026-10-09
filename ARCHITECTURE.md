@@ -53,7 +53,8 @@ flowchart TB
   sync --> state["state.py"] & vault["vault.py"] & config["config.py"]
   web --> duplicates["duplicates.py<br/>Bereinigung"]
   subgraph adapters["adapters/"]
-    base["base.py<br/>BrokerAdapter"] --- dkb["dkb.py"] & tr["tr.py"] & scalable["scalable.py"]
+    base["base.py<br/>BrokerAdapter"] --- fints["fints.py<br/>FintsAdapter"] & tr["tr.py"] & scalable["scalable.py"]
+    fints --- dkb["dkb.py<br/>Profil"]
   end
   adapters --> model["model.py<br/>Transaction, Kind, Position, CashBalance"]
   mapping --> model
@@ -166,11 +167,13 @@ Alle Adapter erben von `BrokerAdapter` (`adapters/base.py`) und **lesen nur**: S
 
 | Adapter | Protokoll | Besonderheiten |
 |---|---|---|
-| `dkb` | FinTS über python-fints | Freigabe in der DKB-App (decoupled). Ids sind Hashes des Buchungsinhalts plus Zähler. Wertpapier-Gegenbuchungen auf dem Giro werden zu `SECURITIES_CASH` |
+| `dkb` | FinTS über python-fints (`FintsAdapter`) | Freigabe in der DKB-App (decoupled). Ids sind Hashes des Buchungsinhalts plus Zähler. Wertpapier-Gegenbuchungen auf dem Giro werden zu `SECURITIES_CASH` |
 | `tr` | WebSocket der Trade-Republic-App über pytr (fest gepinnt) | Web-Login mit Bestätigung in der App. Timeline (Transaktionen und Aktivitätslog, seitenweise bis `since`), Details in Batches zu 20. Geparst mit pytrs `Event.from_dict` |
 | `scalable` | Scalables offizielles CLI `sc` (Unterprozess, `--json`) | Gerätecode-Login mit `--local-read-only`: Link und Code im Browser bestätigen. Das Konfigurationsverzeichnis des CLI (Sitzung mit rotierendem Refresh-Token, DPoP-Schlüssel) liegt nur während des Laufs in einem temporären Verzeichnis, sein Inhalt verschlüsselt im Tresor (`session["files"]`). Transaktionen seitenweise, Details für Trades und Ausschüttungen. `sc` installiert `brokersync install-sc` aus Scalables signiertem Release |
 
 Einen Test-Broker liefert der Dienst nicht aus; die Tests nutzen `tests/fake_broker.py`. Den früheren Test-Broker „Dummy“ (bis 0.3.6) räumt `retired.py` beim Start auf: Einstellungen, Zugangsdaten, Sync-Status, Läufe, unbekannte Buchungen und Abgleich werden gelöscht. Seine Buchungen in Wealthfolio bleiben; die Übersicht zeigt einmal, wie viele es sind und wie man sie findet (`[SYNC dummy:`).
+
+**FinTS-Banken** teilen sich `FintsAdapter` (`adapters/fints.py`): Login mit Freigabe in der App oder mit TAN-Eingabe, PIN-Schutz, Session, Abruf und die Einordnung der Giro-Buchungen. Eine Bank ist nur ein Profil (`dkb.py`): Bankleitzahl (fest oder als Zugangsfeld, wenn sie je Filiale verschieden ist), Server, Namen in den Meldungen und, falls die Buchungstexte abweichen, eigene Muster für Wertpapier, Zins und Gebühr. Die Ids hängen nur an der Buchung, nicht am Profil.
 
 Jeder Adapter hat `replay(recording)` für Contract-Tests (`tests/contract/<adapter>/`). Er antwortet dann aus einer Aufzeichnung statt vom Broker.
 
@@ -255,6 +258,7 @@ FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login
 | `tests/fakes.py` | ein Wealthfolio im Speicher (`httpx.MockTransport`): Login, Fingerprint-Duplikate, Suche, Ändern, Löschen von Übertragspaaren, Bestände (Überträge mit Asset sind Wertpapierüberträge) |
 | `test_mapping.py` | Buchungsregeln des Addons |
 | `test_sync.py` | Ablauf, Wiederholung nach Teilfehlern, verlorener Status, Importe des Addons, Sperre, Fehler eines Brokers, Reparatur alter `$CASH`-Überträge |
+| `test_fints.py` | was jedes FinTS-Profil bekommt, für DKB und ein erfundenes zweites Profil: Bankleitzahl, App-Freigabe, TAN-Eingabe, PIN-Schutz, Meldungen, Muster |
 | `test_dkb.py`, `test_tr.py` | Adapter gegen nachgebaute python-fints- bzw. pytr-Clients: Login, PIN-Schutz, Fehlerpfade, WebSocket-Paging, Abgleich, Duplikate |
 | `test_scalable.py` | Scalable gegen ein nachgebautes `sc` (`fixtures/scalable/fake_sc.py`): Gerätecode-Login, Sitzung im Tresor, abgelaufene Sitzung im Timer-Lauf, CLI nicht freigeschaltet, ganzer Abruf |
 | `test_sc_install.py` | Installation von `sc`: Scalables echte Signatur, manipulierte Releases werden abgelehnt |

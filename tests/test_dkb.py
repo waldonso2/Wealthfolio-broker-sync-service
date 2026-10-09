@@ -8,62 +8,21 @@ from pathlib import Path
 import pytest
 
 from brokersync import config as config_mod
-from brokersync.adapters import dkb as dkb_mod
+from brokersync.adapters import fints as fints_mod
 from brokersync.adapters.base import AdapterError, AuthRequired
-from brokersync.adapters.dkb import DkbAdapter, ReplayClient
+from brokersync.adapters.dkb import DkbAdapter
 from brokersync.mapping import Accounts, TransferPattern, to_activities
 from brokersync.model import Kind
 from brokersync.sync import UNMATCHED_SECURITIES, Syncer
 from brokersync.vault import Vault
 from brokersync.wealthfolio import WealthfolioClient
 
+from .fake_fints import FakeFinTS, FinTSClientTemporaryAuthError, NeedTANResponse
 from .fakes import PASSWORD, FakeWealthfolio
 from .test_sync import RecordingNotifier
 
 RECORDING = json.loads((Path(__file__).parent / "contract" / "dkb" / "giro.json").read_text())["recording"]
 CREDS = {"username": "max", "pin": "1234", "product_id": "TESTPRODUCT", "iban": ""}
-
-
-class NeedTANResponse:  # same name as python-fints' class
-    def __init__(self, decoupled=True, challenge="Bitte in der DKB-App freigeben."):
-        self.decoupled = decoupled
-        self.challenge = challenge
-
-
-class FinTSClientPINError(Exception):
-    pass
-
-
-class FakeFinTS(ReplayClient):
-    """A DKB that wants an app confirmation at the start of the dialog."""
-
-    instances: list = []
-
-    def __init__(self, recording, *, sca=True, confirm_after=1, pin_ok=True):
-        super().__init__(recording)
-        self.init_tan_response = NeedTANResponse() if sca else None
-        self.confirm_after = confirm_after
-        self.pin_ok = pin_ok
-        self.polls = 0
-        self.calls = []
-        FakeFinTS.instances.append(self)
-
-    def __enter__(self):
-        self.calls.append("enter")
-        if not self.pin_ok:
-            raise FinTSClientPINError("PIN wrong?")
-        return self
-
-    def send_tan(self, challenge, tan):
-        self.polls += 1
-        if self.polls < self.confirm_after:
-            return NeedTANResponse()
-        self.init_tan_response = None
-        return "ok"
-
-    def get_transactions(self, account, start_date=None, end_date=None):
-        self.calls.append(("transactions", start_date))
-        return super().get_transactions(account, start_date, end_date)
 
 
 @pytest.fixture
@@ -76,7 +35,7 @@ def fake(monkeypatch):
         return FakeFinTS(RECORDING, **opts)
 
     monkeypatch.setattr(DkbAdapter, "client_factory", staticmethod(factory))
-    monkeypatch.setattr(dkb_mod, "DECOUPLED_POLL", 0)
+    monkeypatch.setattr(fints_mod, "DECOUPLED_POLL", 0)
     return opts
 
 
@@ -129,7 +88,7 @@ def test_fetches_without_tan_from_89_days_back_by_default(fake):
     a.login()
     a.get_transactions(None)
     (_, start), = [c for c in FakeFinTS.instances[-1].calls if c != "enter"]
-    assert (datetime.now(dkb_mod.BERLIN).date() - start).days == 89
+    assert (datetime.now(fints_mod.BERLIN).date() - start).days == 89
 
 
 def test_iban_selects_the_account(fake):
@@ -237,10 +196,6 @@ def test_web_login_with_app_confirmation_and_transfer_patterns(tmp_path, fake):
 
 
 # ── error paths ─────────────────────────────────────────────────────────────
-class FinTSClientTemporaryAuthError(Exception):  # same name as python-fints' class
-    pass
-
-
 def test_a_temporarily_locked_access_is_never_tried_again(fake, monkeypatch):
     fake["sca"] = False
 
@@ -295,7 +250,7 @@ def test_a_tan_for_older_bookings_is_asked_in_the_web_ui(fake, monkeypatch):
 
 def test_a_scheduled_run_gives_up_when_the_app_is_not_confirmed(fake, monkeypatch):
     fake["confirm_after"] = 1000
-    monkeypatch.setattr(dkb_mod, "DECOUPLED_WAIT", 0.05)
+    monkeypatch.setattr(fints_mod, "DECOUPLED_WAIT", 0.05)
     a = DkbAdapter(CREDS)
     a.on_user_action = lambda message: None
     with pytest.raises(AuthRequired) as e:
@@ -309,7 +264,7 @@ def test_positions_skip_accounts_without_a_depot(fake, monkeypatch):
                                     "value_symbol": "EUR", "total_value": 550.0})()
 
     def accounts(self):
-        return [dkb_mod._Account("DE02120300000000202051"), dkb_mod._Account("DE02120300000000999999")]
+        return [fints_mod._Account("DE02120300000000202051"), fints_mod._Account("DE02120300000000999999")]
 
     def holdings(self, account):
         if account.iban.endswith("202051"):
