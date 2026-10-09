@@ -14,6 +14,7 @@ header nav { display: flex; gap: 14px; flex-wrap: wrap; font-size: 15px; }
 header nav a { color: var(--muted); }
 header nav a:hover { color: var(--accent); }
 .brand { font-weight: 600; margin-right: auto; }
+.brand .version { font-weight: 400; font-size: 13px; color: var(--muted); margin-left: 4px; }
 .wrap { max-width: 860px; margin: 0 auto; padding: 14px 16px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin: 16px 0; }
 h1 { font-size: 22px; margin: 8px 0 4px; } h2 { font-size: 18px; margin: 0 0 10px; }

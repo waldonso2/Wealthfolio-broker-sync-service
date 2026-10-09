@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- The web UI shows the installed version in the header, next to the name (previously only in the footer).
+
 ## 0.2.0
 
 - **DKB** (waldonso2/wealthfolio-importer-addon#37): giro account via FinTS (python-fints), read-only. Balance and transactions; confirmation in the DKB app in the web UI, or with a ntfy message and a few minutes' wait during the daily run. Deposits, card payments/withdrawals, interest and fees are booked on the DKB cash account; outbound transfers to own accounts become transfers via the new *Überträge* page (transfer patterns as in the addon).
