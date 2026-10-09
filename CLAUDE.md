@@ -19,7 +19,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | Path | Purpose |
 |---|---|
 | `src/brokersync/model.py` | Broker-neutral `Transaction` (Decimal amounts), `Kind`, `Position`, `CashBalance` |
-| `src/brokersync/adapters/` | `base.py` interface (read-only; `login` / `complete_login` for TAN; `on_user_action` for app confirmations during scheduled runs; `close`; `replay` for contract tests), `dkb.py` (python-fints: MT940/camt → `Transaction`, decoupled TAN, PIN lock-out guard), `tr.py` (pytr, pinned: v2 web login confirmed in the app, cookies in the session, timeline + details → pytr's `Event` → `Transaction`), registry in `__init__.py`; `reports_positions` marks adapters whose positions are complete |
+| `src/brokersync/adapters/` | `base.py` interface (read-only; `login` / `complete_login` for TAN; `on_user_action` for app confirmations during scheduled runs; `close`; `replay` for contract tests), `fints.py` (`FintsAdapter`, shared by every FinTS bank: python-fints, MT940/camt → `Transaction`, decoupled TAN or a TAN to type, PIN lock-out guard), `dkb.py` (DKB's profile on it), `tr.py` (pytr, pinned: v2 web login confirmed in the app, cookies in the session, timeline + details → pytr's `Event` → `Transaction`), registry in `__init__.py`; `reports_positions` marks adapters whose positions are complete |
 | `src/brokersync/mapping.py` | Transaction → Wealthfolio `NewActivity` payloads — port of the addon's rules |
 | `src/brokersync/dedup.py` | Check against existing Wealthfolio activities (port of the addon's `matchExisting`) |
 | `src/brokersync/sync.py` | One run over all enabled brokers: login, fetch, dedupe, create, report |
@@ -36,7 +36,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | `deploy/` | `setup.sh` (venv + units, used by install and update), systemd units, reset-password helper |
 | `ARCHITECTURE.md` | Overview for contributors: components, run sequence, dedup layers, data files, routes |
 | `src/brokersync/retired.py` | On start (`Syncer.__init__`): removes config, vault entries and sync state of brokers that no longer exist (`dummy` up to 0.3.6); their Wealthfolio activities stay, the overview shows once how many and how to find them |
-| `tests/` | `fakes.py` (in-memory Wealthfolio), `fake_broker.py` (test-only broker with a TAN step; no test broker ships), unit/e2e tests, `contract/<adapter>/*.json` recorded cases, `fixtures/wealthfolio/` recorded API answers |
+| `tests/` | `fakes.py` (in-memory Wealthfolio), `fake_broker.py` (test-only broker with a TAN step; no test broker ships), `fake_fints.py` (fake python-fints client), unit/e2e tests, `contract/<adapter>/*.json` recorded cases, `fixtures/wealthfolio/` recorded API answers |
 
 ## Invariants (keep them)
 
@@ -61,6 +61,13 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 2. Map every event type the broker has to a `Kind`; anything else → `Kind.UNKNOWN` with `raw_type` and a `raw` payload without personal data.
 3. Register it in `adapters/__init__.py`.
 4. Add fabricated contract cases in `tests/contract/<key>/` (see its README).
+
+A bank that speaks FinTS needs no adapter of its own - only a profile, like `dkb.py`:
+
+1. Subclass `FintsAdapter`; set `key`, `label`, `credential_fields = credential_fields(...)` (`blz=True` if the bank code differs per branch), `blz` (or leave it empty), `server`, and the names in messages (`bank`, `app`, `banking`).
+2. Override `securities_pattern` / `interest_pattern` / `fee_pattern` only if the bank's posting texts differ; giro bookings of depot trades must become `SECURITIES_CASH`.
+3. Never change `fints.to_transactions`' id scheme (content hash + counter): every synced booking would look new.
+4. Register it, add a contract case with its own posting texts, and run `tests/test_fints.py` against it (add it to `PROFILES`).
 
 ## Releasing
 
