@@ -1,6 +1,7 @@
 """Trade Republic adapter: timeline mapping (via pytr's parser), web login with
 app confirmation, session cookies, PIN safety, and the holdings check."""
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from decimal import Decimal as D
@@ -13,7 +14,7 @@ from brokersync import config as config_mod
 from brokersync.adapters.base import AdapterError, AuthRequired
 from brokersync.adapters.tr import TradeRepublicAdapter
 from brokersync.mapping import Accounts, to_activities
-from brokersync.model import CashBalance, Kind, Position
+from brokersync.model import CashBalance, Kind, Position, to_dict
 from brokersync.reconcile import compare
 from brokersync.sync import Syncer
 from brokersync.vault import Vault
@@ -450,3 +451,162 @@ def test_an_existing_install_fetches_the_whole_history_once_to_learn_the_assets(
     start = seen[0]
     assert start.date().isoformat() == "2026-08-01"
     assert seen[1] != start and seen[2] == start and seen[3] != start
+
+
+# ── websocket: timeline paging, details, cash, positions ────────────────────
+class FakeWsApi(FakeApi):
+    """pytr's websocket side: subscriptions answer through ``recv()``, detail
+    answers arrive out of order and between unrelated messages."""
+
+    def __init__(self, phone, pin, cookies, *, pages, silent=False):
+        super().__init__(phone, pin, cookies, resume=True)
+        self.pages = pages  # {("transactions" | "activity", cursor): page}
+        self.silent = silent
+        self.queue: list[tuple[str, dict, object]] = []
+        self.details: list[str] = []
+        self.requested: list[tuple[str, str | None]] = []
+        self.unsubscribed: list[str] = []
+        self.detail_subs: set[str] = set()
+        self.max_in_flight = 0
+        self.closed = False
+        self._next = 0
+
+    def _subscribe(self, response) -> str:
+        self._next += 1
+        sub_id = str(self._next)
+        self.queue.append((sub_id, {}, response))
+        return sub_id
+
+    async def timeline_transactions(self, after=None):
+        self.requested.append(("transactions", after))
+        return self._subscribe(self.pages[("transactions", after)])
+
+    async def timeline_activity_log(self, after=None):
+        self.requested.append(("activity", after))
+        return self._subscribe(self.pages[("activity", after)])
+
+    async def timeline_detail_v2(self, event_id):
+        self._next += 1
+        self.details.append(event_id)
+        self.detail_subs.add(str(self._next))
+        self.max_in_flight = max(self.max_in_flight, len(self.detail_subs))
+        self.queue.insert(0, (str(self._next), {}, DETAILS[event_id]))  # newest request answers first
+        if len(self.detail_subs) == 1:
+            self.queue.insert(1, ("stray", {}, {}))  # another subscription's message
+        return str(self._next)
+
+    async def cash(self):
+        return self._subscribe([{"currencyId": "EUR", "amount": 1234.56}])
+
+    async def compact_portfolio(self):
+        return self._subscribe(RECORDING["portfolio"])
+
+    async def recv(self):
+        if self.silent or not self.queue:
+            await asyncio.sleep(3600)
+        return self.queue.pop(0)
+
+    async def unsubscribe(self, sub_id):
+        self.unsubscribed.append(sub_id)
+        self.detail_subs.discard(sub_id)
+
+    async def close(self):
+        self.closed = True
+
+
+DETAILS = {e["id"]: e.get("details") for e in RECORDING["events"]}
+
+
+def _item(event: dict) -> dict:
+    """A timeline list item: the event without its details."""
+    return {k: v for k, v in event.items() if k != "details"}
+
+
+@pytest.fixture
+def ws(monkeypatch):
+    import brokersync.adapters.tr as tr_mod
+
+    newest_first = [_item(e) for e in reversed(RECORDING["events"])]
+    pages = {
+        ("transactions", None): {"items": newest_first[:6], "cursors": {"after": "p2"}},
+        ("transactions", "p2"): {"items": newest_first[6:], "cursors": {"after": "p3"}},
+        # The activity log lists some of the same events again.
+        ("activity", None): {"items": newest_first[:2], "cursors": {}},
+    }
+    made = []
+    opts = {}
+
+    def factory(phone, pin, cookies):
+        made.append(FakeWsApi(phone, pin, cookies, pages=pages, **opts))
+        return made[-1]
+
+    monkeypatch.setattr(TradeRepublicAdapter, "api_factory", staticmethod(factory))
+    monkeypatch.setattr(tr_mod, "BATCH", 3)
+    return made, opts
+
+
+def test_timeline_pages_until_since_and_fetches_the_details_in_batches(ws):
+    made, _ = ws
+    since = datetime(2026, 9, 5, tzinfo=UTC)
+    a = TradeRepublicAdapter(CREDS, {"cookies": "valid"})
+    a.login()
+    got = a.get_transactions(since)
+    api = made[-1]
+    # The same transactions as the recording replay gives - details matched to their events
+    # although they arrived in another order and between other messages.
+    expected = TradeRepublicAdapter.replay(RECORDING).get_transactions(since)
+    assert [to_dict(t) for t in got] == [to_dict(t) for t in expected]
+    # Paging stops at the first event older than ``since``: p3 is never asked for.
+    assert api.requested == [("transactions", None), ("transactions", "p2"), ("activity", None)]
+    # Each event's details once, at most BATCH requests in flight, every subscription ended.
+    assert sorted(api.details) == sorted({e["id"] for e in RECORDING["events"]
+                                          if e["timestamp"] >= "2026-09-05" and e.get("action")})
+    assert api.max_in_flight <= 3
+    assert "00000000-0000-4000-8000-000000000014" not in api.details  # address change: no detail view
+    assert len(api.unsubscribed) == len(api.details) + len(api.requested)
+    a.close()
+
+
+def test_cash_and_positions_over_the_websocket(ws):
+    a = TradeRepublicAdapter(CREDS, {"cookies": "valid"})
+    a.login()
+    assert a.get_cash() == [CashBalance("EUR", D("1234.56"))]
+    assert [p.isin for p in a.get_positions()] == ["US67066G1040"]
+    a.close()
+
+
+def test_close_ends_the_connection_and_removes_the_cookie_file(ws):
+    made, _ = ws
+    a = TradeRepublicAdapter(CREDS, {"cookies": "valid"})
+    a.login()
+    a.get_cash()
+    cookies = Path(made[-1].cookies_file)
+    assert cookies.exists()
+    a.close()
+    assert made[-1].closed and not cookies.exists()
+    a.close()  # twice is harmless
+
+
+def test_a_silent_websocket_is_an_error_not_a_hang(ws, monkeypatch):
+    import brokersync.adapters.tr as tr_mod
+
+    made, opts = ws
+    opts["silent"] = True
+    monkeypatch.setattr(tr_mod, "TIMEOUT", 0.05)
+    a = TradeRepublicAdapter(CREDS, {"cookies": "valid"})
+    a.login()
+    with pytest.raises(AdapterError, match="Trade Republic"):
+        a.get_transactions(None)
+    a.close()
+    assert not a.session.get("pin_rejected")
+
+
+def test_too_many_attempts_and_other_errors_do_not_block_the_pin(api, monkeypatch):
+    for error, message in ((Exception("TOO_MANY_REQUESTS"), "Zu viele Anmeldeversuche"),
+                           (ConnectionError("network down"), "Trade Republic: network down")):
+        monkeypatch.setattr(FakeApi, "initiate_weblogin", lambda self, e=error: (_ for _ in ()).throw(e))
+        a = TradeRepublicAdapter(CREDS)
+        with pytest.raises(AdapterError, match=message):
+            a.login()
+        # Not a rejected PIN: the next run may try again.
+        assert not a.session_state().get("pin_rejected")

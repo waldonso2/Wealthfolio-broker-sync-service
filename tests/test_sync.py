@@ -253,6 +253,79 @@ def test_a_known_unknown_event_gets_the_newer_payload_but_is_not_reported_again(
     assert st.unknown_events("tr")[0]["payload"]["betrag"] == "1 EUR"
 
 
+class CrashingAdapter(BrokenAdapter):
+    """A bug in an adapter: an exception the sync doesn't expect, after a login."""
+
+    def login(self):
+        self.session["token"] = "kept"
+
+    def get_transactions(self, since):
+        raise KeyError("eventType")
+
+
+def test_a_crashing_adapter_is_reported_keeps_its_session_and_the_others_still_run(tmp_path):
+    wf = FakeWealthfolio()
+    syncer, notifier = setup(tmp_path, wf, brokers=("broken", "dummy"))
+    syncer.adapters = {"dummy": DummyAdapter, "broken": CrashingAdapter}
+    results = {r.broker: r for r in syncer.run()}
+    assert results["broken"].status == "error"
+    assert results["broken"].messages == ["Unexpected error: 'eventType'"]
+    assert ("Kaputt: Abruf fehlgeschlagen", "Unerwarteter Fehler: 'eventType'", "http://sync.local:8090/") \
+        in notifier.sent
+    assert results["dummy"].status == "ok" and results["dummy"].created == 3
+    # The session is stored even though the run crashed after the login.
+    assert syncer.vault.load()["brokers"]["broken"]["session"] == {"token": "kept"}
+    assert [r.status for r in syncer.state.runs("broken")] == ["error"]
+
+
+def test_a_broker_without_wealthfolio_accounts_is_an_error_and_unknown_brokers_are_ignored(tmp_path):
+    wf = FakeWealthfolio()
+    syncer, notifier = setup(tmp_path, wf)
+    cfg = config_mod.load(tmp_path)
+    cfg.brokers["dummy"].portfolio_account_id = ""
+    cfg.brokers["gone"] = config_mod.BrokerConfig(enabled=True)  # an adapter this version doesn't have
+    config_mod.save(tmp_path, cfg)
+    [r] = syncer.run()
+    assert (r.broker, r.status) == ("dummy", "error")
+    assert "No Wealthfolio accounts assigned" in r.messages[0]
+    assert wf.activities == []
+
+
+class NoBalanceDummy(DummyAdapter):
+    def get_cash(self):
+        raise AdapterError("balance not offered")
+
+    def get_positions(self):
+        raise NotImplementedError
+
+
+def test_a_broker_without_balance_still_books_but_skips_the_check(tmp_path):
+    wf = FakeWealthfolio()
+    syncer, _ = setup(tmp_path, wf)
+    syncer.adapters = {"dummy": NoBalanceDummy}
+    [r] = syncer.run()
+    assert (r.status, r.created) == ("ok", 3)
+    assert syncer.state.balances("dummy") == []
+    assert syncer.state.reconcile("dummy") is None
+
+
+def test_holdings_wealthfolio_cannot_answer_do_not_fail_the_run(tmp_path):
+    wf = FakeWealthfolio()
+
+    def handle(request):
+        if request.url.path == "/api/v1/holdings":
+            return httpx.Response(500, json={"code": 500, "message": "recalculating"})
+        return wf.handle(request)
+
+    syncer, notifier = setup(tmp_path, wf)
+    syncer._wealthfolio = lambda url, pw: WealthfolioClient(url, pw, transport=httpx.MockTransport(handle))
+    [r] = syncer.run()
+    assert (r.status, r.created) == ("ok", 3)
+    assert syncer.state.balances("dummy")  # the broker's balance is still shown
+    assert syncer.state.reconcile("dummy") is None
+    assert not any("Bestand" in t for t, _, _ in notifier.sent)
+
+
 def holdings(wf, account):
     cash = {h["localCurrency"]: D(h["quantity"]) for h in wf.holdings(account) if h["holdingType"] == "cash"}
     securities = {h["instrument"]["symbol"]: D(h["quantity"]) for h in wf.holdings(account)
