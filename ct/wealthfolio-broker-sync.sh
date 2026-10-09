@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Install: run in the Proxmox host shell
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/waldonso2/wealthfolio-broker-sync-service/main/ct/wealthfolio-broker-sync.sh)"
+# Update: run `update` in the container.
+#
+# The engine comes from community-scripts/core; COMMUNITY_SCRIPTS_URL points it
+# at this repository, so it loads install/wealthfolio-broker-sync-install.sh
+# from here and writes an `update` command that runs this script again.
+export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/waldonso2/wealthfolio-broker-sync-service/main}"
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2026 waldonso2
 # License: MIT | https://github.com/waldonso2/wealthfolio-broker-sync-service/raw/main/LICENSE
 # Source: https://github.com/waldonso2/wealthfolio-broker-sync-service
-#
-# Installed through PVE Scripts Local with this repository added as a custom
-# repository: PVE Scripts Local replaces the build.func line above with its
-# bundled copy, which then runs install/wealthfolio-broker-sync-install.sh from
-# this repository. Inside the container, `update` runs this script again, which
-# calls update_script below.
 
 APP="Wealthfolio-Broker-Sync"
 var_tags="${var_tags:-finance;wealthfolio}"

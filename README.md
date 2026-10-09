@@ -2,7 +2,7 @@
 
 Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Duplikate in dein **selbst gehostetes [Wealthfolio](https://wealthfolio.app)** ein. Einmal einrichten, danach läuft der Abruf täglich von selbst.
 
-- **Installation per Klick** über [PVE Scripts Local](https://community-scripts.org/scripts/pve-scripts-local) auf deinem Proxmox-Server
+- **Installation mit einer Zeile** in der Proxmox-Shell, wie bei den [Community-Skripten](https://community-scripts.org): eigener Container, fertig eingerichtet
 - **Alles in der Weboberfläche:** keine Konfigurationsdateien, keine Kommandozeile
 - **Zugangsdaten verschlüsselt** gespeichert, **nur lesender Zugriff** auf die Broker
 - **Benachrichtigung aufs Handy** (ntfy), wenn eine TAN fällig ist oder etwas nicht klappt
@@ -12,18 +12,26 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 
 ## Was du brauchst
 
-- einen Proxmox-Server mit **PVE Scripts Local**
+- einen **Proxmox-Server** (VE 8 oder 9)
 - **Wealthfolio** als selbst gehostete Version (z. B. über das Community-Skript „Wealthfolio“) und das Wealthfolio-Passwort
 - in Wealthfolio je Broker **zwei Konten**: ein Verrechnungskonto (Cash) und ein Depotkonto – dieselben wie beim Broker Importer Addon. Für den Test mit dem Dummy legst du am besten zwei Testkonten an, z. B. „Test Cash“ und „Test Depot“.
 - optional die App **ntfy** auf dem Handy ([Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy), [iOS](https://apps.apple.com/app/ntfy/id1625396347))
 
 ## Installation
 
-1. **Repository eintragen (einmalig).** In PVE Scripts Local: *General Settings → Repositories*, als URL `https://github.com/waldonso2/wealthfolio-broker-sync-service` eintragen, aktivieren und *Add Repository* klicken.
-2. **Installieren.** Im Katalog nach **Wealthfolio Broker Sync** suchen (Kategorie *Finance & Budgeting*) und installieren. Die Standardwerte passen: 1 CPU, 512 MB RAM, 2 GB Disk, Debian 13, unprivilegiert.
+1. **Proxmox-Shell öffnen.** In der Proxmox-Oberfläche links deinen Server (Knoten) wählen, dann oben rechts *>_ Shell*.
+2. **Diese Zeile einfügen und Enter drücken:**
+
+   ```bash
+   bash -c "$(curl -fsSL https://raw.githubusercontent.com/waldonso2/wealthfolio-broker-sync-service/main/ct/wealthfolio-broker-sync.sh)"
+   ```
+
+   Es erscheint der bekannte Assistent der Community-Skripte. *Default Settings* wählen – die Standardwerte passen: 1 CPU, 512 MB RAM, 2 GB Disk, Debian 13, unprivilegiert. Der Kopf zeigt dabei „Scripts fork: waldonso2/wealthfolio-broker-sync-service“; das ist richtig, der Dienst kommt aus diesem Repository und nicht aus der offiziellen Sammlung.
 3. **Öffnen.** Am Ende zeigt die Installation die Adresse der Weboberfläche an, z. B. `http://192.168.1.51:8090`. Diese im Browser öffnen.
 
-**Aktualisieren** geht ebenfalls per Klick in PVE Scripts Local (oder im Container mit `update`). Einstellungen und Zugangsdaten bleiben erhalten; vorher wird eine Sicherung unter `/opt/wealthfolio-broker-sync/backup-*.tar.gz` angelegt (die letzten drei bleiben).
+**Aktualisieren:** In Proxmox die Konsole des Containers öffnen und `update` eingeben. Einstellungen und Zugangsdaten bleiben erhalten; vorher wird eine Sicherung unter `/opt/wealthfolio-broker-sync/backup-*.tar.gz` angelegt (die letzten drei bleiben).
+
+> **PVE Scripts Local:** Der Dienst erscheint dort (noch) nicht. PVE Scripts Local zeigt nur Skripte aus der offiziellen Sammlung von community-scripts.org an; ein unter *Repositories* eingetragenes eigenes Repo bringt keine neuen Skripte in den Katalog. Die Aufnahme in die offizielle Sammlung ist geplant, sobald echte Broker angebunden sind.
 
 ## Einrichtung im Browser
 
