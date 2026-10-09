@@ -27,6 +27,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | `src/brokersync/vault.py` | Fernet-encrypted secrets (`data/secrets.enc`, key `data/secret.key` 0600), UI password hash |
 | `src/brokersync/config.py` / `state.py` | Non-secret config (`data/config.json`, written by the UI only) / SQLite sync state, runs, unknown events |
 | `src/brokersync/reconcile.py` | Broker cash/positions vs. Wealthfolio holdings (`GET /holdings?accountId=`) after each run; reported when a deviation lasts two runs |
+| `src/brokersync/duplicates.py` | Finds activities the sync created on top of CSV/PDF imports (same rules as `ExistingIndex`) and removes only the sync's copies; UI page *Duplikate*, confirmation required |
 | `src/brokersync/notify.py` | ntfy |
 | `src/brokersync/web/` | FastAPI + Jinja2 UI (German texts), CSRF via a dependency, own login |
 | `ct/`, `install/`, `json/` | community-scripts files (`json/` is the catalog entry for a later submission to community-scripts) |
@@ -37,7 +38,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 
 - **Book exactly like the addon** (`src/pdf/activities.ts`, `src/common.ts` there): two-account model, every internal TRANSFER_OUT/TRANSFER_IN pair shares a `sourceGroupId`, BUY/SELL `amount = trade_final_cash(...)`, fee/tax in their own fields, tax refund = CREDIT/TAX_REFUND, cash activities use symbol `$CASH-<ccy>` with quantity/unitPrice 1. When the addon's rules change, change `mapping.py` and its tests too.
 - **Comments are part of Wealthfolio's duplicate fingerprint.** Every activity ends in `[SYNC <broker>:<tx id>]`; never reword existing comment texts, or synced activities reappear as new.
-- **Dedup layers:** state DB (`synced`), Wealthfolio's fingerprint ("Duplicate activity detected" → `Duplicate`, not an error), `dedup.ExistingIndex` for activities from CSV/PDF imports. Activities carrying our own `[SYNC …]` reference are *not* matched there: the whole transaction is re-sent so an interrupted run is completed.
+- **Dedup layers:** state DB (`synced`), Wealthfolio's fingerprint ("Duplicate activity detected" → `Duplicate`, not an error), `dedup.ExistingIndex` for activities from CSV/PDF imports. Never require the same symbol there: the addon books securities under the user's mapped ticker, the sync under the ISIN - trades match on share count + amount + time, dividends with another symbol only when unambiguous. Activities carrying our own `[SYNC …]` reference are *not* matched there: the whole transaction is re-sent so an interrupted run is completed.
 - **A transaction is marked synced only when all its activities exist.** Failures stay unmarked and are retried; a run with failures is not a "success", so the next run fetches from before it.
 - **Adapters are read-only** (AC 7 of #35): no endpoint that trades, transfers or changes settings.
 - **Bank-side cash of securities is never booked twice.** A giro booking that settles a depot trade or payout is `Kind.SECURITIES_CASH`: the sync only looks for the transfer leg the securities side (the addon's PDF import, later a depot adapter) put on the cash account (`ExistingIndex.find_settlement`, ±0.02, ≤6 days). Unmatched ones are reported (`UNMATCHED_SECURITIES`), not marked synced, and keep the fetch window open (`State.oldest_open`) until they match.

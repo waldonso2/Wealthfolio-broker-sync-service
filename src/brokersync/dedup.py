@@ -7,10 +7,12 @@ Checked against the activities of the broker's accounts:
   are left to Wealthfolio's own duplicate check - see ``find``.
 - **Imported by the Broker Importer addon** from the CSV export or a PDF
   statement: those have other comments and times, so they are matched by
-  substance, like the addon's ``matchExisting``: same account, type and
-  security, at most 36 hours apart, same share count (not for dividends) and
-  the same amount within 0.02. Cash-only activities (deposits, interest, …)
-  match on account, type and amount in the same window.
+  substance, like the addon's ``matchExisting``: same account and type, at
+  most 36 hours apart, same share count (not for dividends) and the same
+  amount within 0.02. The security should match too, but the addon books it
+  under the ticker the user mapped while the sync uses the ISIN: so a trade
+  with a different symbol still matches, a dividend only if it is the only
+  candidate. Cash-only activities match on account, type and amount.
 
 Each existing activity matches at most one transaction.
 """
@@ -72,26 +74,37 @@ class ExistingIndex:
         quantity = _dec(a.get("quantity"))
         symbol = a.get("asset", {}).get("symbol", "")
         is_cash = symbol.startswith(CASH_SYMBOL_PREFIX)
-        for e in self.existing:
+
+        def same_substance(e: dict) -> bool:
             if e["id"] in self.used or e.get("accountId") != a["accountId"]:
-                continue
+                return False
             if e.get("activityType") != a["activityType"] or (e.get("subtype") or None) != a.get("subtype"):
-                continue
-            if not is_cash and e.get("assetSymbol") != symbol and e.get("assetId") != symbol:
-                continue
+                return False
             if abs((_when(e["date"]) - when).total_seconds()) > MATCH_WINDOW_SECONDS:
-                continue
+                return False
             existing_amount = _dec(e.get("amount"))
             if existing_amount is None:
                 q, p = _dec(e.get("quantity")), _dec(e.get("unitPrice"))
                 existing_amount = q * p if q is not None and p is not None else None
             if existing_amount is None or abs(existing_amount - amount) > AMOUNT_TOLERANCE:
-                continue
-            if a["activityType"] in ("BUY", "SELL") and _dec(e.get("quantity")) != quantity:
-                continue
-            self.used.add(e["id"])
-            return e["id"]
-        return None
+                return False
+            return a["activityType"] not in ("BUY", "SELL") or _dec(e.get("quantity")) == quantity
+
+        def same_security(e: dict) -> bool:
+            return is_cash or symbol in (e.get("assetSymbol"), e.get("assetId"))
+
+        candidates = [e for e in self.existing if same_substance(e)]
+        # Same security first. The addon books a security under the ticker the
+        # user mapped it to, the sync under the ISIN, so a different symbol is
+        # still a match when nothing else is - for trades the share count and
+        # amount within a day and a half pin it down.
+        match = next((e for e in candidates if same_security(e)), None)
+        if match is None and not is_cash and (a["activityType"] in ("BUY", "SELL") or len(candidates) == 1):
+            match = candidates[0] if candidates else None
+        if match is None:
+            return None
+        self.used.add(match["id"])
+        return match["id"]
 
     def find_settlement(self, cash_account: str, signed: Decimal, when: datetime, days: int) -> str | None:
         """The transfer leg the securities side booked on the cash account for a bank settlement.

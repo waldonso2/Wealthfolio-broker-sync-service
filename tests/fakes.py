@@ -28,6 +28,7 @@ class FakeWealthfolio:
         self.password = password
         self.activities: list[dict] = []
         self.created: list[dict] = []  # payloads as received
+        self.deleted: list[str] = []
         self.fail_types: set[str] = set()
         self.logins = 0
         self.expire_next = False
@@ -92,6 +93,14 @@ class FakeWealthfolio:
             }
             self.activities.append(a)
             return httpx.Response(200, json=a)
+        if path.startswith("/api/v1/activities/") and request.method == "DELETE":
+            activity_id = path.rsplit("/", 1)[1]
+            gone = [a for a in self.activities if a["id"] == activity_id]
+            if not gone:
+                return httpx.Response(404, json={"code": 404, "message": "Activity not found"})
+            self.activities.remove(gone[0])
+            self.deleted.append(activity_id)
+            return httpx.Response(200, json=gone[0])
         if path == "/api/v1/holdings":
             return httpx.Response(200, json=self.holdings(request.url.params["accountId"]))
         if path == "/api/v1/activities/search":
