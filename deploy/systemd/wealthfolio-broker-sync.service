@@ -1,0 +1,22 @@
+[Unit]
+Description=Wealthfolio Broker Sync (web UI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=brokersync
+Group=brokersync
+Environment=BROKERSYNC_DATA=/opt/wealthfolio-broker-sync/data
+ExecStart=/opt/wealthfolio-broker-sync/venv/bin/brokersync serve --host 0.0.0.0 --port 8090
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/wealthfolio-broker-sync/data
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

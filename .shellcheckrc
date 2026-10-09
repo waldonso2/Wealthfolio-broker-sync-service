@@ -1,0 +1,3 @@
+# The community-scripts framework (build.func / install.func) is sourced at
+# runtime and defines the variables and functions the scripts use.
+disable=SC1090,SC1091,SC2034,SC2154

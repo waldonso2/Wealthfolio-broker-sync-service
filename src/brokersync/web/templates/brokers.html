@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}Broker{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Broker</h1>
+  {% for key, adapter in adapters.items() %}
+  <div class="broker">
+    <div><strong>{{ adapter.label }}</strong>
+      {% set b = cfg.brokers.get(key) %}
+      {% if b and b.enabled %}<span class="status ok">aktiv</span>{% else %}<span class="status off">aus</span>{% endif %}</div>
+    <a class="button secondary" href="/brokers/{{ key }}">Einrichten</a>
+  </div>
+  {% endfor %}
+  <p class="muted">Weitere Broker (DKB, Trade Republic, Scalable Capital) folgen.</p>
+</div>
+{% endblock %}

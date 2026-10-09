@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% block title %}Wealthfolio{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Wealthfolio verbinden</h1>
+  <p>Die Adresse, unter der du Wealthfolio im Browser öffnest, und das Wealthfolio-Passwort.</p>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="url">Adresse</label>
+    <input type="url" id="url" name="url" value="{{ cfg.wealthfolio_url }}" placeholder="http://192.168.1.50:8080" required>
+    <label for="pw">Passwort</label>
+    <input type="password" id="pw" name="password" autocomplete="off" placeholder="{{ '•••••••• (gespeichert – leer lassen zum Behalten)' if has_password else '' }}">
+    <label class="check"><input type="checkbox" name="no_password"> Wealthfolio läuft ohne Passwort</label>
+    <div class="actions"><button>Speichern und Verbindung testen</button></div>
+  </form>
+  <p class="muted">Das Passwort steht nach der Installation von Wealthfolio im Wealthfolio-Container in <code>~/wealthfolio.creds</code>.</p>
+</div>
+{% endblock %}

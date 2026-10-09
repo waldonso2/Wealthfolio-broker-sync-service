@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% block title %}{{ adapter.label }}{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ adapter.label }}</h1>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <h2 style="margin-top:14px">Zugang</h2>
+    {% for f in adapter.credential_fields %}
+    <label for="c_{{ f.name }}">{{ f.label }}</label>
+    {% if f.secret %}
+    <input type="password" id="c_{{ f.name }}" name="cred_{{ f.name }}" autocomplete="off" placeholder="{{ '•••••••• (gespeichert – leer lassen zum Behalten)' if stored.get(f.name) else '' }}">
+    {% else %}
+    <input type="text" id="c_{{ f.name }}" name="cred_{{ f.name }}" value="{{ plain.get(f.name, '') }}" autocomplete="off">
+    {% endif %}
+    {% if f.help %}<div class="muted">{{ f.help }}</div>{% endif %}
+    {% endfor %}
+
+    <h2 style="margin-top:22px">Wealthfolio-Konten</h2>
+    {% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error }} – <a href="/setup/wealthfolio">Verbindung prüfen</a></div>{% endif %}
+    <p class="muted">Wie beim Broker Importer Addon: Ein Verrechnungskonto für Ein- und Auszahlungen, ein Depotkonto für die Wertpapiere. Nimm dieselben Konten wie beim CSV-/PDF-Import, dann werden schon importierte Buchungen erkannt.</p>
+    <label for="cash">Verrechnungskonto (Cash)</label>
+    <select id="cash" name="cash_account_id"><option value="">– wählen –</option>
+      {% for a in accounts %}<option value="{{ a.id }}" {{ 'selected' if a.id == b.cash_account_id }}>{{ a.name }} ({{ a.currency }})</option>{% endfor %}
+    </select>
+    <label for="portfolio">Depotkonto</label>
+    <select id="portfolio" name="portfolio_account_id"><option value="">– wählen –</option>
+      {% for a in accounts %}<option value="{{ a.id }}" {{ 'selected' if a.id == b.portfolio_account_id }}>{{ a.name }} ({{ a.currency }})</option>{% endfor %}
+    </select>
+    <label for="start">Buchungen übernehmen ab (beim ersten Abruf)</label>
+    <input type="date" id="start" name="start_date" value="{{ b.start_date }}">
+    <div class="muted">Leer = alles, was der Broker liefert.</div>
+    <label class="check"><input type="checkbox" name="enabled" {{ 'checked' if b.enabled }}> Automatisch abrufen</label>
+    <div class="actions">
+      <button>Speichern</button>
+      <a class="button secondary" href="/brokers/{{ key }}/login">Beim Broker anmelden</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

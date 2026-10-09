@@ -1,0 +1,45 @@
+{
+  "name": "Wealthfolio Broker Sync",
+  "slug": "wealthfolio-broker-sync",
+  "categories": [
+    23
+  ],
+  "date_created": "2026-10-09",
+  "type": "ct",
+  "updateable": true,
+  "privileged": false,
+  "interface_port": 8090,
+  "documentation": "https://github.com/waldonso2/wealthfolio-broker-sync-service#readme",
+  "website": "https://github.com/waldonso2/wealthfolio-broker-sync-service",
+  "logo": "https://cdn.jsdelivr.net/gh/selfhst/icons/webp/wealthfolio.webp",
+  "config_path": "/opt/wealthfolio-broker-sync/data/config.json",
+  "description": "Fetches transactions from your brokers and writes them, deduplicated, into your self-hosted Wealthfolio. Set up entirely in the web UI; credentials are stored encrypted.",
+  "install_methods": [
+    {
+      "type": "default",
+      "script": "ct/wealthfolio-broker-sync.sh",
+      "resources": {
+        "cpu": 1,
+        "ram": 512,
+        "hdd": 2,
+        "os": "debian",
+        "version": "13"
+      }
+    }
+  ],
+  "default_credentials": {
+    "username": null,
+    "password": null
+  },
+  "notes": [
+    {
+      "text": "Open the web UI after the installation; the first visit asks you to choose a password, then an assistant guides you through the setup.",
+      "type": "info"
+    },
+    {
+      "text": "Forgot the web UI password? Run `brokersync-reset-password` in the container console.",
+      "type": "info"
+    }
+  ],
+  "repository_url": "https://github.com/waldonso2/wealthfolio-broker-sync-service"
+}

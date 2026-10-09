@@ -1,0 +1,57 @@
+{% extends "base.html" %}{% block title %}Übersicht{% endblock %}
+{% block content %}
+{% if not all_done %}
+<div class="card">
+  <h2>Einrichtung</h2>
+  <ol class="steps">
+  {% for label, href, done in steps %}
+    <li class="{{ 'done' if done }}"><a href="{{ href }}">{{ label }}</a>{% if done %} ✓{% endif %}</li>
+  {% endfor %}
+  </ol>
+</div>
+{% endif %}
+
+<div class="card" id="run">
+  <h2>Broker</h2>
+  {% for b in brokers if b.config.enabled or b.has_credentials %}
+  <div class="broker">
+    <div>
+      <strong>{{ b.label }}</strong>
+      {% if not b.config.enabled %}<span class="status off">aus</span>
+      {% elif b.last %}<span class="status {{ b.last.status }}">{{ STATUS[b.last.status] }}</span>
+      {% else %}<span class="status off">noch nie abgerufen</span>{% endif %}
+      {% if b.last %}
+      <div class="muted">Letzter Abruf: {{ b.last.started_at | local }} ·
+        {{ b.last.created }} neu, {{ b.last.existing }} schon vorhanden{% if b.last.failed %}, {{ b.last.failed }} fehlgeschlagen{% endif %}{% if b.last.unknown %}, <a href="/unknown">{{ b.last.unknown }} unbekannt</a>{% endif %}</div>
+      {% if b.last.message and b.last.status != "ok" %}<pre class="muted">{{ b.last.message }}</pre>{% endif %}
+      {% endif %}
+    </div>
+    <div class="actions" style="margin:0">
+      {% if b.last and b.last.status == "needs_auth" %}<a class="button" href="/brokers/{{ b.key }}/login">Jetzt anmelden</a>{% endif %}
+      <a class="button secondary" href="/brokers/{{ b.key }}">Einstellungen</a>
+    </div>
+  </div>
+  {% else %}
+  <p>Noch kein Broker eingerichtet. <a href="/brokers">Broker einrichten</a></p>
+  {% endfor %}
+  <form method="post" action="/run" class="actions">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button {% if running %}disabled{% endif %}>{% if running %}Abruf läuft …{% else %}Jetzt abrufen{% endif %}</button>
+  </form>
+  <p class="muted">Automatischer Abruf: {% if next_run %}nächster Lauf {{ next_run }}{% else %}täglich{% endif %}.
+  {% if unknown %} · <a href="/unknown">{{ unknown }} unbekannte Buchungen</a>{% endif %}</p>
+</div>
+
+{% if runs %}
+<div class="card">
+  <h2>Letzte Läufe</h2>
+  <div class="table"><table>
+    <tr><th>Zeit</th><th>Broker</th><th>Ergebnis</th><th>Neu</th><th>Vorhanden</th><th>Fehler</th></tr>
+    {% for r in runs %}
+    <tr><td>{{ r.started_at | local }}</td><td>{{ adapters[r.broker].label if r.broker in adapters else r.broker }}</td>
+      <td><span class="status {{ r.status }}">{{ STATUS[r.status] }}</span></td><td>{{ r.created }}</td><td>{{ r.existing }}</td><td>{{ r.failed }}</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endif %}
+{% endblock %}

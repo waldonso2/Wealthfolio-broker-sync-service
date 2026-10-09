@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block title %}Benachrichtigungen{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Benachrichtigungen</h1>
+  <p>Der Dienst meldet sich per <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy</a>, wenn eine TAN fällig ist, eine Anmeldung abgelaufen ist oder ein Abruf fehlschlägt. Installiere die ntfy-App auf dem Handy und abonniere dort das Thema unten.</p>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="server">ntfy-Server</label>
+    <input type="url" id="server" name="server" value="{{ cfg.ntfy_server }}" required>
+    <label for="topic">Thema</label>
+    <input type="text" id="topic" name="topic" value="{{ cfg.ntfy_topic }}">
+    <div class="muted">Auf ntfy.sh kann jeder ein Thema lesen, der den Namen kennt – der vorgeschlagene Name ist deshalb zufällig. Leer = keine Benachrichtigungen.</div>
+    <label for="token">Zugangstoken (nur bei eigenem ntfy-Server mit Anmeldung)</label>
+    <input type="password" id="token" name="token" autocomplete="off" placeholder="{{ '•••••••• (gespeichert)' if has_token else '' }}">
+    <label for="public">Adresse dieser Oberfläche (für Links in den Nachrichten)</label>
+    <input type="url" id="public" name="public_url" value="{{ cfg.public_url }}" placeholder="http://192.168.1.51:8090">
+    <div class="actions">
+      <button>Speichern</button>
+      <button class="secondary" name="test" value="1">Speichern und Testnachricht senden</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

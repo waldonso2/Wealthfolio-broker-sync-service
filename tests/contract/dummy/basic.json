@@ -1,0 +1,50 @@
+{
+  "description": "Fabricated: deposit, buy, dividend and an unknown event",
+  "recording": {},
+  "since": null,
+  "expected": [
+    {
+      "id": "dummy-0001",
+      "kind": "DEPOSIT",
+      "datetime": "2026-01-02T09:00:00+00:00",
+      "currency": "EUR",
+      "net": "1000",
+      "label": "Einzahlung"
+    },
+    {
+      "id": "dummy-0002",
+      "kind": "BUY",
+      "datetime": "2026-01-05T10:15:00+00:00",
+      "currency": "EUR",
+      "net": "501",
+      "isin": "IE00B4L5Y983",
+      "name": "Testfonds World (Dummy)",
+      "shares": "5",
+      "gross": "500",
+      "fee": "1",
+      "label": "Kauf"
+    },
+    {
+      "id": "dummy-0003",
+      "kind": "DIVIDEND",
+      "datetime": "2026-03-16T11:00:00+00:00",
+      "currency": "EUR",
+      "net": "3.68",
+      "isin": "IE00B4L5Y983",
+      "name": "Testfonds World (Dummy)",
+      "shares": "5",
+      "gross": "5",
+      "tax": "1.32",
+      "label": "Ausschüttung"
+    },
+    {
+      "id": "dummy-0004",
+      "kind": "UNKNOWN",
+      "datetime": "2026-03-20T08:00:00+00:00",
+      "currency": "EUR",
+      "net": "0",
+      "label": "Unbekanntes Ereignis",
+      "raw_type": "DUMMY_SPECIAL_EVENT"
+    }
+  ]
+}
