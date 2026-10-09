@@ -20,6 +20,7 @@ passes it to the next adapter instance.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import ClassVar
@@ -62,6 +63,13 @@ class BrokerAdapter(ABC):
     def __init__(self, credentials: dict[str, str], session: dict | None = None):
         self.credentials = credentials
         self.session = dict(session or {})
+        # Set by the sync: tells the user to act now (e.g. confirm in the bank's
+        # app) while the adapter waits. Unset in the web UI, which shows the
+        # challenge itself.
+        self.on_user_action: Callable[[str], None] | None = None
+
+    def close(self) -> None:  # noqa: B027 - optional hook, most adapters hold no connection
+        """End the connection; afterwards ``session_state()`` is final."""
 
     @abstractmethod
     def login(self) -> None:

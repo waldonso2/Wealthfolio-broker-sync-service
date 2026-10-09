@@ -7,7 +7,7 @@
   <div class="table"><table>
     <tr><th>Datum</th><th>Broker</th><th>Typ</th><th>Details</th></tr>
     {% for e in events %}
-    <tr><td>{{ e.occurred_at[:10] }}</td><td>{{ adapters[e.broker].label if e.broker in adapters else e.broker }}</td><td><code>{{ e.raw_type }}</code></td><td><pre>{{ e.payload | tojson(indent=1) }}</pre></td></tr>
+    <tr><td>{{ e.occurred_at[:10] }}</td><td>{{ adapters[e.broker].label if e.broker in adapters else e.broker }}</td><td>{% if e.raw_type == UNMATCHED_SECURITIES %}Wertpapier-Buchung ohne Gegenstück – PDF-Abrechnung mit dem Addon importieren, dann erkennt der nächste Abruf sie{% else %}<code>{{ e.raw_type }}</code>{% endif %}</td><td><pre>{{ e.payload | tojson(indent=1) }}</pre></td></tr>
     {% endfor %}
   </table></div>
   {% else %}<p class="muted">Keine.</p>{% endif %}

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- **DKB** (waldonso2/wealthfolio-importer-addon#37): giro account via FinTS (python-fints), read-only. Balance and transactions; confirmation in the DKB app in the web UI, or with a ntfy message and a few minutes' wait during the daily run. Deposits, card payments/withdrawals, interest and fees are booked on the DKB cash account; outbound transfers to own accounts become transfers via the new *Überträge* page (transfer patterns as in the addon).
+- Giro bookings for depot trades and payouts aren't booked again: the sync checks that the addon's PDF import booked them and reports the ones still missing until it has.
+- The status page shows the broker's balance after each run, for comparison with Wealthfolio.
+- After a rejected PIN the service doesn't contact the bank again until the credentials are saved anew, so the online banking isn't locked.
+
 ## 0.1.3
 
 - The status page shows the real state of the sync: "läuft" only while a sync actually holds the lock (from the web UI or the timer), and it refreshes itself every 3 seconds until the sync is done.

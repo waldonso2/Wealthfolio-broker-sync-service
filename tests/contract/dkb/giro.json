@@ -1,0 +1,195 @@
+{
+  "description": "Fabricated giro account: salary, card payments (two identical on one day), own transfer, depot debit, interest, fee",
+  "recording": {
+    "iban": "",
+    "accounts": [
+      {
+        "iban": "DE02120300000000202051"
+      }
+    ],
+    "balance": {
+      "amount": "1950.06",
+      "currency": "EUR"
+    },
+    "transactions": [
+      {
+        "date": "2026-09-01",
+        "entry_date": "2026-09-01",
+        "amount": "2500.00",
+        "currency": "EUR",
+        "posting_text": "Gutschrift",
+        "purpose": "Lohn/Gehalt 08/2026",
+        "applicant_name": "Muster GmbH",
+        "applicant_iban": "DE89370400440532013000"
+      },
+      {
+        "date": "2026-09-02",
+        "entry_date": "2026-09-03",
+        "amount": "-42.17",
+        "currency": "EUR",
+        "posting_text": "Kartenzahlung",
+        "purpose": "VISA Debitkarte 2026-09-02",
+        "applicant_name": "Supermarkt Musterstadt",
+        "applicant_iban": ""
+      },
+      {
+        "date": "2026-09-04",
+        "entry_date": "2026-09-04",
+        "amount": "-2.50",
+        "currency": "EUR",
+        "posting_text": "Kartenzahlung",
+        "purpose": "Parkhaus Zentrum",
+        "applicant_name": "Parkhaus Musterstadt",
+        "applicant_iban": ""
+      },
+      {
+        "date": "2026-09-04",
+        "entry_date": "2026-09-04",
+        "amount": "-2.50",
+        "currency": "EUR",
+        "posting_text": "Kartenzahlung",
+        "purpose": "Parkhaus Zentrum",
+        "applicant_name": "Parkhaus Musterstadt",
+        "applicant_iban": ""
+      },
+      {
+        "date": "2026-09-05",
+        "entry_date": "2026-09-05",
+        "amount": "-500.00",
+        "currency": "EUR",
+        "posting_text": "Überweisung",
+        "purpose": "Sparrate September",
+        "applicant_name": "Erika Mustermann",
+        "applicant_iban": "DE75512108001245126199"
+      },
+      {
+        "date": "2026-09-10",
+        "entry_date": "2026-09-10",
+        "amount": "-1001.00",
+        "currency": "EUR",
+        "posting_text": "Wertpapierabrechnung",
+        "purpose": "WP-Abrechnung Kauf 40 St. TEST Fonds World",
+        "applicant_name": "",
+        "applicant_iban": ""
+      },
+      {
+        "date": "2026-09-30",
+        "entry_date": "2026-09-30",
+        "amount": "1.23",
+        "currency": "EUR",
+        "posting_text": "Abschluss",
+        "purpose": "Habenzinsen 3. Quartal",
+        "applicant_name": "",
+        "applicant_iban": ""
+      },
+      {
+        "date": "2026-09-30",
+        "entry_date": "2026-09-30",
+        "amount": "-4.50",
+        "currency": "EUR",
+        "posting_text": "Abschluss",
+        "purpose": "Entgelt Kontoführung",
+        "applicant_name": "",
+        "applicant_iban": ""
+      }
+    ]
+  },
+  "since": "2026-08-01T00:00:00+00:00",
+  "expected": [
+    {
+      "id": "20260901-8a239626722cd095-1",
+      "kind": "DEPOSIT",
+      "datetime": "2026-09-01T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "2500",
+      "label": "Gutschrift",
+      "counterparty": "Muster GmbH",
+      "counterparty_iban": "DE89370400440532013000",
+      "text": "Lohn/Gehalt 08/2026",
+      "signed": "2500",
+      "raw_type": "Gutschrift"
+    },
+    {
+      "id": "20260903-c00073b33f935573-1",
+      "kind": "WITHDRAWAL",
+      "datetime": "2026-09-03T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "42.17",
+      "label": "Kartenzahlung",
+      "counterparty": "Supermarkt Musterstadt",
+      "text": "VISA Debitkarte 2026-09-02",
+      "signed": "-42.17",
+      "raw_type": "Kartenzahlung"
+    },
+    {
+      "id": "20260904-0081a1a3294f0484-1",
+      "kind": "WITHDRAWAL",
+      "datetime": "2026-09-04T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "2.5",
+      "label": "Kartenzahlung",
+      "counterparty": "Parkhaus Musterstadt",
+      "text": "Parkhaus Zentrum",
+      "signed": "-2.5",
+      "raw_type": "Kartenzahlung"
+    },
+    {
+      "id": "20260904-0081a1a3294f0484-2",
+      "kind": "WITHDRAWAL",
+      "datetime": "2026-09-04T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "2.5",
+      "label": "Kartenzahlung",
+      "counterparty": "Parkhaus Musterstadt",
+      "text": "Parkhaus Zentrum",
+      "signed": "-2.5",
+      "raw_type": "Kartenzahlung"
+    },
+    {
+      "id": "20260905-bbcf208ebc2b810a-1",
+      "kind": "WITHDRAWAL",
+      "datetime": "2026-09-05T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "500",
+      "label": "Überweisung",
+      "counterparty": "Erika Mustermann",
+      "counterparty_iban": "DE75512108001245126199",
+      "text": "Sparrate September",
+      "signed": "-500",
+      "raw_type": "Überweisung"
+    },
+    {
+      "id": "20260910-6780e01706914a53-1",
+      "kind": "SECURITIES_CASH",
+      "datetime": "2026-09-10T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "1001",
+      "label": "Wertpapierabrechnung",
+      "text": "WP-Abrechnung Kauf 40 St. TEST Fonds World",
+      "signed": "-1001",
+      "raw_type": "Wertpapierabrechnung"
+    },
+    {
+      "id": "20260930-a649a6d85ac79fa1-1",
+      "kind": "INTEREST",
+      "datetime": "2026-09-30T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "1.23",
+      "label": "Abschluss",
+      "text": "Habenzinsen 3. Quartal",
+      "signed": "1.23",
+      "raw_type": "Abschluss"
+    },
+    {
+      "id": "20260930-f883a5d29d5a4dfa-1",
+      "kind": "FEE",
+      "datetime": "2026-09-30T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "4.5",
+      "label": "Abschluss",
+      "text": "Entgelt Kontoführung",
+      "signed": "-4.5",
+      "raw_type": "Abschluss"
+    }
+  ]
+}

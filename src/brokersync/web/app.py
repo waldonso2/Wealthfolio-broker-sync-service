@@ -13,6 +13,7 @@ import secrets
 import subprocess
 import threading
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -27,7 +28,7 @@ from .. import config as config_mod
 from ..adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from ..notify import Notifier
 from ..state import State
-from ..sync import AlreadyRunning, Syncer, is_running
+from ..sync import UNMATCHED_SECURITIES, AlreadyRunning, Syncer, is_running
 from ..vault import Vault, hash_password, verify_password
 from ..wealthfolio import WealthfolioClient, WealthfolioError
 
@@ -51,7 +52,9 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
     syncer = Syncer(data_dir, wealthfolio=make_wf, notifier=notifier, adapters=adapters)
     templates = Jinja2Templates(directory=HERE / "templates")
     templates.env.filters["local"] = _local_time
+    templates.env.filters["money"] = _money
     templates.env.globals["STATUS"] = STATUS_LABEL
+    templates.env.globals["UNMATCHED_SECURITIES"] = UNMATCHED_SECURITIES
     # Adapters waiting for a TAN, between the two requests of a login.
     pending: dict[str, BrokerAdapter] = {}
     running = threading.Event()
@@ -174,6 +177,7 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
                 "config": b,
                 "has_credentials": bool(secrets_.get("brokers", {}).get(key, {}).get("credentials")),
                 "last": state.last_run(key),
+                "balances": state.balances(key),
             })
         steps = [
             ("Wealthfolio verbinden", "/setup/wealthfolio", bool(c.wealthfolio_url and _wf_done(secrets_, c))),
@@ -280,6 +284,9 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
     def broker_login_start(request: Request, key: str):
         if key not in adapters:
             return redirect(request, "/brokers", "Unbekannter Broker.", "error")
+        old = pending.pop(key, None)
+        if old is not None:
+            old.close()
         stored = vault.broker(key)
         adapter = adapters[key](stored.get("credentials", {}), stored.get("session"))
         try:
@@ -289,9 +296,14 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
             vault.set_broker_session(key, adapter.session_state())
             return render(request, "broker_login.html", key=key, adapter=adapters[key], challenge=e.challenge)
         except AdapterError as e:
+            finish_login(key, adapter)  # keeps e.g. a rejected PIN, so nothing retries it
             return redirect(request, f"/brokers/{key}", f"Anmeldung fehlgeschlagen: {e}", "error")
-        vault.set_broker_session(key, adapter.session_state())
+        finish_login(key, adapter)
         return redirect(request, "/", f"{adapters[key].label}: angemeldet.")
+
+    def finish_login(key: str, adapter: BrokerAdapter) -> None:
+        adapter.close()
+        vault.set_broker_session(key, adapter.session_state())
 
     @app.post("/brokers/{key}/login")
     def broker_login_finish(request: Request, key: str, code: str = Form("")):
@@ -305,10 +317,38 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
             return render(request, "broker_login.html", key=key, adapter=adapters[key], challenge=e.challenge)
         except AdapterError as e:
             pending.pop(key, None)
+            finish_login(key, adapter)
             return redirect(request, f"/brokers/{key}", f"Anmeldung fehlgeschlagen: {e}", "error")
         pending.pop(key, None)
-        vault.set_broker_session(key, adapter.session_state())
+        finish_login(key, adapter)
         return redirect(request, "/", f"{adapters[key].label}: angemeldet. Du kannst jetzt abrufen.")
+
+    # ── transfer patterns ───────────────────────────────────────────────────
+    @app.get("/transfers", response_class=HTMLResponse)
+    def transfers_page(request: Request):
+        c = cfg()
+        accounts, error = wf_accounts(c)
+        names = {a.id: f"{a.name} ({a.currency})" for a in accounts}
+        return render(request, "transfers.html", patterns=c.transfer_patterns, accounts=accounts, names=names,
+                      wf_error=error)
+
+    @app.post("/transfers")
+    def transfers_save(request: Request, label: str = Form(""), iban: str = Form(""), keyword: str = Form(""),
+                       destination: str = Form(""), delete: str = Form("")):
+        c = cfg()
+        if delete:
+            i = int(delete)
+            if 0 <= i < len(c.transfer_patterns):
+                c.transfer_patterns.pop(i)
+        else:
+            iban = iban.replace(" ", "").upper()
+            if not label.strip() or not (iban or keyword.strip()):
+                return redirect(request, "/transfers", "Bitte einen Namen und eine IBAN oder ein Stichwort angeben.",
+                                "error")
+            c.transfer_patterns.append({"label": label.strip(), "iban": iban, "keyword": keyword.strip(),
+                                        "destinationAccountId": destination})
+        config_mod.save(data_dir, c)
+        return redirect(request, "/transfers", "Gespeichert.")
 
     # ── notifications ───────────────────────────────────────────────────────
     @app.get("/notifications", response_class=HTMLResponse)
@@ -363,6 +403,11 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
 
 def _wf_done(secrets_: dict, c: config_mod.Config) -> bool:
     return bool(secrets_.get("wealthfolio_checked"))
+
+
+def _money(value) -> str:
+    """German number format: 1.234,56."""
+    return f"{Decimal(str(value)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _local_time(iso: str | None) -> str:

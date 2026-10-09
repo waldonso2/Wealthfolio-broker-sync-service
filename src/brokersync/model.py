@@ -23,6 +23,11 @@ class Kind(StrEnum):
     FEE = "FEE"
     TAX = "TAX"
     TAX_REFUND = "TAX_REFUND"
+    # Cash side of a securities trade or payout on a bank account (e.g. the DKB
+    # giro debit for a depot buy). Booked by the securities side (PDF import,
+    # depot adapter) as a transfer pair, so the sync only checks that it is
+    # there and reports it when it isn't - booking it again would count it twice.
+    SECURITIES_CASH = "SECURITIES_CASH"
     # An event type the adapter doesn't know. It is never dropped: the sync
     # stores and reports it (AC 10), and nothing is booked for it.
     UNKNOWN = "UNKNOWN"
@@ -77,6 +82,13 @@ class Transaction:
     tax: Decimal = Decimal(0)
     # The broker's own type text, e.g. "Kauf", "Sparplan" - for comments.
     label: str = ""
+    # Bank transactions: counterparty and purpose text - for comments and
+    # transfer patterns.
+    counterparty: str = ""
+    counterparty_iban: str = ""
+    text: str = ""
+    # Signed amount for SECURITIES_CASH: negative = paid out of the account.
+    signed: Decimal | None = None
     # The broker's raw event type, shown for UNKNOWN events.
     raw_type: str = ""
     # Original payload of an UNKNOWN event, stored for the report (never secrets).
