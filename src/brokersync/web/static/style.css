@@ -33,7 +33,7 @@ button.link { background: none; border: none; color: var(--muted); padding: 0; }
 ol.steps { padding-left: 22px; margin: 0; } ol.steps li { margin: 6px 0; }
 ol.steps li.done a { color: var(--ok); } ol.steps li.done::marker { color: var(--ok); }
 .status { font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 99px; border: 1px solid; white-space: nowrap; }
-.status.ok { color: var(--ok); } .status.needs_auth, .status.running { color: var(--warn); } .status.error { color: var(--error); }
+.status.ok { color: var(--ok); } .status.needs_auth, .status.running, .status.aborted { color: var(--warn); } .status.error { color: var(--error); }
 .status.off { color: var(--muted); }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }

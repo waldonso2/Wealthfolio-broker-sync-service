@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS runs (
   broker TEXT NOT NULL,
   started_at TEXT NOT NULL,
   finished_at TEXT,
-  -- running | ok | needs_auth | error
+  -- running | ok | needs_auth | error | aborted
   status TEXT NOT NULL,
   created INTEGER NOT NULL DEFAULT 0,
   existing INTEGER NOT NULL DEFAULT 0,
@@ -117,6 +117,18 @@ class State:
                 "INSERT INTO runs (broker, started_at, status) VALUES (?, ?, 'running')", (broker, now())
             )
         return int(cur.lastrowid)
+
+    def abort_stale_runs(self) -> int:
+        """Close runs left at 'running' by a process that died (restart, update, crash).
+
+        Only call while holding the run lock: then no run can really be in progress.
+        """
+        with self.db:
+            cur = self.db.execute(
+                "UPDATE runs SET status = 'aborted', finished_at = ?, message = ? WHERE status = 'running'",
+                (now(), "Abgebrochen - der Dienst wurde während des Abrufs beendet (Neustart, Update oder Absturz)."),
+            )
+        return cur.rowcount
 
     def finish_run(self, run_id: int, status: str, *, created: int = 0, existing: int = 0, failed: int = 0,
                    unknown: int = 0, message: str = "") -> None:

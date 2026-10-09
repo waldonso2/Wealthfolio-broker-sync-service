@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import fcntl
 import logging
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -51,17 +52,32 @@ class BrokerResult:
 
 
 @contextmanager
-def run_lock(data_dir: Path) -> Iterator[None]:
+def run_lock(data_dir: Path, wait: float = 0) -> Iterator[None]:
+    """The sync lock, shared by the web UI and the timer; waits up to ``wait`` seconds."""
     Path(data_dir).mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + wait
     with open(Path(data_dir) / "sync.lock", "a") as f:
-        try:
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as e:
-            raise AlreadyRunning("A sync is already running.") from e
+        while True:
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as e:
+                if time.monotonic() >= deadline:
+                    raise AlreadyRunning("A sync is already running.") from e
+                time.sleep(0.1)
         try:
             yield
         finally:
             fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def is_running(data_dir: Path) -> bool:
+    """Whether a sync holds the lock - in this process or another (the timer)."""
+    try:
+        with run_lock(data_dir):
+            return False
+    except AlreadyRunning:
+        return True
 
 
 class Syncer:
@@ -83,7 +99,9 @@ class Syncer:
         return f"{cfg.public_url.rstrip('/')}{path}" if cfg.public_url else None
 
     def run(self, only: list[str] | None = None) -> list[BrokerResult]:
-        with run_lock(self.data_dir):
+        # Waits a moment: the status page holds the lock briefly for its checks.
+        with run_lock(self.data_dir, wait=5):
+            self.state.abort_stale_runs()
             cfg = config_mod.load(self.data_dir)
             results = []
             for key, bcfg in cfg.brokers.items():
@@ -93,6 +111,14 @@ class Syncer:
                     continue
                 results.append(self._run_broker(cfg, key))
             return results
+
+    def cleanup(self) -> None:
+        """Close runs a dead process left at 'running', unless a sync is in progress."""
+        try:
+            with run_lock(self.data_dir):
+                self.state.abort_stale_runs()
+        except AlreadyRunning:
+            pass
 
     def _run_broker(self, cfg: config_mod.Config, key: str) -> BrokerResult:
         run_id = self.state.start_run(key)
