@@ -302,7 +302,8 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
             finish_login(key, adapter)  # keeps e.g. a rejected PIN, so nothing retries it
             return redirect(request, f"/brokers/{key}", f"Anmeldung fehlgeschlagen: {e}", "error")
         finish_login(key, adapter)
-        return redirect(request, "/", f"{adapters[key].label}: angemeldet.")
+        return redirect(request, "/", f"{adapters[key].label}: angemeldet - die gespeicherte Sitzung ist noch gültig, "
+                                      "eine Bestätigung war nicht nötig. Du kannst jetzt abrufen.")
 
     def finish_login(key: str, adapter: BrokerAdapter) -> None:
         adapter.close()
@@ -411,7 +412,7 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
             # Not while a sync runs: it could create what is being removed.
             with run_lock(data_dir, wait=5), wf_client(c) as wf:
                 found = duplicates_mod.find(wf, broker, Accounts(b.cash_account_id, b.portfolio_account_id))
-                deleted, done = duplicates_mod.remove(wf, found)
+                deleted, done, errors = duplicates_mod.remove(wf, found)
         except AlreadyRunning:
             return redirect(request, "/duplicates", "Gerade läuft ein Abruf - bitte gleich noch einmal.", "warn")
         except WealthfolioError as e:
@@ -420,6 +421,9 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
             if d.tx_id in done:
                 state.mark(broker, d.tx_id, "existing", [d.original["id"]])
         message = f"{len(done)} doppelte Vorgänge entfernt ({deleted} Buchungen). Die CSV-/PDF-Buchungen bleiben."
+        if errors:
+            message += f" {len(errors)} nicht entfernt: " + "; ".join(errors[:3])
+            return redirect(request, "/duplicates", message, "warn")
         return redirect(request, "/duplicates", message)
 
     @app.get("/unknown", response_class=HTMLResponse)

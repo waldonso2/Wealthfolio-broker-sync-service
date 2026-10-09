@@ -17,7 +17,7 @@ from brokersync.model import CashBalance, Kind, Position
 from brokersync.reconcile import compare
 from brokersync.sync import Syncer
 from brokersync.vault import Vault
-from brokersync.wealthfolio import WealthfolioClient
+from brokersync.wealthfolio import WealthfolioClient, WealthfolioError
 
 from .fakes import PASSWORD, FakeWealthfolio
 from .test_sync import RecordingNotifier
@@ -353,3 +353,51 @@ def test_duplicates_from_before_the_fix_are_found_and_only_the_sync_copy_removed
     syncer.run()
     assert [a["assetSymbol"] for a in wf.activities if a["activityType"] == "BUY" and a["quantity"] == "0.685102"] \
         == ["NVDA"]
+
+
+def test_removal_continues_when_wealthfolio_deleted_the_partner_leg_or_one_fails(tmp_path):
+    from brokersync import duplicates as dup
+    from brokersync.mapping import Accounts
+
+    syncer, wf, _ = setup_sync(tmp_path)
+    for n, day in ((2, "02"), (3, "03")):
+        add_csv_buy(wf, date=f"2026-09-{day}T09:00:00.000Z")
+        ref = f" [SYNC tr:tx-{n}]"
+        for acc, t in (("acc-cash", "TRANSFER_OUT"), ("acc-depot", "TRANSFER_IN")):
+            wf.add_existing(accountId=acc, activityType=t, date=f"2026-09-{day}T09:00:10.000Z", quantity="1",
+                            unitPrice="1", amount="111", currency="EUR", assetSymbol="$CASH-EUR",
+                            comment=f"Funds{ref}", sourceGroupId=f"sync-tr-tx-{n}")
+        wf.add_existing(accountId="acc-depot", activityType="BUY", date=f"2026-09-{day}T09:00:12.000Z",
+                        quantity="0.685102", unitPrice="160.560033", amount="111", fee="1", currency="EUR",
+                        comment=f"Kauf{ref}", assetSymbol="US67066G1040", id=f"buy-{n}")
+    client = WealthfolioClient("http://wf", PASSWORD, transport=wf.transport())
+    found = dup.find(client, "tr", Accounts("acc-cash", "acc-depot"))
+    assert [d.tx_id for d in found] == ["tx-2", "tx-3"]
+    real_delete = client.delete_activity
+    client.delete_activity = lambda i: (_ for _ in ()).throw(WealthfolioError("locked")) if i == "buy-2" \
+        else real_delete(i)
+    deleted, done, errors = dup.remove(client, found)
+    assert done == ["tx-3"] and deleted == 3 and len(errors) == 1 and "locked" in errors[0]
+    # tx-2 lost its transfer pair but kept the trade: the next check finds the trade alone.
+    client.delete_activity = real_delete
+    again = dup.find(client, "tr", Accounts("acc-cash", "acc-depot"))
+    assert [(d.tx_id, len(d.activities)) for d in again] == [("tx-2", 1)]
+    assert dup.remove(client, again)[1] == ["tx-2"]
+    assert not [a for a in wf.activities if "[SYNC" in (a.get("comment") or "")]
+
+
+def test_login_with_a_valid_session_says_no_confirmation_was_needed(tmp_path, api):
+    from fastapi.testclient import TestClient
+
+    from brokersync.web.app import create_app
+
+    api["resume"] = True
+    Vault(tmp_path).set_broker_credentials("tr", CREDS)
+    Vault(tmp_path).set_broker_session("tr", {"cookies": "still valid"})
+    app = create_app(tmp_path, adapters={"tr": TradeRepublicAdapter}, notifier=RecordingNotifier(),
+                     run_in_thread=False)
+    client = TestClient(app)
+    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    r = client.get("/brokers/tr/login")
+    assert "Sitzung ist noch gültig" in r.text
+    assert FakeApi.instances[-1].calls == ["resume"]

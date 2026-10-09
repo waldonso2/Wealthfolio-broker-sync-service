@@ -97,9 +97,15 @@ class FakeWealthfolio:
             activity_id = path.rsplit("/", 1)[1]
             gone = [a for a in self.activities if a["id"] == activity_id]
             if not gone:
-                return httpx.Response(404, json={"code": 404, "message": "Activity not found"})
-            self.activities.remove(gone[0])
-            self.deleted.append(activity_id)
+                # Wealthfolio answers 400 for a missing activity.
+                return httpx.Response(400, json={"code": 400, "message": "Record not found"})
+            # Like Wealthfolio: deleting one leg of a linked transfer pair deletes both.
+            group = gone[0].get("sourceGroupId")
+            if group and gone[0]["activityType"] in ("TRANSFER_IN", "TRANSFER_OUT"):
+                gone = [a for a in self.activities if a.get("sourceGroupId") == group]
+            for a in gone:
+                self.activities.remove(a)
+                self.deleted.append(a["id"])
             return httpx.Response(200, json=gone[0])
         if path == "/api/v1/holdings":
             return httpx.Response(200, json=self.holdings(request.url.params["accountId"]))

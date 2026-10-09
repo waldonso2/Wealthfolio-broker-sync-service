@@ -22,7 +22,7 @@ from datetime import date
 
 from .dedup import MAIN_TYPES, ExistingIndex
 from .mapping import Accounts
-from .wealthfolio import WealthfolioClient
+from .wealthfolio import WealthfolioClient, WealthfolioError
 
 REF = re.compile(r"\[SYNC ([\w-]+):([^\]]+)\]")
 SECURITY_TYPES = ("BUY", "SELL", "DIVIDEND")
@@ -33,7 +33,7 @@ class Duplicate:
     tx_id: str
     sync: dict  # the sync's main activity
     original: dict  # the CSV/PDF activity it duplicates
-    activity_ids: list[str] = field(default_factory=list)  # every activity of the sync's transaction
+    activities: list[dict] = field(default_factory=list)  # every activity of the sync's transaction
 
 
 def _main(acts: list[dict]) -> dict:
@@ -78,20 +78,39 @@ def find(wf: WealthfolioClient, broker: str, accounts: Accounts) -> list[Duplica
         match_id = index.find(f"[SYNC {broker}:{tx_id}]", [_as_payload(main)])
         if match_id:
             original = next(o for o in others if o["id"] == match_id)
-            out.append(Duplicate(tx_id, main, original, [a["id"] for a in acts]))
+            out.append(Duplicate(tx_id, main, original, acts))
     return out
 
 
-def remove(wf: WealthfolioClient, duplicates: list[Duplicate]) -> tuple[int, list[str]]:
-    """Delete the sync's copies; returns (activities deleted, transaction ids done)."""
+def remove(wf: WealthfolioClient, duplicates: list[Duplicate]) -> tuple[int, list[str], list[str]]:
+    """Delete the sync's copies; returns (activities deleted, transaction ids done, errors).
+
+    Wealthfolio deletes both legs of a linked transfer pair when one is deleted,
+    so the second leg is skipped (and "not found" counts as gone). One
+    transaction failing doesn't stop the others.
+    """
     deleted = 0
     done: list[str] = []
+    errors: list[str] = []
     for d in duplicates:
-        # Transfer legs first, the trade last: an interruption leaves the trade,
-        # which the next check finds again.
-        ordered = sorted(d.activity_ids, key=lambda i: i == d.sync["id"])
-        for activity_id in ordered:
-            wf.delete_activity(activity_id)
-            deleted += 1
+        gone_groups: set[str] = set()
+        try:
+            # Transfer legs first, the trade last: an interruption leaves the trade,
+            # which the next check finds again.
+            for a in sorted(d.activities, key=lambda a: a["id"] == d.sync["id"]):
+                group = a.get("sourceGroupId")
+                if group and group in gone_groups:
+                    continue  # deleted together with its partner leg
+                try:
+                    wf.delete_activity(a["id"])
+                except WealthfolioError as e:
+                    if "not found" not in str(e).lower():
+                        raise
+                if group:
+                    gone_groups.add(group)
+        except WealthfolioError as e:
+            errors.append(f"{d.sync.get('date', '')[:10]} {d.sync.get('activityType')} {d.sync.get('amount')}: {e}")
+            continue
+        deleted += len(d.activities)
         done.append(d.tx_id)
-    return deleted, done
+    return deleted, done, errors
