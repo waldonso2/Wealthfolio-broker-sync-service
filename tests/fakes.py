@@ -87,7 +87,9 @@ class FakeWealthfolio:
                 "currency": p["currency"],
                 "comment": p.get("comment"),
                 "assetSymbol": p.get("asset", {}).get("symbol", ""),
-                "assetId": p.get("asset", {}).get("symbol", ""),
+                # Like Wealthfolio: an asset id books onto that existing asset.
+                "assetId": p.get("asset", {}).get("id") or p.get("asset", {}).get("symbol", ""),
+                "assetName": p.get("asset", {}).get("name"),
                 "sourceGroupId": p.get("sourceGroupId"),
                 "_fp": fp,
             }
@@ -128,6 +130,7 @@ class FakeWealthfolio:
 
         cash: dict[str, Decimal] = {}
         shares: dict[str, Decimal] = {}
+        symbols: dict[str, str] = {}
         for a in self.activities:
             if a["accountId"] != account_id:
                 continue
@@ -138,9 +141,11 @@ class FakeWealthfolio:
             cash[a["currency"]] = cash.get(a["currency"], Decimal(0)) + self.CASH_SIGN[t] * Decimal(a["amount"] or 0)
             if t in ("BUY", "SELL"):
                 q = Decimal(a["quantity"]) * (1 if t == "BUY" else -1)
-                shares[symbol] = shares.get(symbol, Decimal(0)) + q
+                asset = a.get("assetId") or symbol
+                shares[asset] = shares.get(asset, Decimal(0)) + q
+                symbols.setdefault(asset, symbol)
         out = [{"holdingType": "cash", "localCurrency": c, "quantity": str(v), "instrument": {"symbol": c}}
                for c, v in cash.items()]
         out += [{"holdingType": "security", "localCurrency": "EUR", "quantity": str(q),
-                 "instrument": {"symbol": s, "name": s}} for s, q in shares.items() if q]
+                 "instrument": {"id": i, "symbol": symbols[i], "name": symbols[i]}} for i, q in shares.items() if q]
         return out

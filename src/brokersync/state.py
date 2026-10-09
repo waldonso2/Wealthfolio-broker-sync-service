@@ -50,6 +50,22 @@ CREATE TABLE IF NOT EXISTS balances (
   at TEXT NOT NULL,
   PRIMARY KEY (broker, currency)
 );
+-- The Wealthfolio asset a broker's ISIN is booked under (learned from the
+-- activities of its trades and dividends): the addon books under the ticker
+-- the user mapped, which Wealthfolio's holdings don't link to an ISIN.
+CREATE TABLE IF NOT EXISTS assets (
+  broker TEXT NOT NULL,
+  isin TEXT NOT NULL,
+  asset_id TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  exchange_mic TEXT,
+  name TEXT,
+  PRIMARY KEY (broker, isin)
+);
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS unknown_events (
   broker TEXT NOT NULL,
   tx_id TEXT NOT NULL,
@@ -101,15 +117,47 @@ class State:
                 (broker, tx_id, status, json.dumps(activity_ids), now()),
             )
 
+    def activity_ids(self, broker: str, tx_id: str) -> list[str]:
+        row = self.db.execute("SELECT activity_ids FROM synced WHERE broker = ? AND tx_id = ?",
+                              (broker, tx_id)).fetchone()
+        return json.loads(row[0]) if row else []
+
+    # ── assets per ISIN ─────────────────────────────────────────────────────
+    def assets(self, broker: str) -> dict[str, dict]:
+        rows = self.db.execute("SELECT isin, asset_id, symbol, exchange_mic, name FROM assets WHERE broker = ?",
+                               (broker,))
+        return {i: {"asset_id": a, "symbol": s, "exchange_mic": m, "name": n} for i, a, s, m, n in rows}
+
+    def set_asset(self, broker: str, isin: str, asset_id: str, symbol: str, exchange_mic: str | None,
+                  name: str | None) -> None:
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO assets VALUES (?, ?, ?, ?, ?, ?)",
+                            (broker, isin, asset_id, symbol, exchange_mic, name))
+
+    def flag(self, key: str) -> bool:
+        return self.db.execute("SELECT 1 FROM meta WHERE key = ?", (key,)).fetchone() is not None
+
+    def set_flag(self, key: str) -> None:
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, now()))
+
     # ── unknown events ──────────────────────────────────────────────────────
     def add_unknown(self, broker: str, tx_id: str, raw_type: str, occurred_at: str, payload: dict) -> bool:
-        """Store an unknown event; True if it wasn't known yet (so it gets reported once)."""
+        """Store an unknown event; True if it wasn't known yet (so it gets reported once).
+
+        A known one gets the current payload (a newer version may show more).
+        """
+        data = json.dumps(payload, default=str)
         with self.db:
             cur = self.db.execute(
                 "INSERT OR IGNORE INTO unknown_events VALUES (?, ?, ?, ?, ?, ?)",
-                (broker, tx_id, raw_type, occurred_at, json.dumps(payload, default=str), now()),
+                (broker, tx_id, raw_type, occurred_at, data, now()),
             )
-        return cur.rowcount == 1
+            if cur.rowcount == 1:
+                return True
+            self.db.execute("UPDATE unknown_events SET payload = ? WHERE broker = ? AND tx_id = ?",
+                            (data, broker, tx_id))
+        return False
 
     def oldest_open(self, broker: str, raw_type: str) -> datetime | None:
         """When the oldest still open event of this type happened (e.g. an unmatched settlement)."""

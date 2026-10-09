@@ -242,3 +242,12 @@ def test_automatic_fetch_off_skips_the_broker_unless_it_is_requested_by_name(tmp
     assert syncer.run() == [] and wf.activities == []  # timer and "Alle abrufen"
     [r] = syncer.run(["dummy"])  # the broker's own button
     assert (r.status, r.created) == ("ok", 3)
+
+
+def test_a_known_unknown_event_gets_the_newer_payload_but_is_not_reported_again(tmp_path):
+    from brokersync.state import State
+
+    st = State(tmp_path)
+    assert st.add_unknown("tr", "e1", "X", "2026-01-01", {"eventType": "X"}) is True
+    assert st.add_unknown("tr", "e1", "X", "2026-01-01", {"eventType": "X", "betrag": "1 EUR"}) is False
+    assert st.unknown_events("tr")[0]["payload"]["betrag"] == "1 EUR"

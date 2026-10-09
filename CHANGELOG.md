@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.5
+
+- **Fix: the holdings check listed every position twice** - once with the broker's shares and Wealthfolio 0, once with 0 and Wealthfolio's shares. Wealthfolio's holdings carry no ISIN and the addon books under the ticker the user mapped, so the check compared the ISIN with the ticker. The sync now learns which Wealthfolio asset an ISIN is booked under from the activities of its trades and dividends (its own or the CSV/PDF ones it recognised) and compares positions by that asset.
+- New trades and dividends of a known ISIN are booked onto that asset, instead of opening a second position under the ISIN.
+- Unknown Trade Republic events now show their amount (`betrag`) on the page *Unbekannte Buchungen*, so they can be booked by hand; events already listed get it with the next run.
+- After this update, the next run of a broker with positions (Trade Republic) fetches the whole history once to learn the assets; nothing already in Wealthfolio is booked again.
+
 ## 0.3.4
 
 - **Fix: "Jetzt abrufen" did nothing for a broker with "Automatisch abrufen" off.** Each broker now has its own "Jetzt abrufen" button on the status page, which runs it even when automatic fetching is off; the general button is now "Alle abrufen" and, like the daily run, skips those brokers (the page says so). The status of such a broker shows its last result plus "automatischer Abruf aus" instead of only "aus".

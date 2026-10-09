@@ -43,6 +43,7 @@ class SecurityMapping:
     symbol: str
     exchange_mic: str | None = None
     name: str | None = None
+    asset_id: str | None = None  # an existing Wealthfolio asset (``brokersync.assets``)
 
 
 @dataclass(frozen=True)
@@ -206,6 +207,7 @@ def to_activities(
 
     m = mappings.get(tx.isin or "")
     asset = _clean({
+        "id": m.asset_id if m else None,
         "symbol": m.symbol if m else tx.isin,
         "exchangeMic": m.exchange_mic if m else None,
         "name": (m.name if m and m.name else None) or tx.name or None,
