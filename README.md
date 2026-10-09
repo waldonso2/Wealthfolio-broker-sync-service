@@ -172,7 +172,7 @@ Genau wie beim Broker Importer Addon, damit sich Sync, CSV- und PDF-Import nicht
 
 ## Technik
 
-Für Mitwirkende: [CLAUDE.md](CLAUDE.md) beschreibt Aufbau, Regeln und wie ein neuer Broker dazukommt.
+Für Mitwirkende: [ARCHITECTURE.md](ARCHITECTURE.md) erklärt Aufbau und Ablauf, [CLAUDE.md](CLAUDE.md) die Regeln und wie ein neuer Broker dazukommt.
 
 - Python-Dienst `brokersync` (FastAPI-Oberfläche auf Port 8090, `brokersync run` für den systemd-Timer) unter `/opt/wealthfolio-broker-sync`; Daten in `/opt/wealthfolio-broker-sync/data` (Konfiguration, verschlüsselte Zugangsdaten, Sync-Status), läuft als eigener Benutzer `brokersync`.
 - Wealthfolio wird über seine REST-API (`/api/v1`) mit dem Wealthfolio-Passwort angesprochen.

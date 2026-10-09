@@ -234,3 +234,105 @@ def test_web_login_with_app_confirmation_and_transfer_patterns(tmp_path, fake):
     assert config_mod.load(tmp_path).transfer_patterns[0]["destinationAccountId"] == "acc-old"
     client.post("/transfers", data={"csrf": csrf, "delete": "0"})
     assert config_mod.load(tmp_path).transfer_patterns == []
+
+
+# ── error paths ─────────────────────────────────────────────────────────────
+class FinTSClientTemporaryAuthError(Exception):  # same name as python-fints' class
+    pass
+
+
+def test_a_temporarily_locked_access_is_never_tried_again(fake, monkeypatch):
+    fake["sca"] = False
+
+    def locked(self):
+        raise FinTSClientTemporaryAuthError("locked")
+
+    monkeypatch.setattr(FakeFinTS, "__enter__", locked)
+    a = DkbAdapter(CREDS)
+    with pytest.raises(AdapterError, match="vorübergehend gesperrt"):
+        a.login()
+    assert a.session_state()["pin_rejected"] is True
+
+
+def test_other_bank_errors_are_adapter_errors_and_keep_the_pin(fake, monkeypatch):
+    fake["sca"] = False
+
+    def down(self):
+        raise ConnectionError("server unreachable")
+
+    monkeypatch.setattr(FakeFinTS, "__enter__", down)
+    a = DkbAdapter(CREDS)
+    with pytest.raises(AdapterError, match="DKB \\(FinTS\\): server unreachable"):
+        a.login()
+    assert not a.session_state().get("pin_rejected")
+
+
+def test_no_account_for_the_login_is_explained(fake, monkeypatch):
+    fake["sca"] = False
+    monkeypatch.setattr(FakeFinTS, "get_sepa_accounts", lambda self: [])
+    a = DkbAdapter(CREDS)
+    a.login()
+    with pytest.raises(AdapterError, match="kein Konto"):
+        a.get_cash()
+
+
+def test_a_tan_for_older_bookings_is_asked_in_the_web_ui(fake, monkeypatch):
+    # The dialog starts without SCA, but the bank wants a TAN (here: a code) for the fetch.
+    fake["sca"] = False
+    asked = []
+
+    def wants_tan(self, account, start_date=None, end_date=None):
+        asked.append(start_date)
+        return NeedTANResponse(decoupled=False, challenge="TAN aus der App eingeben")
+
+    monkeypatch.setattr(FakeFinTS, "get_transactions", wants_tan)
+    a = DkbAdapter(CREDS)
+    a.login()
+    with pytest.raises(AuthRequired) as e:
+        a.get_transactions(datetime(2026, 1, 1, tzinfo=UTC))
+    assert (e.value.challenge.kind, e.value.challenge.message) == ("code", "TAN aus der App eingeben")
+
+
+def test_a_scheduled_run_gives_up_when_the_app_is_not_confirmed(fake, monkeypatch):
+    fake["confirm_after"] = 1000
+    monkeypatch.setattr(dkb_mod, "DECOUPLED_WAIT", 0.05)
+    a = DkbAdapter(CREDS)
+    a.on_user_action = lambda message: None
+    with pytest.raises(AuthRequired) as e:
+        a.login()
+    assert e.value.challenge.kind == "confirm"
+
+
+def test_positions_skip_accounts_without_a_depot(fake, monkeypatch):
+    fake["sca"] = False
+    holding = type("Holding", (), {"ISIN": "IE00B4L5Y983", "name": "Testfonds", "pieces": 5.5,
+                                    "value_symbol": "EUR", "total_value": 550.0})()
+
+    def accounts(self):
+        return [dkb_mod._Account("DE02120300000000202051"), dkb_mod._Account("DE02120300000000999999")]
+
+    def holdings(self, account):
+        if account.iban.endswith("202051"):
+            raise ValueError("not a depot")
+        return [holding]
+
+    monkeypatch.setattr(FakeFinTS, "get_sepa_accounts", accounts)
+    monkeypatch.setattr(FakeFinTS, "get_holdings", holdings)
+    a = DkbAdapter(CREDS)
+    a.login()
+    [p] = a.get_positions()
+    assert (p.isin, str(p.shares), str(p.value)) == ("IE00B4L5Y983", "5.5", "550.0")
+
+
+def test_close_survives_a_broken_connection(fake, monkeypatch):
+    fake["sca"] = False
+
+    def broken(self, *args, **kw):
+        raise ConnectionError("gone")
+
+    a = DkbAdapter(CREDS)
+    a.login()
+    monkeypatch.setattr(FakeFinTS, "__exit__", broken)
+    monkeypatch.setattr(FakeFinTS, "deconstruct", broken)
+    a.close()  # no exception: the run's result counts more than a clean goodbye
+    DkbAdapter(CREDS).close()  # never logged in

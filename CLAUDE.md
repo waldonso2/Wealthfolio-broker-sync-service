@@ -33,6 +33,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | `src/brokersync/web/` | FastAPI + Jinja2 UI (German texts), CSRF via a dependency, own login |
 | `ct/`, `install/`, `json/` | community-scripts files (`json/` is the catalog entry for a later submission to community-scripts) |
 | `deploy/` | `setup.sh` (venv + units, used by install and update), systemd units, reset-password helper |
+| `ARCHITECTURE.md` | Overview for contributors: components, run sequence, dedup layers, data files, routes |
 | `tests/` | `fakes.py` (in-memory Wealthfolio), unit/e2e tests, `contract/<adapter>/*.json` recorded cases, `fixtures/wealthfolio/` recorded API answers |
 
 ## Invariants (keep them)
