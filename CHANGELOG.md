@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- Updates can no longer leave the service unable to start: the update keeps the previous Python environment until the new one is completely installed, puts it back if the install fails (network, disk, a broken package), restarts the previous version and says so. Before, a failed install left no environment at all and the service restarted in a loop ("Unable to locate executable .../venv/bin/brokersync").
+
 ## 0.3.0
 
 - **Trade Republic** (waldonso2/wealthfolio-importer-addon#38), read-only via pytr 0.4.10: web login confirmed in the Trade Republic app (or with an authenticator code) without logging out the phone; the session is kept and resumed, and a scheduled run asks for a new confirmation via ntfy when it has expired. Timeline events are booked like the addon's CSV import: trades and savings plans with fee and tax, dividends net with withholding tax, Saveback as a bonus-funded buy, interest, Vorabpauschale, tax corrections, deposits, card payments and refunds, transfers (with transfer patterns). Corporate actions, securities transfers and private markets are reported for the CSV import; informational and cancelled events are skipped.

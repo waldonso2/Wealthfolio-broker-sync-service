@@ -51,7 +51,12 @@ function update_script() {
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "wealthfolio-broker-sync" "waldonso2/wealthfolio-broker-sync-service" "tarball" "latest" "/opt/wealthfolio-broker-sync/app"
 
     msg_info "Updating ${APP}"
-    bash /opt/wealthfolio-broker-sync/app/deploy/setup.sh
+    if ! bash /opt/wealthfolio-broker-sync/app/deploy/setup.sh; then
+      # The previous version is still installed: bring it back up.
+      systemctl start wealthfolio-broker-sync wealthfolio-broker-sync-run.timer
+      msg_error "Update failed - the previous version keeps running. Details above."
+      exit 1
+    fi
     msg_ok "Updated ${APP}"
 
     msg_info "Starting Service"
