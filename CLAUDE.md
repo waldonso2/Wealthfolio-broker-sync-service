@@ -41,6 +41,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 - **Adapters are read-only** (AC 7 of #35): no endpoint that trades, transfers or changes settings.
 - **Unknown event types** become `Kind.UNKNOWN`: stored, listed in the UI, notified once — never dropped, never booked.
 - **One broker failing never stops the others**; it is reported via ntfy with a link (`public_url` + path).
+- **Test data that can reach a real Wealthfolio** (the dummy adapter, anything a user tests with) is dated today — the dummy uses the day of its login, fixed in the session so the daily timer doesn't book it again — and marked **TEST** in every activity's comment (the dummy's transaction ids start with `TEST-`), so the user finds and deletes it easily. Fixtures for automated tests may use fixed dates.
 - **Secrets only in the vault**, never in `config.json`, logs, exceptions shown to the user, or the repo. Test data is fabricated — no real statements, names, IBANs or account numbers.
 - `ct/wealthfolio-broker-sync.sh` exports `COMMUNITY_SCRIPTS_URL` (this repo's raw `main`) **before** sourcing `community-scripts/core`'s `core/build.func`: the engine resolves `install/<slug>-install.sh` and writes the container's `update` command from it. Without it both point to community-scripts/ProxmoxVE. `test_packaging.py` checks this, and that the install line in the README matches.
 

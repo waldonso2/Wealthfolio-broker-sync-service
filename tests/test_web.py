@@ -70,7 +70,8 @@ def test_assistant_from_first_visit_to_first_sync(tmp_path):
     assert "Falscher Code" in r.text
     r = client.post("/brokers/dummy/login", data={"csrf": token, "code": CODE})
     assert "angemeldet" in r.text
-    assert Vault(tmp_path).broker("dummy")["session"] == {"confirmed": True}
+    session = Vault(tmp_path).broker("dummy")["session"]
+    assert session["confirmed"] is True and "anchor" in session
 
     # Step 4: run now.
     r = client.post("/run", data={"csrf": token})

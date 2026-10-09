@@ -1,49 +1,51 @@
 {
-  "description": "Fabricated: deposit, buy, dividend and an unknown event",
-  "recording": {},
+  "description": "Fabricated: deposit, buy, dividend and an unknown event, for a login at 16:00 German time",
+  "recording": {
+    "anchor": "2026-01-05T15:00:00+00:00"
+  },
   "since": null,
   "expected": [
     {
-      "id": "dummy-0001",
+      "id": "TEST-20260105-1",
       "kind": "DEPOSIT",
-      "datetime": "2026-01-02T09:00:00+00:00",
+      "datetime": "2026-01-05T12:00:00+00:00",
       "currency": "EUR",
       "net": "1000",
-      "label": "Einzahlung"
+      "label": "TEST Einzahlung"
     },
     {
-      "id": "dummy-0002",
+      "id": "TEST-20260105-2",
       "kind": "BUY",
-      "datetime": "2026-01-05T10:15:00+00:00",
+      "datetime": "2026-01-05T13:00:00+00:00",
       "currency": "EUR",
       "net": "501",
       "isin": "IE00B4L5Y983",
-      "name": "Testfonds World (Dummy)",
+      "name": "TEST Fonds World (Dummy)",
       "shares": "5",
       "gross": "500",
       "fee": "1",
-      "label": "Kauf"
+      "label": "TEST Kauf"
     },
     {
-      "id": "dummy-0003",
+      "id": "TEST-20260105-3",
       "kind": "DIVIDEND",
-      "datetime": "2026-03-16T11:00:00+00:00",
+      "datetime": "2026-01-05T14:00:00+00:00",
       "currency": "EUR",
       "net": "3.68",
       "isin": "IE00B4L5Y983",
-      "name": "Testfonds World (Dummy)",
+      "name": "TEST Fonds World (Dummy)",
       "shares": "5",
       "gross": "5",
       "tax": "1.32",
-      "label": "Ausschüttung"
+      "label": "TEST Ausschüttung"
     },
     {
-      "id": "dummy-0004",
+      "id": "TEST-20260105-4",
       "kind": "UNKNOWN",
-      "datetime": "2026-03-20T08:00:00+00:00",
+      "datetime": "2026-01-05T14:30:00+00:00",
       "currency": "EUR",
       "net": "0",
-      "label": "Unbekanntes Ereignis",
+      "label": "TEST Unbekanntes Ereignis",
       "raw_type": "DUMMY_SPECIAL_EVENT"
     }
   ]

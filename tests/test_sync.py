@@ -46,6 +46,10 @@ class BrokenAdapter(BrokerAdapter):
         return []
 
 
+# Login to the dummy at 16:00 German time: deposit 13:00, buy 14:00, dividend 15:00.
+ANCHOR = "2026-01-05T15:00:00+00:00"
+
+
 def setup(tmp_path, wf: FakeWealthfolio, brokers=("dummy",), confirmed=True):
     cfg = config_mod.Config(wealthfolio_url="http://wf.local:8080", public_url="http://sync.local:8090")
     for key in brokers:
@@ -57,7 +61,7 @@ def setup(tmp_path, wf: FakeWealthfolio, brokers=("dummy",), confirmed=True):
     for key in brokers:
         vault.set_broker_credentials(key, {"username": "test"})
     if confirmed:
-        vault.set_broker_session("dummy", {"confirmed": True})
+        vault.set_broker_session("dummy", {"confirmed": True, "anchor": ANCHOR})
     notifier = RecordingNotifier()
     syncer = Syncer(tmp_path, wealthfolio=lambda url, pw: WealthfolioClient(url, pw, transport=wf.transport()),
                     notifier=notifier, adapters={"dummy": DummyAdapter, "broken": BrokenAdapter})
@@ -99,10 +103,10 @@ def test_lost_state_is_recovered_from_the_comments(tmp_path):
 def test_activities_from_the_addons_csv_import_are_recognised(tmp_path):
     wf = FakeWealthfolio()
     # What the addon's CSV import booked for the same buy: other comment and time.
-    wf.add_existing(accountId="acc-depot", activityType="BUY", date="2026-01-05T10:15:31.123Z", quantity="5",
-                    unitPrice="100", amount="501", fee="1", currency="EUR", comment="Buy Testfonds [10:15:31.123]",
+    wf.add_existing(accountId="acc-depot", activityType="BUY", date="2026-01-05T13:00:31.123Z", quantity="5",
+                    unitPrice="100", amount="501", fee="1", currency="EUR", comment="Buy Testfonds [13:00:31.123]",
                     assetSymbol="IE00B4L5Y983", assetId="IE00B4L5Y983")
-    wf.add_existing(accountId="acc-cash", activityType="DEPOSIT", date="2026-01-02T09:00:05.000Z", quantity="1",
+    wf.add_existing(accountId="acc-cash", activityType="DEPOSIT", date="2026-01-05T12:00:05.000Z", quantity="1",
                     unitPrice="1", amount="1000", currency="EUR", comment="Einzahlung", assetSymbol="$CASH-EUR")
     syncer, _ = setup(tmp_path, wf)
     [r] = syncer.run()
@@ -122,7 +126,7 @@ def test_partial_failure_is_retried_without_duplicating_created_legs(tmp_path):
     [r2] = syncer.run()
     assert (r2.status, r2.created) == ("ok", 1)
     # Each transfer leg of the buy exists once.
-    legs = [a for a in wf.activities if a.get("sourceGroupId") == "sync-dummy-dummy-0002"]
+    legs = [a for a in wf.activities if a.get("sourceGroupId") == "sync-dummy-TEST-20260105-2"]
     assert sorted(a["activityType"] for a in legs) == ["TRANSFER_IN", "TRANSFER_OUT"]
 
 
@@ -206,6 +210,6 @@ def test_a_failed_sweep_after_a_created_dividend_is_completed(tmp_path):
     assert [a["activityType"] for a in wf.activities] == ["DEPOSIT", "DIVIDEND"]
     wf.fail_types = set()
     syncer.run()
-    div_group = [a["activityType"] for a in wf.activities if "dummy-0003" in a["comment"]]
+    div_group = [a["activityType"] for a in wf.activities if "TEST-20260105-3" in a["comment"]]
     assert sorted(div_group) == ["DIVIDEND", "TRANSFER_IN", "TRANSFER_OUT"]
     assert len([a for a in wf.activities if a["activityType"] == "BUY"]) == 1
