@@ -302,7 +302,8 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
             finish_login(key, adapter)  # keeps e.g. a rejected PIN, so nothing retries it
             return redirect(request, f"/brokers/{key}", f"Anmeldung fehlgeschlagen: {e}", "error")
         finish_login(key, adapter)
-        return redirect(request, "/", f"{adapters[key].label}: angemeldet.")
+        return redirect(request, "/", f"{adapters[key].label}: angemeldet - die gespeicherte Sitzung ist noch gültig, "
+                                      "eine Bestätigung war nicht nötig. Du kannst jetzt abrufen.")
 
     def finish_login(key: str, adapter: BrokerAdapter) -> None:
         adapter.close()

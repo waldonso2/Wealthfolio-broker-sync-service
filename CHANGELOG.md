@@ -3,6 +3,7 @@
 ## 0.3.3
 
 - **Fix: removing duplicates stopped after the first transfer leg.** Wealthfolio deletes both legs of a linked transfer pair when one is deleted; deleting the second leg then failed ("not found") and aborted the whole removal. The partner leg is now skipped, "not found" counts as removed, and one transaction failing no longer stops the others - the page lists what couldn't be removed.
+- Logging in to a broker whose saved session is still valid now says so ("die gespeicherte Sitzung ist noch gültig, eine Bestätigung war nicht nötig") instead of a bare "angemeldet", which looked as if nothing had happened.
 
 ## 0.3.2
 

@@ -384,3 +384,20 @@ def test_removal_continues_when_wealthfolio_deleted_the_partner_leg_or_one_fails
     assert [(d.tx_id, len(d.activities)) for d in again] == [("tx-2", 1)]
     assert dup.remove(client, again)[1] == ["tx-2"]
     assert not [a for a in wf.activities if "[SYNC" in (a.get("comment") or "")]
+
+
+def test_login_with_a_valid_session_says_no_confirmation_was_needed(tmp_path, api):
+    from fastapi.testclient import TestClient
+
+    from brokersync.web.app import create_app
+
+    api["resume"] = True
+    Vault(tmp_path).set_broker_credentials("tr", CREDS)
+    Vault(tmp_path).set_broker_session("tr", {"cookies": "still valid"})
+    app = create_app(tmp_path, adapters={"tr": TradeRepublicAdapter}, notifier=RecordingNotifier(),
+                     run_in_thread=False)
+    client = TestClient(app)
+    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    r = client.get("/brokers/tr/login")
+    assert "Sitzung ist noch gültig" in r.text
+    assert FakeApi.instances[-1].calls == ["resume"]
