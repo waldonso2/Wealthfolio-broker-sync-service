@@ -35,10 +35,12 @@
       <a class="button secondary" href="/brokers/{{ key }}/login">Beim Broker anmelden</a>
     </div>
   </form>
+  {% if not adapter.full_history %}
   <form method="post" action="/brokers/{{ key }}/refetch">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <p class="muted">Fehlen Buchungen aus der Zeit vor dem letzten Abruf (etwa nach einem geänderten Startdatum)? Der nächste Abruf holt dann noch einmal alles ab dem Startdatum; schon übernommene Buchungen werden nicht doppelt angelegt.</p>
     <div class="actions"><button class="secondary">Ab Startdatum neu abrufen</button></div>
   </form>
+  {% endif %}
 </div>
 {% endblock %}

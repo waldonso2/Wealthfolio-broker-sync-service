@@ -1,8 +1,10 @@
-"""Sync state in SQLite (``<data>/state.db``): which broker transactions are
-already in Wealthfolio, the run history and the unknown events.
+"""Sync state in SQLite (``<data>/state.db``): which broker transactions the
+sync booked (and the activity ids), which the user ignores, the run history,
+the unknown events and the last comparison with Wealthfolio.
 
-This is the first line of deduplication; Wealthfolio's own fingerprint and the
-check against existing activities (``brokersync.dedup``) are the others.
+``synced`` decides only what is *new*: a transaction listed there is not booked
+automatically again. Whether it is still in Wealthfolio is checked against
+Wealthfolio after every run (``brokersync.coverage``).
 """
 
 from __future__ import annotations
@@ -18,7 +20,8 @@ CREATE TABLE IF NOT EXISTS synced (
   broker TEXT NOT NULL,
   tx_id TEXT NOT NULL,
   -- imported: activities created by the sync; existing: already in Wealthfolio
-  -- (CSV/PDF import or an earlier sync whose state was lost)
+  -- (CSV/PDF import or an earlier sync whose state was lost); ignored: the user
+  -- chose not to book it
   status TEXT NOT NULL,
   activity_ids TEXT NOT NULL DEFAULT '[]',
   synced_at TEXT NOT NULL,
@@ -65,6 +68,15 @@ CREATE TABLE IF NOT EXISTS assets (
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+-- What the last run found comparing the broker with Wealthfolio (brokersync.coverage).
+CREATE TABLE IF NOT EXISTS gaps (
+  broker TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  ref TEXT NOT NULL,
+  occurred_at TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  PRIMARY KEY (broker, kind, ref)
 );
 CREATE TABLE IF NOT EXISTS unknown_events (
   broker TEXT NOT NULL,
@@ -117,6 +129,34 @@ class State:
                 (broker, tx_id, status, json.dumps(activity_ids), now()),
             )
 
+    def synced(self, broker: str) -> dict[str, tuple[str, list[str]]]:
+        rows = self.db.execute("SELECT tx_id, status, activity_ids FROM synced WHERE broker = ?", (broker,))
+        return {t: (s, json.loads(ids)) for t, s, ids in rows}
+
+    def forget(self, broker: str, tx_ids: list[str]) -> None:
+        """The next run treats these transactions as new: books them unless they are in Wealthfolio."""
+        with self.db:
+            self.db.executemany("DELETE FROM synced WHERE broker = ? AND tx_id = ?", [(broker, t) for t in tx_ids])
+            self.db.executemany("DELETE FROM gaps WHERE broker = ? AND ref = ? AND kind != 'orphan'",
+                                [(broker, t) for t in tx_ids])
+
+    def ignore(self, broker: str, tx_ids: list[str]) -> None:
+        with self.db:
+            for t in tx_ids:
+                self.db.execute("INSERT OR REPLACE INTO synced VALUES (?, ?, 'ignored', '[]', ?)", (broker, t, now()))
+                self.db.execute("UPDATE gaps SET kind = 'ignored' WHERE broker = ? AND ref = ? AND kind != 'orphan'",
+                                (broker, t))
+
+    def set_gaps(self, broker: str, gaps: list[dict]) -> None:
+        with self.db:
+            self.db.execute("DELETE FROM gaps WHERE broker = ?", (broker,))
+            self.db.executemany("INSERT OR REPLACE INTO gaps VALUES (?, ?, ?, ?, ?)",
+                                [(broker, g["kind"], g["ref"], g["occurred_at"], json.dumps(g)) for g in gaps])
+
+    def gaps(self, broker: str) -> list[dict]:
+        rows = self.db.execute("SELECT kind, payload FROM gaps WHERE broker = ? ORDER BY occurred_at", (broker,))
+        return [{**json.loads(p), "kind": k} for k, p in rows]
+
     def activity_ids(self, broker: str, tx_id: str) -> list[str]:
         row = self.db.execute("SELECT activity_ids FROM synced WHERE broker = ? AND tx_id = ?",
                               (broker, tx_id)).fetchone()
@@ -158,7 +198,7 @@ class State:
         created = sum(len(json.loads(ids)) for (ids,) in self.db.execute(
             "SELECT activity_ids FROM synced WHERE broker = ? AND status = 'imported'", (broker,)))
         with self.db:
-            for table in ("synced", "runs", "reconcile", "balances", "assets", "unknown_events"):
+            for table in ("synced", "runs", "reconcile", "balances", "assets", "unknown_events", "gaps"):
                 self.db.execute(f"DELETE FROM {table} WHERE broker = ?", (broker,))
             self.db.execute("DELETE FROM meta WHERE key LIKE ?", (f"%:{broker}",))
         return created

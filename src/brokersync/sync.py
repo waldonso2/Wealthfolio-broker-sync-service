@@ -1,10 +1,15 @@
 """One sync run: every enabled broker → Wealthfolio.
 
-Per broker: log in (stored session), fetch the transactions since the last
-successful run (minus an overlap), skip the ones already synced, check the rest
-against Wealthfolio's existing activities, create what is missing. A broker
-that fails is reported and the others still run (AC 9). Unknown event types are
-stored and reported once, never dropped (AC 10).
+Per broker: log in (stored session), fetch the transactions - the whole
+history for adapters that can read it cheaply (``full_history``), else since
+the last successful run (minus an overlap) -, skip the ones already synced,
+check the rest against Wealthfolio's existing activities, create what is
+missing. Then compare the ones synced before with Wealthfolio
+(``brokersync.coverage``): deleted ones and activities the broker no longer
+lists are shown on the page *Prüfung* and reported, never re-created or
+deleted without the user. A broker that fails is reported and the others still
+run (AC 9). Unknown event types are stored and reported once, never dropped
+(AC 10).
 
 Only one run at a time: the web UI and the systemd timer share a lock file.
 """
@@ -18,13 +23,13 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from . import assets as assets_mod
 from . import config as config_mod
+from . import coverage, retired
 from . import repair as repair_mod
-from . import retired
 from .adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from .dedup import ExistingIndex
 from .mapping import Accounts, MappingError, SecurityMapping, TransferPattern, to_activities, tx_ref
@@ -188,12 +193,15 @@ class Syncer:
         # Once, for brokers with positions: the whole history, to learn the
         # Wealthfolio asset of every ISIN (brokersync.assets) for the check.
         backfill = adapter_cls.reports_positions and not self.state.flag(f"assets-learned:{key}")
+        full = adapter_cls.full_history
         # "Ab Startdatum neu abrufen" in the broker settings: once from the start date again.
-        refetch = self.state.flag(refetch_flag(key))
-        since = self._start(bcfg) if backfill or refetch else self._since(key, bcfg)
+        refetch = not full and self.state.flag(refetch_flag(key))
+        since = self._start(bcfg) if full or backfill or refetch else self._since(key, bcfg)
+        # Before this run books anything: what the comparison with Wealthfolio checks.
+        synced = self.state.synced(key)
         try:
             adapter.login()
-            adapter.known_ids = self.state.known(key)
+            adapter.known_ids = set(synced)
             transactions = adapter.get_transactions(since)
             cash = self._broker_cash(key, adapter)
             positions = self._broker_positions(key, adapter) if adapter_cls.reports_positions else None
@@ -202,8 +210,7 @@ class Syncer:
             adapter.close()
             self.vault.set_broker_session(key, adapter.session_state())
 
-        known = self.state.known(key)
-        todo = [t for t in transactions if t.id not in known]
+        todo = [t for t in transactions if t.id not in synced]
         log.info("%s: %d transactions from the broker since %s, %d not synced yet", key, len(transactions),
                  since.date().isoformat() if since else "the beginning", len(todo))
         self._report_unknown(cfg, key, [t for t in todo if t.kind == Kind.UNKNOWN], result)
@@ -219,19 +226,16 @@ class Syncer:
             # Before the check against existing activities: it then sees them repaired.
             repaired = self._repair_cash_assets(key, wf, accounts)
             unmatched: list[Transaction] = []
+            activities = self._activities(wf, accounts, transactions, since if full else None, full)
             if todo:
-                # Wide enough for a settlement a few days after the trade (SECURITIES_CASH).
-                margin = timedelta(days=SETTLEMENT_DAYS + 1)
-                first = min(t.datetime for t in todo) - margin
-                last = max(t.datetime for t in todo) + margin
-                existing = ExistingIndex(wf.search_activities([accounts.cash, accounts.portfolio], first.date(),
-                                                              last.date()))
+                existing = ExistingIndex(activities)
                 for tx in sorted(todo, key=lambda t: t.datetime):
                     if tx.kind == Kind.SECURITIES_CASH:
                         if not self._settle_securities_cash(key, tx, accounts, existing, result):
                             unmatched.append(tx)
                         continue
                     self._sync_tx(wf, key, tx, accounts, mappings, patterns, existing, result)
+            self._compare(cfg, key, transactions, synced, activities, full, since)
             try:
                 assets_mod.learn(self.state, key, transactions, wf, accounts)
                 if backfill:
@@ -243,8 +247,62 @@ class Syncer:
                     time.sleep(self.recalc_wait)  # Wealthfolio recalculates holdings in the background
                 self._reconcile(cfg, key, wf, accounts, cash, positions, mappings)
         self._report_unmatched(cfg, key, unmatched, result)
+        if full:
+            self._resolve_vanished_unknowns(key, transactions, since)
         if refetch and not result.failed:
             self.state.delete_meta(refetch_flag(key))
+
+    @staticmethod
+    def _activities(wf: WealthfolioClient, accounts: Accounts, transactions: list[Transaction],
+                    since: datetime | None, full: bool) -> list[dict]:
+        """Both accounts' activities around the fetched transactions - for a full history all of them."""
+        # Wide enough for a settlement a few days after the trade (SECURITIES_CASH).
+        margin = timedelta(days=SETTLEMENT_DAYS + 1)
+        if full:
+            first = (since - margin).date() if since else date(1970, 1, 1)
+            last = date(2100, 1, 1)
+        elif transactions:
+            first = (min(t.datetime for t in transactions) - margin).date()
+            last = (max(t.datetime for t in transactions) + margin).date()
+        else:
+            return []
+        return wf.search_activities([accounts.cash, accounts.portfolio], first, last)
+
+    def _compare(self, cfg: config_mod.Config, key: str, transactions: list[Transaction],
+                 synced: dict[str, tuple[str, list[str]]], activities: list[dict], full: bool,
+                 since: datetime | None) -> None:
+        """Transactions synced before that are gone from Wealthfolio, and the reverse (brokersync.coverage)."""
+        gaps = coverage.check(key, transactions, synced, activities, full_history=full, since=since)
+        before = {(g["kind"], g["ref"]) for g in self.state.gaps(key)}
+        self.state.set_gaps(key, [g.as_dict() for g in gaps])
+        new = [g for g in gaps if g.kind != coverage.IGNORED and (g.kind, g.ref) not in before]
+        if not new:
+            return
+        log.info("%s: %d transactions missing in Wealthfolio, %d activities no longer at the broker", key,
+                 sum(g.kind != coverage.ORPHAN for g in new), sum(g.kind == coverage.ORPHAN for g in new))
+        label = self.adapters[key].label
+        lines = []
+        missing = [g for g in new if g.kind != coverage.ORPHAN]
+        orphans = [g for g in new if g.kind == coverage.ORPHAN]
+        if missing:
+            lines.append(f"{len(missing)} schon übernommene Buchung(en) fehlen in Wealthfolio (gelöscht?).")
+        if orphans:
+            lines.append(f"{len(orphans)} Buchung(en) in Wealthfolio gibt es bei {label} nicht (mehr), "
+                         "z. B. storniert.")
+        self.notifier(cfg).send(f"{label}: Abweichung zu Wealthfolio",
+                                " ".join(lines) + " Auf der Seite Prüfung entscheidest du, was passiert.",
+                                link=self.link(cfg, "/check"), tags="mag")
+
+    def _resolve_vanished_unknowns(self, key: str, transactions: list[Transaction], since: datetime | None) -> None:
+        """A full history is the whole truth: an unknown event the broker no longer lists as one is settled
+        (e.g. a cancellation a newer version nets out with its original)."""
+        still = {t.id for t in transactions if t.kind == Kind.UNKNOWN}
+        for e in self.state.unknown_events(key):
+            if e["raw_type"] == UNMATCHED_SECURITIES or e["tx_id"] in still:
+                continue
+            if since and datetime.fromisoformat(e["occurred_at"]) < since:
+                continue
+            self.state.resolve_unknown(key, e["tx_id"])
 
     def _repair_cash_assets(self, key: str, wf: WealthfolioClient, accounts: Accounts) -> int:
         """Once per broker: the cash activities older versions created with a $CASH asset (brokersync.repair).

@@ -27,10 +27,16 @@ the same API):
 - A depot migration moves positions out and back in (same ISIN and share
   count within 7 days); its cash leg is a deposit marked ``SWITCH-`` plus a
   withdrawal of the same amount. Such pairs cancel out and are skipped.
-- Cancellations (``isCancellation``), unpaired security transfers, fund swaps,
+- A fund swap and a certificate redemption are sales; a cancelled distribution
+  and its original cancel out.
+- Other cancellations (``isCancellation``), unpaired security transfers,
   ELTIFs and every other type are ``Kind.UNKNOWN``: listed and reported, never
   booked. Their payload keeps types, ISIN and amount only - the description of
   a cash transfer can carry a name.
+
+Every run reads the whole list (``full_history``): it is a few paged queries.
+Only the details, one query each, are fetched just for transactions the sync
+doesn't have yet.
 """
 
 from __future__ import annotations
@@ -307,9 +313,10 @@ def _sales(items: list[dict]) -> tuple[list[Transaction], set[str]]:
     return out, used
 
 
-def _cancelled(items: list[dict], known: set[str]) -> set[str]:
-    """A cancelled distribution and its original cancel out, like in the addon - unless the
-    original was synced already: then the cancellation stays a report (nothing is deleted)."""
+def _cancelled(items: list[dict]) -> set[str]:
+    """A cancelled distribution and its original cancel out, like in the addon. If the sync
+    booked the original already, the page *Prüfung* lists its activities as no longer at
+    Scalable (``brokersync.coverage``) - nothing is deleted here."""
     used: set[str] = set()
     originals = sorted((i for i in items if i.get("cash_transaction_type") == "DISTRIBUTION"
                         and not i.get("is_cancellation") and (_dec(i.get("amount")) or Decimal(0)) > 0),
@@ -321,20 +328,16 @@ def _cancelled(items: list[dict], known: set[str]) -> set[str]:
         original = next((o for o in originals if o["id"] not in used and o.get("related_isin") == c.get("related_isin")
                          and _dec(o.get("amount")) == amount
                          and _when(o["last_event_datetime"]) <= _when(c["last_event_datetime"])), None)
-        if original and original["id"] not in known:
+        if original:
             used.update((c["id"], original["id"]))
     return used
 
 
-def to_transactions(items: list[dict], details: dict[str, dict], known: set[str] | None = None) -> list[Transaction]:
-    """Transaction summaries (``sc broker transactions``) plus details → transactions, oldest first.
-
-    ``known``: ids the sync has already - a cancellation whose original is among
-    them can't be undone here and is reported instead.
-    """
+def to_transactions(items: list[dict], details: dict[str, dict]) -> list[Transaction]:
+    """Transaction summaries (``sc broker transactions``) plus details → transactions, oldest first."""
     booked = [i for i in items if i.get("status") in ("FILLED", "SETTLED") and _when(i.get("last_event_datetime"))]
     out, consumed = _sales(booked)
-    consumed |= _cancelled(booked, known or set())
+    consumed |= _cancelled(booked)
     netted = _netted([i for i in booked if i["id"] not in consumed]) | consumed
     for item in booked:
         if item["id"] in netted:
@@ -509,6 +512,7 @@ class ScalableAdapter(BrokerAdapter):
                              "Depot-Seite im Browser."),
     ]
     reports_positions = True
+    full_history = True
 
     # Replaced in tests.
     cli_factory: Callable[[dict[str, str]], ScCli] | None = None
@@ -647,7 +651,7 @@ class ScalableAdapter(BrokerAdapter):
                 log.warning("scalable: details for %d of %d transactions not fetched (rate limit), the next run "
                             "continues", len(wanted) - n, len(wanted))
                 break
-        txs = to_transactions(items, details, self.known_ids)
+        txs = to_transactions(items, details)
         missing = {i["id"] for i in wanted if i["id"] not in details}
         txs = [replace(t, label=f"{t.label} (Details folgen beim nächsten Abruf)") if t.id in missing
                and t.kind in (Kind.BUY, Kind.SELL) else t for t in txs]

@@ -1,5 +1,58 @@
 {% extends "base.html" %}{% block title %}Prüfung{% endblock %}
 {% block content %}
+{% for b in brokers %}
+{% set missing = b.gaps | selectattr("kind", "in", ["missing", "partial"]) | list %}
+{% set orphans = b.gaps | selectattr("kind", "equalto", "orphan") | list %}
+{% set ignored = b.gaps | selectattr("kind", "equalto", "ignored") | list %}
+<div class="card">
+  <h1>Abgleich {{ b.label }} ↔ Wealthfolio</h1>
+  <p>Nach jedem Abruf vergleicht der Dienst, was {{ b.label }} auflistet, mit dem, was in Wealthfolio steht{% if not b.full %} – für die Zeit, die der letzte Abruf gelesen hat{% else %} – die ganze Historie ab dem Startdatum{% endif %}. Er legt nichts von selbst wieder an und löscht nichts: Du entscheidest hier.</p>
+  {% if not b.checked %}<p class="muted">Noch kein Abruf.</p>{% else %}
+
+  <h3>Schon übernommen, fehlt aber in Wealthfolio: {{ missing | length }}</h3>
+  {% if missing %}
+  <p class="muted">In Wealthfolio gelöscht – oder die Import-Buchung, der der Dienst sie zugeordnet hatte, ist weg. „Wieder anlegen“: der nächste Abruf bucht sie neu, außer sie ist inzwischen in Wealthfolio (z. B. aus einem CSV-/PDF-Import). „Ignorieren“: wenn sie zu Recht fehlt, etwa weil sie doppelt war.</p>
+  <form method="post" action="/check/{{ b.key }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="table"><table>
+      <tr><th></th><th>Datum</th><th>Art</th><th>Wertpapier</th><th>Betrag</th><th>Fehlt</th></tr>
+      {% for g in missing %}
+      <tr><td><input type="checkbox" name="tx" value="{{ g.ref }}" aria-label="auswählen"></td><td>{{ g.occurred_at | local }}</td><td>{{ g.label }}</td><td>{{ g.name }}</td><td>{{ g.amount }} {{ g.currency }}</td><td>{{ "ganz" if g.kind == "missing" else "teilweise" }}</td></tr>
+      {% endfor %}
+    </table></div>
+    <div class="actions"><button name="action" value="rebook">Wieder anlegen</button><button class="secondary" name="action" value="ignore">Ignorieren</button></div>
+  </form>
+  {% else %}<p class="muted">Keine.</p>{% endif %}
+
+  {% if b.full %}
+  <h3>In Wealthfolio, aber nicht (mehr) bei {{ b.label }}: {{ orphans | length }}</h3>
+  {% if orphans %}
+  <p class="muted">Buchungen des Dienstes, deren Vorgang {{ b.label }} nicht mehr auflistet – z. B. storniert. Bitte in Wealthfolio prüfen und löschen (bei einem Übertrag beide Seiten).</p>
+  <div class="table"><table>
+    <tr><th>Datum</th><th>Art</th><th>Wertpapier</th><th>Betrag</th><th>Vorgang</th></tr>
+    {% for g in orphans %}
+    <tr><td>{{ g.occurred_at | local }}</td><td>{{ g.label }}</td><td>{{ g.name }}</td><td>{{ g.amount }} {{ g.currency }}</td><td>{{ g.tx_id }}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% else %}<p class="muted">Keine.</p>{% endif %}
+  {% endif %}
+
+  {% if ignored %}
+  <h3>Ignoriert: {{ ignored | length }}</h3>
+  <form method="post" action="/check/{{ b.key }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="table"><table>
+      <tr><th></th><th>Datum</th><th>Art</th><th>Wertpapier</th><th>Betrag</th></tr>
+      {% for g in ignored %}
+      <tr><td><input type="checkbox" name="tx" value="{{ g.ref }}" aria-label="auswählen"></td><td>{{ g.occurred_at | local }}</td><td>{{ g.label }}</td><td>{{ g.name }}</td><td>{{ g.amount }} {{ g.currency }}</td></tr>
+      {% endfor %}
+    </table></div>
+    <div class="actions"><button class="secondary" name="action" value="rebook">Doch anlegen</button></div>
+  </form>
+  {% endif %}
+  {% endif %}
+</div>
+{% endfor %}
 <div class="card">
   <h1>Prüfung der Konten</h1>
   <p>Das Depotkonto hält kein Bargeld: Jeder Kauf wird vom Verrechnungskonto bezahlt, jeder Verkauf und jede Ausschüttung dorthin übertragen. Fehlt eine Seite davon – von Hand gelöscht, ohne Übertrag importiert, doppelt gebucht –, zeigt das Depotkonto Bargeld und das Verrechnungskonto das Gegenteil. Diese Seite zeigt, wo.</p>
