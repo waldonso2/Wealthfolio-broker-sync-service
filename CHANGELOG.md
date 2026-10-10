@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+
+- **Fix: "Neu aufsetzen" wasn't visible** in the broker settings - it had landed in the page title.
+- **comdirect without a start date fetches everything** comdirect's API delivers (before: one year). The log shows how far back that goes (oldest giro booking and depot transaction), without amounts.
+
 ## 0.7.0
 
 - **comdirect: only the depot is booked, no longer the giro account.** The comdirect cash account in Wealthfolio now receives only the dividends. A buy is booked with a deposit of its cost on the cash account right before it, a sale with a withdrawal of its proceeds right after it - so the account doesn't run into the minus because the giro history before the start date is missing. Deposits, card payments, fees and interest of the giro account are no longer booked, and its balance is no longer compared. After the update click **Neu aufsetzen** in the comdirect settings once: it deletes what 0.6.0 booked and the next run books everything again with the new rules.
