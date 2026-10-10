@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from .. import __version__, retired
+from .. import __version__, audit, retired
 from .. import config as config_mod
 from .. import duplicates as duplicates_mod
 from ..adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
@@ -396,6 +396,26 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
                 return redirect(request, "/notifications", "Testnachricht konnte nicht gesendet werden.", "error")
             return redirect(request, "/notifications", "Testnachricht gesendet.")
         return redirect(request, "/", "Benachrichtigungen gespeichert.")
+
+    # ── account check (read only) ───────────────────────────────────────────
+    @app.get("/check", response_class=HTMLResponse)
+    def check_page(request: Request):
+        c = cfg()
+        report, error = [], None
+        try:
+            with wf_client(c) as wf:
+                names = {a.id: a.name for a in wf.list_accounts()}
+                for key, b in c.brokers.items():
+                    if key in adapters and b.cash_account_id and b.portfolio_account_id:
+                        accounts = Accounts(b.cash_account_id, b.portfolio_account_id)
+                        report.append({"key": key, "label": adapters[key].label, "result": audit.run(wf, accounts),
+                                       "cash_name": names.get(b.cash_account_id, "Verrechnungskonto"),
+                                       "depot_name": names.get(b.portfolio_account_id, "Depotkonto"),
+                                       "depot_id": b.portfolio_account_id})
+        except WealthfolioError as e:
+            error = str(e)
+        return render(request, "check.html", report=report, wf_error=error, source=audit.source,
+                      effect=audit.cash_effect)
 
     # ── unknown events, securities ──────────────────────────────────────────
     # ── duplicates of CSV/PDF imports ───────────────────────────────────────

@@ -30,6 +30,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | `src/brokersync/reconcile.py` | Broker cash/positions vs. Wealthfolio holdings (`GET /holdings?accountId=`) after each run, plus cash on the securities account (must be 0) and `$CASH` positions; reported when a deviation lasts two runs |
 | `src/brokersync/repair.py` | Once per broker (state flag): removes the `$CASH` asset from the sync's own cash activities (PUT `/activities`, `asset: {}`); the broker books nothing until it worked |
 | `src/brokersync/duplicates.py` | Finds activities the sync created on top of CSV/PDF imports (same rules as `ExistingIndex`) and removes only the sync's copies; UI page *Duplikate*, confirmation required |
+| `src/brokersync/audit.py` | Read-only check of a broker's two accounts (UI page *Prüfung*): depot moments (activities ≤10 s apart) whose cash effect isn't zero, and transfers between the two accounts without their other leg |
 | `src/brokersync/notify.py` | ntfy |
 | `src/brokersync/sc_install.py` | `brokersync install-sc`: downloads the latest `sc` release, verifies Scalable's minisign signature (pinned key) and the SHA-256 before writing `/opt/wealthfolio-broker-sync/bin/sc`; called by `deploy/setup.sh`, failure is non-fatal |
 | `src/brokersync/web/` | FastAPI + Jinja2 UI (German texts), CSRF via a dependency, own login |

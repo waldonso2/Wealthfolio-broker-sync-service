@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.5
+
+- **New page "Prüfung"** (read only): for each broker it shows where the two-account model doesn't add up - the moments on the securities account where cash is left behind (e.g. a buy without its funding transfer, or a transfer whose sale or payout was deleted), and transfers between the two accounts without their other leg. Each line has date, type, amount, comment and whether the sync or an import booked it. Nothing is changed; fixes are made in Wealthfolio.
+
 ## 0.4.4
 
 - **Fix: a certificate redemption was booked as a dividend next to the CSV import's sale.** Scalable books a redemption or knock-out as the securities leaving the depot with value 0 plus a distribution of the same ISIN on the same day; the addon books both as one sale. The sync now does the same, so it recognises the CSV sale instead of adding a dividend.
