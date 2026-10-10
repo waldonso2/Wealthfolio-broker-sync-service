@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- **Prüfung: fewer false alarms.** Two moments on the securities account that cancel each other within 36 hours now count as one and are no longer listed - e.g. a dividend from the CSV import and its transfer to cash from a PDF import or entered by hand at another time of day. A stock dividend or staking reward (subtype `DIVIDEND_IN_KIND`, `STAKING_REWARD`) brings shares, not money, and no longer counts as cash on the securities account.
+
 ## 0.5.0
 
 - **Wealthfolio is checked after every run, not trusted from the sync's own records.** Until now a transaction counted as done once the sync had booked it; deleting it in Wealthfolio meant it never came back. Now every run compares the transactions synced before with Wealthfolio (by their `[SYNC …]` reference and the stored activity ids) and lists on the page *Prüfung*, per broker: transactions that are missing in Wealthfolio, completely or partly, with **Wieder anlegen** (the next run books them, unless an import has them by then) and **Ignorieren** (they stay away; *Doch anlegen* undoes it). A deletion may have been on purpose, so nothing is re-created without that click. New deviations are notified once.

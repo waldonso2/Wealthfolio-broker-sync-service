@@ -112,3 +112,26 @@ def test_the_page(tmp_path):
     assert re.search(r"2026-03-03 10:00:01</td><td>TRANSFER_OUT", page)
     count = len(wf.activities)
     assert len(wf.activities) == count and not wf.deleted and not wf.updated  # read only
+
+
+def test_a_transfer_and_its_trade_imported_apart_belong_together():
+    wf = FakeWealthfolio()
+    everything(wf)
+    # A dividend from one import, its sweep entered by hand 38 minutes earlier ...
+    wf.add_existing(accountId="acc-depot", activityType="TRANSFER_OUT", date="2026-03-10T12:00:00.000Z",
+                    amount="100.79", currency="EUR", comment="Dividende -> Cash", assetSymbol="", assetId="")
+    wf.add_existing(accountId="acc-depot", activityType="DIVIDEND", date="2026-03-10T12:38:30.911Z", quantity="1",
+                    unitPrice="100.79", amount="100.79", currency="EUR", comment="Dividend", assetSymbol="X",
+                    assetId="X")
+    # ... and a stock dividend, which brings shares, not money.
+    wf.add_existing(accountId="acc-depot", activityType="DIVIDEND", subtype="DIVIDEND_IN_KIND",
+                    date="2026-03-11T22:49:41.226Z", quantity="58.98", unitPrice="1.18", amount="69.572808",
+                    currency="EUR", comment="stock dividend", assetSymbol="X", assetId="X")
+    r = audit.check(wf.activities, ACC)
+    assert r.moments == [] and r.depot_cash == 0
+    # Not when they are days apart, or don't cancel out.
+    wf.add_existing(accountId="acc-depot", activityType="TRANSFER_OUT", date="2026-03-15T12:00:00.000Z",
+                    amount="40", currency="EUR", comment="Übertrag", assetSymbol="", assetId="")
+    wf.add_existing(accountId="acc-depot", activityType="DIVIDEND", date="2026-03-18T12:00:00.000Z", quantity="1",
+                    unitPrice="40", amount="40", currency="EUR", comment="Dividend", assetSymbol="X", assetId="X")
+    assert sorted(m.net for m in audit.check(wf.activities, ACC).moments) == [D("-40"), D("40")]
