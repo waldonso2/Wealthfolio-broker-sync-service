@@ -1,9 +1,81 @@
 {
- "description": "Fabricated sc --json answers: trades, savings plan, cash types, a depot migration that cancels out, a cancellation, an unpaired transfer, an ELTIF and a pending order.",
+ "description": "Fabricated sc --json answers: trades, savings plan, cash types, a depot migration that cancels out, a cancelled distribution with its original, a fund swap and a certificate redemption (sales), a cancellation without original, an unpaired transfer, an ELTIF and a pending order.",
  "recording": {
   "transactions": [
    {
     "items": [
+     {
+      "id": "sc-0024",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": true,
+      "last_event_datetime": "2026-05-20T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerCashTransactionSummary",
+      "type": "CASH_TRANSACTION",
+      "cash_transaction_type": "DISTRIBUTION",
+      "related_isin": "IE00TEST0001",
+      "amount": "-50",
+      "description": "TEST Fonds World"
+     },
+     {
+      "id": "sc-0023",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-05-11T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerCashTransactionSummary",
+      "type": "CASH_TRANSACTION",
+      "cash_transaction_type": "DISTRIBUTION",
+      "related_isin": "DE000TEST0006",
+      "amount": "120.5",
+      "description": "TEST Zertifikat"
+     },
+     {
+      "id": "sc-0022",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-05-11T08:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerNonTradeSecurityTransactionSummary",
+      "type": "NON_TRADE_SECURITY_TRANSACTION",
+      "non_trade_security_transaction_type": "SWAP_OUT",
+      "isin": "DE000TEST0006",
+      "quantity": "12",
+      "amount": "0",
+      "description": "TEST Zertifikat"
+     },
+     {
+      "id": "sc-0021",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-05-04T00:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerCashTransactionSummary",
+      "type": "CASH_TRANSACTION",
+      "cash_transaction_type": "SWAP_OUT",
+      "related_isin": "IE00TEST0005",
+      "amount": "216.34",
+      "description": "TEST Fonds Alt"
+     },
+     {
+      "id": "sc-0020",
+      "currency": "EUR",
+      "status": "SETTLED",
+      "is_cancellation": false,
+      "last_event_datetime": "2026-05-04T06:00:00Z",
+      "documents": [],
+      "summary_type": "BrokerNonTradeSecurityTransactionSummary",
+      "type": "NON_TRADE_SECURITY_TRANSACTION",
+      "non_trade_security_transaction_type": "SWAP_OUT",
+      "isin": "IE00TEST0005",
+      "quantity": "60",
+      "amount": "-216.34",
+      "description": "TEST Fonds Alt"
+     },
      {
       "id": "sc-0019",
       "currency": "EUR",
@@ -420,28 +492,6 @@
    "label": "Sparplan"
   },
   {
-   "id": "sc-0004",
-   "kind": "DIVIDEND",
-   "datetime": "2026-02-02T00:00:00+00:00",
-   "currency": "EUR",
-   "net": "3.68",
-   "isin": "IE00TEST0001",
-   "name": "TEST Fonds World",
-   "gross": "5",
-   "tax": "1.32",
-   "label": "Dividende"
-  },
-  {
-   "id": "sc-0005",
-   "kind": "UNKNOWN",
-   "datetime": "2026-02-03T00:00:00+00:00",
-   "currency": "EUR",
-   "net": "0",
-   "isin": "IE00TEST0001",
-   "label": "DISTRIBUTION_CANCELLATION",
-   "raw_type": "DISTRIBUTION_CANCELLATION"
-  },
-  {
    "id": "sc-0006",
    "kind": "INTEREST",
    "datetime": "2026-03-01T00:00:00+00:00",
@@ -525,6 +575,40 @@
    "net": "7.5",
    "label": "Steuerrückerstattung",
    "text": "Test"
+  },
+  {
+   "id": "sc-0020",
+   "kind": "SELL",
+   "datetime": "2026-05-04T06:00:00+00:00",
+   "currency": "EUR",
+   "net": "216.34",
+   "isin": "IE00TEST0005",
+   "name": "TEST Fonds Alt",
+   "shares": "60",
+   "gross": "216.34",
+   "label": "Fondstausch"
+  },
+  {
+   "id": "sc-0022",
+   "kind": "SELL",
+   "datetime": "2026-05-11T08:00:00+00:00",
+   "currency": "EUR",
+   "net": "120.5",
+   "isin": "DE000TEST0006",
+   "name": "TEST Zertifikat",
+   "shares": "12",
+   "gross": "120.5",
+   "label": "Rückzahlung"
+  },
+  {
+   "id": "sc-0024",
+   "kind": "UNKNOWN",
+   "datetime": "2026-05-20T00:00:00+00:00",
+   "currency": "EUR",
+   "net": "0",
+   "isin": "IE00TEST0001",
+   "label": "DISTRIBUTION_CANCELLATION",
+   "raw_type": "DISTRIBUTION_CANCELLATION"
   }
  ]
 }

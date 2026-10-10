@@ -50,11 +50,13 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from ..model import BrokerAccount, CashBalance, Kind, Position, Transaction
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
 
 log = logging.getLogger(__name__)
+BERLIN = ZoneInfo("Europe/Berlin")
 
 # Where install-sc puts the binary; BROKERSYNC_SC overrides, else sc on the PATH.
 DEFAULT_SC = "/opt/wealthfolio-broker-sync/bin/sc"
@@ -261,11 +263,79 @@ def _netted(items: list[dict]) -> set[str]:
     return done
 
 
-def to_transactions(items: list[dict], details: dict[str, dict]) -> list[Transaction]:
-    """Transaction summaries (``sc broker transactions``) plus details → transactions, oldest first."""
+def _day(item: dict):
+    return _when(item["last_event_datetime"]).astimezone(BERLIN).date()
+
+
+def _sales(items: list[dict]) -> tuple[list[Transaction], set[str]]:
+    """Securities that left the depot for cash, booked as a sale like the addon does.
+
+    - Fund swap / forced exchange: security ``SWAP_OUT`` plus cash ``SWAP_OUT``
+      of the same ISIN on the same day; the cash leg is the proceeds.
+    - Certificate redemption / knock-out: a security leg out with value 0 plus a
+      distribution of the same ISIN on the same day, which is the payout.
+    Returns the sales and the ids of the rows they consume.
+    """
+    out: list[Transaction] = []
+    used: set[str] = set()
+    legs = [i for i in items if i.get("type") == "NON_TRADE_SECURITY_TRANSACTION" and not i.get("is_cancellation")
+            and _direction(i) < 0 and i.get("isin")]
+    def cash_leg(leg: dict, typ: str) -> dict | None:
+        return next((c for c in items if c["id"] not in used and c.get("type") == "CASH_TRANSACTION"
+                     and not c.get("is_cancellation") and c.get("cash_transaction_type") == typ
+                     and c.get("related_isin") == leg["isin"] and _day(c) == _day(leg)
+                     and (_dec(c.get("amount")) or Decimal(0)) > 0), None)
+
+    for leg in legs:
+        shares = abs(_dec(leg.get("quantity")) or Decimal(0))
+        if not shares or leg["id"] in used:
+            continue
+        cash, swap = None, False
+        if (leg.get("non_trade_security_transaction_type") or "") == "SWAP_OUT":
+            cash, swap = cash_leg(leg, "SWAP_OUT"), True
+        if cash is None and (_dec(leg.get("amount")) or Decimal(0)) == 0:
+            cash, swap = cash_leg(leg, "DISTRIBUTION"), False
+        if cash is None:
+            continue
+        proceeds = _dec(cash["amount"])
+        out.append(Transaction(
+            id=leg["id"], kind=Kind.SELL, datetime=_when(leg["last_event_datetime"]),
+            currency=cash.get("currency") or "EUR", net=proceeds, isin=leg["isin"],
+            name=leg.get("description") or cash.get("description") or "", shares=shares, gross=proceeds,
+            label="Fondstausch" if swap else "Rückzahlung"))
+        used.update((leg["id"], cash["id"]))
+    return out, used
+
+
+def _cancelled(items: list[dict], known: set[str]) -> set[str]:
+    """A cancelled distribution and its original cancel out, like in the addon - unless the
+    original was synced already: then the cancellation stays a report (nothing is deleted)."""
+    used: set[str] = set()
+    originals = sorted((i for i in items if i.get("cash_transaction_type") == "DISTRIBUTION"
+                        and not i.get("is_cancellation") and (_dec(i.get("amount")) or Decimal(0)) > 0),
+                       key=lambda i: _when(i["last_event_datetime"]), reverse=True)
+    for c in items:
+        if not (c.get("is_cancellation") and c.get("cash_transaction_type") == "DISTRIBUTION"):
+            continue
+        amount = abs(_dec(c.get("amount")) or Decimal(0))
+        original = next((o for o in originals if o["id"] not in used and o.get("related_isin") == c.get("related_isin")
+                         and _dec(o.get("amount")) == amount
+                         and _when(o["last_event_datetime"]) <= _when(c["last_event_datetime"])), None)
+        if original and original["id"] not in known:
+            used.update((c["id"], original["id"]))
+    return used
+
+
+def to_transactions(items: list[dict], details: dict[str, dict], known: set[str] | None = None) -> list[Transaction]:
+    """Transaction summaries (``sc broker transactions``) plus details → transactions, oldest first.
+
+    ``known``: ids the sync has already - a cancellation whose original is among
+    them can't be undone here and is reported instead.
+    """
     booked = [i for i in items if i.get("status") in ("FILLED", "SETTLED") and _when(i.get("last_event_datetime"))]
-    netted = _netted(booked)
-    out = []
+    out, consumed = _sales(booked)
+    consumed |= _cancelled(booked, known or set())
+    netted = _netted([i for i in booked if i["id"] not in consumed]) | consumed
     for item in booked:
         if item["id"] in netted:
             continue
@@ -577,7 +647,7 @@ class ScalableAdapter(BrokerAdapter):
                 log.warning("scalable: details for %d of %d transactions not fetched (rate limit), the next run "
                             "continues", len(wanted) - n, len(wanted))
                 break
-        txs = to_transactions(items, details)
+        txs = to_transactions(items, details, self.known_ids)
         missing = {i["id"] for i in wanted if i["id"] not in details}
         txs = [replace(t, label=f"{t.label} (Details folgen beim nächsten Abruf)") if t.id in missing
                and t.kind in (Kind.BUY, Kind.SELL) else t for t in txs]
