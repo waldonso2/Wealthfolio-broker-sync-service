@@ -69,6 +69,19 @@ CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+-- Positions the user books as bought on a day (held before the start date):
+-- the sync books each as a buy with a deposit of its cost (page Prüfung).
+CREATE TABLE IF NOT EXISTS openings (
+  broker TEXT NOT NULL,
+  isin TEXT NOT NULL,
+  day TEXT NOT NULL,
+  name TEXT NOT NULL,
+  shares TEXT NOT NULL,
+  price TEXT NOT NULL,
+  fee TEXT NOT NULL,
+  currency TEXT NOT NULL,
+  PRIMARY KEY (broker, isin, day)
+);
 -- What the last run found comparing the broker with Wealthfolio (brokersync.coverage).
 CREATE TABLE IF NOT EXISTS gaps (
   broker TEXT NOT NULL,
@@ -147,6 +160,23 @@ class State:
                 self.db.execute("UPDATE gaps SET kind = 'ignored' WHERE broker = ? AND ref = ? AND kind != 'orphan'",
                                 (broker, t))
 
+    # ── opening positions ───────────────────────────────────────────────────
+    def add_opening(self, broker: str, isin: str, day: str, name: str, shares: str, price: str, fee: str,
+                    currency: str = "EUR") -> None:
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO openings VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                            (broker, isin, day, name, shares, price, fee, currency))
+
+    def delete_opening(self, broker: str, isin: str, day: str) -> None:
+        with self.db:
+            self.db.execute("DELETE FROM openings WHERE broker = ? AND isin = ? AND day = ?", (broker, isin, day))
+
+    def openings(self, broker: str) -> list[dict]:
+        rows = self.db.execute("SELECT isin, day, name, shares, price, fee, currency FROM openings WHERE broker = ? "
+                               "ORDER BY day, isin", (broker,))
+        return [{"isin": i, "day": d, "name": n, "shares": s, "price": p, "fee": f, "currency": c}
+                for i, d, n, s, p, f, c in rows]
+
     def set_gaps(self, broker: str, gaps: list[dict]) -> None:
         with self.db:
             self.db.execute("DELETE FROM gaps WHERE broker = ?", (broker,))
@@ -198,10 +228,20 @@ class State:
         created = sum(len(json.loads(ids)) for (ids,) in self.db.execute(
             "SELECT activity_ids FROM synced WHERE broker = ? AND status = 'imported'", (broker,)))
         with self.db:
-            for table in ("synced", "runs", "reconcile", "balances", "assets", "unknown_events", "gaps"):
+            for table in ("synced", "runs", "reconcile", "balances", "assets", "unknown_events", "gaps", "openings"):
                 self.db.execute(f"DELETE FROM {table} WHERE broker = ?", (broker,))
             self.db.execute("DELETE FROM meta WHERE key LIKE ?", (f"%:{broker}",))
         return created
+
+    def reset_broker(self, broker: str) -> None:
+        """Forget what was synced for a broker (brokersync.reset): the next run starts from the start date.
+
+        Keeps what the user entered (opening positions) and the learned assets.
+        """
+        with self.db:
+            for table in ("synced", "runs", "reconcile", "balances", "unknown_events", "gaps"):
+                self.db.execute(f"DELETE FROM {table} WHERE broker = ?", (broker,))
+            self.db.execute("DELETE FROM meta WHERE key LIKE ?", (f"%:{broker}",))
 
     # ── unknown events ──────────────────────────────────────────────────────
     def add_unknown(self, broker: str, tx_id: str, raw_type: str, occurred_at: str, payload: dict) -> bool:

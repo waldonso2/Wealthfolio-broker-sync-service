@@ -17,6 +17,7 @@ Only one run at a time: the web UI and the systemd timer share a lock file.
 from __future__ import annotations
 
 import fcntl
+import json
 import logging
 import os
 import time
@@ -24,7 +25,9 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from . import assets as assets_mod
 from . import config as config_mod
@@ -41,12 +44,17 @@ from .vault import Vault
 from .wealthfolio import Duplicate, WealthfolioClient, WealthfolioError
 
 log = logging.getLogger(__name__)
+BERLIN = ZoneInfo("Europe/Berlin")
 
 # Re-fetch this much before the last successful run: brokers book late.
 OVERLAP = timedelta(days=7)
 # A bank's securities settlement lies at most this many days from the trade.
 SETTLEMENT_DAYS = 6
 UNMATCHED_SECURITIES = "WERTPAPIER_OHNE_GEGENSTUECK"
+
+
+def opening_id(isin: str, day: str) -> str:
+    return f"start-{isin}-{day}"
 
 
 def refetch_flag(key: str) -> str:
@@ -202,7 +210,7 @@ class Syncer:
         try:
             adapter.login()
             adapter.known_ids = set(synced)
-            transactions = adapter.get_transactions(since)
+            transactions = adapter.get_transactions(since) + self._openings(key)
             cash = self._broker_cash(key, adapter)
             positions = self._broker_positions(key, adapter) if adapter_cls.reports_positions else None
         finally:
@@ -335,10 +343,28 @@ class Syncer:
 
     def _broker_positions(self, key: str, adapter: BrokerAdapter) -> list[Position] | None:
         try:
-            return adapter.get_positions()
+            positions = adapter.get_positions()
         except (AdapterError, AuthRequired, NotImplementedError) as e:
             log.info("%s: no positions: %s", key, e)
             return None
+        # For the page Prüfung: what a position missing in Wealthfolio is pre-filled with.
+        self.state.set_meta(f"positions:{key}", json.dumps(
+            [{"isin": p.isin, "name": p.name, "shares": str(p.shares), "currency": p.currency,
+              "cost": str(p.cost) if p.cost is not None else ""} for p in positions]))
+        return positions
+
+    def _openings(self, key: str) -> list[Transaction]:
+        """Opening positions the user entered (page Prüfung): a buy on that day, its cost deposited first."""
+        out = []
+        for o in self.state.openings(key):
+            shares, price, fee = Decimal(o["shares"]), Decimal(o["price"]), Decimal(o["fee"])
+            day = date.fromisoformat(o["day"])
+            out.append(Transaction(
+                id=opening_id(o["isin"], o["day"]), kind=Kind.BUY,
+                datetime=datetime(day.year, day.month, day.day, 12, tzinfo=BERLIN).astimezone(UTC),
+                currency=o["currency"], net=shares * price + fee, isin=o["isin"], name=o["name"], shares=shares,
+                gross=shares * price, fee=fee, label="Anfangsbestand", external_cash=True))
+        return out
 
     def _reconcile(self, cfg: config_mod.Config, key: str, wf: WealthfolioClient, accounts: Accounts,
                    cash: list[CashBalance], positions: list[Position] | None,

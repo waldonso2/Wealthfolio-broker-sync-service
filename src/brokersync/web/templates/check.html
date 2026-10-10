@@ -37,6 +37,35 @@
   {% else %}<p class="muted">Keine.</p>{% endif %}
   {% endif %}
 
+  {% if b.missing or b.openings %}
+  <h3>Bestand ohne Kauf in Wealthfolio: {{ b.missing | length }}</h3>
+  <p class="muted">{{ b.label }} meldet mehr Stück, als Wealthfolio aus den Käufen kennt – meist vor dem Startdatum gekauft oder ins Depot übertragen. Trag Kaufdatum, Kurs pro Stück und Gebühr ein: Der nächste Abruf bucht einen Kauf an diesem Tag und davor eine Einzahlung des Kaufbetrags aufs Verrechnungskonto.</p>
+  {% for m in b.missing %}
+  <form method="post" action="/check/{{ b.key }}/opening" class="inline-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ m.isin }}"><input type="hidden" name="name" value="{{ m.name }}">
+    <p><strong>{{ m.name }}</strong> <span class="muted">{{ m.isin }}</span></p>
+    <div class="row">
+      <label>Stück <input type="text" name="shares" value="{{ m.shares }}" inputmode="decimal" required></label>
+      <label>Kaufdatum <input type="date" name="day" required></label>
+      <label>Kurs pro Stück ({{ m.currency }}) <input type="text" name="price" value="{{ m.price }}" inputmode="decimal" required></label>
+      <label>Gebühren <input type="text" name="fee" value="0" inputmode="decimal"></label>
+    </div>
+    {% if m.price %}<p class="muted">Vorbelegt mit dem Einstandskurs, den {{ b.label }} meldet.</p>{% endif %}
+    <div class="actions"><button>Als Kauf anlegen</button></div>
+  </form>
+  {% endfor %}
+  {% if b.openings %}
+  <div class="table"><table>
+    <tr><th>Wertpapier</th><th>Kaufdatum</th><th>Stück</th><th>Kurs</th><th>Gebühr</th><th>Status</th></tr>
+    {% for o in b.openings %}
+    <tr><td>{{ o.name }} <span class="muted">{{ o.isin }}</span></td><td>{{ o.day }}</td><td>{{ o.shares }}</td><td>{{ o.price }} {{ o.currency }}</td><td>{{ o.fee }}</td>
+      <td>{% if o.booked %}gebucht{% else %}wird beim nächsten Abruf gebucht
+        <form method="post" action="/check/{{ b.key }}/opening" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ o.isin }}"><input type="hidden" name="day" value="{{ o.day }}"><button class="secondary" name="action" value="delete">Entfernen</button></form>{% endif %}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% endif %}
+  {% endif %}
+
   {% if ignored %}
   <h3>Ignoriert: {{ ignored | length }}</h3>
   <form method="post" action="/check/{{ b.key }}">

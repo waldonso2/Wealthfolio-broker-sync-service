@@ -279,6 +279,8 @@ def to_activities(
         return out
 
     if tx.kind == Kind.BUY:
+        if tx.external_cash:
+            out.append(cash(accounts.cash, "DEPOSIT", -3, tx.net, f"Deposit for {tx.isin} ({tx.name}) buy{ref}"))
         out.append(cash(accounts.cash, "TRANSFER_OUT", -2, tx.net,
                         f"Funds for {tx.isin} ({tx.name}) buy -> Portfolio{ref}", source_group=gid))
         out.append(cash(accounts.portfolio, "TRANSFER_IN", -1, tx.net, f"Funds from Cash for {tx.isin} buy{ref}",
@@ -292,6 +294,9 @@ def to_activities(
     if refund:
         out.append(refund_credit("sale"))
     sweep_to_cash(f"{tx.isin} ({tx.name}) sale")
+    if tx.external_cash:
+        out.append(cash(accounts.cash, "WITHDRAWAL", 3, tx.net,
+                        f"Proceeds of {tx.isin} ({tx.name}) sale paid out{ref}"))
     return out
 
 

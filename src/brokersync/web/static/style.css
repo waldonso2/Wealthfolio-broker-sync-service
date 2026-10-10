@@ -44,3 +44,5 @@ th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line
 .broker:last-child { border-bottom: none; }
 pre { white-space: pre-wrap; font-size: 13px; margin: 4px 0 0; }
 code { font-size: 14px; }
+.inline-form { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 12px; }
+.inline-form .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 12px; }

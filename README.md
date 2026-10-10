@@ -181,6 +181,10 @@ Der Dienst liest Girokonto **und Depot** über die **offizielle REST-API der com
 
 **Einrichten** unter *Broker → comdirect*: Zugangsnummer, PIN, Client-ID, Client-Secret; die IBAN nur, wenn du mehrere Girokonten hast. Als Konten ein comdirect-Verrechnungskonto und ein Depotkonto in Wealthfolio.
 
+**Nur das Depot wird gebucht, nicht das Girokonto.** Das comdirect-Verrechnungskonto in Wealthfolio enthält nur die Dividenden: Vor jedem Kauf bucht der Dienst eine Einzahlung in Höhe des Kaufbetrags, nach jedem Verkauf eine Auszahlung des Erlöses. Überweisungen, Kartenzahlungen, Gebühren und Zinsen des Girokontos übernimmt er nicht, und den Kontostand gleicht er nicht ab.
+
+**Wertpapiere, die du schon vor dem Startdatum hattest,** zeigt die Seite *Prüfung* unter „Bestand ohne Kauf in Wealthfolio“. Kaufdatum, Kurs pro Stück (vorbelegt mit dem Einstandskurs von comdirect) und Gebühren eintragen – der nächste Abruf bucht den Kauf samt Einzahlung.
+
 **Anmelden:** photoTAN-Push in der App bestätigen und *Ich habe in der App bestätigt* klicken (bei photoTAN-Grafik oder mobileTAN die TAN eintippen). comdirect hält eine Sitzung nur kurz (Zugriffsschlüssel 10 Minuten, verlängerbar, solange der Dienst sie nutzt). Der tägliche Abruf braucht deshalb meist eine **neue Bestätigung**: Er schickt dir eine ntfy-Nachricht und wartet drei Minuten auf die Freigabe in der App. Mit TAN zum Eintippen geht das nur in der Weboberfläche.
 
 > **Sperrschutz:** comdirect sperrt das Online-Banking nach **fünf TAN-Anforderungen ohne richtige TAN** und nach **drei falschen TANs**. Der Dienst fordert nach drei unbeantworteten Anfragen oder zwei falschen TANs keine weitere an. Dann einmal auf comdirect.de mit TAN anmelden und die Zugangsdaten im Dienst neu speichern.
@@ -189,13 +193,11 @@ Der Dienst liest Girokonto **und Depot** über die **offizielle REST-API der com
 
 | Bei comdirect | In Wealthfolio |
 |---|---|
-| Kauf / Verkauf (Depotumsatz) | Kauf/Verkauf auf dem Depotkonto mit Stückzahl und Kurswert; als Betrag die zugehörige Wertpapier-Buchung auf dem Girokonto, die Differenz als Gebühr. Die API trennt bei Verkäufen Gebühr und Steuer nicht – beides steht dann in der Gebühr. Geld per Übertrag vom bzw. zum Verrechnungskonto |
+| Kauf / Verkauf (Depotumsatz) | Kauf/Verkauf auf dem Depotkonto mit Stückzahl und Kurswert; als Betrag die zugehörige Wertpapier-Buchung auf dem Girokonto, die Differenz als Gebühr. Die API trennt bei Verkäufen Gebühr und Steuer nicht – beides steht dann in der Gebühr. Davor eine Einzahlung (Kauf) bzw. danach eine Auszahlung (Verkauf) auf dem Verrechnungskonto, dazwischen der Übertrag |
 | Dividende / Ertrag (Zinsen / Dividenden, Wertpapier per ISIN oder WKN im Buchungstext erkennbar) | Dividende mit Nettobetrag auf dem Depotkonto, Geld per Übertrag aufs Verrechnungskonto |
-| Habenzinsen | Zinsen (INTEREST) |
-| Bankgebühren | Gebühr (FEE) |
-| Überweisung, Lastschrift, Karte, … | Einzahlung / Auszahlung bzw. – mit Eintrag unter *Überträge* – Übertrag aufs eigene Konto |
-| Wertpapier-Buchung ohne passenden Depotumsatz | nur gegen eine Buchung aus dem PDF-Import geprüft, wie bei der DKB |
-| Depotübertrag, Kauf/Verkauf ohne Kontobuchung nach 10 Tagen, Storno | **nicht gebucht**, als unbekannt gemeldet |
+| Dividende, deren Wertpapier nicht erkennbar ist | **nicht gebucht**, als unbekannt gemeldet |
+| alle anderen Girobuchungen (Überweisung, Karte, Gebühren, Zinsen, …) | **nicht gebucht** |
+| Depotübertrag, Kauf/Verkauf ohne Kontobuchung nach 10 Tagen | **nicht gebucht**, als unbekannt gemeldet – den Bestand legst du unter *Prüfung* an |
 
 Vorgemerkte Umsätze und Orders übernimmt der Dienst erst, wenn sie gebucht sind. Der erste Abruf ohne Startdatum reicht ein Jahr zurück.
 
@@ -211,6 +213,7 @@ Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in 
 | Push-Nachricht „Abruf fehlgeschlagen“ | Übersicht öffnen, dort steht der Grund. Meist löst es sich beim nächsten Lauf von selbst |
 | „unbekannte Buchungen“ | Der Dienst kennt eine Buchungsart noch nicht und hat sie **nicht** übernommen. Unter *Unbekannte Buchungen* steht, was es war – bei Bedarf von Hand in Wealthfolio eintragen und gern ein Issue mit dem Typ anlegen |
 | Abgleich zeigt Bargeld im Depotkonto oder zu viel/zu wenig auf dem Verrechnungskonto | Seite *Prüfung* öffnen: Sie listet die Zeitpunkte, an denen im Depotkonto Bargeld stehen bleibt (z. B. ein Kauf ohne Übertrag oder ein Übertrag, dessen Verkauf gelöscht wurde), und Überträge ohne Gegenstück – mit Datum, Betrag, Kommentar und ob die Buchung vom Dienst oder aus einem Import stammt. Korrigiert wird in Wealthfolio; die Seite ändert nichts |
+| Ein Broker soll noch einmal von vorn gebucht werden (z. B. nach geänderten Regeln) | In den Broker-Einstellungen *Neu aufsetzen*: löscht alle Buchungen des Dienstes für diesen Broker, der nächste Abruf holt alles ab dem Startdatum neu. Importe und Handeinträge bleiben |
 | Push-Nachricht „Abweichung zu Wealthfolio“ | Eine schon übernommene Buchung fehlt in Wealthfolio (gelöscht?), oder eine Buchung des Dienstes gibt es beim Broker nicht mehr (z. B. storniert). Seite *Prüfung* öffnen: Fehlende mit *Wieder anlegen* zurückholen oder *Ignorieren*, wenn sie zu Recht fehlen; Stornierte in Wealthfolio löschen |
 | Wertpapier soll in Wealthfolio unter seinem Ticker statt der ISIN laufen | Unter *Wertpapiere* die Zuordnung ISIN → Symbol eintragen (wie im Addon) |
 | Passwort der Oberfläche vergessen | In Proxmox die Konsole des Containers öffnen und `brokersync-reset-password` eingeben. Beim nächsten Öffnen legst du ein neues fest |
