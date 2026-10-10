@@ -44,6 +44,10 @@ SETTLEMENT_DAYS = 6
 UNMATCHED_SECURITIES = "WERTPAPIER_OHNE_GEGENSTUECK"
 
 
+def refetch_flag(key: str) -> str:
+    return f"refetch:{key}"
+
+
 class AlreadyRunning(Exception):
     pass
 
@@ -182,7 +186,9 @@ class Syncer:
         # Once, for brokers with positions: the whole history, to learn the
         # Wealthfolio asset of every ISIN (brokersync.assets) for the check.
         backfill = adapter_cls.reports_positions and not self.state.flag(f"assets-learned:{key}")
-        since = self._start(bcfg) if backfill else self._since(key, bcfg)
+        # "Ab Startdatum neu abrufen" in the broker settings: once from the start date again.
+        refetch = self.state.flag(refetch_flag(key))
+        since = self._start(bcfg) if backfill or refetch else self._since(key, bcfg)
         try:
             adapter.login()
             transactions = adapter.get_transactions(since)
@@ -195,6 +201,8 @@ class Syncer:
 
         known = self.state.known(key)
         todo = [t for t in transactions if t.id not in known]
+        log.info("%s: %d transactions from the broker since %s, %d not synced yet", key, len(transactions),
+                 since.date().isoformat() if since else "the beginning", len(todo))
         self._report_unknown(cfg, key, [t for t in todo if t.kind == Kind.UNKNOWN], result)
         todo = [t for t in todo if t.kind != Kind.UNKNOWN]
 
@@ -232,6 +240,8 @@ class Syncer:
                     time.sleep(self.recalc_wait)  # Wealthfolio recalculates holdings in the background
                 self._reconcile(cfg, key, wf, accounts, cash, positions, mappings)
         self._report_unmatched(cfg, key, unmatched, result)
+        if refetch and not result.failed:
+            self.state.delete_meta(refetch_flag(key))
 
     def _repair_cash_assets(self, key: str, wf: WealthfolioClient, accounts: Accounts) -> int:
         """Once per broker: the cash activities older versions created with a $CASH asset (brokersync.repair).

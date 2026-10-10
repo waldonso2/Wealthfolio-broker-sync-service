@@ -53,7 +53,7 @@ Die Adresse, unter der du Wealthfolio öffnest, und das Wealthfolio-Passwort. Na
 
 ### 3. Broker einrichten
 
-Zugangsdaten eintragen und die beiden Wealthfolio-Konten wählen. Mit *Buchungen übernehmen ab* bestimmst du, wie weit der erste Abruf zurückgeht. *Automatisch abrufen* anhaken.
+Zugangsdaten eintragen und die beiden Wealthfolio-Konten wählen. Mit *Buchungen übernehmen ab* bestimmst du, wie weit der erste Abruf zurückgeht; danach holt jeder Abruf ab dem letzten (minus 7 Tage). Soll später doch ein früherer Zeitraum dazukommen, Startdatum ändern und *Ab Startdatum neu abrufen* klicken – schon übernommene Buchungen werden nicht doppelt angelegt. *Automatisch abrufen* anhaken.
 
 <img src="docs/screenshots/04-broker.png" width="560" alt="Broker einrichten">
 
@@ -168,7 +168,7 @@ Der Dienst liest dein Scalable-Depot über **Scalables offizielles Kommandozeile
 | Depotumzug (Wertpapiere aus- und wieder eingebucht, Bargeld mit `SWITCH-`) | **nicht gebucht** – heben sich auf, wie beim CSV-Import |
 | Storno, einzelner Wertpapierübertrag, Fondstausch, ELTIF, negative Zinsen, Gebührenerstattung | **nicht gebucht**, als unbekannt gemeldet – bitte von Hand prüfen bzw. eintragen |
 
-Offene Orders übernimmt der Dienst erst, wenn sie ausgeführt sind. Was du schon per CSV importiert hast, erkennt er wie bei Trade Republic.
+Offene Orders übernimmt der Dienst erst, wenn sie ausgeführt sind. Kommt nichts an, steht im Log (`journalctl -u wealthfolio-broker-sync -n 50`), wie viele Transaktionen welcher Art Scalable geliefert hat – ohne Beträge oder Namen. Was du schon per CSV importiert hast, erkennt er wie bei Trade Republic.
 
 ## Abgleich mit Wealthfolio
 

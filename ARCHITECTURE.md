@@ -115,6 +115,7 @@ sequenceDiagram
 | Danach | letzter erfolgreicher Lauf minus 7 Tage (`OVERLAP`), weil Broker spät buchen |
 | Offene Wertpapier-Gegenbuchungen | Das Fenster bleibt bis einen Tag vor der ältesten offenen Buchung offen (`State.oldest_open`) |
 | Broker mit Positionen, einmalig | die ganze Historie ab `start_date`, um für den Abgleich zu jeder ISIN das Wealthfolio-Asset zu lernen (`assets-learned:<broker>`) |
+| *Ab Startdatum neu abrufen* (Broker-Einstellungen) | einmal wieder ab `start_date` (`refetch:<broker>`); das Flag fällt nach einem Lauf ohne Fehler weg |
 
 Ein Lauf mit Fehlern zählt nicht als Erfolg. Der nächste Lauf fängt deshalb wieder vor ihm an.
 
@@ -207,7 +208,7 @@ Alles liegt in `BROKERSYNC_DATA` (Standard `/opt/wealthfolio-broker-sync/data`, 
 | `unknown_events` | unbekannte Buchungen und offene Wertpapier-Gegenbuchungen, mit einer Nutzlast ohne persönliche Daten |
 | `balances`, `reconcile` | letzter Kontostand des Brokers und Abweichungen, samt dem, was schon gemeldet wurde |
 | `assets` | ISIN → Wealthfolio-Asset je Broker |
-| `meta` | Flags, z. B. `assets-learned:<broker>`, `cash-assets-repaired:<broker>`, und der Hinweis `retired-notice:<broker>` zu einem entfernten Broker |
+| `meta` | Flags, z. B. `assets-learned:<broker>`, `cash-assets-repaired:<broker>`, `refetch:<broker>`, und der Hinweis `retired-notice:<broker>` zu einem entfernten Broker |
 
 Geheimnisse stehen nur im Vault. Sie landen weder in `config.json` noch in Logs, Fehlermeldungen oder im Repository.
 
@@ -224,6 +225,7 @@ FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login
 | `/setup/wealthfolio` | Wealthfolio-URL und -Passwort, Verbindungstest |
 | `/brokers`, `/brokers/{key}` | Broker-Liste, Zugangsdaten, Konten, Startdatum, automatischer Abruf |
 | `/brokers/{key}/login` | Login mit TAN, Code oder App-Bestätigung |
+| `/brokers/{key}/refetch` | nächster Abruf einmal wieder ab dem Startdatum |
 | `/transfers` | Muster für Überträge auf eigene Konten |
 | `/notifications` | ntfy-Server, -Topic, -Token, öffentliche URL |
 | `/securities` | Zuordnung ISIN → Tickersymbol und Börse |
