@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2
+
+- **Fix: Scalable brought no transactions and no cash balance.** The CLI's broker commands wrap their answer in `result` (next to the account and portfolio they used); the adapter read one level too high and found nothing. It now reads the answer like `sc` itself does. After the update, click *Ab Startdatum neu abrufen* in the Scalable settings, so the next run fetches the history the earlier runs missed.
+
 ## 0.4.1
 
 - **"Ab Startdatum neu abrufen"** in the broker settings: the next run fetches everything from the start date again, once. Changing the start date alone only affects a broker's first run; afterwards each run starts at the last successful one (minus 7 days). Transactions already synced are not created again.
