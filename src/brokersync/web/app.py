@@ -414,8 +414,33 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
                                        "depot_id": b.portfolio_account_id})
         except WealthfolioError as e:
             error = str(e)
+        brokers = [{"key": k, "label": adapters[k].label, "full": adapters[k].full_history, "gaps": state.gaps(k),
+                    "checked": bool(state.last_run(k))}
+                   for k, b in c.brokers.items() if k in adapters and b.cash_account_id and b.portfolio_account_id]
         return render(request, "check.html", report=report, wf_error=error, source=audit.source,
-                      effect=audit.cash_effect)
+                      effect=audit.cash_effect, brokers=brokers)
+
+    @app.post("/check/{key}")
+    async def check_decide(request: Request, key: str):
+        """The user's decision on transactions missing in Wealthfolio: book them again, or ignore them."""
+        if key not in adapters:
+            return redirect(request, "/check", "Unbekannter Broker.", "error")
+        form = await request.form()
+        action = str(form.get("action", ""))
+        open_refs = {g["ref"] for g in state.gaps(key) if g["kind"] != "orphan"}
+        tx_ids = [str(t) for t in form.getlist("tx") if str(t) in open_refs]
+        if not tx_ids:
+            return redirect(request, "/check", "Keine Buchung ausgewählt.", "warn")
+        if action == "ignore":
+            state.ignore(key, tx_ids)
+            return redirect(request, "/check", f"{len(tx_ids)} Buchung(en) werden nicht mehr gebucht.")
+        if action != "rebook":
+            return redirect(request, "/check", "Unbekannte Aktion.", "error")
+        state.forget(key, tx_ids)
+        if not adapters[key].full_history:
+            state.set_flag(refetch_flag(key))  # they may lie before the next run's window
+        return redirect(request, "/check", f"{len(tx_ids)} Buchung(en) legt der nächste Abruf wieder an – außer "
+                                           "sie sind inzwischen in Wealthfolio (z. B. aus einem Import).")
 
     # ── unknown events, securities ──────────────────────────────────────────
     # ── duplicates of CSV/PDF imports ───────────────────────────────────────

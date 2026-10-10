@@ -64,6 +64,10 @@ class BrokerAdapter(ABC):
     # True if get_positions() is the complete list of holdings: then the sync
     # compares it with Wealthfolio (a missing position counts as 0 shares).
     reports_positions: ClassVar[bool] = False
+    # True if reading the whole history is cheap: then every run fetches all of
+    # it (from the start date) and the comparison with Wealthfolio also finds
+    # synced activities the broker no longer lists (brokersync.coverage).
+    full_history: ClassVar[bool] = False
 
     def __init__(self, credentials: dict[str, str], session: dict | None = None):
         self.credentials = credentials

@@ -53,7 +53,7 @@ Die Adresse, unter der du Wealthfolio öffnest, und das Wealthfolio-Passwort. Na
 
 ### 3. Broker einrichten
 
-Zugangsdaten eintragen und die beiden Wealthfolio-Konten wählen. Mit *Buchungen übernehmen ab* bestimmst du, wie weit der erste Abruf zurückgeht; danach holt jeder Abruf ab dem letzten (minus 7 Tage). Soll später doch ein früherer Zeitraum dazukommen, Startdatum ändern und *Ab Startdatum neu abrufen* klicken – schon übernommene Buchungen werden nicht doppelt angelegt. *Automatisch abrufen* anhaken.
+Zugangsdaten eintragen und die beiden Wealthfolio-Konten wählen. Mit *Buchungen übernehmen ab* bestimmst du, wie weit der erste Abruf zurückgeht; danach holt jeder Abruf ab dem letzten (minus 7 Tage). Soll später doch ein früherer Zeitraum dazukommen, Startdatum ändern und *Ab Startdatum neu abrufen* klicken – schon übernommene Buchungen werden nicht doppelt angelegt. Scalable liest bei jedem Abruf alles ab dem Startdatum, dort ist der Knopf nicht nötig. *Automatisch abrufen* anhaken.
 
 <img src="docs/screenshots/04-broker.png" width="560" alt="Broker einrichten">
 
@@ -185,6 +185,7 @@ Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in 
 | Push-Nachricht „Abruf fehlgeschlagen“ | Übersicht öffnen, dort steht der Grund. Meist löst es sich beim nächsten Lauf von selbst |
 | „unbekannte Buchungen“ | Der Dienst kennt eine Buchungsart noch nicht und hat sie **nicht** übernommen. Unter *Unbekannte Buchungen* steht, was es war – bei Bedarf von Hand in Wealthfolio eintragen und gern ein Issue mit dem Typ anlegen |
 | Abgleich zeigt Bargeld im Depotkonto oder zu viel/zu wenig auf dem Verrechnungskonto | Seite *Prüfung* öffnen: Sie listet die Zeitpunkte, an denen im Depotkonto Bargeld stehen bleibt (z. B. ein Kauf ohne Übertrag oder ein Übertrag, dessen Verkauf gelöscht wurde), und Überträge ohne Gegenstück – mit Datum, Betrag, Kommentar und ob die Buchung vom Dienst oder aus einem Import stammt. Korrigiert wird in Wealthfolio; die Seite ändert nichts |
+| Push-Nachricht „Abweichung zu Wealthfolio“ | Eine schon übernommene Buchung fehlt in Wealthfolio (gelöscht?), oder eine Buchung des Dienstes gibt es beim Broker nicht mehr (z. B. storniert). Seite *Prüfung* öffnen: Fehlende mit *Wieder anlegen* zurückholen oder *Ignorieren*, wenn sie zu Recht fehlen; Stornierte in Wealthfolio löschen |
 | Wertpapier soll in Wealthfolio unter seinem Ticker statt der ISIN laufen | Unter *Wertpapiere* die Zuordnung ISIN → Symbol eintragen (wie im Addon) |
 | Passwort der Oberfläche vergessen | In Proxmox die Konsole des Containers öffnen und `brokersync-reset-password` eingeben. Beim nächsten Öffnen legst du ein neues fest |
 

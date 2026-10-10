@@ -102,6 +102,7 @@ sequenceDiagram
       S->>W: POST /activities je Teil (Duplikat-Antwort = schon da)
     end
   end
+  S->>S: früher Gebuchtes mit Wealthfolio vergleichen (coverage.py) → Seite Prüfung
   S->>W: Assets lernen, GET /holdings
   S->>S: Abweichungen vergleichen, nach 2 Läufen melden
   S->>N: Zusammenfassung von Fehlern, Unbekanntem, Abweichungen
@@ -111,6 +112,7 @@ sequenceDiagram
 
 | Situation | `since` |
 |---|---|
+| Adapter mit `full_history` (Scalable) | jeder Lauf ab `start_date` (sonst alles); Details nur für neue Transaktionen |
 | Erster Lauf | `start_date` des Brokers, sonst alles, was der Broker liefert (bei der DKB 89 Tage, damit keine TAN nötig ist) |
 | Danach | letzter erfolgreicher Lauf minus 7 Tage (`OVERLAP`), weil Broker spät buchen |
 | Offene Wertpapier-Gegenbuchungen | Das Fenster bleibt bis einen Tag vor der ältesten offenen Buchung offen (`State.oldest_open`) |
@@ -130,6 +132,8 @@ Dieselbe Buchung kann auf drei Wegen schon in Wealthfolio sein: Der Sync hat sie
 | 3. Abgleich mit Importen | `dedup.ExistingIndex` | Aktivitäten aus CSV/PDF-Importen des Addons: gleiches Konto und gleicher Typ, ≤ 36 h Abstand, gleiche Stückzahl, Betrag ±0,02. Das Symbol muss nicht übereinstimmen (Addon: gemapptes Tickersymbol, Sync: ISIN) |
 
 Geht der Sync-Status verloren (`state.db` gelöscht), findet Schicht 2 alles wieder. `test_lost_state_is_recovered_from_the_comments` prüft das.
+
+`state.synced` entscheidet nur, was **neu** ist. Ob eine früher gebuchte Transaktion noch in Wealthfolio steht, prüft jeder Lauf danach gegen Wealthfolio (`coverage.py`): über die `[SYNC …]`-Referenz und die gespeicherten Aktivitäts-Ids. Fehlt sie ganz oder teilweise, steht sie auf der Seite *Prüfung*; der Nutzer wählt *Wieder anlegen* (der Eintrag in `synced` wird gelöscht, der nächste Lauf behandelt sie als neu, mit allen drei Schichten) oder *Ignorieren* (Status `ignored`). Von selbst legt der Sync nichts wieder an, weil eine Löschung in Wealthfolio Absicht sein kann. Bei `full_history` meldet er außerdem Aktivitäten mit `[SYNC …]`, deren Transaktion der Broker nicht mehr auflistet (z. B. storniert) - löschen muss sie der Nutzer.
 
 Eine Transaktion wird erst als synchronisiert markiert, wenn **alle** ihre Aktivitäten existieren. Ein Kauf besteht zum Beispiel aus Übertrag raus, Übertrag rein und dem Kauf selbst. Bricht der Lauf nach dem ersten Teil ab, legt der nächste Lauf die fehlenden Teile an, und die vorhandenen kommen als `Duplicate` zurück.
 
@@ -203,7 +207,8 @@ Alles liegt in `BROKERSYNC_DATA` (Standard `/opt/wealthfolio-broker-sync/data`, 
 
 | Tabelle | Inhalt |
 |---|---|
-| `synced` | `(broker, tx_id)`, Status `imported`/`existing` und die angelegten Aktivitäts-Ids |
+| `synced` | `(broker, tx_id)`, Status `imported`/`existing`/`ignored` und die angelegten Aktivitäts-Ids |
+| `gaps` | Ergebnis des letzten Vergleichs mit Wealthfolio: `missing`, `partial`, `ignored`, `orphan` |
 | `runs` | Verlauf der Abrufe: `running`, `ok`, `needs_auth`, `error`, `aborted` und die Zähler |
 | `unknown_events` | unbekannte Buchungen und offene Wertpapier-Gegenbuchungen, mit einer Nutzlast ohne persönliche Daten |
 | `balances`, `reconcile` | letzter Kontostand des Brokers und Abweichungen, samt dem, was schon gemeldet wurde |
@@ -231,7 +236,8 @@ FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login
 | `/securities` | Zuordnung ISIN → Tickersymbol und Börse |
 | `/unknown` | unbekannte Buchungen und offene Wertpapier-Gegenbuchungen |
 | `/duplicates` | Duplikate finden und die Kopien des Syncs nach Bestätigung löschen |
-| `/check` | Prüfung (nur lesend): wo im Depotkonto Bargeld stehen bleibt und welche Überträge kein Gegenstück haben (`audit.py`) |
+| `/check` | Prüfung: Abgleich Broker ↔ Wealthfolio aus dem letzten Lauf (`coverage.py`), dazu nur lesend, wo im Depotkonto Bargeld stehen bleibt und welche Überträge kein Gegenstück haben (`audit.py`) |
+| `POST /check/{key}` | fehlende Transaktionen wieder anlegen lassen (`action=rebook`) oder ignorieren (`action=ignore`) |
 | `/retired/dismiss` | Hinweis zu einem entfernten Broker (z. B. dem Dummy) ausblenden |
 
 ## Fehlerbehandlung

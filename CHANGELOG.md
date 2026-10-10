@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+- **Wealthfolio is checked after every run, not trusted from the sync's own records.** Until now a transaction counted as done once the sync had booked it; deleting it in Wealthfolio meant it never came back. Now every run compares the transactions synced before with Wealthfolio (by their `[SYNC …]` reference and the stored activity ids) and lists on the page *Prüfung*, per broker: transactions that are missing in Wealthfolio, completely or partly, with **Wieder anlegen** (the next run books them, unless an import has them by then) and **Ignorieren** (they stay away; *Doch anlegen* undoes it). A deletion may have been on purpose, so nothing is re-created without that click. New deviations are notified once.
+- **Scalable reads its whole history on every run** (from the start date): a few paged queries; the per-transaction details are still fetched only once. So the comparison also finds activities of the sync that Scalable no longer lists - e.g. a distribution Scalable cancelled after it was booked. They are listed for deletion in Wealthfolio, never deleted by the sync. *Ab Startdatum neu abrufen* is no longer needed for Scalable and hidden there.
+- Scalable: a cancelled distribution and its original now always cancel out; the cancellation is no longer an unknown event, and its old entry disappears from *Unbekannte Buchungen*.
+
 ## 0.4.5
 
 - **New page "Prüfung"** (read only): for each broker it shows where the two-account model doesn't add up - the moments on the securities account where cash is left behind (e.g. a buy without its funding transfer, or a transfer whose sale or payout was deleted), and transfers between the two accounts without their other leg. Each line has date, type, amount, comment and whether the sync or an import booked it. Nothing is changed; fixes are made in Wealthfolio.

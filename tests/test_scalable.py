@@ -290,14 +290,14 @@ def test_a_distribution_takes_gross_and_tax_from_its_details():
     assert (p["quantity"], p["amount"], p["tax"]) == ("1", "3.68", "1.32")
 
 
-def test_a_cancellation_whose_original_was_synced_is_reported():
+def test_a_cancelled_distribution_and_its_original_cancel_out():
     original = _item("d1", "2025-08-20T00:00:00Z", type="CASH_TRANSACTION", cash_transaction_type="DISTRIBUTION",
                      amount="459.14", related_isin="NL00TEST0007")
     cancel = _item("d2", "2025-08-27T00:00:00Z", type="CASH_TRANSACTION", cash_transaction_type="DISTRIBUTION",
                    amount="-459.14", related_isin="NL00TEST0007", is_cancellation=True)
+    # Also when the original was synced already: the page "Prüfung" then lists its
+    # activities as no longer at Scalable (brokersync.coverage).
     assert sc_mod.to_transactions([original, cancel], {}) == []
-    txs = sc_mod.to_transactions([original, cancel], {}, known={"d1"})
-    assert [(t.id, t.kind.value) for t in txs] == [("d1", "DIVIDEND"), ("d2", "UNKNOWN")]
 
 
 def test_a_swap_out_without_its_cash_leg_stays_unknown():
