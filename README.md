@@ -6,7 +6,8 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 - **Alles in der Weboberfläche:** keine Konfigurationsdateien, keine Kommandozeile
 - **Zugangsdaten verschlüsselt** gespeichert, **nur lesender Zugriff** auf die Broker
 - **Benachrichtigung aufs Handy** (ntfy), wenn eine TAN fällig ist oder etwas nicht klappt
-- **Bucht wie das [Broker Importer Addon](https://github.com/waldonso2/wealthfolio-importer-addon)**: Was du schon per CSV oder PDF importiert hast, wird erkannt und nicht doppelt angelegt
+- **Keine Duplikate:** Was schon in Wealthfolio steht – auch aus einem früheren CSV- oder PDF-Import –, erkennt der Dienst und legt es nicht noch einmal an
+- **Prüft sich selbst:** Nach jedem Abruf vergleicht er Konto und Depot mit dem Broker und zeigt, wo etwas fehlt oder nicht aufgeht
 
 > **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS), **Scalable Capital** (über Scalables offizielles CLI) und **comdirect** (Girokonto und Depot über die offizielle REST-API; neu, noch nicht lange im Einsatz).
 
@@ -14,7 +15,7 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 
 - einen **Proxmox-Server** (VE 8 oder 9)
 - **Wealthfolio** als selbst gehostete Version (z. B. über das Community-Skript „Wealthfolio“) und das Wealthfolio-Passwort
-- in Wealthfolio je Broker **zwei Konten**: ein Verrechnungskonto (Cash) und ein Depotkonto – dieselben wie beim Broker Importer Addon.
+- in Wealthfolio je Broker **zwei Konten**: ein Verrechnungskonto (Cash) und ein Depotkonto (siehe [Wie gebucht wird](#wie-gebucht-wird)).
 - optional die App **ntfy** auf dem Handy ([Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy), [iOS](https://apps.apple.com/app/ntfy/id1625396347))
 
 ## Installation
@@ -86,7 +87,7 @@ Der Dienst liest dein **DKB-Girokonto** per FinTS (HBCI), dieselbe Schnittstelle
 - **Anmeldename und PIN:** dieselben wie im DKB-Banking.
 - **IBAN des Girokontos:** nur nötig, wenn du bei der DKB mehrere Konten hast.
 - **FinTS-Produkt-ID:** Banken verlangen für FinTS eine bei der Deutschen Kreditwirtschaft registrierte Produkt-ID. Sobald dieser Dienst eine hat, ist sie fest eingebaut und das Feld entfällt. Bis dahin trägst du hier eine registrierte Produkt-ID ein.
-- **Konten:** dasselbe DKB-Verrechnungs- und Depotkonto wie beim PDF-Import im Addon.
+- **Konten:** ein DKB-Verrechnungskonto und ein DKB-Depotkonto in Wealthfolio.
 
 **Freigabe in der DKB-App:** Bei der ersten Anmeldung und danach in Abständen (nach den PSD2-Regeln meist alle 90 Tage) will die DKB eine Bestätigung in der DKB-App. In der Oberfläche bestätigst du in der App und klickst dann *Ich habe in der App bestätigt*. Läuft gerade der tägliche Abruf, schickt der Dienst eine ntfy-Nachricht und wartet drei Minuten auf deine Freigabe.
 
@@ -94,13 +95,13 @@ Der Dienst liest dein **DKB-Girokonto** per FinTS (HBCI), dieselbe Schnittstelle
 
 | Auf dem Girokonto | In Wealthfolio (DKB-Verrechnungskonto) |
 |---|---|
-| Gutschrift, Gehalt, eingehende Überweisung | Einzahlung (DEPOSIT) – eingehendes Geld ist immer eine Einzahlung, wie im Addon |
+| Gutschrift, Gehalt, eingehende Überweisung | Einzahlung (DEPOSIT) – eingehendes Geld ist immer eine Einzahlung |
 | Kartenzahlung, Lastschrift, ausgehende Überweisung | Auszahlung (WITHDRAWAL), also eine Ausgabe |
-| Ausgehende Überweisung auf ein eigenes Konto | Übertrag (TRANSFER_OUT, mit Gegenbuchung auf dem gewählten Konto), wenn unter *Überträge* eingetragen – wie die Transfer-Muster im Addon |
+| Ausgehende Überweisung auf ein eigenes Konto | Übertrag (TRANSFER_OUT, mit Gegenbuchung auf dem gewählten Konto), wenn unter *Überträge* eingetragen |
 | Habenzinsen / Kontoführungsentgelt beim Rechnungsabschluss | Zinsen (INTEREST) / Gebühr (FEE) |
 | Wertpapierabrechnung, Ertragsgutschrift, Dividende | **nichts** – siehe unten |
 
-**Wertpapiere:** Käufe, Verkäufe und Ausschüttungen deines DKB-Depots bucht der PDF-Import des Addons, samt der Abbuchung bzw. Gutschrift auf dem Verrechnungskonto. Damit nichts doppelt zählt, bucht der Dienst diese Girokonto-Umsätze nicht noch einmal. Er prüft nur, ob der PDF-Import sie schon gebucht hat (gleicher Betrag, höchstens 6 Tage auseinander). Fehlt das Gegenstück, bekommst du eine Nachricht: PDF-Abrechnung mit dem Addon importieren, der nächste Abruf erkennt sie dann. Ob die DKB Depotbestände über FinTS liefert, ist noch nicht geprüft; bis dahin bleibt dafür der PDF-Import.
+**Wertpapiere:** Das DKB-Depot liefert FinTS nicht als Umsätze. Käufe, Verkäufe und Ausschüttungen kommen deshalb über einen Import der Wertpapierabrechnungen (PDF) in Wealthfolio, der nach demselben Zwei-Konten-Modell bucht (Übertrag vom bzw. zum Verrechnungskonto). Damit nichts doppelt zählt, bucht der Dienst die zugehörigen Girokonto-Umsätze nicht noch einmal. Er prüft nur, ob der Übertrag dazu schon da ist (gleicher Betrag, höchstens 6 Tage auseinander). Fehlt er, bekommst du eine Nachricht; sobald die Abrechnung importiert ist, erkennt der nächste Abruf sie. Ob die DKB Depotbestände über FinTS liefert, ist noch nicht geprüft.
 
 **Zeitraum:** Ohne Datum unter *Buchungen übernehmen ab* holt der erste Abruf die letzten 89 Tage. Für ältere Umsätze verlangt die DKB eine Freigabe in der App.
 
@@ -112,16 +113,16 @@ Der Dienst liest dein **DKB-Girokonto** per FinTS (HBCI), dieselbe Schnittstelle
 
 Der Dienst liest deine Trade-Republic-Timeline über die inoffizielle Schnittstelle der App, mit dem Open-Source-Projekt [pytr](https://github.com/pytr-org/pytr). Er liest nur; Orders oder Auszahlungen kann er nicht auslösen.
 
-> **Bitte beachten:** Trade Republic bietet keine offizielle Schnittstelle. Die genutzte kann sich jederzeit ändern, dann klappt der Abruf bis zu einem Update nicht. Ein automatisierter Zugriff ist von Trade Republic vermutlich nicht vorgesehen. Wer das nicht möchte, nutzt weiter den CSV-Import im Addon.
+> **Bitte beachten:** Trade Republic bietet keine offizielle Schnittstelle. Die genutzte kann sich jederzeit ändern, dann klappt der Abruf bis zu einem Update nicht. Ein automatisierter Zugriff ist von Trade Republic vermutlich nicht vorgesehen. Wer das nicht möchte, importiert die Buchungen weiter per CSV.
 
 **Einrichten** unter *Broker → Trade Republic*:
 
 - **Telefonnummer** mit Ländervorwahl (z. B. `+4917612345678`) und die **PIN** der App.
-- **Konten:** dasselbe Trade-Republic-Verrechnungs- und Depotkonto wie beim CSV-Import im Addon.
+- **Konten:** ein Trade-Republic-Verrechnungskonto und ein Trade-Republic-Depotkonto in Wealthfolio.
 
 **Anmelden:** Die Anmeldung läuft wie im Browser auf app.traderepublic.com. Trade Republic schickt eine Anfrage in die App, die bestätigst du, und dann klickst du *Ich habe in der App bestätigt*. Die Handy-App bleibt dabei angemeldet. Nutzt dein Konto eine Authenticator-App, fragt die Seite nach deren Code. Die Sitzung hält eine Weile; läuft sie ab, schickt der tägliche Abruf eine ntfy-Nachricht und wartet zwei Minuten auf deine Bestätigung in der App.
 
-**Was gebucht wird** – nach denselben Regeln wie der CSV-Import des Addons:
+**Was gebucht wird:**
 
 | In der Timeline | In Wealthfolio |
 |---|---|
@@ -132,11 +133,11 @@ Der Dienst liest deine Trade-Republic-Timeline über die inoffizielle Schnittste
 | Vorabpauschale / Steuerkorrektur | Steuer (TAX) / Steuererstattung (CREDIT/TAX_REFUND) |
 | Einzahlung, Kartenerstattung | Einzahlung (DEPOSIT) |
 | Kartenzahlung, Überweisung | Auszahlung (WITHDRAWAL) oder – mit Eintrag unter *Überträge* – Übertrag aufs eigene Konto |
-| Aktiensplit, Spin-off, Tausch, Depotübertrag, Private Markets | **nicht gebucht**, als unbekannt gemeldet – diese Kapitalmaßnahmen bildet der CSV-Import im Addon ab |
+| Aktiensplit, Spin-off, Tausch, Depotübertrag, Private Markets | **nicht gebucht**, als unbekannt gemeldet – bitte von Hand oder per CSV-Import buchen |
 
 Reine Hinweise (Order angelegt/storniert, Dokumente, Adressänderung …) und stornierte Buchungen übernimmt der Dienst nicht.
 
-**CSV-Import und Dienst zusammen:** Was du schon per CSV importiert hast, erkennt der Dienst und legt es nicht noch einmal an: gleiche Art, gleicher Betrag, höchstens 36 Stunden auseinander, bei Käufen und Verkäufen dieselbe Stückzahl. Das Wertpapier darf dabei unter einem anderen Symbol stehen (im Addon zugeordneter Ticker, im Dienst die ISIN).
+**CSV-Import und Dienst zusammen:** Was du schon per CSV importiert hast, erkennt der Dienst und legt es nicht noch einmal an: gleiche Art, gleicher Betrag, höchstens 36 Stunden auseinander, bei Käufen und Verkäufen dieselbe Stückzahl. Das Wertpapier darf dabei unter einem anderen Symbol stehen (beim Import zugeordneter Ticker, im Dienst die ISIN).
 
 **Duplikate aus Version 0.3.0/0.3.1:** Diese Versionen haben per CSV importierte Käufe, Verkäufe und Dividenden ein zweites Mal angelegt. Die Seite *Duplikate* zeigt sie neben der CSV-Buchung und löscht nach deiner Bestätigung nur die Kopie des Dienstes.
 
@@ -151,24 +152,24 @@ Der Dienst liest dein Scalable-Depot über **Scalables offizielles Kommandozeile
 **Einrichten** unter *Broker → Scalable Capital*:
 
 - **Depot-ID** nur, wenn du mehrere Scalable-Depots hast: die `portfolioId` aus der Adresse der Depot-Seite im Browser. Mit einem Depot leer lassen.
-- **Konten:** dasselbe Scalable-Verrechnungs- und Depotkonto wie beim CSV-Import im Addon.
+- **Konten:** ein Scalable-Verrechnungskonto und ein Scalable-Depotkonto in Wealthfolio.
 
 **Anmelden:** Die Seite zeigt einen Link und einen Code. Link öffnen, bei Scalable anmelden, den Code bestätigen und dann *Ich habe bestätigt* klicken. Die Sitzung erneuert sich bei jedem Abruf selbst und liegt verschlüsselt im Tresor des Dienstes. Will Scalable doch eine neue Anmeldung, schickt der tägliche Abruf Link und Code per ntfy und wartet zehn Minuten auf deine Bestätigung.
 
-**Was gebucht wird** – nach denselben Regeln wie der CSV-Import des Addons:
+**Was gebucht wird:**
 
 | Bei Scalable | In Wealthfolio |
 |---|---|
 | Kauf, Sparplan, Verkauf | Kauf/Verkauf auf dem Depotkonto mit Gebühr (Order-, Handelsplatz- und Krypto-Spread-Gebühr) und Steuer in eigenen Feldern, Geld per Übertrag vom bzw. zum Verrechnungskonto |
-| Ausschüttung | eine Dividende mit Nettobetrag und – wenn Scalable sie nennt – Steuer; Stückzahl 1, weil die Schnittstelle keine nennt (wie der CSV-Import). Geld per Übertrag aufs Verrechnungskonto |
+| Ausschüttung | eine Dividende mit Nettobetrag und – wenn Scalable sie nennt – Steuer; Stückzahl 1, weil die Schnittstelle keine nennt. Geld per Übertrag aufs Verrechnungskonto |
 | Zinsen | Zinsen (INTEREST) |
 | Steuer (z. B. Vorabpauschale) / Steuererstattung | Steuer (TAX) / Steuererstattung (CREDIT/TAX_REFUND) |
 | Gebühr (z. B. PRIME+) | Gebühr (FEE) |
 | Einzahlung / Auszahlung | Einzahlung (DEPOSIT) / Auszahlung (WITHDRAWAL) oder – mit Eintrag unter *Überträge* – Übertrag aufs eigene Konto |
-| Depotumzug (Wertpapiere aus- und wieder eingebucht, Bargeld mit `SWITCH-`) | **nicht gebucht** – heben sich auf, wie beim CSV-Import |
-| Fondstausch (Wertpapiere und Gutschrift `SWAP_OUT` am selben Tag) | Verkauf zum gutgeschriebenen Betrag, wie beim CSV-Import |
-| Rückzahlung/Knock-out eines Zertifikats (Ausbuchung mit Wert 0 plus Ausschüttung am selben Tag) | Verkauf zum ausgezahlten Betrag, wie beim CSV-Import |
-| Storno einer Ausschüttung | Storno und ursprüngliche Ausschüttung heben sich auf. Hatte der Dienst die Ausschüttung schon übernommen, meldet er das Storno als unbekannt – dann die Ausschüttung in Wealthfolio von Hand löschen |
+| Depotumzug (Wertpapiere aus- und wieder eingebucht, Bargeld mit `SWITCH-`) | **nicht gebucht** – heben sich auf |
+| Fondstausch (Wertpapiere und Gutschrift `SWAP_OUT` am selben Tag) | Verkauf zum gutgeschriebenen Betrag |
+| Rückzahlung/Knock-out eines Zertifikats (Ausbuchung mit Wert 0 plus Ausschüttung am selben Tag) | Verkauf zum ausgezahlten Betrag |
+| Storno einer Ausschüttung | Storno und ursprüngliche Ausschüttung heben sich auf. Hatte der Dienst die Ausschüttung schon übernommen, zeigt die Seite *Prüfung* sie unter „nicht (mehr) bei Scalable“ – dann in Wealthfolio löschen |
 | andere Stornos, einzelner Wertpapierübertrag, ELTIF, negative Zinsen, Gebührenerstattung | **nicht gebucht**, als unbekannt gemeldet – bitte von Hand prüfen bzw. eintragen |
 
 Offene Orders übernimmt der Dienst erst, wenn sie ausgeführt sind. Der erste Abruf der ganzen Historie dauert einige Minuten: Scalable begrenzt, wie schnell die Details der Käufe und Verkäufe abgefragt werden dürfen. Wird es trotzdem zu viel, bucht der Dienst, was er hat, und holt den Rest beim nächsten Abruf. Kommt nichts an, steht im Log (`journalctl -u wealthfolio-broker-sync -n 50`), wie viele Transaktionen welcher Art Scalable geliefert hat – ohne Beträge oder Namen. Was du schon per CSV importiert hast, erkennt er wie bei Trade Republic. Scalables CSV-Export enthält bei Dividenden keine Steuer; erkennt der Dienst eine solche importierte Dividende, trägt er die Steuer aus Scalables Angaben nach (nur das Steuerfeld, Betrag und Kommentar bleiben).
@@ -203,7 +204,9 @@ Vorgemerkte Umsätze und Orders übernimmt der Dienst erst, wenn sie gebucht sin
 
 ## Abgleich mit Wealthfolio
 
-Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in Wealthfolio: das Guthaben mit dem Cash des Verrechnungskontos, ob das Depotkonto kein Bargeld hält (es muss 0 sein) und keine Position „$CASH“ in einem der Konten steht, und, bei Trade Republic und Scalable Capital, jede Position mit dem Bestand des Depotkontos. Die Übersicht zeigt das Ergebnis. Eine Abweichung, die auch beim nächsten Abruf noch besteht, kommt als ntfy-Nachricht. Direkt nach neuen Buchungen rechnet Wealthfolio noch. Typische Ursachen: eine Kapitalmaßnahme, die per CSV-Import nachzuholen ist, oder Buchungen aus der Zeit vor dem ersten Abruf.
+Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in Wealthfolio: das Guthaben mit dem Cash des Verrechnungskontos (nicht bei comdirect, dort wird das Girokonto nicht gebucht), ob das Depotkonto kein Bargeld hält (es muss 0 sein) und keine Position „$CASH“ in einem der Konten steht, und, bei Trade Republic, Scalable Capital und comdirect, jede Position mit dem Bestand des Depotkontos. Die Übersicht zeigt das Ergebnis. Eine Abweichung, die auch beim nächsten Abruf noch besteht, kommt als ntfy-Nachricht. Direkt nach neuen Buchungen rechnet Wealthfolio noch. Typische Ursachen: eine Kapitalmaßnahme, die von Hand nachzubuchen ist, oder Bestände aus der Zeit vor dem Startdatum – die legst du auf der Seite *Prüfung* als Anfangsbestand an.
+
+Die Seite **Prüfung** zeigt außerdem, welche schon übernommenen Buchungen in Wealthfolio fehlen (*Wieder anlegen* oder *Ignorieren*), welche Buchungen des Dienstes es beim Broker nicht mehr gibt, wo im Depotkonto Bargeld stehen bleibt und welche Überträge kein Gegenstück haben.
 
 ## Im Alltag
 
@@ -215,14 +218,12 @@ Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in 
 | Abgleich zeigt Bargeld im Depotkonto oder zu viel/zu wenig auf dem Verrechnungskonto | Seite *Prüfung* öffnen: Sie listet die Zeitpunkte, an denen im Depotkonto Bargeld stehen bleibt (z. B. ein Kauf ohne Übertrag oder ein Übertrag, dessen Verkauf gelöscht wurde), und Überträge ohne Gegenstück – mit Datum, Betrag, Kommentar und ob die Buchung vom Dienst oder aus einem Import stammt. Korrigiert wird in Wealthfolio; die Seite ändert nichts |
 | Ein Broker soll noch einmal von vorn gebucht werden (z. B. nach geänderten Regeln) | In den Broker-Einstellungen *Neu aufsetzen*: löscht alle Buchungen des Dienstes für diesen Broker, der nächste Abruf holt alles ab dem Startdatum neu. Importe und Handeinträge bleiben |
 | Push-Nachricht „Abweichung zu Wealthfolio“ | Eine schon übernommene Buchung fehlt in Wealthfolio (gelöscht?), oder eine Buchung des Dienstes gibt es beim Broker nicht mehr (z. B. storniert). Seite *Prüfung* öffnen: Fehlende mit *Wieder anlegen* zurückholen oder *Ignorieren*, wenn sie zu Recht fehlen; Stornierte in Wealthfolio löschen |
-| Wertpapier soll in Wealthfolio unter seinem Ticker statt der ISIN laufen | Unter *Wertpapiere* die Zuordnung ISIN → Symbol eintragen (wie im Addon) |
+| Wertpapier soll in Wealthfolio unter seinem Ticker statt der ISIN laufen | Unter *Wertpapiere* die Zuordnung ISIN → Symbol eintragen |
 | Passwort der Oberfläche vergessen | In Proxmox die Konsole des Containers öffnen und `brokersync-reset-password` eingeben. Beim nächsten Öffnen legst du ein neues fest |
 
 ## Wie gebucht wird
 
-Genau wie beim Broker Importer Addon, damit sich Sync, CSV- und PDF-Import nicht in die Quere kommen:
-
-- **Zwei Konten je Broker:** Käufe, Verkäufe und Dividenden auf dem Depotkonto, alles andere auf dem Verrechnungskonto. Das Geld für einen Kauf und der Erlös eines Verkaufs bzw. einer Dividende wandern als Übertrag (TRANSFER_OUT/TRANSFER_IN, verknüpft über `sourceGroupId`) zwischen den Konten, sodass auf dem Depotkonto kein Bargeld liegen bleibt. Wealthfolio zählt diese Überträge nicht als Ausgaben.
+- **Zwei Konten je Broker:** Käufe, Verkäufe und Dividenden auf dem Depotkonto, alles andere auf dem Verrechnungskonto. Das Geld für einen Kauf und der Erlös eines Verkaufs bzw. einer Dividende wandern als Übertrag (TRANSFER_OUT/TRANSFER_IN, verknüpft über `sourceGroupId`) zwischen den Konten, sodass auf dem Depotkonto kein Bargeld liegen bleibt. Wealthfolio zählt diese Überträge nicht als Ausgaben. Bei comdirect kommt das Geld eines Kaufs als Einzahlung aufs Verrechnungskonto und der Erlös eines Verkaufs geht als Auszahlung wieder hinaus, weil das Girokonto nicht gebucht wird.
 - **Gebühren und Steuern** stehen in den eigenen Feldern der Buchung; eine Dividende ist eine Buchung mit dem Nettobetrag und der Steuer. Eine Steuererstattung wird eine eigene Gutschrift (CREDIT/TAX_REFUND).
 - **Keine Duplikate:**
   1. Der Dienst merkt sich jede übernommene Transaktion.
@@ -230,7 +231,8 @@ Genau wie beim Broker Importer Addon, damit sich Sync, CSV- und PDF-Import nicht
   3. Vor dem Anlegen wird geprüft, ob es die Transaktion schon gibt, z. B. aus einem CSV- oder PDF-Import: gleiches Konto, gleiche Art und gleiches Wertpapier, höchstens 36 Stunden auseinander, gleiche Stückzahl, gleicher Betrag ±0,02.
 
   Bricht ein Lauf mittendrin ab, ergänzt der nächste die fehlenden Teile.
-- Jede Buchung trägt im Kommentar `[SYNC <broker>:<id>]`.
+- Jede Buchung trägt im Kommentar `[SYNC <broker>:<id>]`. Daran erkennt der Dienst seine eigenen Buchungen; die Kommentare bitte nicht ändern.
+- **Steuer nachtragen:** Fehlt bei einer importierten Dividende die Steuer (Scalables CSV-Export hat keine), trägt der Dienst sie aus den Angaben des Brokers nach – nur das Steuerfeld.
 
 ## Technik
 
@@ -245,7 +247,7 @@ Für Mitwirkende: [ARCHITECTURE.md](ARCHITECTURE.md) erklärt Aufbau und Ablauf,
 
 - [pytr](https://github.com/pytr-org/pytr) (MIT) für die Anbindung an Trade Republic; die Testfälle für Trade Republic folgen dem Format seiner Test-Ereignisse.
 - [python-fints](https://github.com/raphaelm/python-fints) (LGPL) für FinTS.
-- [Scalable CLI](https://github.com/ScalableCapital/scalable-cli) (Apache-2.0) von Scalable Capital für Scalable; die Zuordnung der Buchungsarten folgt dem [Scalable Capital Transactions Exporter](https://github.com/matthesvoss/Scalable-Capital-Transactions-Exporter) (MIT), dessen CSV das Addon importiert.
+- [Scalable CLI](https://github.com/ScalableCapital/scalable-cli) (Apache-2.0) von Scalable Capital für Scalable; die Zuordnung der Buchungsarten folgt dem [Scalable Capital Transactions Exporter](https://github.com/matthesvoss/Scalable-Capital-Transactions-Exporter) (MIT).
 
 ## Lizenz
 

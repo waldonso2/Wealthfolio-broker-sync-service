@@ -459,8 +459,8 @@ class Syncer:
             self.notifier(cfg).send(
                 f"{self.adapters[key].label}: Wertpapier-Buchung ohne Gegenstück",
                 f"{len(new)} Buchung(en) ({total}) gehören zu Wertpapiergeschäften, die noch nicht in Wealthfolio "
-                "sind. Importiere die PDF-Abrechnung mit dem Broker Importer Addon; danach erkennt der nächste "
-                "Abruf sie.",
+                "sind. Importiere die Wertpapierabrechnung (PDF) in Wealthfolio; danach erkennt der nächste Abruf "
+                "sie.",
                 link=self.link(cfg, "/unknown"), tags="question",
             )
 

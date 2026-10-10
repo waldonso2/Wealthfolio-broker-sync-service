@@ -46,7 +46,7 @@
           <tr><th>Wert</th><th>{{ b.label }}</th><th>Wealthfolio</th></tr>
           {% for d in b.reconcile.deviations %}<tr><td>{{ d.name }}</td><td>{{ d.broker }}</td><td>{{ d.wealthfolio }}</td></tr>{% endfor %}
         </table></div>
-        <div class="muted">Direkt nach neuen Buchungen kann Wealthfolio noch rechnen; gemeldet wird erst, was beim nächsten Abruf noch abweicht. Fehlende Buchungen (z.&nbsp;B. Kapitalmaßnahmen) per CSV-Import im Addon nachholen.</div>
+        <div class="muted">Direkt nach neuen Buchungen kann Wealthfolio noch rechnen; gemeldet wird erst, was beim nächsten Abruf noch abweicht. Fehlende Buchungen (z.&nbsp;B. Kapitalmaßnahmen) von Hand nachholen; Bestände von vor dem Startdatum unter <a href="/check">Prüfung</a> als Anfangsbestand anlegen.</div>
         {% else %}
         <div class="muted">Abgleich mit Wealthfolio: Bestand und Cash stimmen ({{ b.reconcile.at | local }}).</div>
         {% endif %}
