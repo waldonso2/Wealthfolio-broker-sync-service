@@ -72,6 +72,9 @@ class BrokerAdapter(ABC):
         # app) while the adapter waits. Unset in the web UI, which shows the
         # challenge itself.
         self.on_user_action: Callable[[str], None] | None = None
+        # Set by the sync: ids it already has, so an adapter can skip expensive
+        # per-transaction queries for them (Scalable's details).
+        self.known_ids: set[str] = set()
 
     def close(self) -> None:  # noqa: B027 - optional hook, most adapters hold no connection
         """End the connection; afterwards ``session_state()`` is final."""

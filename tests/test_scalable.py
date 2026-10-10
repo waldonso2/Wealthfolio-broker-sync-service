@@ -34,6 +34,7 @@ def fake_sc(tmp_path, monkeypatch):
     monkeypatch.setenv("BROKERSYNC_SC", str(FAKE_SC))
     monkeypatch.setenv("FAKE_SC_DIR", str(ctl))
     monkeypatch.setattr(sc_mod, "CONFIRM_WAIT", 0.5)
+    monkeypatch.setattr(sc_mod, "DETAIL_PAUSE", 0)
     rec = CASE["recording"]
     data = {"transactions first": rec["transactions"][0], "transactions c2": rec["transactions"][1],
             "broker holdings": rec["holdings"], "broker cash-breakdown": rec["cash"], "whoami": {"email": "x"}}
@@ -112,6 +113,7 @@ def test_missing_cli_is_a_clear_error(tmp_path, monkeypatch):
 
 
 def test_full_sync_books_like_the_addon(tmp_path, monkeypatch):
+    monkeypatch.setattr(sc_mod, "DETAIL_PAUSE", 0)
     monkeypatch.setattr(ScalableAdapter, "cli_factory", lambda files: sc_mod._Replay(CASE["recording"]))
     wf = FakeWealthfolio()
     cfg = config_mod.Config(wealthfolio_url="http://wf.local:8080", public_url="http://sync.local:8090")
@@ -176,7 +178,8 @@ def test_login_in_the_web_ui(tmp_path, fake_sc):
     assert "session.json" in Vault(tmp_path).broker("scalable")["session"]["files"]
 
 
-def test_the_log_shows_what_scalable_sent_without_values(caplog):
+def test_the_log_shows_what_scalable_sent_without_values(caplog, monkeypatch):
+    monkeypatch.setattr(sc_mod, "DETAIL_PAUSE", 0)
     import logging
 
     caplog.set_level(logging.INFO, "brokersync.adapters.scalable")
@@ -189,3 +192,76 @@ def test_the_log_shows_what_scalable_sent_without_values(caplog):
         a.get_cash()
     assert '"buying_power": {"amount": "str"}' in caplog.text
     assert "1.5" not in caplog.text and "sc-0001" not in caplog.text and "IE00TEST0001" not in caplog.text
+
+
+class Limited:
+    """A CLI that answers from the recording but rate-limits detail queries as told."""
+
+    def __init__(self, limit_after: int, limited_calls: int):
+        self.inner = sc_mod._Replay(CASE["recording"])
+        self.limit_after, self.limited_calls = limit_after, limited_calls
+        self.details: list[str] = []
+
+    def run(self, *args):
+        if args[:3] == ("broker", "transaction", "details"):
+            if len(self.details) >= self.limit_after and self.limited_calls:
+                self.limited_calls -= 1
+                raise sc_mod.ScError("rate_limited", "RATE_LIMITED: backend rate limit exceeded during "
+                                                      "BrokerTransactionDetails; retry later")
+            self.details.append(args[-1])
+        return self.inner.run(*args)
+
+    def files(self):
+        return {}
+
+    def cleanup(self):
+        pass
+
+
+@pytest.fixture
+def no_waiting(monkeypatch):
+    monkeypatch.setattr(sc_mod, "DETAIL_PAUSE", 0)
+    monkeypatch.setattr(sc_mod, "RATE_LIMIT_WAITS", (0, 0))
+    monkeypatch.setattr(sc_mod.time, "sleep", lambda s: None)
+
+
+def test_rate_limit_is_waited_out(no_waiting):
+    a = ScalableAdapter.replay(CASE["recording"])
+    a._cli = Limited(limit_after=1, limited_calls=2)
+    txs = {t.id: t for t in a.get_transactions(None)}
+    assert txs["sc-0009"].gross == D("200") and "Details" not in txs["sc-0009"].label
+    assert len(a._cli.details) == 4
+
+
+def test_a_lasting_rate_limit_books_what_has_details_and_retries_the_rest(no_waiting):
+    a = ScalableAdapter.replay(CASE["recording"])
+    a._cli = Limited(limit_after=1, limited_calls=99)
+    txs = {t.id: t for t in a.get_transactions(None)}
+    fetched = a._cli.details[0]
+    assert txs[fetched].gross is not None
+    missing = [t for t in txs.values() if t.kind.value in ("BUY", "SELL") and t.id != fetched]
+    assert missing and all(t.gross is None and "Details folgen beim nächsten Abruf" in t.label for t in missing)
+    # The deposit and the other cash transactions are there all the same.
+    assert txs["sc-0001"].net == D("1000")
+
+    # Next run: details only for what the sync doesn't have yet.
+    b = ScalableAdapter.replay(CASE["recording"])
+    b._cli = Limited(limit_after=99, limited_calls=0)
+    b.known_ids = {fetched, "sc-0004"}
+    b.get_transactions(None)
+    assert fetched not in b._cli.details and "sc-0004" not in b._cli.details
+    assert set(b._cli.details) == {"sc-0002", "sc-0003", "sc-0009"} - {fetched}
+
+
+def test_other_errors_still_stop_the_run(no_waiting):
+    a = ScalableAdapter.replay(CASE["recording"])
+
+    class Broken(Limited):
+        def run(self, *args):
+            if args[:3] == ("broker", "transaction", "details"):
+                raise sc_mod.ScError("broker_response_invalid", "Broker response invalid")
+            return self.inner.run(*args)
+
+    a._cli = Broken(0, 0)
+    with pytest.raises(AdapterError, match="Broker response invalid"):
+        a.get_transactions(None)

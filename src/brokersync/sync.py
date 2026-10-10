@@ -170,6 +170,8 @@ class Syncer:
                               failed=result.failed, unknown=result.unknown, message="\n".join(result.messages))
         log.info("%s: %s, %d created, %d already there, %d failed, %d unknown", key, result.status,
                  result.created, result.existing, result.failed, result.unknown)
+        if result.status != "ok" and result.messages:
+            log.warning("%s: %s", key, " | ".join(result.messages[:5]))
         return result
 
     def _sync_broker(self, cfg: config_mod.Config, key: str, result: BrokerResult) -> None:
@@ -191,6 +193,7 @@ class Syncer:
         since = self._start(bcfg) if backfill or refetch else self._since(key, bcfg)
         try:
             adapter.login()
+            adapter.known_ids = self.state.known(key)
             transactions = adapter.get_transactions(since)
             cash = self._broker_cash(key, adapter)
             positions = self._broker_positions(key, adapter) if adapter_cls.reports_positions else None

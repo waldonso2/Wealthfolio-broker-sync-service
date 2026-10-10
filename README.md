@@ -168,7 +168,7 @@ Der Dienst liest dein Scalable-Depot über **Scalables offizielles Kommandozeile
 | Depotumzug (Wertpapiere aus- und wieder eingebucht, Bargeld mit `SWITCH-`) | **nicht gebucht** – heben sich auf, wie beim CSV-Import |
 | Storno, einzelner Wertpapierübertrag, Fondstausch, ELTIF, negative Zinsen, Gebührenerstattung | **nicht gebucht**, als unbekannt gemeldet – bitte von Hand prüfen bzw. eintragen |
 
-Offene Orders übernimmt der Dienst erst, wenn sie ausgeführt sind. Kommt nichts an, steht im Log (`journalctl -u wealthfolio-broker-sync -n 50`), wie viele Transaktionen welcher Art Scalable geliefert hat – ohne Beträge oder Namen. Was du schon per CSV importiert hast, erkennt er wie bei Trade Republic.
+Offene Orders übernimmt der Dienst erst, wenn sie ausgeführt sind. Der erste Abruf der ganzen Historie dauert einige Minuten: Scalable begrenzt, wie schnell die Details der Käufe und Verkäufe abgefragt werden dürfen. Wird es trotzdem zu viel, bucht der Dienst, was er hat, und holt den Rest beim nächsten Abruf. Kommt nichts an, steht im Log (`journalctl -u wealthfolio-broker-sync -n 50`), wie viele Transaktionen welcher Art Scalable geliefert hat – ohne Beträge oder Namen. Was du schon per CSV importiert hast, erkennt er wie bei Trade Republic.
 
 ## Abgleich mit Wealthfolio
 
