@@ -316,7 +316,12 @@ class ScCli:
         if not body.get("ok"):
             err = body.get("error") or {}
             raise ScError(err.get("code") or "error", err.get("message") or "Scalable CLI meldet einen Fehler.")
-        return body.get("data") or {}
+        data = body.get("data") or {}
+        # Broker commands wrap their answer with the account/portfolio they used:
+        # {"account_id", "portfolio_id", "resolution", "result": {...}} - read it like sc does.
+        if isinstance(data, dict) and isinstance(data.get("result"), dict):
+            return data["result"]
+        return data
 
     def start_login(self) -> tuple[str, str]:
         """Start ``sc login``; returns (link, code) as soon as the CLI prints them."""

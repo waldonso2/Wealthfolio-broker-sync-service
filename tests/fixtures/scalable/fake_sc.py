@@ -57,4 +57,9 @@ if key.startswith("broker transaction details"):
     key = "details " + args[args.index("--transaction-id") + 1]
 elif key.startswith("broker transactions"):
     key = "transactions " + (args[args.index("--cursor") + 1] if "--cursor" in args else "first")
-print(json.dumps({"ok": True, "command": key, "data": data.get(key, {})}))
+answer = data.get(key, {})
+if args[0] == "broker":
+    # Like sc: broker commands wrap their answer with the account and portfolio they used.
+    answer = {"account_id": "acc-1", "portfolio_id": "pf-1",
+              "resolution": {"account": "auto", "portfolio": "auto"}, "result": answer}
+print(json.dumps({"ok": True, "command": key, "data": answer}))
