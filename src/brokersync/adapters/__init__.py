@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
+from .comdirect import ComdirectAdapter
 from .dkb import DkbAdapter
 from .scalable import ScalableAdapter
 from .tr import TradeRepublicAdapter
@@ -11,6 +12,7 @@ ADAPTERS: dict[str, type[BrokerAdapter]] = {
     DkbAdapter.key: DkbAdapter,
     TradeRepublicAdapter.key: TradeRepublicAdapter,
     ScalableAdapter.key: ScalableAdapter,
+    ComdirectAdapter.key: ComdirectAdapter,
 }
 
 __all__ = [

@@ -8,7 +8,7 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 - **Benachrichtigung aufs Handy** (ntfy), wenn eine TAN fällig ist oder etwas nicht klappt
 - **Bucht wie das [Broker Importer Addon](https://github.com/waldonso2/wealthfolio-importer-addon)**: Was du schon per CSV oder PDF importiert hast, wird erkannt und nicht doppelt angelegt
 
-> **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS) und **Scalable Capital** (über Scalables offizielles CLI).
+> **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS), **Scalable Capital** (über Scalables offizielles CLI) und **comdirect** (Girokonto und Depot über die offizielle REST-API; neu, noch nicht lange im Einsatz).
 
 ## Was du brauchst
 
@@ -172,6 +172,32 @@ Der Dienst liest dein Scalable-Depot über **Scalables offizielles Kommandozeile
 | andere Stornos, einzelner Wertpapierübertrag, ELTIF, negative Zinsen, Gebührenerstattung | **nicht gebucht**, als unbekannt gemeldet – bitte von Hand prüfen bzw. eintragen |
 
 Offene Orders übernimmt der Dienst erst, wenn sie ausgeführt sind. Der erste Abruf der ganzen Historie dauert einige Minuten: Scalable begrenzt, wie schnell die Details der Käufe und Verkäufe abgefragt werden dürfen. Wird es trotzdem zu viel, bucht der Dienst, was er hat, und holt den Rest beim nächsten Abruf. Kommt nichts an, steht im Log (`journalctl -u wealthfolio-broker-sync -n 50`), wie viele Transaktionen welcher Art Scalable geliefert hat – ohne Beträge oder Namen. Was du schon per CSV importiert hast, erkennt er wie bei Trade Republic.
+
+## comdirect
+
+Der Dienst liest Girokonto **und Depot** über die **offizielle REST-API der comdirect** für Privatkunden – nur lesend; Order- und Überweisungs-Schnittstellen ruft er nie auf.
+
+**Vorher einmal bei comdirect:** Im comdirect-Banking unter *Persönlicher Bereich → Zugänge verwalten* die **REST API** freischalten. Dort bekommst du **Client-ID** und **Client-Secret**. Als TAN-Verfahren empfiehlt sich **photoTAN-Push**: Dann bestätigst du die Anmeldung einfach in der photoTAN-App.
+
+**Einrichten** unter *Broker → comdirect*: Zugangsnummer, PIN, Client-ID, Client-Secret; die IBAN nur, wenn du mehrere Girokonten hast. Als Konten ein comdirect-Verrechnungskonto und ein Depotkonto in Wealthfolio.
+
+**Anmelden:** photoTAN-Push in der App bestätigen und *Ich habe in der App bestätigt* klicken (bei photoTAN-Grafik oder mobileTAN die TAN eintippen). comdirect hält eine Sitzung nur kurz (Zugriffsschlüssel 10 Minuten, verlängerbar, solange der Dienst sie nutzt). Der tägliche Abruf braucht deshalb meist eine **neue Bestätigung**: Er schickt dir eine ntfy-Nachricht und wartet drei Minuten auf die Freigabe in der App. Mit TAN zum Eintippen geht das nur in der Weboberfläche.
+
+> **Sperrschutz:** comdirect sperrt das Online-Banking nach **fünf TAN-Anforderungen ohne richtige TAN** und nach **drei falschen TANs**. Der Dienst fordert nach drei unbeantworteten Anfragen oder zwei falschen TANs keine weitere an. Dann einmal auf comdirect.de mit TAN anmelden und die Zugangsdaten im Dienst neu speichern.
+
+**Was gebucht wird:**
+
+| Bei comdirect | In Wealthfolio |
+|---|---|
+| Kauf / Verkauf (Depotumsatz) | Kauf/Verkauf auf dem Depotkonto mit Stückzahl und Kurswert; als Betrag die zugehörige Wertpapier-Buchung auf dem Girokonto, die Differenz als Gebühr. Die API trennt bei Verkäufen Gebühr und Steuer nicht – beides steht dann in der Gebühr. Geld per Übertrag vom bzw. zum Verrechnungskonto |
+| Dividende / Ertrag (Zinsen / Dividenden, Wertpapier per ISIN oder WKN im Buchungstext erkennbar) | Dividende mit Nettobetrag auf dem Depotkonto, Geld per Übertrag aufs Verrechnungskonto |
+| Habenzinsen | Zinsen (INTEREST) |
+| Bankgebühren | Gebühr (FEE) |
+| Überweisung, Lastschrift, Karte, … | Einzahlung / Auszahlung bzw. – mit Eintrag unter *Überträge* – Übertrag aufs eigene Konto |
+| Wertpapier-Buchung ohne passenden Depotumsatz | nur gegen eine Buchung aus dem PDF-Import geprüft, wie bei der DKB |
+| Depotübertrag, Kauf/Verkauf ohne Kontobuchung nach 10 Tagen, Storno | **nicht gebucht**, als unbekannt gemeldet |
+
+Vorgemerkte Umsätze und Orders übernimmt der Dienst erst, wenn sie gebucht sind. Der erste Abruf ohne Startdatum reicht ein Jahr zurück.
 
 ## Abgleich mit Wealthfolio
 

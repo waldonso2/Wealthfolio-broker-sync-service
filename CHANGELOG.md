@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- **New broker: comdirect**, through comdirect's official REST API for private customers (giro account and depot). Login with Zugangsnummer, PIN and the API's client ID and secret, confirmed with photoTAN-Push in the app (or a photoTAN graphic / mobileTAN typed in the web UI); a scheduled run asks via ntfy and waits. Balance, giro bookings, depot positions and depot transactions are read; buys and sales are booked with the giro booking that settled them (its amount is the trade's cash, the rest of it the costs - the API doesn't split costs of a sale into fee and tax), dividends when the posting text names the security. Depot transfers and trades whose settlement doesn't turn up are reported.
+- **Lock-out guard for comdirect:** comdirect locks the online banking after five TAN requests without a correct TAN and after three wrong TANs. The service stops after three unanswered requests or two wrong TANs and asks the user to log in once on comdirect.de and save the credentials again.
+- The login page can show a picture with the challenge (comdirect's photoTAN graphic).
+
 ## 0.5.1
 
 - **Prüfung: fewer false alarms.** Two moments on the securities account that cancel each other within 36 hours now count as one and are no longer listed - e.g. a dividend from the CSV import and its transfer to cash from a PDF import or entered by hand at another time of day. A stock dividend or staking reward (subtype `DIVIDEND_IN_KIND`, `STAKING_REWARD`) brings shares, not money, and no longer counts as cash on the securities account.
