@@ -1,0 +1,460 @@
+{
+  "description": "Fabricated comdirect giro + depot: deposit, buy and sale with their settlements, dividend named by WKN, fee, direct debit, a securities booking without depot match, interest, a pending booking (skipped), a buy whose settlement isn't there yet (skipped), a depot transfer and an old unsettled buy (unknown).",
+  "recording": {
+    "today": "2026-03-20",
+    "balances": [
+      {
+        "accountId": "ACC-TEST-SA",
+        "account": {
+          "accountId": "ACC-TEST-SA",
+          "accountDisplayId": "0000000002",
+          "currency": "EUR",
+          "accountType": {
+            "key": "DAS",
+            "text": "Tagesgeld PLUS-Konto"
+          },
+          "iban": "DE00TEST00000000000002"
+        },
+        "balance": {
+          "value": "50.00",
+          "unit": "EUR"
+        },
+        "balanceEUR": {
+          "value": "50.00",
+          "unit": "EUR"
+        }
+      },
+      {
+        "accountId": "ACC-TEST-CA",
+        "account": {
+          "accountId": "ACC-TEST-CA",
+          "accountDisplayId": "0000000001",
+          "currency": "EUR",
+          "accountType": {
+            "key": "CA",
+            "text": "Girokonto"
+          },
+          "iban": "DE00TEST00000000000001"
+        },
+        "balance": {
+          "value": "1234.56",
+          "unit": "EUR"
+        },
+        "balanceEUR": {
+          "value": "1234.56",
+          "unit": "EUR"
+        }
+      }
+    ],
+    "bookings": [
+      {
+        "reference": "TESTREF0001",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-03-02",
+        "amount": {
+          "value": "2000.00",
+          "unit": "EUR"
+        },
+        "remitter": {
+          "holderName": "TEST Max Mustermann",
+          "iban": "DE00TEST00000000000099"
+        },
+        "transactionType": {
+          "key": "TRANSFER",
+          "text": "Überweisung"
+        },
+        "remittanceInfo": "01Umbuchung Sparkonto                "
+      },
+      {
+        "reference": "TESTREF0002",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-03-05",
+        "amount": {
+          "value": "-1009.80",
+          "unit": "EUR"
+        },
+        "transactionType": {
+          "key": "SECURITIES",
+          "text": "Wertpapier"
+        },
+        "remittanceInfo": "01WP-ABRECHNUNG KAUF                 02TEST FONDS WORLD IE00TEST0001      "
+      },
+      {
+        "reference": "TESTREF0003",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-03-10",
+        "amount": {
+          "value": "12.34",
+          "unit": "EUR"
+        },
+        "transactionType": {
+          "key": "INTEREST_DIVIDENDS",
+          "text": "Zinsen / Dividenden"
+        },
+        "remittanceInfo": "01Ertragsgutschrift                  02WKN A0TEST TEST FONDS WORLD        "
+      },
+      {
+        "reference": "TESTREF0004",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-03-12",
+        "amount": {
+          "value": "490.10",
+          "unit": "EUR"
+        },
+        "transactionType": {
+          "key": "SECURITIES",
+          "text": "Wertpapier"
+        },
+        "remittanceInfo": "01WP-ABRECHNUNG VERKAUF              02DE000TEST002                       "
+      },
+      {
+        "reference": "TESTREF0005",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-03-13",
+        "amount": {
+          "value": "-4.90",
+          "unit": "EUR"
+        },
+        "transactionType": {
+          "key": "BANK_FEES",
+          "text": "Bankgebühren"
+        },
+        "remittanceInfo": "01Entgelt Kontofuehrung              "
+      },
+      {
+        "reference": "TESTREF0006",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-03-14",
+        "amount": {
+          "value": "-35.00",
+          "unit": "EUR"
+        },
+        "creditor": {
+          "holderName": "TEST Stadtwerke",
+          "iban": "DE00TEST00000000000098"
+        },
+        "transactionType": {
+          "key": "DIRECT_DEBIT",
+          "text": "Lastschrift"
+        },
+        "remittanceInfo": "01Abschlag Strom TEST                "
+      },
+      {
+        "reference": "TESTREF0007",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-03-15",
+        "amount": {
+          "value": "-250.00",
+          "unit": "EUR"
+        },
+        "transactionType": {
+          "key": "SECURITIES",
+          "text": "Wertpapier"
+        },
+        "remittanceInfo": "01WP-ABRECHNUNG KAUF                 02ANDERES DEPOT                      "
+      },
+      {
+        "reference": "TESTREF0008",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-03-16",
+        "amount": {
+          "value": "0.42",
+          "unit": "EUR"
+        },
+        "transactionType": {
+          "key": "INTEREST_DIVIDENDS",
+          "text": "Zinsen / Dividenden"
+        },
+        "remittanceInfo": "01Habenzinsen                        "
+      },
+      {
+        "reference": "TESTREF0009",
+        "bookingStatus": "NOTBOOKED",
+        "bookingDate": null,
+        "amount": {
+          "value": "-10.00",
+          "unit": "EUR"
+        },
+        "transactionType": {
+          "key": "CARD",
+          "text": "Kartenverfügung"
+        },
+        "remittanceInfo": "01vorgemerkt                         "
+      }
+    ],
+    "depots": [
+      {
+        "depotId": "DEPOT-TEST-1",
+        "depotDisplayId": "0000001",
+        "clientId": "user",
+        "defaultSettlementAccountId": "ACC-TEST-CA",
+        "settlementAccountIds": [
+          "ACC-TEST-CA"
+        ]
+      }
+    ],
+    "positions": [
+      {
+        "depotId": "DEPOT-TEST-1",
+        "positionId": "POS-1",
+        "wkn": "A0TEST",
+        "quantity": {
+          "value": "10",
+          "unit": "XXX"
+        },
+        "currentValue": {
+          "value": "1015.00",
+          "unit": "EUR"
+        },
+        "instrument": {
+          "wkn": "A0TEST",
+          "isin": "IE00TEST0001",
+          "name": "TEST Fonds World"
+        }
+      }
+    ],
+    "depot_transactions": [
+      {
+        "transactionId": "DTX-1",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-03-05",
+        "businessDate": "2026-03-03",
+        "quantity": {
+          "value": "10",
+          "unit": "XXX"
+        },
+        "instrument": {
+          "wkn": "A0TEST",
+          "isin": "IE00TEST0001",
+          "name": "TEST Fonds World"
+        },
+        "executionPrice": {
+          "value": "100.00",
+          "unit": "EUR"
+        },
+        "transactionValue": {
+          "value": "1000.00",
+          "unit": "EUR"
+        },
+        "transactionDirection": "IN",
+        "transactionType": {
+          "key": "BUY",
+          "text": "Kauf"
+        }
+      },
+      {
+        "transactionId": "DTX-2",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-03-12",
+        "businessDate": "2026-03-10",
+        "quantity": {
+          "value": "5",
+          "unit": "XXX"
+        },
+        "instrument": {
+          "wkn": "TEST02",
+          "isin": "DE000TEST002",
+          "name": "TEST Aktie AG"
+        },
+        "executionPrice": {
+          "value": "100.00",
+          "unit": "EUR"
+        },
+        "transactionValue": {
+          "value": "500.00",
+          "unit": "EUR"
+        },
+        "transactionDirection": "OUT",
+        "transactionType": {
+          "key": "SELL",
+          "text": "Verkauf"
+        }
+      },
+      {
+        "transactionId": "DTX-3",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-03-18",
+        "businessDate": "2026-03-18",
+        "quantity": {
+          "value": "3",
+          "unit": "XXX"
+        },
+        "instrument": {
+          "wkn": "TEST03",
+          "isin": "DE000TEST003",
+          "name": "TEST Neu AG"
+        },
+        "executionPrice": {
+          "value": "10.00",
+          "unit": "EUR"
+        },
+        "transactionValue": {
+          "value": "30.00",
+          "unit": "EUR"
+        },
+        "transactionDirection": "IN",
+        "transactionType": {
+          "key": "BUY",
+          "text": "Kauf"
+        }
+      },
+      {
+        "transactionId": "DTX-4",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-03-01",
+        "businessDate": "2026-03-01",
+        "quantity": {
+          "value": "7",
+          "unit": "XXX"
+        },
+        "instrument": {
+          "wkn": "TEST04",
+          "isin": "DE000TEST004",
+          "name": "TEST Uebertrag AG"
+        },
+        "transactionDirection": "IN",
+        "transactionType": {
+          "key": "TRANSFER_IN",
+          "text": "Depotübertrag eingehend"
+        }
+      },
+      {
+        "transactionId": "DTX-5",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-02-01",
+        "businessDate": "2026-02-01",
+        "quantity": {
+          "value": "1",
+          "unit": "XXX"
+        },
+        "instrument": {
+          "wkn": "TEST05",
+          "isin": "DE000TEST005",
+          "name": "TEST Alt AG"
+        },
+        "executionPrice": {
+          "value": "80.00",
+          "unit": "EUR"
+        },
+        "transactionValue": {
+          "value": "80.00",
+          "unit": "EUR"
+        },
+        "transactionDirection": "IN",
+        "transactionType": {
+          "key": "BUY",
+          "text": "Kauf"
+        }
+      }
+    ]
+  },
+  "since": null,
+  "expected": [
+    {
+      "id": "dep-DTX-5",
+      "kind": "UNKNOWN",
+      "datetime": "2026-02-01T11:00:00+00:00",
+      "currency": "EUR",
+      "net": "0",
+      "label": "BUY_OHNE_KONTOBUCHUNG",
+      "raw_type": "BUY_OHNE_KONTOBUCHUNG"
+    },
+    {
+      "id": "dep-DTX-4",
+      "kind": "UNKNOWN",
+      "datetime": "2026-03-01T11:00:00+00:00",
+      "currency": "EUR",
+      "net": "0",
+      "label": "DEPOT_TRANSFER_IN",
+      "raw_type": "DEPOT_TRANSFER_IN"
+    },
+    {
+      "id": "acc-TESTREF0001",
+      "kind": "DEPOSIT",
+      "datetime": "2026-03-02T11:00:00+00:00",
+      "currency": "EUR",
+      "net": "2000",
+      "label": "Überweisung",
+      "counterparty": "TEST Max Mustermann",
+      "counterparty_iban": "DE00TEST00000000000099",
+      "text": "Umbuchung Sparkonto"
+    },
+    {
+      "id": "dep-DTX-1",
+      "kind": "BUY",
+      "datetime": "2026-03-03T11:00:00+00:00",
+      "currency": "EUR",
+      "net": "1009.8",
+      "isin": "IE00TEST0001",
+      "name": "TEST Fonds World",
+      "shares": "10",
+      "gross": "1000",
+      "fee": "9.8",
+      "label": "Kauf"
+    },
+    {
+      "id": "acc-TESTREF0003",
+      "kind": "DIVIDEND",
+      "datetime": "2026-03-10T11:00:00+00:00",
+      "currency": "EUR",
+      "net": "12.34",
+      "isin": "IE00TEST0001",
+      "name": "TEST Fonds World",
+      "label": "Dividende",
+      "text": "Ertragsgutschrift WKN A0TEST TEST FONDS WORLD"
+    },
+    {
+      "id": "dep-DTX-2",
+      "kind": "SELL",
+      "datetime": "2026-03-10T11:00:00+00:00",
+      "currency": "EUR",
+      "net": "490.1",
+      "isin": "DE000TEST002",
+      "name": "TEST Aktie AG",
+      "shares": "5",
+      "gross": "500",
+      "fee": "9.9",
+      "label": "Verkauf"
+    },
+    {
+      "id": "acc-TESTREF0005",
+      "kind": "FEE",
+      "datetime": "2026-03-13T11:00:00+00:00",
+      "currency": "EUR",
+      "net": "4.9",
+      "label": "Bankgebühren",
+      "text": "Entgelt Kontofuehrung"
+    },
+    {
+      "id": "acc-TESTREF0006",
+      "kind": "WITHDRAWAL",
+      "datetime": "2026-03-14T11:00:00+00:00",
+      "currency": "EUR",
+      "net": "35",
+      "label": "Lastschrift",
+      "counterparty": "TEST Stadtwerke",
+      "counterparty_iban": "DE00TEST00000000000098",
+      "text": "Abschlag Strom TEST"
+    },
+    {
+      "id": "acc-TESTREF0007",
+      "kind": "SECURITIES_CASH",
+      "datetime": "2026-03-15T11:00:00+00:00",
+      "currency": "EUR",
+      "net": "250",
+      "label": "Wertpapier",
+      "text": "WP-ABRECHNUNG KAUF ANDERES DEPOT",
+      "signed": "-250",
+      "raw_type": "Wertpapier"
+    },
+    {
+      "id": "acc-TESTREF0008",
+      "kind": "INTEREST",
+      "datetime": "2026-03-16T11:00:00+00:00",
+      "currency": "EUR",
+      "net": "0.42",
+      "label": "Zinsen / Dividenden",
+      "text": "Habenzinsen"
+    }
+  ]
+}

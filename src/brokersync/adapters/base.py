@@ -43,6 +43,8 @@ class Challenge:
     kind: str
     message: str
     url: str = ""
+    # A picture to show with it (a data: URL), e.g. comdirect's photoTAN graphic.
+    image: str = ""
 
 
 class AuthRequired(Exception):
