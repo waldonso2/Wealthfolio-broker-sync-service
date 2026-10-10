@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.3
+
+- **Tax for dividends from the CSV import.** Scalable's CSV export has no tax on dividends, so dividends the addon imported had none. When the sync finds such a dividend for a broker's payout that carries a tax, it puts the tax into the imported activity - only the tax field; amount and comment stay, and tax is not part of Wealthfolio's duplicate fingerprint, so a later re-import still recognises it. Dividends matched before this version get it once: the first run after the update fetches the details of those transactions again (for Scalable a few minutes, paced for its rate limit). The log says how many dividends got their tax.
+
 ## 0.7.2
 
 - **Fix: comdirect returned only half a year without a start date.** Unasked, comdirect's API delivers about six months of giro bookings (and possibly depot transactions); older ones only when a date is given. Without a start date the service now asks for ten years back, giro and depot alike; if comdirect refuses the date, it asks without.

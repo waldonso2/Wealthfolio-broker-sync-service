@@ -650,6 +650,7 @@ class ScalableAdapter(BrokerAdapter):
                 # without them fail visibly and the next run fetches them.
                 log.warning("scalable: details for %d of %d transactions not fetched (rate limit), the next run "
                             "continues", len(wanted) - n, len(wanted))
+                self.incomplete = True
                 break
         txs = to_transactions(items, details)
         missing = {i["id"] for i in wanted if i["id"] not in details}

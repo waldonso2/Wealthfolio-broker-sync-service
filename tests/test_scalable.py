@@ -242,7 +242,7 @@ def test_a_lasting_rate_limit_books_what_has_details_and_retries_the_rest(no_wai
     a._cli = Limited(limit_after=2, limited_calls=99)
     txs = {t.id: t for t in a.get_transactions(None)}
     fetched = set(a._cli.details)
-    assert len(fetched) == 2
+    assert len(fetched) == 2 and a.incomplete
     for tid in trades:
         if tid in fetched:
             assert txs[tid].gross is not None and "Details" not in txs[tid].label
