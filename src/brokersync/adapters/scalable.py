@@ -46,6 +46,7 @@ import threading
 import time
 from collections import Counter
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -67,6 +68,11 @@ CONFIRM_WAIT = 45
 # A scheduled run waits this long for the user to confirm the link from the notification.
 UNATTENDED_LOGIN_WAIT = 10 * 60
 PAGE_SIZE = 100
+# Scalable rate-limits the API (RATE_LIMITED after ~150 detail queries in half a
+# minute): pause between detail queries, and on the limit wait and try again.
+DETAIL_PAUSE = 1.0
+RATE_LIMIT_WAITS = (30, 60, 120)
+RETRY_AFTER = re.compile(r"retry after (\d+)s")
 NETTING_WINDOW = timedelta(days=7)
 RELOGIN_CODES = {"no_session", "refresh_relogin_required"}
 
@@ -113,6 +119,14 @@ class ScError(AdapterError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
+
+
+class RateLimited(AdapterError):
+    """Scalable still rate-limits after waiting."""
+
+
+def _rate_limited(e: ScError) -> bool:
+    return e.code == "rate_limited" or "RATE_LIMITED" in str(e)
 
 
 def _dec(v) -> Decimal | None:
@@ -445,10 +459,20 @@ class ScalableAdapter(BrokerAdapter):
         return ["--portfolio-id", pid] if pid else []
 
     def _run(self, *args: str) -> dict:
-        try:
-            data = self.cli.run(*args)
-        except ScError as e:
-            raise self._translate(e) from e
+        for attempt, wait in enumerate((*RATE_LIMIT_WAITS, None)):
+            try:
+                data = self.cli.run(*args)
+                break
+            except ScError as e:
+                if not _rate_limited(e):
+                    raise self._translate(e) from e
+                if wait is None:
+                    raise RateLimited(f"Scalable: {e}") from e
+                m = RETRY_AFTER.search(str(e))
+                pause = min(int(m.group(1)), 300) if m else wait
+                log.info("scalable: rate limited (%s), waiting %ds (attempt %d)", args[1] if len(args) > 1 else args[0],
+                         pause, attempt + 1)
+                time.sleep(pause)
         self._keep()
         return data
 
@@ -537,13 +561,26 @@ class ScalableAdapter(BrokerAdapter):
         log.info("scalable: %d transactions from sc (%s)", len(items), summary(items))
         if items and not any(_when(i.get("last_event_datetime")) for i in items):
             log.warning("scalable: transactions without a usable date, first one: %s", json.dumps(shape(items[0])))
-        details = {}
-        for item in items:
-            if item.get("status") in ("FILLED", "SETTLED") and needs_details(item):
+        # Details only for what the sync doesn't have yet: one query each, and Scalable rate-limits.
+        wanted = [i for i in items if i.get("status") in ("FILLED", "SETTLED") and needs_details(i)
+                  and i["id"] not in self.known_ids]
+        details: dict[str, dict] = {}
+        for n, item in enumerate(wanted):
+            if n:
+                time.sleep(DETAIL_PAUSE)
+            try:
                 details[item["id"]] = self._run("broker", "transaction", "details", *self._portfolio(),
                                                 "--transaction-id", item["id"])
-                time.sleep(0.1)  # be gentle on the first, full fetch
+            except RateLimited:
+                # Still limited after waiting: book what has its details now. Trades
+                # without them fail visibly and the next run fetches them.
+                log.warning("scalable: details for %d of %d transactions not fetched (rate limit), the next run "
+                            "continues", len(wanted) - n, len(wanted))
+                break
         txs = to_transactions(items, details)
+        missing = {i["id"] for i in wanted if i["id"] not in details}
+        txs = [replace(t, label=f"{t.label} (Details folgen beim nächsten Abruf)") if t.id in missing
+               and t.kind in (Kind.BUY, Kind.SELL) else t for t in txs]
         return [t for t in txs if since is None or t.datetime >= since]
 
     def get_positions(self) -> list[Position]:

@@ -465,3 +465,13 @@ def test_a_failed_repair_is_reported_and_tried_again(tmp_path):
     [r] = syncer.run()
     assert r.status == "ok" and len(wf.activities) == count
     assert holdings(wf, "acc-depot")[0] == {"EUR": D(0)}
+
+
+def test_the_reason_of_a_failed_run_is_logged(tmp_path, caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, "brokersync.sync")
+    wf = FakeWealthfolio()
+    syncer, _ = setup(tmp_path, wf, brokers=("broken",))
+    syncer.run()
+    assert "broken: broker is down" in caplog.text

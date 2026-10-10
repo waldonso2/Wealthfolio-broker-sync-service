@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.3
+
+- **Fix: a full Scalable fetch stopped with "RATE_LIMITED".** Scalable limits how many transaction details may be queried in a short time. The adapter now pauses a second between detail queries, waits and retries when Scalable reports the limit (30 s, 60 s, 120 s, or as long as Scalable says), and only queries details of transactions the sync doesn't have yet. If the limit lasts, the run books everything it has the details for and reports the remaining trades ("Details folgen beim nächsten Abruf"); the next run continues with those.
+- The journal now carries the reason of a failed run, not only its status.
+
 ## 0.4.2
 
 - **Fix: Scalable brought no transactions and no cash balance.** The CLI's broker commands wrap their answer in `result` (next to the account and portfolio they used); the adapter read one level too high and found nothing. It now reads the answer like `sc` itself does. After the update, click *Ab Startdatum neu abrufen* in the Scalable settings, so the next run fetches the history the earlier runs missed.
