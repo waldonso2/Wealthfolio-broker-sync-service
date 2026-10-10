@@ -5,6 +5,7 @@ DKB and for a second, fabricated profile that exists only here."""
 import json
 import re
 from datetime import UTC, datetime
+from decimal import Decimal as D
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ import pytest
 from brokersync.adapters import ADAPTERS
 from brokersync.adapters import fints as fints_mod
 from brokersync.adapters.base import AdapterError, AuthRequired
+from brokersync.adapters.deutschebank import DeutscheBankAdapter
 from brokersync.adapters.dkb import DkbAdapter
 from brokersync.adapters.fints import FintsAdapter, credential_fields
 from brokersync.model import Kind
@@ -37,6 +39,7 @@ class ExampleBank(FintsAdapter):
 PROFILES = {
     DkbAdapter: {"username": "max", "pin": "1234", "product_id": "TESTPRODUCT"},
     ExampleBank: {"username": "max", "pin": "1234", "product_id": "TESTPRODUCT", "blz": "100 700 00"},
+    DeutscheBankAdapter: {"username": "1234567890", "pin": "1234", "product_id": "TESTPRODUCT", "blz": "10070000"},
 }
 
 
@@ -67,12 +70,14 @@ def test_each_profile_connects_to_its_bank(opts):
         with pytest.raises(AuthRequired):
             cls(creds).login()
     assert connected == [("12030000", "https://fints.dkb.de/fints", "TESTPRODUCT"),
-                         ("10070000", "https://fints.example.invalid/", "TESTPRODUCT")]
+                         ("10070000", "https://fints.example.invalid/", "TESTPRODUCT"),
+                         ("10070000", "https://fints.deutsche-bank.de/", "TESTPRODUCT")]
 
 
 def test_a_bank_code_per_branch_is_a_credential(opts):
     assert [f.name for f in ExampleBank.credential_fields] == ["username", "pin", "blz", "iban", "product_id"]
     assert "blz" not in [f.name for f in DkbAdapter.credential_fields]
+    assert "blz" in [f.name for f in DeutscheBankAdapter.credential_fields]
     with pytest.raises(AdapterError, match="Bankleitzahl fehlt"):
         ExampleBank({**PROFILES[ExampleBank], "blz": ""}).login()
 
@@ -152,3 +157,67 @@ def test_replay_works_for_every_profile():
     since = datetime(2026, 8, 1, tzinfo=UTC)
     assert [t.id for t in ExampleBank.replay(RECORDING).get_transactions(since)] == \
         [t.id for t in DkbAdapter.replay(RECORDING).get_transactions(since)]
+
+
+class Op:
+    """Stands in for python-fints' FinTSOperations members (the adapter reads their names)."""
+
+    def __init__(self, name):
+        self.name = name
+
+
+class Bpd:
+    def __init__(self, segments):
+        self.segments = segments
+
+    def find_segment_first(self, name):
+        return name if name in self.segments else None
+
+
+class GiroAndDepot(FakeFinTS):
+    """A giro account and a depot without IBAN, the depot only in the user parameters."""
+
+    bpd = Bpd({"HIWPDS"})
+
+    def get_sepa_accounts(self):
+        depot = fints_mod._Account("DE00000000000000000000")
+        depot.iban = None
+        return [depot] + super().get_sepa_accounts()
+
+    def get_information(self):
+        return {"bank": {"supported_operations": {Op("GET_TRANSACTIONS"): True, Op("GET_HOLDINGS"): True}},
+                "accounts": [
+                    {"iban": "DE02100700000000202051", "account_number": "0000202051", "subaccount_number": "00",
+                     "type": 1, "product_name": "Girokonto", "supported_operations": {Op("GET_TRANSACTIONS"): True}},
+                    {"iban": None, "account_number": "0000999888", "subaccount_number": None, "type": 30,
+                     "product_name": "maxblue Depot", "supported_operations": {Op("GET_HOLDINGS"): True}},
+                ]}
+
+    def get_holdings(self, account):
+        self.calls.append(("holdings", account.accountnumber, account.blz))
+        if account.accountnumber != "0000999888":
+            raise ValueError("no depot")
+        return [type("Holding", (), {"ISIN": "DE000TEST001", "name": "TEST Fonds", "pieces": 12.5,
+                                     "value_symbol": "EUR", "total_value": 1250.0})()]
+
+
+def test_deutsche_bank_reads_the_giro_account_and_the_depot_from_the_user_parameters(monkeypatch, caplog):
+    import logging
+
+    monkeypatch.setattr(FintsAdapter, "client_factory",
+                        staticmethod(lambda *args: GiroAndDepot(RECORDING, sca=False)))
+    a = DeutscheBankAdapter(PROFILES[DeutscheBankAdapter])
+    with caplog.at_level(logging.INFO, logger="brokersync.adapters.fints"):
+        a.login()
+    log = caplog.text
+    assert "Depotbestand ja, Depotumsätze nein" in log and "„maxblue Depot“ (Art 30, IBAN nein)" in log
+    assert "0000999888" not in log and "202051" not in log  # no account numbers in the log
+    # The giro account is the first with an IBAN, not the depot listed before it.
+    assert a.get_cash()
+    [p] = a.get_positions()
+    assert (p.isin, p.shares) == ("DE000TEST001", D("12.5"))
+    assert ("holdings", "0000999888", "10070000") in a._client.calls
+
+
+def test_deutsche_bank_compares_its_positions():
+    assert DeutscheBankAdapter.reports_positions and not DkbAdapter.reports_positions
