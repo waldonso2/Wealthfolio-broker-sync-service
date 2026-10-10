@@ -2,7 +2,7 @@
 {% block content %}
 <div class="card">
   <h1>Doppelte Buchungen</h1>
-  <p>Hier stehen Buchungen, die der Dienst angelegt hat, obwohl es sie schon aus dem CSV- oder PDF-Import des Addons gab. Bis Version 0.3.1 erkannte der Dienst Wertpapiere nur am Symbol; das Addon führt sie aber unter dem zugeordneten Ticker, der Dienst unter der ISIN.</p>
+  <p>Hier stehen Buchungen, die der Dienst angelegt hat, obwohl es sie schon aus einem CSV- oder PDF-Import gab. Bis Version 0.3.1 erkannte der Dienst Wertpapiere nur am Symbol; ein Import führt sie aber oft unter einem zugeordneten Ticker, der Dienst unter der ISIN.</p>
   <p class="muted">Gelöscht wird nur die Kopie des Dienstes (Kommentar „[SYNC …]“) samt ihrer Übertragsbuchungen. Deine CSV-/PDF-Buchung bleibt, und der Dienst legt den Vorgang nicht noch einmal an.</p>
   {% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error }}</div>{% endif %}
   {% for r in report %}

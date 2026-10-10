@@ -21,9 +21,11 @@ flowchart LR
   end
   Sync -- "FinTS (read-only)" --> DKB[(DKB)]
   Sync -- "WebSocket via pytr (read-only)" --> TR[(Trade Republic)]
+  Sync -- "Scalable CLI sc (read-only)" --> SC[(Scalable Capital)]
+  Sync -- "REST-API (read-only)" --> CD[(comdirect)]
   Sync -- "REST /api/v1" --> WF[(Wealthfolio)]
   Sync -- "HTTP" --> Ntfy[(ntfy)]
-  Addon["Broker Importer Addon<br/>(CSV-/PDF-Import)"] -- bucht ebenfalls --> WF
+  Import["CSV-/PDF-Import<br/>(von Hand, optional)"] -. bucht ebenfalls .-> WF
 ```
 
 Es gibt zwei Prozesse mit demselben Code und demselben Datenverzeichnis:
@@ -53,7 +55,7 @@ flowchart TB
   sync --> state["state.py"] & vault["vault.py"] & config["config.py"]
   web --> duplicates["duplicates.py<br/>Bereinigung"]
   subgraph adapters["adapters/"]
-    base["base.py<br/>BrokerAdapter"] --- fints["fints.py<br/>FintsAdapter"] & tr["tr.py"] & scalable["scalable.py"]
+    base["base.py<br/>BrokerAdapter"] --- fints["fints.py<br/>FintsAdapter"] & tr["tr.py"] & scalable["scalable.py"] & comdirect["comdirect.py"]
     fints --- dkb["dkb.py<br/>Profil"]
   end
   adapters --> model["model.py<br/>Transaction, Kind, Position, CashBalance"]
@@ -63,7 +65,7 @@ flowchart TB
 Die Schichten hängen nur in eine Richtung voneinander ab:
 
 1. **Adapter** sprechen mit dem Broker und liefern ausschließlich broker-neutrale Objekte aus `model.py`. Sie wissen nichts von Wealthfolio.
-2. **Mapping** übersetzt eine `Transaction` in eine oder mehrere Wealthfolio-Aktivitäten, nach denselben Regeln wie das Addon. Es kennt keinen Broker-Code, nur `Kind`.
+2. **Mapping** übersetzt eine `Transaction` in eine oder mehrere Wealthfolio-Aktivitäten (Buchungsmodell unten). Es kennt keinen Broker-Code, nur `Kind`.
 3. **Sync** verbindet beides und entscheidet, was neu ist.
 
 So kommt ein neuer Broker ohne Änderungen an Mapping und Sync aus.
@@ -123,13 +125,13 @@ Ein Lauf mit Fehlern zählt nicht als Erfolg. Der nächste Lauf fängt deshalb w
 
 ## Doppelte Buchungen vermeiden
 
-Dieselbe Buchung kann auf drei Wegen schon in Wealthfolio sein: Der Sync hat sie früher angelegt, ein Lauf brach mitten in einer mehrteiligen Buchung ab, oder das Addon hat sie per CSV/PDF importiert. Drei Schichten fangen das ab:
+Dieselbe Buchung kann auf drei Wegen schon in Wealthfolio sein: Der Sync hat sie früher angelegt, ein Lauf brach mitten in einer mehrteiligen Buchung ab, oder ein CSV-/PDF-Import hat sie schon angelegt. Drei Schichten fangen das ab:
 
 | Schicht | Wo | Erkennt |
 |---|---|---|
 | 1. Sync-Status | `state.synced` | Transaktionen, die vollständig angelegt oder als vorhanden erkannt wurden. Sie werden gar nicht erst verarbeitet |
 | 2. Wealthfolio-Fingerprint | Wealthfolio (`409 Duplicate activity detected` → `Duplicate`) | Teile, die ein abgebrochener Lauf schon angelegt hat. Der Kommentar mit `[SYNC <broker>:<id>]` gehört zum Fingerprint und darf daher nie umformuliert werden |
-| 3. Abgleich mit Importen | `dedup.ExistingIndex` | Aktivitäten aus CSV/PDF-Importen des Addons: gleiches Konto und gleicher Typ, ≤ 36 h Abstand, gleiche Stückzahl, Betrag ±0,02. Das Symbol muss nicht übereinstimmen (Addon: gemapptes Tickersymbol, Sync: ISIN) |
+| 3. Abgleich mit Importen | `dedup.ExistingIndex` | Aktivitäten aus CSV-/PDF-Importen: gleiches Konto und gleicher Typ, ≤ 36 h Abstand, gleiche Stückzahl, Betrag ±0,02. Das Symbol muss nicht übereinstimmen (Import: zugeordnetes Tickersymbol, Sync: ISIN) |
 
 Geht der Sync-Status verloren (`state.db` gelöscht), findet Schicht 2 alles wieder. `test_lost_state_is_recovered_from_the_comments` prüft das.
 
@@ -141,22 +143,23 @@ Duplikate, die ältere Versionen trotzdem erzeugt haben, findet `duplicates.py` 
 
 ## Buchungsmodell
 
-Jeder Broker hat in Wealthfolio zwei Konten: ein **Cash-Konto** und ein **Depot**, wie beim Addon. `mapping.py` setzt das um:
+Jeder Broker hat in Wealthfolio zwei Konten: ein **Cash-Konto** und ein **Depot**. `mapping.py` setzt das um:
 
 | `Kind` | Aktivitäten |
 |---|---|
 | `BUY` | Cash `TRANSFER_OUT` → Depot `TRANSFER_IN` (gemeinsame `sourceGroupId`), Depot `BUY` |
 | `SELL`, `DIVIDEND` | Depot `SELL`/`DIVIDEND`, dann zurück aufs Cash-Konto (Übertragspaar) |
 | `BUY` mit `bonus_funded` (Saveback) | `BUY` ohne Übertrag vom Cash-Konto |
+| `BUY`/`SELL` mit `external_cash` (comdirect, Anfangsbestand) | wie oben, dazu vorher ein `DEPOSIT` des Kaufbetrags bzw. danach ein `WITHDRAWAL` des Erlöses auf dem Cash-Konto |
 | `DEPOSIT`, `WITHDRAWAL`, `INTEREST`, `FEE`, `TAX` | eine Aktivität auf dem Cash-Konto (ohne Asset, Menge und Preis 1) |
 | `TAX_REFUND` | `CREDIT` mit Subtyp `TAX_REFUND` |
 | `WITHDRAWAL` auf ein eigenes Konto (*Überträge*) | `TRANSFER_OUT` → `TRANSFER_IN` auf das Zielkonto |
 | `SECURITIES_CASH` | nichts. Der Sync sucht nur den Übertrag, den die Wertpapierseite gebucht hat |
 | `UNKNOWN` | nichts. Gespeichert, auf der Seite *Unbekannt* gelistet, einmal gemeldet |
 
-**Cash-Aktivitäten tragen kein Asset**, auch die Überträge nicht, genau wie die Importe des Addons. Mit Asset bucht Wealthfolio ein `TRANSFER_IN`/`TRANSFER_OUT` als Wertpapierübertrag dieses Assets, und es fließt kein Geld. Versionen vor 0.3.6 haben Cash-Aktivitäten mit dem Asset `$CASH-<Währung>` angelegt. `repair.py` ändert die eigenen davon einmal je Broker auf „kein Asset“ (`PUT /activities` mit `asset: {}`), statt sie zu löschen und neu anzulegen; Ids, Sync-Status und Übertragspaare bleiben so erhalten. Bis das geklappt hat, bucht der Sync für diesen Broker nichts. Ein erneut gesendeter Übertrag ohne Asset würde sonst nicht als dieselbe Aktivität erkannt und doppelt gebucht. Erledigt ist die Reparatur, wenn das Flag `cash-assets-repaired:<broker>` gesetzt ist.
+**Cash-Aktivitäten tragen kein Asset**, auch die Überträge nicht. Mit Asset bucht Wealthfolio ein `TRANSFER_IN`/`TRANSFER_OUT` als Wertpapierübertrag dieses Assets, und es fließt kein Geld. Versionen vor 0.3.6 haben Cash-Aktivitäten mit dem Asset `$CASH-<Währung>` angelegt. `repair.py` ändert die eigenen davon einmal je Broker auf „kein Asset“ (`PUT /activities` mit `asset: {}`), statt sie zu löschen und neu anzulegen; Ids, Sync-Status und Übertragspaare bleiben so erhalten. Bis das geklappt hat, bucht der Sync für diesen Broker nichts. Ein erneut gesendeter Übertrag ohne Asset würde sonst nicht als dieselbe Aktivität erkannt und doppelt gebucht. Erledigt ist die Reparatur, wenn das Flag `cash-assets-repaired:<broker>` gesetzt ist.
 
-Beträge sind durchgehend `Decimal`. Gebühr und Steuer stehen in eigenen Feldern, der Betrag eines Kaufs oder Verkaufs ist `trade_final_cash(...)`. Das entspricht genau den Regeln des Addons (`src/pdf/activities.ts`, `src/common.ts`).
+Beträge sind durchgehend `Decimal`. Gebühr und Steuer stehen in eigenen Feldern, der Betrag eines Kaufs oder Verkaufs ist `trade_final_cash(...)`. Dieselben Regeln sollte ein CSV-/PDF-Import befolgen, damit der Abgleich (Schicht 3) seine Buchungen erkennt.
 
 ## Adapter
 
@@ -269,8 +272,8 @@ FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login
 | Datei | Prüft |
 |---|---|
 | `tests/fakes.py` | ein Wealthfolio im Speicher (`httpx.MockTransport`): Login, Fingerprint-Duplikate, Suche, Ändern, Löschen von Übertragspaaren, Bestände (Überträge mit Asset sind Wertpapierüberträge) |
-| `test_mapping.py` | Buchungsregeln des Addons |
-| `test_sync.py` | Ablauf, Wiederholung nach Teilfehlern, verlorener Status, Importe des Addons, Sperre, Fehler eines Brokers, Reparatur alter `$CASH`-Überträge |
+| `test_mapping.py` | Buchungsregeln (Zwei-Konten-Modell, Beträge, Überträge) |
+| `test_sync.py` | Ablauf, Wiederholung nach Teilfehlern, verlorener Status, CSV-/PDF-Importe (auch Steuer nachtragen), Sperre, Fehler eines Brokers, Reparatur alter `$CASH`-Überträge |
 | `test_fints.py` | was jedes FinTS-Profil bekommt, für DKB und ein erfundenes zweites Profil: Bankleitzahl, App-Freigabe, TAN-Eingabe, PIN-Schutz, Meldungen, Muster |
 | `test_dkb.py`, `test_tr.py` | Adapter gegen nachgebaute python-fints- bzw. pytr-Clients: Login, PIN-Schutz, Fehlerpfade, WebSocket-Paging, Abgleich, Duplikate |
 | `test_scalable.py` | Scalable gegen ein nachgebautes `sc` (`fixtures/scalable/fake_sc.py`): Gerätecode-Login, Sitzung im Tresor, abgelaufene Sitzung im Timer-Lauf, CLI nicht freigeschaltet, ganzer Abruf |
