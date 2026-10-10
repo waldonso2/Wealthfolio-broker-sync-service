@@ -31,7 +31,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | `src/brokersync/repair.py` | Once per broker (state flag): removes the `$CASH` asset from the sync's own cash activities (PUT `/activities`, `asset: {}`); the broker books nothing until it worked |
 | `src/brokersync/duplicates.py` | Finds activities the sync created on top of CSV/PDF imports (same rules as `ExistingIndex`) and removes only the sync's copies; UI page *Duplikate*, confirmation required |
 | `src/brokersync/coverage.py` | After each run: transactions synced before vs. Wealthfolio (by `[SYNC …]` reference and stored ids) → missing/partial/ignored, and for `full_history` adapters activities the broker no longer lists (orphan); stored in `state.gaps`, shown on *Prüfung* with *Wieder anlegen* / *Ignorieren* |
-| `src/brokersync/audit.py` | Read-only check of a broker's two accounts (UI page *Prüfung*): depot moments (activities ≤10 s apart) whose cash effect isn't zero, and transfers between the two accounts without their other leg |
+| `src/brokersync/audit.py` | Read-only check of a broker's two accounts (UI page *Prüfung*): depot moments (activities ≤10 s apart) whose cash effect isn't zero (two that cancel out within 36 h are a pair, in-kind payouts move no cash), and transfers between the two accounts without their other leg |
 | `src/brokersync/notify.py` | ntfy |
 | `src/brokersync/sc_install.py` | `brokersync install-sc`: downloads the latest `sc` release, verifies Scalable's minisign signature (pinned key) and the SHA-256 before writing `/opt/wealthfolio-broker-sync/bin/sc`; called by `deploy/setup.sh`, failure is non-fatal |
 | `src/brokersync/web/` | FastAPI + Jinja2 UI (German texts), CSRF via a dependency, own login |

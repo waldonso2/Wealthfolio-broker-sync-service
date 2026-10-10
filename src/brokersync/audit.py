@@ -9,7 +9,10 @@ shows cash and the cash account the opposite. This finds where:
 - **Depot moments that leave cash:** the securities account's activities,
   grouped by time (the transfer legs lie a few seconds from their trade), whose
   cash effect doesn't net to zero - e.g. a buy without its funding transfer,
-  or a sweep whose sale was deleted.
+  or a sweep whose sale was deleted. Two such moments that cancel each other
+  within ``PAIR_HOURS`` belong together (a PDF import's transfer and the CSV
+  import's trade, or a transfer entered by hand at noon) and are not listed.
+  Payouts in kind (a stock dividend, a staking reward) move no cash.
 - **Transfers without a partner:** a transfer on the securities account with
   no matching opposite transfer on the cash account (same ``sourceGroupId``, or
   the same amount within a minute), and an internal transfer on the cash
@@ -30,6 +33,10 @@ from .wealthfolio import WealthfolioClient
 TOLERANCE = Decimal("0.02")
 MOMENT_SECONDS = 10
 PARTNER_SECONDS = 60
+# Like the import check (dedup.MATCH_WINDOW_SECONDS): moments that cancel out within this belong together.
+PAIR_HOURS = 36
+# Subtypes Wealthfolio books as shares, not money.
+IN_KIND = {"DIVIDEND_IN_KIND", "STAKING_REWARD"}
 # Cash effect of each type on its own account, as Wealthfolio books ``amount``.
 SIGN = {"DEPOSIT": 1, "TRANSFER_IN": 1, "SELL": 1, "DIVIDEND": 1, "INTEREST": 1, "CREDIT": 1,
         "WITHDRAWAL": -1, "TRANSFER_OUT": -1, "BUY": -1, "FEE": -1, "TAX": -1}
@@ -57,6 +64,8 @@ def is_cash_transfer(a: dict) -> bool:
 def cash_effect(a: dict) -> Decimal:
     t = a.get("activityType") or ""
     if t in ("TRANSFER_IN", "TRANSFER_OUT") and not is_cash_transfer(a):
+        return Decimal(0)
+    if (a.get("subtype") or "") in IN_KIND:
         return Decimal(0)
     return SIGN.get(t, 0) * abs(_dec(a.get("amount")))
 
@@ -92,14 +101,16 @@ def check(activities: list[dict], accounts: Accounts) -> Report:
 
     # Depot moments: activities less than MOMENT_SECONDS apart belong together.
     group: list[dict] = []
+    moments: list[Moment] = []
     for a in [*depot, None]:
         if group and (a is None or (_when(a) - _when(group[-1])).total_seconds() > MOMENT_SECONDS):
             net = sum((cash_effect(x) for x in group), Decimal(0))
             if abs(net) > TOLERANCE:
-                report.moments.append(Moment(group, net))
+                moments.append(Moment(group, net))
             group = []
         if a is not None:
             group.append(a)
+    report.moments = _unpaired(moments)
 
     # Transfers between the two accounts without their other leg.
     used: set[str] = set()
@@ -134,6 +145,25 @@ def check(activities: list[dict], accounts: Accounts) -> Report:
             report.lonely.append(a)
     report.lonely.sort(key=_when)
     return report
+
+
+def _unpaired(moments: list[Moment]) -> list[Moment]:
+    """The moments left after pairing those that cancel each other within PAIR_HOURS (nearest first)."""
+    paired: set[int] = set()
+    for i, m in enumerate(moments):
+        if i in paired:
+            continue
+        best = None
+        for j in range(i + 1, len(moments)):
+            n = moments[j]
+            gap = (_when(n.activities[0]) - _when(m.activities[-1])).total_seconds()
+            if gap > PAIR_HOURS * 3600:
+                break
+            if j not in paired and abs(m.net + n.net) <= TOLERANCE and (best is None or gap < best[0]):
+                best = (gap, j)
+        if best:
+            paired.update((i, best[1]))
+    return [m for i, m in enumerate(moments) if i not in paired]
 
 
 def run(wf: WealthfolioClient, accounts: Accounts) -> Report:

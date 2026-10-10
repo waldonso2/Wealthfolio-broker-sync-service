@@ -64,7 +64,7 @@
 
   <h3>Zeitpunkte im Depotkonto, an denen Bargeld stehen bleibt: {{ x.moments | length }}</h3>
   {% if x.moments %}
-  <p class="muted">Summe: {{ x.moments_total | money }} EUR. Jeder Block sind Buchungen, die zusammengehören (wenige Sekunden auseinander); „bleibt stehen“ ist, was davon nicht ausgeglichen ist. Typisch: ein Kauf ohne „Funds from Cash …“, ein Übertrag „… -> Cash“ ohne seinen Verkauf oder seine Ausschüttung, oder eine Buchung doppelt.</p>
+  <p class="muted">Summe: {{ x.moments_total | money }} EUR. Jeder Block sind Buchungen, die zusammengehören (wenige Sekunden auseinander; zwei Blöcke, die sich innerhalb von 36 Stunden ausgleichen, gelten als zusammengehörig und stehen hier nicht); „bleibt stehen“ ist, was davon nicht ausgeglichen ist. Typisch: ein Kauf ohne „Funds from Cash …“, ein Übertrag „… -> Cash“ ohne seinen Verkauf oder seine Ausschüttung, oder eine Buchung doppelt.</p>
   <div class="table"><table>
     <tr><th>Zeitpunkt</th><th>Art</th><th>Betrag</th><th>Wirkung</th><th>Kommentar</th><th>Herkunft</th></tr>
     {% for m in x.moments[:200] %}
