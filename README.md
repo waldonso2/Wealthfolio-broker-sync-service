@@ -199,7 +199,7 @@ Der Dienst liest Girokonto **und Depot** über die **offizielle REST-API der com
 | alle anderen Girobuchungen (Überweisung, Karte, Gebühren, Zinsen, …) | **nicht gebucht** |
 | Depotübertrag, Kauf/Verkauf ohne Kontobuchung nach 10 Tagen | **nicht gebucht**, als unbekannt gemeldet – den Bestand legst du unter *Prüfung* an |
 
-Vorgemerkte Umsätze und Orders übernimmt der Dienst erst, wenn sie gebucht sind. Ohne Startdatum holt der erste Abruf alles, was comdirect über die Schnittstelle herausgibt; wie weit das zurückreicht, steht im Log (`comdirect: … giro bookings (oldest …), … depot transactions (oldest …)`).
+Vorgemerkte Umsätze und Orders übernimmt der Dienst erst, wenn sie gebucht sind. Ohne Startdatum fragt der Dienst zehn Jahre zurück (ohne Datum liefert comdirect nur ein halbes Jahr) und übernimmt, was comdirect davon herausgibt; wie weit das zurückreicht, steht im Log (`comdirect: … giro bookings (oldest …), … depot transactions (oldest …)`).
 
 ## Abgleich mit Wealthfolio
 
