@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import re
 import time
 from collections import Counter
@@ -43,6 +44,8 @@ from zoneinfo import ZoneInfo
 
 from ..model import BrokerAccount, CashBalance, Kind, Position, Transaction
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
+
+log = logging.getLogger(__name__)
 
 # The FinTS product ID registered for this service with the Deutsche
 # Kreditwirtschaft; empty until it is assigned (then users need not enter one).
@@ -61,10 +64,10 @@ INTEREST = re.compile(r"\bzins|habenzins|guthabenzins", re.IGNORECASE)
 FEE = re.compile(r"entgelt|geb[uü]hr|kontof[uü]hrung|abschluss", re.IGNORECASE)
 
 
-def credential_fields(bank: str, banking: str, *, blz: bool = False) -> list[CredentialField]:
+def credential_fields(bank: str, banking: str, *, blz: bool = False, username_help: str = "") -> list[CredentialField]:
     """The usual FinTS credentials; ``blz`` for banks whose bank code differs per branch."""
     fields = [
-        CredentialField("username", "Anmeldename", help=f"Wie beim {banking} im Browser."),
+        CredentialField("username", "Anmeldename", help=username_help or f"Wie beim {banking} im Browser."),
         CredentialField("pin", "PIN / Passwort", secret=True),
     ]
     if blz:
@@ -142,6 +145,7 @@ class FintsAdapter(BrokerAdapter):
         if self._client.init_tan_response:
             self._pending = self._client.init_tan_response
             self._settle()
+        self._log_capabilities()
 
     def complete_login(self, code: str) -> None:
         if self._pending is None:
@@ -226,6 +230,34 @@ class FintsAdapter(BrokerAdapter):
         adapter._open = True
         return adapter
 
+    def _information(self) -> dict:
+        """python-fints' summary of the bank parameters and accounts ({} when not available)."""
+        try:
+            return self._client.get_information() or {}
+        except Exception:
+            return {}
+
+    def _log_capabilities(self) -> None:
+        """What the bank offers over FinTS, without numbers or names - to set up a new bank profile."""
+        info = self._information()
+        if not info:
+            return
+        ops = _ops(info.get("bank", {}))
+        depot_tx = False
+        try:
+            depot_tx = bool(self._client.bpd.find_segment_first("HIWDUS"))
+        except Exception:
+            pass
+        log.info("%s (FinTS): Umsätze %s, camt %s, Depotbestand %s, Depotumsätze %s", self.label,
+                 _yes(ops.get("GET_TRANSACTIONS")), _yes(ops.get("GET_TRANSACTIONS_XML")),
+                 _yes(ops.get("GET_HOLDINGS")), _yes(depot_tx))
+        for a in info.get("accounts") or []:
+            acc_ops = _ops(a)
+            log.info("%s (FinTS): Konto „%s“ (Art %s, IBAN %s): Umsätze %s, Depotbestand %s", self.label,
+                     a.get("product_name") or "?", a.get("type") or "?", _yes(a.get("iban")),
+                     _yes(acc_ops.get("GET_TRANSACTIONS") or acc_ops.get("GET_TRANSACTIONS_XML")),
+                     _yes(acc_ops.get("GET_HOLDINGS")))
+
     # ── data ────────────────────────────────────────────────────────────────
     def _account(self):
         accounts = self._call(self._client.get_sepa_accounts)
@@ -237,7 +269,26 @@ class FintsAdapter(BrokerAdapter):
                 if (a.iban or "").upper() == wanted:
                     return a
             raise AdapterError(f"Die IBAN {wanted} gehört nicht zu diesem {self.label}-Zugang.")
-        return accounts[0]
+        # A depot listed with the giro account has no IBAN: the giro account is the first with one.
+        return next((a for a in accounts if a.iban), accounts[0])
+
+    def _depot_accounts(self) -> list:
+        """Accounts to ask for holdings: the SEPA accounts, plus accounts the user parameters
+        list with holdings that have no IBAN (a depot is not a SEPA account at most banks)."""
+        accounts = list(self._call(self._client.get_sepa_accounts) or [])
+        known = {(a.accountnumber, a.subaccount if hasattr(a, "subaccount") else None) for a in accounts}
+        for a in self._information().get("accounts") or []:
+            ops = _ops(a)
+            number = a.get("account_number")
+            if not ops.get("GET_HOLDINGS") or a.get("iban") or not number:
+                continue
+            if (number, a.get("subaccount_number")) in known:
+                continue
+            bank_id = a.get("bank_identifier")
+            accounts.append(_sepa_account(number, a.get("subaccount_number"),
+                                          getattr(bank_id, "bank_code", None) or self.blz
+                                          or (self.credentials.get("blz") or "").replace(" ", "")))
+        return accounts
 
     def get_accounts(self) -> list[BrokerAccount]:
         return [BrokerAccount(a.iban or a.accountnumber, a.iban or a.accountnumber, "EUR")
@@ -251,11 +302,14 @@ class FintsAdapter(BrokerAdapter):
 
     def get_positions(self) -> list[Position]:
         out: list[Position] = []
-        for account in self._call(self._client.get_sepa_accounts):
+        for account in self._depot_accounts():
             try:
                 holdings = self._call(self._client.get_holdings, account) or []
-            except AdapterError:
+            except AdapterError as e:
+                log.debug("%s (FinTS): kein Depotbestand für ein Konto: %s", self.label, e)
                 continue  # not a depot, or the bank doesn't offer holdings over FinTS
+            if holdings:
+                log.info("%s (FinTS): Depotbestand mit %d Positionen", self.label, len(holdings))
             for h in holdings:
                 out.append(Position(h.ISIN, h.name, Decimal(str(h.pieces)), h.value_symbol or "EUR",
                                     Decimal(str(h.total_value)) if h.total_value is not None else None))
@@ -271,6 +325,21 @@ class FintsAdapter(BrokerAdapter):
 
 def _cap(text: str) -> str:
     return text[:1].upper() + text[1:]
+
+
+def _ops(entry: dict) -> dict[str, bool]:
+    """``supported_operations`` of python-fints' information, by operation name."""
+    return {getattr(k, "name", str(k)): v for k, v in (entry.get("supported_operations") or {}).items()}
+
+
+def _yes(value) -> str:
+    return "ja" if value else "nein"
+
+
+def _sepa_account(number: str, subaccount, blz: str):
+    from fints.models import SEPAAccount
+
+    return SEPAAccount(iban=None, bic=None, accountnumber=number, subaccount=subaccount, blz=blz)
 
 
 def to_transactions(records: list[dict], securities: re.Pattern = SECURITIES, interest: re.Pattern = INTEREST,

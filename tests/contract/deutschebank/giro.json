@@ -1,0 +1,172 @@
+{
+  "description": "Fabricated giro account (posting texts assumed until a real run shows Deutsche Bank's): salary, card payment, maxblue buy and payout, own transfer, fee, interest",
+  "recording": {
+    "iban": "",
+    "accounts": [
+      {
+        "iban": "DE02100700000000202051"
+      }
+    ],
+    "balance": {
+      "amount": "3120.40",
+      "currency": "EUR"
+    },
+    "transactions": [
+      {
+        "date": "2026-09-01",
+        "entry_date": "2026-09-01",
+        "amount": "2800.00",
+        "currency": "EUR",
+        "posting_text": "SEPA-Gutschrift",
+        "purpose": "Gehalt 09/2026",
+        "applicant_name": "Muster GmbH",
+        "applicant_iban": "DE89370400440532013000"
+      },
+      {
+        "date": "2026-09-02",
+        "entry_date": "2026-09-03",
+        "amount": "-35.20",
+        "currency": "EUR",
+        "posting_text": "Kartenzahlung",
+        "purpose": "Debitkarte 2026-09-02 Musterstadt",
+        "applicant_name": "Baeckerei Muster",
+        "applicant_iban": ""
+      },
+      {
+        "date": "2026-09-05",
+        "entry_date": "2026-09-05",
+        "amount": "-1504.90",
+        "currency": "EUR",
+        "posting_text": "Wertpapierkauf",
+        "purpose": "maxblue Depot WKN TEST01 Stk 15",
+        "applicant_name": "",
+        "applicant_iban": ""
+      },
+      {
+        "date": "2026-09-10",
+        "entry_date": "2026-09-10",
+        "amount": "12.34",
+        "currency": "EUR",
+        "posting_text": "Ertragsgutschrift",
+        "purpose": "Ausschuettung TEST Fonds",
+        "applicant_name": "",
+        "applicant_iban": ""
+      },
+      {
+        "date": "2026-09-15",
+        "entry_date": "2026-09-15",
+        "amount": "-500.00",
+        "currency": "EUR",
+        "posting_text": "SEPA-Überweisung",
+        "purpose": "Umbuchung Tagesgeld",
+        "applicant_name": "Max Mustermann",
+        "applicant_iban": "DE02500105170137075030"
+      },
+      {
+        "date": "2026-09-30",
+        "entry_date": "2026-09-30",
+        "amount": "-5.90",
+        "currency": "EUR",
+        "posting_text": "Entgelt",
+        "purpose": "Kontofuehrung 09/2026",
+        "applicant_name": "",
+        "applicant_iban": ""
+      },
+      {
+        "date": "2026-09-30",
+        "entry_date": "2026-09-30",
+        "amount": "0.42",
+        "currency": "EUR",
+        "posting_text": "Rechnungsabschluss",
+        "purpose": "Habenzinsen 09/2026",
+        "applicant_name": "",
+        "applicant_iban": ""
+      }
+    ]
+  },
+  "since": null,
+  "expected": [
+    {
+      "id": "20260901-a80bb5a790ed911c-1",
+      "kind": "DEPOSIT",
+      "datetime": "2026-09-01T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "2800",
+      "label": "SEPA-Gutschrift",
+      "counterparty": "Muster GmbH",
+      "counterparty_iban": "DE89370400440532013000",
+      "text": "Gehalt 09/2026",
+      "signed": "2800",
+      "raw_type": "SEPA-Gutschrift"
+    },
+    {
+      "id": "20260903-2d9d7fab5a8020ab-1",
+      "kind": "WITHDRAWAL",
+      "datetime": "2026-09-03T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "35.2",
+      "label": "Kartenzahlung",
+      "counterparty": "Baeckerei Muster",
+      "text": "Debitkarte 2026-09-02 Musterstadt",
+      "signed": "-35.2",
+      "raw_type": "Kartenzahlung"
+    },
+    {
+      "id": "20260905-20f1c9c3105342a1-1",
+      "kind": "SECURITIES_CASH",
+      "datetime": "2026-09-05T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "1504.9",
+      "label": "Wertpapierkauf",
+      "text": "maxblue Depot WKN TEST01 Stk 15",
+      "signed": "-1504.9",
+      "raw_type": "Wertpapierkauf"
+    },
+    {
+      "id": "20260910-f78a63bc11c9ef0e-1",
+      "kind": "SECURITIES_CASH",
+      "datetime": "2026-09-10T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "12.34",
+      "label": "Ertragsgutschrift",
+      "text": "Ausschuettung TEST Fonds",
+      "signed": "12.34",
+      "raw_type": "Ertragsgutschrift"
+    },
+    {
+      "id": "20260915-138e22536739c094-1",
+      "kind": "WITHDRAWAL",
+      "datetime": "2026-09-15T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "500",
+      "label": "SEPA-Überweisung",
+      "counterparty": "Max Mustermann",
+      "counterparty_iban": "DE02500105170137075030",
+      "text": "Umbuchung Tagesgeld",
+      "signed": "-500",
+      "raw_type": "SEPA-Überweisung"
+    },
+    {
+      "id": "20260930-fe7d80e80639dddf-1",
+      "kind": "FEE",
+      "datetime": "2026-09-30T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "5.9",
+      "label": "Entgelt",
+      "text": "Kontofuehrung 09/2026",
+      "signed": "-5.9",
+      "raw_type": "Entgelt"
+    },
+    {
+      "id": "20260930-387a0ecddfe72acd-1",
+      "kind": "INTEREST",
+      "datetime": "2026-09-30T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "0.42",
+      "label": "Rechnungsabschluss",
+      "text": "Habenzinsen 09/2026",
+      "signed": "0.42",
+      "raw_type": "Rechnungsabschluss"
+    }
+  ]
+}

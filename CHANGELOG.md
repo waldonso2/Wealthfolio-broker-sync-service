@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0
+
+- **Deutsche Bank** (FinTS): the giro account like DKB's (deposits, withdrawals, transfers, interest, fees; securities bookings are only checked against an import of the statements) and the **holdings of the maxblue depot**, compared with the depot account after each run - positions without a buy in Wealthfolio can be entered as opening positions on *Prüfung*. Login with the Deutsche Bank ID (or branch and account number), PIN and the bank code of the branch; confirmation with BestSign in the app. New and not yet tried against the bank: at login the log lists what it offers over FinTS (transactions, camt, holdings, depot transactions; per account its product name and type, no numbers) - that decides how depot trades are booked next.
+- FinTS (all banks): a depot listed among the accounts no longer gets picked as the giro account when no IBAN is set; holdings are also asked for depots that have no IBAN.
+
 ## 0.7.4
 
 - **Docs and UI texts describe the service on its own.** README, ARCHITECTURE and the pages of the web UI no longer point to another tool; CSV and PDF imports are mentioned only as activities the sync recognises and doesn't book twice. The message about an unmatched securities booking now says to import the securities statement (PDF) in Wealthfolio. Bookings are unchanged.

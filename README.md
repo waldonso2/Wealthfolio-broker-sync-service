@@ -9,7 +9,7 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 - **Keine Duplikate:** Was schon in Wealthfolio steht – auch aus einem früheren CSV- oder PDF-Import –, erkennt der Dienst und legt es nicht noch einmal an
 - **Prüft sich selbst:** Nach jedem Abruf vergleicht er Konto und Depot mit dem Broker und zeigt, wo etwas fehlt oder nicht aufgeht
 
-> **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS), **Scalable Capital** (über Scalables offizielles CLI) und **comdirect** (Girokonto und Depot über die offizielle REST-API; neu, noch nicht lange im Einsatz).
+> **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS), **Scalable Capital** (über Scalables offizielles CLI), **comdirect** (Girokonto und Depot über die offizielle REST-API) und **Deutsche Bank** (Girokonto und maxblue-Depotbestand per FinTS; neu, noch nicht lange im Einsatz).
 
 ## Was du brauchst
 
@@ -109,6 +109,26 @@ Der Dienst liest dein **DKB-Girokonto** per FinTS (HBCI), dieselbe Schnittstelle
 
 **Sicherheit:** Lehnt die DKB Anmeldename oder PIN ab, versucht der Dienst es nicht noch einmal, bis du die Zugangsdaten neu speicherst. Nach drei Fehlversuchen sperrt die DKB sonst das Online-Banking.
 
+## Deutsche Bank
+
+Der Dienst liest dein **Deutsche-Bank-Girokonto** und den **Bestand deines maxblue-Depots** per FinTS (HBCI) – nur lesend. Eine eigene Freischaltung im Online-Banking braucht FinTS bei der Deutschen Bank nicht mehr.
+
+**Einrichten** unter *Broker → Deutsche Bank*:
+
+- **Anmeldename:** deine Deutsche-Bank-ID oder Filialnummer und Kontonummer (zehnstellig, ggf. mit führenden Nullen), wie im Online-Banking. Dazu die **PIN**.
+- **Bankleitzahl:** die deines Kontos (sie hängt bei der Deutschen Bank von der Filiale ab, steht in deiner IBAN an Stelle 5 bis 12).
+- **IBAN des Girokontos:** nur nötig, wenn du mehrere Girokonten hast.
+- **FinTS-Produkt-ID:** wie bei der DKB.
+- **Konten:** ein Deutsche-Bank-Verrechnungskonto und ein Depotkonto (maxblue) in Wealthfolio.
+
+**Freigabe mit BestSign:** Bei der ersten Anmeldung und danach in Abständen will die Deutsche Bank eine Bestätigung in der Deutsche Bank App (BestSign). In der Oberfläche bestätigst du und klickst *Ich habe in der App bestätigt*; beim täglichen Abruf schickt der Dienst eine ntfy-Nachricht und wartet drei Minuten. Mit photoTAN geht die Anmeldung nur in der Weboberfläche.
+
+**Was gebucht wird:** Die Girokonto-Umsätze wie bei der DKB (Tabelle oben): Einzahlungen, Auszahlungen, Überträge, Zinsen und Entgelte. Girokonto-Buchungen zu Wertpapiergeschäften (Kauf, Verkauf, Ertragsgutschrift) bucht der Dienst nicht selbst; er prüft, ob ein Import der Wertpapierabrechnungen sie schon gebucht hat.
+
+**Depot:** Den Bestand des maxblue-Depots vergleicht der Dienst nach jedem Abruf mit dem Depotkonto in Wealthfolio. Wertpapiere ohne Kauf in Wealthfolio legst du auf der Seite *Prüfung* als Anfangsbestand an. Depotumsätze (Käufe und Verkäufe mit Stückzahl) liefert FinTS bei den meisten Banken nicht; was die Deutsche Bank anbietet, steht nach der Anmeldung im Log (`Deutsche Bank (FinTS): Umsätze …, Depotbestand …, Depotumsätze …` und eine Zeile je Konto, ohne Konto- oder Depotnummer).
+
+**Zeitraum und Sicherheit** wie bei der DKB: ohne Startdatum die letzten 89 Tage; nach einer abgelehnten PIN kein weiterer Versuch, bis du die Zugangsdaten neu speicherst.
+
 ## Trade Republic
 
 Der Dienst liest deine Trade-Republic-Timeline über die inoffizielle Schnittstelle der App, mit dem Open-Source-Projekt [pytr](https://github.com/pytr-org/pytr). Er liest nur; Orders oder Auszahlungen kann er nicht auslösen.
@@ -204,7 +224,7 @@ Vorgemerkte Umsätze und Orders übernimmt der Dienst erst, wenn sie gebucht sin
 
 ## Abgleich mit Wealthfolio
 
-Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in Wealthfolio: das Guthaben mit dem Cash des Verrechnungskontos (nicht bei comdirect, dort wird das Girokonto nicht gebucht), ob das Depotkonto kein Bargeld hält (es muss 0 sein) und keine Position „$CASH“ in einem der Konten steht, und, bei Trade Republic, Scalable Capital und comdirect, jede Position mit dem Bestand des Depotkontos. Die Übersicht zeigt das Ergebnis. Eine Abweichung, die auch beim nächsten Abruf noch besteht, kommt als ntfy-Nachricht. Direkt nach neuen Buchungen rechnet Wealthfolio noch. Typische Ursachen: eine Kapitalmaßnahme, die von Hand nachzubuchen ist, oder Bestände aus der Zeit vor dem Startdatum – die legst du auf der Seite *Prüfung* als Anfangsbestand an.
+Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in Wealthfolio: das Guthaben mit dem Cash des Verrechnungskontos (nicht bei comdirect, dort wird das Girokonto nicht gebucht), ob das Depotkonto kein Bargeld hält (es muss 0 sein) und keine Position „$CASH“ in einem der Konten steht, und, bei Trade Republic, Scalable Capital, comdirect und der Deutschen Bank, jede Position mit dem Bestand des Depotkontos. Die Übersicht zeigt das Ergebnis. Eine Abweichung, die auch beim nächsten Abruf noch besteht, kommt als ntfy-Nachricht. Direkt nach neuen Buchungen rechnet Wealthfolio noch. Typische Ursachen: eine Kapitalmaßnahme, die von Hand nachzubuchen ist, oder Bestände aus der Zeit vor dem Startdatum – die legst du auf der Seite *Prüfung* als Anfangsbestand an.
 
 Die Seite **Prüfung** zeigt außerdem, welche schon übernommenen Buchungen in Wealthfolio fehlen (*Wieder anlegen* oder *Ignorieren*), welche Buchungen des Dienstes es beim Broker nicht mehr gibt, wo im Depotkonto Bargeld stehen bleibt und welche Überträge kein Gegenstück haben.
 
