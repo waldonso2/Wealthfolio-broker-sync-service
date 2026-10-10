@@ -106,6 +106,10 @@ def test_starting_over_deletes_only_the_syncs_activities(tmp_path):
     app = create_app(tmp_path, wealthfolio=syncer._wealthfolio, adapters={"fake": FakeBroker}, run_in_thread=False)
     client = TestClient(app, base_url="http://sync.local:8090")
     client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    page = client.get("/brokers/fake").text
+    # In the page, not in its <title>.
+    assert "Neu aufsetzen" not in page.split("</title>")[0]
+    assert 'action="/brokers/fake/reset"' in page.split("<body")[1] and 'name="confirm"' in page
     token = csrf(client, "/brokers/fake")
     r = client.post("/brokers/fake/reset", data={"csrf": token})
     assert "Häkchen" in r.text and len(wf.activities) == 8

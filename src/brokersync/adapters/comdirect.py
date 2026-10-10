@@ -72,8 +72,6 @@ SETTLEMENT_DAYS = 6
 # A trade without its giro booking after this many days is reported.
 UNSETTLED_DAYS = 10
 PAGE_SIZE = 500
-# Without a start date, the first run reads this far back.
-DEFAULT_DAYS = 365
 
 ISIN = re.compile(r"\b([A-Z]{2}[A-Z0-9]{9}[0-9])\b")
 WKN = re.compile(r"\b([A-Z0-9]{6})\b")
@@ -561,11 +559,13 @@ class ComdirectAdapter(BrokerAdapter):
 
     def get_transactions(self, since: datetime | None) -> list[Transaction]:
         today = self.today or datetime.now(BERLIN).date()
-        start = since.astimezone(BERLIN).date() if since else today - timedelta(days=DEFAULT_DAYS)
-        # A day more for the giro bookings: a trade's settlement can lie before its business date.
-        first_day = (start - timedelta(days=1)).isoformat()
-        bookings = self._pages(f"/banking/v1/accounts/{self._giro()['accountId']}/transactions",
-                               transactionState="BOOKED", **{"min-bookingDate": first_day})
+        # Without a start date: everything comdirect delivers.
+        start = since.astimezone(BERLIN).date() if since else None
+        params = {"transactionState": "BOOKED"}
+        if start:
+            # A day more for the giro bookings: a trade's settlement can lie before its business date.
+            params["min-bookingDate"] = (start - timedelta(days=1)).isoformat()
+        bookings = self._pages(f"/banking/v1/accounts/{self._giro()['accountId']}/transactions", **params)
         if self._depots is None:
             self._depots = self._pages("/brokerage/clients/user/v3/depots")
         depot_txs: list[dict] = []
@@ -581,8 +581,15 @@ class ComdirectAdapter(BrokerAdapter):
                 wkn_to_isin[i["wkn"]] = i["isin"]
             if i.get("isin") and i.get("name"):
                 names[i["isin"]] = i["name"]
-        log.info("comdirect: %d giro bookings, %d depot transactions since %s", len(bookings), len(depot_txs), start)
+        # How far back comdirect delivers: only counts and dates, no amounts.
+        log.info("comdirect: %d giro bookings (oldest %s), %d depot transactions (oldest %s), asked from %s",
+                 len(bookings), min((str(b.get("bookingDate")) for b in bookings if b.get("bookingDate")), default="-"),
+                 len(depot_txs), min((str(d.get("businessDate") or d.get("bookingDate")) for d in depot_txs
+                                      if d.get("businessDate") or d.get("bookingDate")), default="-"),
+                 start or "the beginning")
         txs = to_transactions(bookings, depot_txs, wkn_to_isin, today, names)
+        if start is None:
+            return txs
         first = _noon(start) - timedelta(hours=12)
         return [t for t in txs if t.datetime >= first]
 
