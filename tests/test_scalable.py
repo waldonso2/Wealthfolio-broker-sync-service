@@ -130,15 +130,18 @@ def test_full_sync_books_like_the_addon(tmp_path, monkeypatch):
     syncer.recalc_wait = 0
     [r] = syncer.run()
     assert (r.status, r.failed, r.unknown) == ("ok", 0, 3), r.messages
-    assert r.created == 11
+    assert r.created == 12
     cash = {h["localCurrency"]: D(h["quantity"]) for h in wf.holdings("acc-cash") if h["holdingType"] == "cash"}
     depot = {h["localCurrency"]: D(h["quantity"]) for h in wf.holdings("acc-depot") if h["holdingType"] == "cash"}
-    # 1000 - 501 - 25 + 3.68 - 12.30 - 4.99 + 188.45 - 200 + 0.42 + 2.10 + 7.50
-    assert cash == {"EUR": D("458.86")} and depot == {"EUR": D(0)}
-    dividend = next(a for a in wf.activities if a["activityType"] == "DIVIDEND")
-    assert (dividend["quantity"], dividend["amount"], dividend["tax"]) == ("1", "3.68", "1.32")
-    assert [e["raw_type"] for e in syncer.state.unknown_events()] == [
-        "ELTIF_TRANSACTION", "TRANSFER_IN", "DISTRIBUTION_CANCELLATION"]
+    # 1000 - 501 - 25 - 12.30 - 4.99 + 188.45 - 200 + 0.42 + 2.10 + 7.50 + 216.34 (swap) + 120.50 (redemption);
+    # the cancelled distribution and its original cancel out.
+    # The depot keeps no cash; only the unit price's sixth decimal leaves a fraction of a cent (as with TR).
+    assert cash == {"EUR": D("792.02")} and abs(depot["EUR"]) < D("0.01")
+    sales = sorted((a["quantity"], round(D(a["amount"]), 2)) for a in wf.activities if a["activityType"] == "SELL")
+    assert sales == [("12", D("120.50")), ("2", D("188.45")), ("60", D("216.34"))]
+    assert not [a for a in wf.activities if a["activityType"] == "DIVIDEND"]
+    assert sorted(e["raw_type"] for e in syncer.state.unknown_events()) == [
+        "DISTRIBUTION_CANCELLATION", "ELTIF_TRANSACTION", "TRANSFER_IN"]
     # Nothing personal in an unknown event's payload: no description texts.
     assert all("description" not in e["payload"] for e in syncer.state.unknown_events())
 
@@ -186,7 +189,7 @@ def test_the_log_shows_what_scalable_sent_without_values(caplog, monkeypatch):
     rec = dict(CASE["recording"], cash={"cash_balance": None, "buying_power": {"amount": "1.5"}})
     a = ScalableAdapter.replay(rec)
     a.get_transactions(None)
-    assert "scalable: 19 transactions from sc (" in caplog.text
+    assert "scalable: 24 transactions from sc (" in caplog.text
     assert "CASH_TRANSACTION/SETTLED/DEPOSIT: 2" in caplog.text
     with pytest.raises(AdapterError, match="keinen Kontostand"):
         a.get_cash()
@@ -230,27 +233,32 @@ def test_rate_limit_is_waited_out(no_waiting):
     a._cli = Limited(limit_after=1, limited_calls=2)
     txs = {t.id: t for t in a.get_transactions(None)}
     assert txs["sc-0009"].gross == D("200") and "Details" not in txs["sc-0009"].label
-    assert len(a._cli.details) == 4
+    assert set(a._cli.details) == {"sc-0002", "sc-0003", "sc-0004", "sc-0009", "sc-0023"}
 
 
 def test_a_lasting_rate_limit_books_what_has_details_and_retries_the_rest(no_waiting):
+    trades = {"sc-0002", "sc-0003", "sc-0009"}
     a = ScalableAdapter.replay(CASE["recording"])
-    a._cli = Limited(limit_after=1, limited_calls=99)
+    a._cli = Limited(limit_after=2, limited_calls=99)
     txs = {t.id: t for t in a.get_transactions(None)}
-    fetched = a._cli.details[0]
-    assert txs[fetched].gross is not None
-    missing = [t for t in txs.values() if t.kind.value in ("BUY", "SELL") and t.id != fetched]
-    assert missing and all(t.gross is None and "Details folgen beim nächsten Abruf" in t.label for t in missing)
+    fetched = set(a._cli.details)
+    assert len(fetched) == 2
+    for tid in trades:
+        if tid in fetched:
+            assert txs[tid].gross is not None and "Details" not in txs[tid].label
+        else:
+            assert txs[tid].gross is None and "Details folgen beim nächsten Abruf" in txs[tid].label
+    assert trades - fetched
     # The deposit and the other cash transactions are there all the same.
     assert txs["sc-0001"].net == D("1000")
 
     # Next run: details only for what the sync doesn't have yet.
     b = ScalableAdapter.replay(CASE["recording"])
     b._cli = Limited(limit_after=99, limited_calls=0)
-    b.known_ids = {fetched, "sc-0004"}
+    b.known_ids = fetched
     b.get_transactions(None)
-    assert fetched not in b._cli.details and "sc-0004" not in b._cli.details
-    assert set(b._cli.details) == {"sc-0002", "sc-0003", "sc-0009"} - {fetched}
+    assert not fetched & set(b._cli.details)
+    assert trades - fetched <= set(b._cli.details)
 
 
 def test_other_errors_still_stop_the_run(no_waiting):
@@ -265,3 +273,37 @@ def test_other_errors_still_stop_the_run(no_waiting):
     a._cli = Broken(0, 0)
     with pytest.raises(AdapterError, match="Broker response invalid"):
         a.get_transactions(None)
+
+
+def _item(id, when, **kw):
+    return {"id": id, "currency": "EUR", "status": "SETTLED", "is_cancellation": False, "last_event_datetime": when,
+            **kw}
+
+
+def test_a_distribution_takes_gross_and_tax_from_its_details():
+    item = _item("d1", "2026-02-02T00:00:00Z", type="CASH_TRANSACTION", cash_transaction_type="DISTRIBUTION",
+                 amount="3.68", related_isin="IE00TEST0001", description="TEST Fonds World")
+    details = {"d1": {"cash": {"tax_details": {"gross_amount": "5", "tax_amount": "1.32"}}}}
+    [tx] = sc_mod.to_transactions([item], details)
+    assert (tx.kind.value, tx.net, tx.gross, tx.tax, tx.shares) == ("DIVIDEND", D("3.68"), D("5"), D("1.32"), None)
+    [p] = [a for a in to_activities(tx, "scalable", Accounts("c", "p")) if a["activityType"] == "DIVIDEND"]
+    assert (p["quantity"], p["amount"], p["tax"]) == ("1", "3.68", "1.32")
+
+
+def test_a_cancellation_whose_original_was_synced_is_reported():
+    original = _item("d1", "2025-08-20T00:00:00Z", type="CASH_TRANSACTION", cash_transaction_type="DISTRIBUTION",
+                     amount="459.14", related_isin="NL00TEST0007")
+    cancel = _item("d2", "2025-08-27T00:00:00Z", type="CASH_TRANSACTION", cash_transaction_type="DISTRIBUTION",
+                   amount="-459.14", related_isin="NL00TEST0007", is_cancellation=True)
+    assert sc_mod.to_transactions([original, cancel], {}) == []
+    txs = sc_mod.to_transactions([original, cancel], {}, known={"d1"})
+    assert [(t.id, t.kind.value) for t in txs] == [("d1", "DIVIDEND"), ("d2", "UNKNOWN")]
+
+
+def test_a_swap_out_without_its_cash_leg_stays_unknown():
+    leg = _item("s1", "2026-02-09T08:00:00Z", type="NON_TRADE_SECURITY_TRANSACTION",
+                non_trade_security_transaction_type="SWAP_OUT", isin="DE000TEST0006", quantity=12, amount=0)
+    other_day = _item("s2", "2026-02-12T00:00:00Z", type="CASH_TRANSACTION", cash_transaction_type="DISTRIBUTION",
+                      amount="120.5", related_isin="DE000TEST0006")
+    kinds = [(t.id, t.kind.value) for t in sc_mod.to_transactions([leg, other_day], {})]
+    assert kinds == [("s1", "UNKNOWN"), ("s2", "DIVIDEND")]

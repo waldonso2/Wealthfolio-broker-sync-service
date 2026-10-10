@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.4
+
+- **Fix: a certificate redemption was booked as a dividend next to the CSV import's sale.** Scalable books a redemption or knock-out as the securities leaving the depot with value 0 plus a distribution of the same ISIN on the same day; the addon books both as one sale. The sync now does the same, so it recognises the CSV sale instead of adding a dividend.
+- **Fund swaps** (securities `SWAP_OUT` plus the cash `SWAP_OUT` of the same ISIN and day) are booked as a sale like the addon, instead of being reported as unknown.
+- **A cancelled distribution** and its original cancel out, like in the addon. If the sync had booked the original already, the cancellation is still reported, so the original can be removed by hand.
+- Activities booked before this version are not changed: a dividend the sync added for a redemption has to be deleted by hand.
+
 ## 0.4.3
 
 - **Fix: a full Scalable fetch stopped with "RATE_LIMITED".** Scalable limits how many transaction details may be queried in a short time. The adapter now pauses a second between detail queries, waits and retries when Scalable reports the limit (30 s, 60 s, 120 s, or as long as Scalable says), and only queries details of transactions the sync doesn't have yet. If the limit lasts, the run books everything it has the details for and reports the remaining trades ("Details folgen beim nächsten Abruf"); the next run continues with those.
