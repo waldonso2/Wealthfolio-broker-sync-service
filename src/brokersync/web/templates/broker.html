@@ -1,4 +1,13 @@
-{% extends "base.html" %}{% block title %}{{ adapter.label }}{% endblock %}
+{% extends "base.html" %}{% block title %}{{ adapter.label }}<div class="card">
+  <h2>Neu aufsetzen</h2>
+  <p>Löscht alle Buchungen, die der Dienst für {{ adapter.label }} in Wealthfolio angelegt hat (Kommentar „[SYNC {{ key }}:…]“), und vergisst, was schon übernommen wurde. Der nächste Abruf holt dann alles ab dem Startdatum neu – nach den aktuellen Regeln. CSV-/PDF-Importe, von Hand angelegte Buchungen und eingetragene Anfangsbestände bleiben.</p>
+  <form method="post" action="/brokers/{{ key }}/reset">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="check"><input type="checkbox" name="confirm" value="1"> Ja, die Buchungen des Dienstes für {{ adapter.label }} löschen</label>
+    <div class="actions"><button class="secondary">Neu aufsetzen</button></div>
+  </form>
+</div>
+{% endblock %}
 {% block content %}
 <div class="card">
   <h1>{{ adapter.label }}</h1>

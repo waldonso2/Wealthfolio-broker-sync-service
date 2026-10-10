@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0
+
+- **comdirect: only the depot is booked, no longer the giro account.** The comdirect cash account in Wealthfolio now receives only the dividends. A buy is booked with a deposit of its cost on the cash account right before it, a sale with a withdrawal of its proceeds right after it - so the account doesn't run into the minus because the giro history before the start date is missing. Deposits, card payments, fees and interest of the giro account are no longer booked, and its balance is no longer compared. After the update click **Neu aufsetzen** in the comdirect settings once: it deletes what 0.6.0 booked and the next run books everything again with the new rules.
+- **Opening positions:** positions the broker holds that Wealthfolio has no buy for (bought before the start date, or transferred in) are listed on the page *Prüfung*. Enter the purchase date, price per unit (pre-filled with the broker's purchase price, if it reports one) and fees: the next run books a buy on that day, preceded by a deposit of its cost.
+- **Neu aufsetzen** (broker settings): deletes every activity the service booked for a broker (`[SYNC …]` in its two accounts; imports and manual entries stay), forgets its sync state and fetches everything from the start date again. Confirmation required.
+
 ## 0.6.0
 
 - **New broker: comdirect**, through comdirect's official REST API for private customers (giro account and depot). Login with Zugangsnummer, PIN and the API's client ID and secret, confirmed with photoTAN-Push in the app (or a photoTAN graphic / mobileTAN typed in the web UI); a scheduled run asks via ntfy and waits. Balance, giro bookings, depot positions and depot transactions are read; buys and sales are booked with the giro booking that settled them (its amount is the trade's cash, the rest of it the costs - the API doesn't split costs of a sale into fee and tax), dividends when the posting text names the security. Depot transfers and trades whose settlement doesn't turn up are reported.

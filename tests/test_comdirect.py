@@ -197,8 +197,9 @@ def test_trade_settlement_and_unsettled_trades():
     # A booking far off in amount (costs over half the value) or date isn't the settlement.
     far = cd.to_transactions([booking("B3", "2026-03-20", "-101"), booking("B4", "2026-03-05", "-300")],
                              [trade("T3", "2026-03-04", "BUY", "100", "DE000TEST00A")], {}, date(2026, 3, 20))
-    assert [(t.id, t.kind.value) for t in far] == [
-        ("dep-T3", "UNKNOWN"), ("acc-B4", "SECURITIES_CASH"), ("acc-B3", "SECURITIES_CASH")]
+    # Unused giro bookings aren't booked at all: only dividends land on the cash account.
+    assert [(t.id, t.kind.value) for t in far] == [("dep-T3", "UNKNOWN")]
+    assert all(t.external_cash for t in txs.values())
 
 
 def test_a_push_without_status_link_is_left_to_the_web_ui(monkeypatch):

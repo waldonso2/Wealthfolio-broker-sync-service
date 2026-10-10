@@ -1,5 +1,5 @@
 {
-  "description": "Fabricated comdirect giro + depot: deposit, buy and sale with their settlements, dividend named by WKN, fee, direct debit, a securities booking without depot match, interest, a pending booking (skipped), a buy whose settlement isn't there yet (skipped), a depot transfer and an old unsettled buy (unknown).",
+  "description": "Fabricated comdirect giro + depot: buy and sale with their settlements (booked with a deposit / withdrawal of their cash), a dividend named by WKN; deposit, fee, direct debit, interest and a securities booking without depot match are not booked (the giro account isn't); a pending booking and a buy whose settlement isn't there yet are skipped, a depot transfer and an old unsettled buy are unknown.",
   "recording": {
     "today": "2026-03-20",
     "balances": [
@@ -369,17 +369,6 @@
       "raw_type": "DEPOT_TRANSFER_IN"
     },
     {
-      "id": "acc-TESTREF0001",
-      "kind": "DEPOSIT",
-      "datetime": "2026-03-02T11:00:00+00:00",
-      "currency": "EUR",
-      "net": "2000",
-      "label": "Überweisung",
-      "counterparty": "TEST Max Mustermann",
-      "counterparty_iban": "DE00TEST00000000000099",
-      "text": "Umbuchung Sparkonto"
-    },
-    {
       "id": "dep-DTX-1",
       "kind": "BUY",
       "datetime": "2026-03-03T11:00:00+00:00",
@@ -390,7 +379,8 @@
       "shares": "10",
       "gross": "1000",
       "fee": "9.8",
-      "label": "Kauf"
+      "label": "Kauf",
+      "external_cash": true
     },
     {
       "id": "acc-TESTREF0003",
@@ -414,47 +404,8 @@
       "shares": "5",
       "gross": "500",
       "fee": "9.9",
-      "label": "Verkauf"
-    },
-    {
-      "id": "acc-TESTREF0005",
-      "kind": "FEE",
-      "datetime": "2026-03-13T11:00:00+00:00",
-      "currency": "EUR",
-      "net": "4.9",
-      "label": "Bankgebühren",
-      "text": "Entgelt Kontofuehrung"
-    },
-    {
-      "id": "acc-TESTREF0006",
-      "kind": "WITHDRAWAL",
-      "datetime": "2026-03-14T11:00:00+00:00",
-      "currency": "EUR",
-      "net": "35",
-      "label": "Lastschrift",
-      "counterparty": "TEST Stadtwerke",
-      "counterparty_iban": "DE00TEST00000000000098",
-      "text": "Abschlag Strom TEST"
-    },
-    {
-      "id": "acc-TESTREF0007",
-      "kind": "SECURITIES_CASH",
-      "datetime": "2026-03-15T11:00:00+00:00",
-      "currency": "EUR",
-      "net": "250",
-      "label": "Wertpapier",
-      "text": "WP-ABRECHNUNG KAUF ANDERES DEPOT",
-      "signed": "-250",
-      "raw_type": "Wertpapier"
-    },
-    {
-      "id": "acc-TESTREF0008",
-      "kind": "INTEREST",
-      "datetime": "2026-03-16T11:00:00+00:00",
-      "currency": "EUR",
-      "net": "0.42",
-      "label": "Zinsen / Dividenden",
-      "text": "Habenzinsen"
+      "label": "Verkauf",
+      "external_cash": true
     }
   ]
 }

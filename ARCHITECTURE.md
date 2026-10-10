@@ -210,6 +210,7 @@ Alles liegt in `BROKERSYNC_DATA` (Standard `/opt/wealthfolio-broker-sync/data`, 
 |---|---|
 | `synced` | `(broker, tx_id)`, Status `imported`/`existing`/`ignored` und die angelegten Aktivitäts-Ids |
 | `gaps` | Ergebnis des letzten Vergleichs mit Wealthfolio: `missing`, `partial`, `ignored`, `orphan` |
+| `openings` | Anfangsbestände, die der Nutzer auf *Prüfung* einträgt (ISIN, Kaufdatum, Stück, Kurs, Gebühr); jeder Lauf bucht sie als Kauf `start-<isin>-<tag>` mit Einzahlung |
 | `runs` | Verlauf der Abrufe: `running`, `ok`, `needs_auth`, `error`, `aborted` und die Zähler |
 | `unknown_events` | unbekannte Buchungen und offene Wertpapier-Gegenbuchungen, mit einer Nutzlast ohne persönliche Daten |
 | `balances`, `reconcile` | letzter Kontostand des Brokers und Abweichungen, samt dem, was schon gemeldet wurde |
@@ -239,6 +240,8 @@ FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login
 | `/duplicates` | Duplikate finden und die Kopien des Syncs nach Bestätigung löschen |
 | `/check` | Prüfung: Abgleich Broker ↔ Wealthfolio aus dem letzten Lauf (`coverage.py`), dazu nur lesend, wo im Depotkonto Bargeld stehen bleibt und welche Überträge kein Gegenstück haben (`audit.py`) |
 | `POST /check/{key}` | fehlende Transaktionen wieder anlegen lassen (`action=rebook`) oder ignorieren (`action=ignore`) |
+| `POST /check/{key}/opening` | Anfangsbestand eintragen oder (noch nicht gebucht) entfernen |
+| `POST /brokers/{key}/reset` | *Neu aufsetzen*: Buchungen des Dienstes für den Broker löschen, Status zurücksetzen (`reset.py`) |
 | `/retired/dismiss` | Hinweis zu einem entfernten Broker (z. B. dem Dummy) ausblenden |
 
 ## Fehlerbehandlung

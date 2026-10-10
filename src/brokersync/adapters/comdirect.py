@@ -18,17 +18,20 @@ The user enables the API in the comdirect online banking (persönlicher Bereich
   adapter counts unanswered challenges and wrong TANs in the session and stops
   asking long before that (``MAX_OPEN_CHALLENGES``, ``MAX_WRONG_TANS``); a
   rejected PIN stops it too, until the credentials are saved anew.
-- **Bank side:** balance and bookings of the giro account (``CA``, or the IBAN
-  chosen). Deposits, withdrawals, interest and fees like the FinTS banks.
-- **Securities side:** the depot transactions carry share count, price and
-  market value, but neither fees nor taxes. Each buy/sell is booked with the
-  giro booking that settled it (``Wertpapier``, ±``SETTLEMENT_DAYS``): its
-  amount is the trade's cash, the difference to the market value its costs.
-  The API doesn't split costs of a sale into fee and tax, so both go into the
-  fee. Dividends come as giro bookings (``Zinsen / Dividenden``) and are booked
+- **Only the depot is booked, not the giro account.** The cash account in
+  Wealthfolio receives the dividends (swept from the depot) and nothing else:
+  a buy is preceded by a deposit of its cost, a sale followed by a withdrawal
+  of its proceeds (``Transaction.external_cash``). No balance is compared.
+- **Trades:** the depot transactions carry share count, price and market
+  value, but neither fees nor taxes. Each buy/sell is paired with the giro
+  booking that settled it (``Wertpapier``, ±``SETTLEMENT_DAYS``): its amount
+  is the trade's cash, the difference to the market value its costs. The API
+  doesn't split costs of a sale into fee and tax, so both go into the fee.
+  Depot transfers are ``UNKNOWN``; positions bought before the start date
+  are added as opening positions on the page *Prüfung*.
+- **Dividends** come as giro bookings (``Zinsen / Dividenden``) and are booked
   on the depot when the posting text names the security (ISIN, or a WKN of a
-  position). Securities bookings the sync can't place stay ``SECURITIES_CASH``
-  (checked against the PDF import), depot transfers are ``UNKNOWN``.
+  position); otherwise they are reported.
 
 Only GET endpoints of ``banking`` and ``brokerage`` are called besides the login;
 the order, quote and transfer endpoints are never used (AC 7 of #35).
@@ -119,11 +122,6 @@ def _text(t: dict) -> str:
     return " ".join(" ".join(re.sub(r"^\d{2}", "", line).split()) for line in lines).strip()
 
 
-def _party(t: dict, value: Decimal) -> tuple[str, str]:
-    info = (t.get("remitter") if value > 0 else t.get("creditor")) or t.get("debtor") or {}
-    return (info.get("holderName") or "").strip(), (info.get("iban") or "").replace(" ", "").upper()
-
-
 def _is_securities(t: dict) -> bool:
     return "wertpapier" in _type(t) or "securities" in _type(t)
 
@@ -190,40 +188,26 @@ def to_transactions(bookings: list[dict], depot_transactions: list[dict], wkn_to
         out.append(Transaction(
             id=tx_id, kind=Kind.BUY if buy else Kind.SELL, datetime=_noon(business), currency=_unit(cash.get("amount")),
             net=net, isin=isin or None, name=name, shares=abs(shares) if shares is not None else None,
-            gross=gross, fee=costs, label="Kauf" if buy else "Verkauf"))
+            gross=gross, fee=costs, label="Kauf" if buy else "Verkauf", external_cash=True))
 
-    # Giro bookings.
+    # Giro bookings: only dividends are booked (the giro account itself isn't); a payout whose
+    # security can't be told is reported.
     for b in bookings:
-        if b["reference"] in used:
+        if b["reference"] in used or not _is_income(b):
             continue
         value = _dec(b.get("amount")) or Decimal(0)
-        currency = _unit(b.get("amount"))
-        day = _day(b.get("bookingDate")) or _day(b.get("valutaDate")) or today
-        when = _noon(day)
         text = _text(b)
-        name, iban = _party(b, value)
-        label = ((b.get("transactionType") or {}).get("text") if isinstance(b.get("transactionType"), dict)
-                 else str(b.get("transactionType") or "")) or ""
-        tx_id = _account_id(b)
+        if value <= 0 or (INTEREST.search(text) and not DIVIDEND.search(text)):
+            continue
+        currency = _unit(b.get("amount"))
+        when = _noon(_day(b.get("bookingDate")) or _day(b.get("valutaDate")) or today)
         security = _security(text, wkn_to_isin)
-        if _is_income(b) and value > 0 and security and (DIVIDEND.search(text) or not INTEREST.search(text)):
-            out.append(Transaction(id=tx_id, kind=Kind.DIVIDEND, datetime=when, currency=currency, net=value,
+        if security:
+            out.append(Transaction(id=_account_id(b), kind=Kind.DIVIDEND, datetime=when, currency=currency, net=value,
                                    isin=security, name=names.get(security, security), label="Dividende", text=text))
-        elif _is_income(b) and value > 0 and not DIVIDEND.search(text):
-            out.append(Transaction(id=tx_id, kind=Kind.INTEREST, datetime=when, currency=currency, net=value,
-                                   label=label, text=text))
-        elif _is_securities(b) or _is_income(b):
-            out.append(Transaction(id=tx_id, kind=Kind.SECURITIES_CASH, datetime=when, currency=currency,
-                                   net=abs(value), signed=value, label=label, text=text, raw_type=label))
-        elif "storno" in _type(b) or "cancellation" in _type(b):
-            out.append(_unknown(tx_id, when, "STORNO", {"betrag": f"{value} {currency}"}, currency))
-        elif value < 0 and ("gebühr" in _type(b) or "fees" in _type(b)) and not name:
-            out.append(Transaction(id=tx_id, kind=Kind.FEE, datetime=when, currency=currency, net=-value,
-                                   label=label, text=text))
         else:
-            out.append(Transaction(
-                id=tx_id, kind=Kind.DEPOSIT if value > 0 else Kind.WITHDRAWAL, datetime=when, currency=currency,
-                net=abs(value), label=label, counterparty=name, counterparty_iban=iban, text=text))
+            out.append(_unknown(_account_id(b), when, "DIVIDENDE_OHNE_WERTPAPIER",
+                                {"betrag": f"{value} {currency}", "buchungstext": text[:140]}, currency))
     return sorted(out, key=lambda t: (t.datetime, t.id))
 
 
@@ -560,9 +544,8 @@ class ComdirectAdapter(BrokerAdapter):
                               account.get("currency") or "EUR")]
 
     def get_cash(self) -> list[CashBalance]:
-        balance = self._giro().get("balance") or {}
-        value = _dec(balance)
-        return [CashBalance(_unit(balance), value)] if value is not None else []
+        # The giro account isn't booked (only dividends land on the cash account): no balance to compare.
+        return []
 
     def get_positions(self) -> list[Position]:
         out = []
@@ -573,7 +556,7 @@ class ComdirectAdapter(BrokerAdapter):
             if not isin or not shares:
                 continue
             out.append(Position(isin, instrument.get("name") or "", shares, _unit(p.get("currentValue")),
-                                _dec(p.get("currentValue"))))
+                                _dec(p.get("currentValue")), cost=_dec(p.get("purchasePrice"))))
         return out
 
     def get_transactions(self, since: datetime | None) -> list[Transaction]:

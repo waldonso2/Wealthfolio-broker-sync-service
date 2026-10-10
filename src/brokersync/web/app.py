@@ -7,13 +7,14 @@ the audience are users of German brokers.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets
 import subprocess
 import threading
-from datetime import datetime
-from decimal import Decimal
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -26,11 +27,12 @@ from starlette.middleware.sessions import SessionMiddleware
 from .. import __version__, audit, retired
 from .. import config as config_mod
 from .. import duplicates as duplicates_mod
+from .. import reset as reset_mod
 from ..adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from ..mapping import Accounts
 from ..notify import Notifier
 from ..state import State
-from ..sync import UNMATCHED_SECURITIES, AlreadyRunning, Syncer, is_running, refetch_flag, run_lock
+from ..sync import UNMATCHED_SECURITIES, AlreadyRunning, Syncer, is_running, opening_id, refetch_flag, run_lock
 from ..vault import Vault, hash_password, verify_password
 from ..wealthfolio import WealthfolioClient, WealthfolioError
 
@@ -415,10 +417,85 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
         except WealthfolioError as e:
             error = str(e)
         brokers = [{"key": k, "label": adapters[k].label, "full": adapters[k].full_history, "gaps": state.gaps(k),
-                    "checked": bool(state.last_run(k))}
+                    "checked": bool(state.last_run(k)), "missing": missing_positions(k),
+                    "openings": [{**o, "booked": opening_id(o["isin"], o["day"]) in synced}
+                                 for synced in [state.synced(k)] for o in state.openings(k)]}
                    for k, b in c.brokers.items() if k in adapters and b.cash_account_id and b.portfolio_account_id]
         return render(request, "check.html", report=report, wf_error=error, source=audit.source,
                       effect=audit.cash_effect, brokers=brokers)
+
+    def missing_positions(key: str) -> list[dict]:
+        """Positions the broker holds more of than Wealthfolio (last check), pre-filled for an opening position."""
+        if not adapters[key].reports_positions:
+            return []
+        known = {p["isin"]: p for p in json.loads(state.meta(f"positions:{key}") or "[]")}
+        entered = {o["isin"] for o in state.openings(key)}
+        out = []
+        for d in (state.reconcile(key) or {}).get("deviations", []):
+            if d["kind"] != "position" or ":" in d["key"] or d["key"] in entered:
+                continue
+            try:
+                missing = Decimal(d["broker"]) - Decimal(d["wealthfolio"])
+            except InvalidOperation:
+                continue
+            if missing > 0:
+                p = known.get(d["key"], {})
+                out.append({"isin": d["key"], "name": d["name"], "shares": format(missing.normalize(), "f"),
+                            "price": p.get("cost") or "", "currency": p.get("currency") or "EUR"})
+        return out
+
+    @app.post("/check/{key}/opening")
+    async def check_opening(request: Request, key: str):
+        """An opening position: bought on a day before the start date; the next run books it."""
+        if key not in adapters:
+            return redirect(request, "/check", "Unbekannter Broker.", "error")
+        form = await request.form()
+        isin = str(form.get("isin", "")).strip()
+        day = str(form.get("day", "")).strip()
+        if form.get("action") == "delete":
+            if opening_id(isin, day) not in state.synced(key):
+                state.delete_opening(key, isin, day)
+            return redirect(request, "/check", "Anfangsbestand entfernt.")
+        try:
+            shares = Decimal(str(form.get("shares", "")).replace(",", "."))
+            price = Decimal(str(form.get("price", "")).replace(",", "."))
+            fee = Decimal(str(form.get("fee") or "0").replace(",", "."))
+            bought = date.fromisoformat(day)
+        except (InvalidOperation, ValueError):
+            return redirect(request, "/check", "Bitte Kaufdatum, Stückzahl, Kurs und Gebühr als Zahlen angeben.",
+                            "error")
+        if shares <= 0 or price <= 0 or fee < 0 or bought > date.today() or not isin:
+            return redirect(request, "/check", "Stückzahl und Kurs müssen größer 0 sein, die Gebühr mindestens 0, "
+                                               "das Kaufdatum darf nicht in der Zukunft liegen.", "error")
+        known = {p["isin"]: p for p in json.loads(state.meta(f"positions:{key}") or "[]")}
+        p = known.get(isin, {})
+        state.add_opening(key, isin, bought.isoformat(), str(form.get("name") or p.get("name") or isin),
+                          str(shares), str(price), str(fee), p.get("currency") or "EUR")
+        return redirect(request, "/check", f"Anfangsbestand {isin} gespeichert - der nächste Abruf bucht ihn als Kauf "
+                                           f"am {bought:%d.%m.%Y} samt Einzahlung des Kaufbetrags.")
+
+    @app.post("/brokers/{key}/reset")
+    def broker_reset(request: Request, key: str, confirm: str = Form("")):
+        if key not in adapters:
+            return redirect(request, "/brokers", "Unbekannter Broker.", "error")
+        if not confirm:
+            return redirect(request, f"/brokers/{key}", "Bitte bestätige das Neu-Aufsetzen mit dem Häkchen.", "error")
+        b = cfg().broker(key)
+        if not b.cash_account_id or not b.portfolio_account_id:
+            return redirect(request, f"/brokers/{key}", "Erst die beiden Wealthfolio-Konten wählen.", "error")
+        try:
+            with run_lock(data_dir, wait=5), wf_client(cfg()) as wf:
+                deleted, errors = reset_mod.reset(wf, state, key, Accounts(b.cash_account_id, b.portfolio_account_id))
+        except AlreadyRunning:
+            return redirect(request, f"/brokers/{key}", "Gerade läuft ein Abruf - bitte gleich noch einmal.", "warn")
+        except WealthfolioError as e:
+            return redirect(request, f"/brokers/{key}", f"Wealthfolio nicht erreichbar: {e}", "error")
+        if errors:
+            return redirect(request, f"/brokers/{key}", f"{deleted} Buchungen gelöscht, {len(errors)} nicht: "
+                                                        + "; ".join(errors[:3]) + " - bitte noch einmal versuchen.",
+                            "error")
+        return redirect(request, f"/brokers/{key}", f"{deleted} Buchungen des Dienstes gelöscht. Der nächste Abruf "
+                                                    "holt alles ab dem Startdatum neu.")
 
     @app.post("/check/{key}")
     async def check_decide(request: Request, key: str):
