@@ -1,0 +1,44 @@
+{% extends "base.html" %}{% block title %}Sicherheit{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Sicherheit</h1>
+  <p>Was der Dienst speichert, ist verschlüsselt: Zugangsdaten, Sitzungen und Einstellungen mit AES-256-GCM, die Sync-Datenbank mit SQLCipher. Der Schlüssel liegt nicht bei den Daten.</p>
+  <table>
+    <tr><th>Prüfung</th><th>Ergebnis</th><th></th></tr>
+    {% for c in checks %}
+    <tr><td>{{ c.label }}</td><td><span class="status {{ 'warn' if c.warn else ('ok' if c.ok else 'error') }}">{{ 'Hinweis' if c.warn else ('OK' if c.ok else 'Handlungsbedarf') }}</span></td><td>{{ c.detail }}</td></tr>
+    {% endfor %}
+    {% if wf_plain %}
+    <tr><td>Verbindung zu Wealthfolio</td><td><span class="status warn">Hinweis</span></td><td>Wealthfolio wird per HTTP angesprochen; das Wealthfolio-Passwort geht unverschlüsselt durchs Netz. Wenn möglich, Wealthfolio per HTTPS erreichbar machen.</td></tr>
+    {% endif %}
+  </table>
+</div>
+
+<div class="card">
+  <h2>Master-Passphrase</h2>
+  {% if has_passphrase %}
+  <p>Gesetzt. Nach jedem Neustart des Containers musst du den Dienst in der Oberfläche entsperren; bis dahin ruft er nichts ab und meldet sich per ntfy.</p>
+  {% else %}
+  <p>Mit einer Master-Passphrase sind Zugangsdaten, Einstellungen und Sync-Daten auch dann nicht lesbar, wenn jemand den ganzen Container oder eine Sicherung kopiert. Dafür musst du den Dienst nach jedem Neustart einmal entsperren. <strong>Ohne die Passphrase sind die Daten verloren</strong> – dann bleibt nur, den Dienst neu einzurichten.</p>
+  {% endif %}
+  <form method="post" action="/security/passphrase">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="pw">Passwort der Oberfläche (zur Bestätigung)</label>
+    <input type="password" id="pw" name="password" autocomplete="current-password" required>
+    <label for="new">{{ 'Neue Passphrase' if has_passphrase else 'Passphrase' }} (mindestens {{ min_length }} Zeichen)</label>
+    <input type="password" id="new" name="new" autocomplete="new-password" minlength="{{ min_length }}">
+    <label for="new2">Wiederholen</label>
+    <input type="password" id="new2" name="new2" autocomplete="new-password" minlength="{{ min_length }}">
+    <div class="actions">
+      <button name="action" value="set">{{ 'Passphrase ändern' if has_passphrase else 'Passphrase setzen' }}</button>
+      {% if has_passphrase %}<button class="secondary" name="action" value="remove">Passphrase entfernen</button>{% endif %}
+    </div>
+  </form>
+  {% if has_passphrase %}
+  <form method="post" action="/security/lock">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="actions"><button class="secondary">Jetzt sperren</button></div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

@@ -37,8 +37,8 @@ def test_assistant_from_first_visit_to_first_sync(tmp_path):
     r = client.get("/", follow_redirects=False)
     assert r.headers["location"] == "/setup-password"
     r = client.post("/setup-password", data={"password": "short", "password2": "short"})
-    assert "mindestens 8 Zeichen" in r.text
-    r = client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    assert "mindestens 12 Zeichen" in r.text
+    r = client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     assert "Einrichtung" in r.text and "Wealthfolio verbinden" in r.text
     assert config_mod.load(tmp_path).public_url == "http://sync.local:8090"
 
@@ -92,13 +92,13 @@ def test_assistant_from_first_visit_to_first_sync(tmp_path):
 
 def test_login_required_and_csrf_checked(tmp_path):
     client, _, _ = make(tmp_path)
-    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     assert client.post("/run", data={"csrf": "forged"}).status_code == 400
     client.post("/logout", data={"csrf": csrf(client, "/")})
     r = client.get("/", follow_redirects=False)
     assert r.headers["location"] == "/login"
     assert "Falsches Passwort" in client.post("/login", data={"password": "wrong"}).text
-    assert "Einrichtung" in client.post("/login", data={"password": "geheim123"}).text
+    assert "Einrichtung" in client.post("/login", data={"password": "geheim-123456"}).text
     # The password can only be chosen once.
     r = client.post("/setup-password", data={"password": "andere123", "password2": "andere123"},
                     follow_redirects=False)
@@ -107,7 +107,7 @@ def test_login_required_and_csrf_checked(tmp_path):
 
 def test_notifications_and_securities(tmp_path):
     client, _, notifier = make(tmp_path)
-    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     page = client.get("/notifications").text
     topic = re.search(r'name="topic" value="(wealthfolio-sync-[0-9a-f]{12})"', page).group(1)
     token = csrf(client, "/notifications")
@@ -134,7 +134,7 @@ def test_status_follows_the_real_state_of_the_sync(tmp_path):
     from brokersync.sync import run_lock
 
     client, _, _ = make(tmp_path)
-    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     # A run the process died in the middle of (restart, update, crash).
     stale = State(tmp_path)
     stale.start_run("fake")
@@ -195,7 +195,7 @@ def test_an_installation_with_the_old_dummy_broker_is_cleaned_up(tmp_path):
     assert not state.flag("assets-learned:dummy")
     assert state.known("fake") == {"f-1"} and len(state.runs("fake")) == 1
 
-    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     page = client.get("/").text
     # Its activities stay in Wealthfolio: shown once, with the count and how to find them.
     assert "Dummy (Test) entfernt" in page and "4 Buchungen" in page and "[SYNC dummy:" in page
@@ -204,7 +204,7 @@ def test_an_installation_with_the_old_dummy_broker_is_cleaned_up(tmp_path):
     assert "Dummy (Test) entfernt" not in r.text
     # A restart finds nothing left to clean up and doesn't show it again.
     client, _, _ = make(tmp_path)
-    client.post("/login", data={"password": "geheim123"})
+    client.post("/login", data={"password": "geheim-123456"})
     assert "Dummy (Test) entfernt" not in client.get("/").text
     assert "Unbekannter Broker" in client.get("/brokers/dummy").text
 
@@ -214,7 +214,7 @@ def test_refetch_button(tmp_path):
     from brokersync.sync import refetch_flag
 
     client, _, _ = make(tmp_path)
-    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     page = client.get("/brokers/fake").text
     assert "Ab Startdatum neu abrufen" in page
     r = client.post("/brokers/fake/refetch", data={"csrf": csrf(client, "/brokers/fake")})

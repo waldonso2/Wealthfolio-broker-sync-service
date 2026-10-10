@@ -19,7 +19,7 @@ def test_catalog_entry_matches_the_scripts():
     assert [m["script"] for m in meta["install_methods"]] == [f"ct/{SLUG}.sh"]
     assert (ROOT / "ct" / f"{SLUG}.sh").exists()
     assert (ROOT / "install" / f"{SLUG}-install.sh").exists()
-    assert meta["interface_port"] == 8090
+    assert meta["interface_port"] == 8443
 
 
 def test_ct_script_loads_the_engine_with_this_repository_as_script_source():

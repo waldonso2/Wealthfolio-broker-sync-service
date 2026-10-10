@@ -20,6 +20,7 @@
     <a href="/transfers">Überträge</a>
     <a href="/duplicates">Duplikate</a>
     <a href="/check">Prüfung</a>
+    <a href="/security">Sicherheit</a>
     <form method="post" action="/logout" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">Abmelden</button></form>
   </nav>
   {% endif %}
@@ -27,7 +28,7 @@
 <main class="wrap">
   {% if flash %}<div class="flash {{ flash.level }}">{{ flash.text }}</div>{% endif %}
   {% block content %}{% endblock %}
-  <p class="muted">Version {{ version }} · Zugangsdaten werden verschlüsselt gespeichert · nur lesender Zugriff auf die Broker</p>
+  <p class="muted">Version {{ version }} · alle Daten verschlüsselt gespeichert · nur lesender Zugriff auf die Broker</p>
 </main>
 </body>
 </html>

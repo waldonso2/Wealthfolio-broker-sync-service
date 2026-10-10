@@ -4,12 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wealthfolio-broker-sync"
-version = "0.8.0"
+version = "0.9.0"
 description = "Fetches transactions from brokers and writes them, deduplicated, into a self-hosted Wealthfolio"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
+  "argon2-cffi>=23.1",
   "cryptography>=43",
   "fastapi>=0.115",
   "fints>=5.0,<6",
@@ -20,6 +21,9 @@ dependencies = [
   # Unofficial Trade Republic API: pinned, updated deliberately (its login and
   # parsing follow Trade Republic's changes).
   "pytr==0.4.10",
+  # SQLCipher for the encrypted state database; wheels exist for x86-64 only,
+  # elsewhere state.db stays plain SQLite (the page Sicherheit says so).
+  "sqlcipher3-binary>=0.5; platform_machine == 'x86_64'",
   "uvicorn>=0.30",
 ]
 

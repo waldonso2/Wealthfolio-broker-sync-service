@@ -8,10 +8,29 @@ Type=oneshot
 User=brokersync
 Group=brokersync
 Environment=BROKERSYNC_DATA=/opt/wealthfolio-broker-sync/data
+Environment=BROKERSYNC_RUNTIME=/run/wealthfolio-broker-sync
+# The service's key: drop-in 10-key.conf from deploy/setup.sh.
 ExecStart=/opt/wealthfolio-broker-sync/venv/bin/brokersync run
+RuntimeDirectory=wealthfolio-broker-sync
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+UMask=0077
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 ReadWritePaths=/opt/wealthfolio-broker-sync/data
-UMask=0077

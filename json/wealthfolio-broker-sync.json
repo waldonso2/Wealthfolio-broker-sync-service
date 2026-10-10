@@ -8,12 +8,12 @@
   "type": "ct",
   "updateable": true,
   "privileged": false,
-  "interface_port": 8090,
+  "interface_port": 8443,
   "documentation": "https://github.com/waldonso2/wealthfolio-broker-sync-service#readme",
   "website": "https://github.com/waldonso2/wealthfolio-broker-sync-service",
   "logo": "https://cdn.jsdelivr.net/gh/selfhst/icons/webp/wealthfolio.webp",
-  "config_path": "/opt/wealthfolio-broker-sync/data/config.json",
-  "description": "Fetches transactions from your brokers and writes them, deduplicated, into your self-hosted Wealthfolio. Set up entirely in the web UI; credentials are stored encrypted.",
+  "config_path": "/opt/wealthfolio-broker-sync/data/config.enc",
+  "description": "Fetches transactions from your brokers and writes them, deduplicated, into your self-hosted Wealthfolio. Set up entirely in the web UI over HTTPS; everything it stores is encrypted, optionally with a master passphrase.",
   "install_methods": [
     {
       "type": "default",
@@ -39,6 +39,14 @@
     {
       "text": "Forgot the web UI password? Run `brokersync-reset-password` in the container console.",
       "type": "info"
+    },
+    {
+      "text": "The web UI uses a self-signed certificate (https://<ip>:8443): confirm the browser warning once. Plain http on port 8090 redirects there.",
+      "type": "info"
+    },
+    {
+      "text": "With a master passphrase set, the service has to be unlocked in the web UI after every restart of the container. Without the passphrase the data can't be recovered.",
+      "type": "warning"
     }
   ],
   "repository_url": "https://github.com/waldonso2/wealthfolio-broker-sync-service"

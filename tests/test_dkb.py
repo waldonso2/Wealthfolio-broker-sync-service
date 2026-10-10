@@ -173,7 +173,7 @@ def test_web_login_with_app_confirmation_and_transfer_patterns(tmp_path, fake):
     app = create_app(tmp_path, wealthfolio=lambda u, p: WealthfolioClient(u, p, transport=wf.transport()),
                      adapters={"dkb": DkbAdapter}, notifier=RecordingNotifier(), run_in_thread=False)
     client = TestClient(app)
-    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     csrf = re.search(r'name="csrf" value="([^"]+)"', client.get("/").text).group(1)
     client.post("/setup/wealthfolio", data={"csrf": csrf, "url": "http://wf", "password": PASSWORD})
     page = client.get("/brokers/dkb").text

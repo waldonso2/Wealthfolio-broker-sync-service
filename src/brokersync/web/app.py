@@ -24,17 +24,19 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from .. import __version__, audit, retired
+from .. import __version__, audit, crypto, redact, retired
 from .. import config as config_mod
 from .. import duplicates as duplicates_mod
 from .. import reset as reset_mod
+from .. import security as security_mod
 from ..adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from ..mapping import Accounts
 from ..notify import Notifier
 from ..state import State
 from ..sync import UNMATCHED_SECURITIES, AlreadyRunning, Syncer, is_running, opening_id, refetch_flag, run_lock
-from ..vault import Vault, hash_password, verify_password
+from ..vault import Vault, hash_password, needs_rehash, verify_password
 from ..wealthfolio import WealthfolioClient, WealthfolioError
+from .gate import Gate, Throttle
 
 log = logging.getLogger(__name__)
 HERE = Path(__file__).parent
@@ -46,9 +48,26 @@ STATUS_LABEL = {"ok": "OK", "needs_auth": "Anmeldung nötig", "error": "Fehler",
                 "aborted": "abgebrochen"}
 
 
+MIN_PASSWORD = 12
+
+
 def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[BrokerAdapter]] | None = None,
-               notifier: Notifier | None = None, run_in_thread: bool = True) -> FastAPI:
+               notifier: Notifier | None = None, run_in_thread: bool = True, secure: bool = False) -> Gate:
+    """The web UI behind its gate: security headers, and the unlock page while a master passphrase is set
+    and not entered (the app itself is built once the data can be read)."""
     data_dir = Path(data_dir)
+    throttle = Throttle()
+    gate = Gate(data_dir, secure=secure, throttle=throttle, templates_dir=HERE / "templates",
+                static_dir=HERE / "static")
+    gate.build = lambda: _create_app(data_dir, wealthfolio=wealthfolio, adapters=adapters, notifier=notifier,
+                                     run_in_thread=run_in_thread, secure=secure, gate=gate, throttle=throttle)
+    if not crypto.is_locked(data_dir):
+        gate.app()  # build it now: start-up work (retired brokers) and errors show at start, not on a first visit
+    return gate
+
+
+def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_thread: bool, secure: bool, gate: Gate,
+                throttle: Throttle) -> FastAPI:
     vault = Vault(data_dir)
     state = State(data_dir)
     adapters = adapters or ADAPTERS
@@ -90,8 +109,8 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
         return await call_next(request)
 
     # Added after the middleware above so it runs first and fills request.session.
-    app.add_middleware(SessionMiddleware, secret_key=session_key, same_site="strict", https_only=False,
-                       max_age=7 * 24 * 3600)
+    app.add_middleware(SessionMiddleware, secret_key=session_key, same_site="strict", https_only=secure,
+                       max_age=24 * 3600)
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 
     def render(request: Request, name: str, **ctx) -> HTMLResponse:
@@ -104,7 +123,8 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
 
     def redirect(request: Request, url: str, flash: str | None = None, level: str = "ok") -> RedirectResponse:
         if flash:
-            request.session["flash"] = {"text": flash, "level": level}
+            # Messages can carry a broker's error text: never a secret or an account number on screen.
+            request.session["flash"] = {"text": redact.redact(flash), "level": level}
         return RedirectResponse(url, 303)
 
     def cfg() -> config_mod.Config:
@@ -135,9 +155,10 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
     def setup_password(request: Request, password: str = Form(...), password2: str = Form(...)):
         if vault.load().get("ui_password_hash"):
             return RedirectResponse("/login", 303)
-        if len(password) < 8 or password != password2:
+        if len(password) < MIN_PASSWORD or password != password2:
             return redirect(request, "/setup-password",
-                            "Das Passwort braucht mindestens 8 Zeichen, beide Eingaben müssen gleich sein.", "error")
+                            f"Das Passwort braucht mindestens {MIN_PASSWORD} Zeichen, beide Eingaben müssen gleich "
+                            "sein.", "error")
         vault.update(lambda d: d.__setitem__("ui_password_hash", hash_password(password)))
         request.session["user"] = "admin"
         if not cfg().public_url:
@@ -152,9 +173,21 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
 
     @app.post("/login")
     def login(request: Request, password: str = Form(...)):
-        if verify_password(password, vault.load().get("ui_password_hash")):
+        client = request.client.host if request.client else "?"
+        wait = throttle.blocked(client)
+        if wait:
+            return redirect(request, "/login", f"Zu viele Fehlversuche. Bitte in {wait // 60 + 1} Minuten erneut "
+                            "versuchen.", "error")
+        stored = vault.load().get("ui_password_hash")
+        if verify_password(password, stored):
+            throttle.success(client)
+            if needs_rehash(stored):
+                vault.update(lambda d: d.__setitem__("ui_password_hash", hash_password(password)))
+            request.session.clear()
             request.session["user"] = "admin"
             return redirect(request, "/")
+        throttle.failure(client)
+        log.warning("web UI: wrong password from %s", client)
         return redirect(request, "/login", "Falsches Passwort.", "error")
 
     @app.post("/logout")
@@ -372,26 +405,71 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
         config_mod.save(data_dir, c)
         return redirect(request, "/transfers", "Gespeichert.")
 
+    # ── security ────────────────────────────────────────────────────────────
+    @app.get("/security", response_class=HTMLResponse)
+    def security_page(request: Request):
+        c = cfg()
+        wf_plain = c.wealthfolio_url.startswith("http://") and not _is_local(c.wealthfolio_url)
+        return render(request, "security.html", checks=security_mod.status(data_dir, secure=secure),
+                      has_passphrase=crypto.passphrase_enabled(data_dir), min_length=crypto.MIN_PASSPHRASE,
+                      wf_plain=wf_plain)
+
+    @app.post("/security/passphrase")
+    def security_passphrase(request: Request, password: str = Form(...), action: str = Form(...),
+                            new: str = Form(""), new2: str = Form("")):
+        client = request.client.host if request.client else "?"
+        if throttle.blocked(client):
+            return redirect(request, "/security", "Zu viele Fehlversuche. Bitte später erneut versuchen.", "error")
+        if not verify_password(password, vault.load().get("ui_password_hash")):
+            throttle.failure(client)
+            return redirect(request, "/security", "Das Passwort der Oberfläche stimmt nicht.", "error")
+        throttle.success(client)
+        if action == "remove":
+            target = None
+        else:
+            if new != new2:
+                return redirect(request, "/security", "Die beiden Eingaben der Passphrase sind verschieden.", "error")
+            target = new
+        try:
+            security_mod.change_passphrase(data_dir, target)
+        except ValueError as e:
+            return redirect(request, "/security", str(e), "error")
+        except AlreadyRunning:
+            return redirect(request, "/security", "Gerade läuft ein Abruf. Bitte danach erneut versuchen.", "warn")
+        log.info("master passphrase %s", "removed" if target is None else "set")
+        gate.reset()  # the database connection and the vault use the new key from the next request on
+        done = ("Master-Passphrase entfernt." if target is None
+                else "Master-Passphrase gesetzt. Merke sie dir gut: Ohne sie sind die Daten verloren.")
+        return redirect(request, "/security", done)
+
+    @app.post("/security/lock")
+    def security_lock(request: Request):
+        crypto.lock(data_dir)
+        gate.reset()
+        log.info("web UI: service locked")
+        return RedirectResponse("/unlock", 303)
+
     # ── notifications ───────────────────────────────────────────────────────
     @app.get("/notifications", response_class=HTMLResponse)
     def notifications_page(request: Request):
         c = cfg()
         if not c.ntfy_topic:
             c.ntfy_topic = f"wealthfolio-sync-{secrets.token_hex(6)}"
-        return render(request, "notifications.html", cfg=c, has_token=bool(vault.load().get("ntfy_token")))
+        return render(request, "notifications.html", cfg=c, has_token=bool(c.ntfy_token))
 
     @app.post("/notifications")
     def notifications_save(request: Request, server: str = Form(...), topic: str = Form(""), token: str = Form(""),
-                           public_url: str = Form(""), test: str = Form("")):
+                           public_url: str = Form(""), details: str = Form(""), test: str = Form("")):
         c = cfg()
         c.ntfy_server = server.strip().rstrip("/")
         c.ntfy_topic = topic.strip()
         c.public_url = public_url.strip().rstrip("/")
-        config_mod.save(data_dir, c)
+        c.ntfy_details = bool(details)
         if token:
-            vault.update(lambda d: d.__setitem__("ntfy_token", token))
+            c.ntfy_token = token
+        config_mod.save(data_dir, c)
         if test:
-            n = notifier or Notifier(c.ntfy_server, c.ntfy_topic, vault.load().get("ntfy_token"))
+            n = notifier or Notifier(c.ntfy_server, c.ntfy_topic, c.ntfy_token)
             ok = n.send("Wealthfolio Broker Sync", "Testnachricht - Benachrichtigungen funktionieren.",
                         link=c.public_url or None, tags="white_check_mark")
             if not ok:
@@ -594,6 +672,13 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
 
 def _wf_done(secrets_: dict, c: config_mod.Config) -> bool:
     return bool(secrets_.get("wealthfolio_checked"))
+
+
+def _is_local(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    host = urlparse(url).hostname or ""
+    return host in ("localhost", "127.0.0.1", "::1")
 
 
 def _money(value) -> str:

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Runs a brokersync command the way the services run: as the user brokersync,
+# with the service's key handed over by systemd (the key itself stays root-only).
+#   brokersync-cli security-status
+set -euo pipefail
+CONF=/etc/systemd/system/wealthfolio-broker-sync.service.d/10-key.conf
+args=()
+while IFS= read -r line; do
+  args+=(-p "$line")
+done < <(grep -E '^(LoadCredential|LoadCredentialEncrypted|Environment)=' "$CONF")
+exec systemd-run --quiet --wait --pipe --collect \
+  -p User=brokersync -p Group=brokersync -p UMask=0077 \
+  -p Environment=BROKERSYNC_DATA=/opt/wealthfolio-broker-sync/data \
+  -p Environment=BROKERSYNC_RUNTIME=/run/wealthfolio-broker-sync \
+  "${args[@]}" /opt/wealthfolio-broker-sync/venv/bin/brokersync "$@"

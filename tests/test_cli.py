@@ -61,20 +61,21 @@ def test_run_with_an_empty_data_dir_does_nothing(data):
 
 def test_reset_ui_password_keeps_everything_else(data, capsys):
     vault = Vault(data)
-    vault.update(lambda d: d.update(ui_password_hash=hash_password("geheim123"), wealthfolio_password="wf"))
+    vault.update(lambda d: d.update(ui_password_hash=hash_password("geheim-123456"), wealthfolio_password="wf"))
     assert cli.main(["reset-ui-password"]) == 0
     assert vault.load() == {"wealthfolio_password": "wf"}
     assert "set a new one" in capsys.readouterr().out
 
 
 def test_serve_starts_the_ui_on_the_given_port(data, monkeypatch):
-    import uvicorn
+    from brokersync.web import serve
 
     started = {}
-    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: started.update(app=app, **kw))
-    assert cli.main(["serve", "--port", "9999"]) == 0
-    assert (started["host"], started["port"]) == ("0.0.0.0", 9999)
-    assert started["app"].title  # the FastAPI app for the data dir
+    monkeypatch.setattr(serve, "serve", lambda data_dir, **kw: started.update(data_dir=data_dir, **kw))
+    assert cli.main(["serve", "--port", "8443", "--certfile", "c.pem", "--keyfile", "k.pem",
+                     "--redirect-port", "8090"]) == 0
+    assert started == {"data_dir": data, "host": "0.0.0.0", "port": 8443, "certfile": "c.pem", "keyfile": "k.pem",
+                       "redirect_port": 8090}
 
 
 def test_version_and_missing_command(capsys):

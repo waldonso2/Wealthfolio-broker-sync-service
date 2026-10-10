@@ -4,7 +4,7 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 
 - **Installation mit einer Zeile** in der Proxmox-Shell, wie bei den [Community-Skripten](https://community-scripts.org): eigener Container, fertig eingerichtet
 - **Alles in der Weboberfläche:** keine Konfigurationsdateien, keine Kommandozeile
-- **Zugangsdaten verschlüsselt** gespeichert, **nur lesender Zugriff** auf die Broker
+- **Alles verschlüsselt:** Zugangsdaten, Einstellungen und Sync-Daten (AES-256), der Schlüssel liegt nicht bei den Daten; Oberfläche nur per HTTPS; wahlweise mit Master-Passphrase. **Nur lesender Zugriff** auf die Broker
 - **Benachrichtigung aufs Handy** (ntfy), wenn eine TAN fällig ist oder etwas nicht klappt
 - **Keine Duplikate:** Was schon in Wealthfolio steht – auch aus einem früheren CSV- oder PDF-Import –, erkennt der Dienst und legt es nicht noch einmal an
 - **Prüft sich selbst:** Nach jedem Abruf vergleicht er Konto und Depot mit dem Broker und zeigt, wo etwas fehlt oder nicht aufgeht
@@ -28,9 +28,9 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
    ```
 
    Es erscheint der bekannte Assistent der Community-Skripte. *Default Settings* wählen – die Standardwerte passen: 1 CPU, 512 MB RAM, 2 GB Disk, Debian 13, unprivilegiert. Der Kopf zeigt dabei „Scripts fork: waldonso2/wealthfolio-broker-sync-service“; das ist richtig, der Dienst kommt aus diesem Repository und nicht aus der offiziellen Sammlung.
-3. **Öffnen.** Am Ende zeigt die Installation die Adresse der Weboberfläche an, z. B. `http://192.168.1.51:8090`. Diese im Browser öffnen.
+3. **Öffnen.** Am Ende zeigt die Installation die Adresse der Weboberfläche an, z. B. `https://192.168.1.51:8443`. Diese im Browser öffnen. Das Zertifikat hat der Container selbst ausgestellt: Die Warnung des Browsers einmal bestätigen. Wer prüfen will, ob es das richtige ist: Die Seite *Sicherheit* zeigt seinen SHA-256-Fingerabdruck, den der Browser in den Zertifikatsdetails ebenfalls anzeigt. Alte Adressen mit `http://…:8090` leiten dorthin weiter.
 
-**Aktualisieren:** In Proxmox die Konsole des Containers öffnen und `update` eingeben. Einstellungen und Zugangsdaten bleiben erhalten; vorher wird eine Sicherung unter `/opt/wealthfolio-broker-sync/backup-*.tar.gz` angelegt (die letzten drei bleiben).
+**Aktualisieren:** In Proxmox die Konsole des Containers öffnen und `update` eingeben. Einstellungen und Zugangsdaten bleiben erhalten; vorher wird eine Sicherung der verschlüsselten Daten unter `/opt/wealthfolio-broker-sync/backup-*.tar.gz` angelegt (die letzten drei bleiben).
 
 > **PVE Scripts Local:** Der Dienst erscheint dort (noch) nicht. PVE Scripts Local zeigt nur Skripte aus der offiziellen Sammlung von community-scripts.org an; ein unter *Repositories* eingetragenes eigenes Repo bringt keine neuen Skripte in den Katalog. Die Aufnahme in die offizielle Sammlung ist geplant, sobald echte Broker angebunden sind.
 
@@ -240,6 +240,29 @@ Die Seite **Prüfung** zeigt außerdem, welche schon übernommenen Buchungen in 
 | Push-Nachricht „Abweichung zu Wealthfolio“ | Eine schon übernommene Buchung fehlt in Wealthfolio (gelöscht?), oder eine Buchung des Dienstes gibt es beim Broker nicht mehr (z. B. storniert). Seite *Prüfung* öffnen: Fehlende mit *Wieder anlegen* zurückholen oder *Ignorieren*, wenn sie zu Recht fehlen; Stornierte in Wealthfolio löschen |
 | Wertpapier soll in Wealthfolio unter seinem Ticker statt der ISIN laufen | Unter *Wertpapiere* die Zuordnung ISIN → Symbol eintragen |
 | Passwort der Oberfläche vergessen | In Proxmox die Konsole des Containers öffnen und `brokersync-reset-password` eingeben. Beim nächsten Öffnen legst du ein neues fest |
+| Push-Nachricht „Broker Sync gesperrt“ (mit Master-Passphrase, nach einem Neustart) | Auf die Nachricht tippen und die Passphrase eingeben |
+
+## Sicherheit
+
+Was der Dienst speichert, ist verschlüsselt; die Seite **Sicherheit** zeigt jederzeit, was wie geschützt ist (in der Konsole: `brokersync-cli security-status`).
+
+| Was | Wie |
+|---|---|
+| Zugangsdaten, Sitzungen, Tokens, Wealthfolio-Passwort | AES-256-GCM (`data/secrets.enc`) |
+| Einstellungen (Konten, Wertpapiere, Überträge mit IBANs) | AES-256-GCM (`data/config.enc`) |
+| Sync-Datenbank (Buchungen, Bestände, Läufe) | SQLCipher, AES-256 (`data/state.db`) |
+| ntfy-Einstellungen | AES-256-GCM (`data/notify.enc`) – nur mit dem Schlüssel des Dienstes, damit ein gesperrter Dienst Bescheid sagen kann |
+| Schlüssel des Dienstes | **nicht** in `data/`: mit `systemd-creds` verschlüsselt in `/etc/wealthfolio-broker-sync/key.cred` (nur root), der Dienst bekommt ihn beim Start |
+| Passwort der Oberfläche | argon2id; nach fünf Fehlversuchen 15 Minuten Pause |
+| Oberfläche | HTTPS (Port 8443, eigenes Zertifikat in `/etc/wealthfolio-broker-sync/tls/`; ein eigenes `cert.pem`/`key.pem` dort bleibt erhalten), sichere Cookies, strenge Sicherheits-Header |
+| Log und Nachrichten | Zugangsdaten, Tokens, IBANs und Kontonummern werden geschwärzt; ntfy-Nachrichten enthalten ohne *Details* keine Beträge |
+| Dienst | eigener Benutzer, systemd-Härtung (kein Schreibzugriff außer `data/`, keine Rechteausweitung), Dateien nur für den Dienst lesbar |
+
+**Master-Passphrase (wahlweise, Seite *Sicherheit*):** Ohne sie kann jemand, der den ganzen Container samt Schlüssel kopiert (z. B. ein Proxmox-Backup), die Daten entschlüsseln. Mit ihr nicht: Der Schlüssel entsteht erst aus Schlüssel des Dienstes **und** Passphrase (argon2id). Dafür musst du den Dienst nach jedem Neustart des Containers in der Oberfläche entsperren; bis dahin ruft er nichts ab und schickt eine ntfy-Nachricht. **Ohne die Passphrase sind die Daten verloren** – dann bleibt nur, den Dienst neu einzurichten.
+
+**Sicherungen:** `update` sichert `data/` vorher nach `/opt/wealthfolio-broker-sync/backup-*.tar.gz` – nur verschlüsselte Daten, ohne Schlüssel. Ältere Sicherungen, die noch den Schlüssel enthielten, ersetzt das Update durch eine verschlüsselte. Proxmox-Backups des Containers enthalten auch den Schlüssel: Sie gehören auf ein verschlüsseltes Ziel, oder du setzt die Master-Passphrase.
+
+**Wealthfolio:** Den Dienst mit Wealthfolio möglichst per HTTPS verbinden; sonst geht das Wealthfolio-Passwort unverschlüsselt durchs Netz (die Seite *Sicherheit* weist darauf hin).
 
 ## Wie gebucht wird
 
@@ -258,7 +281,7 @@ Die Seite **Prüfung** zeigt außerdem, welche schon übernommenen Buchungen in 
 
 Für Mitwirkende: [ARCHITECTURE.md](ARCHITECTURE.md) erklärt Aufbau und Ablauf, [CLAUDE.md](CLAUDE.md) die Regeln und wie ein neuer Broker dazukommt.
 
-- Python-Dienst `brokersync` (FastAPI-Oberfläche auf Port 8090, `brokersync run` für den systemd-Timer) unter `/opt/wealthfolio-broker-sync`; Daten in `/opt/wealthfolio-broker-sync/data` (Konfiguration, verschlüsselte Zugangsdaten, Sync-Status), läuft als eigener Benutzer `brokersync`.
+- Python-Dienst `brokersync` (FastAPI-Oberfläche per HTTPS auf Port 8443, Port 8090 leitet weiter; `brokersync run` für den systemd-Timer) unter `/opt/wealthfolio-broker-sync`; verschlüsselte Daten in `/opt/wealthfolio-broker-sync/data`, Schlüssel und Zertifikat in `/etc/wealthfolio-broker-sync`; läuft als eigener Benutzer `brokersync`. Befehle mit dem Schlüssel des Dienstes: `brokersync-cli <befehl>`.
 - Wealthfolio wird über seine REST-API (`/api/v1`) mit dem Wealthfolio-Passwort angesprochen.
 - Scalables CLI `sc` liegt unter `/opt/wealthfolio-broker-sync/bin/sc`; `brokersync install-sc` installiert bzw. aktualisiert es (Installation und Update rufen es auf).
 - Releases: Ein neuer Stand wird installierbar, sobald die Version in `pyproject.toml` erhöht und nach `main` gemergt ist; der Release-Workflow legt dann das GitHub-Release an, aus dem Installation und Update laden.

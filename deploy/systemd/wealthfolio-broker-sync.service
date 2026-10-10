@@ -8,15 +8,40 @@ Type=simple
 User=brokersync
 Group=brokersync
 Environment=BROKERSYNC_DATA=/opt/wealthfolio-broker-sync/data
-ExecStart=/opt/wealthfolio-broker-sync/venv/bin/brokersync serve --host 0.0.0.0 --port 8090
+Environment=BROKERSYNC_RUNTIME=/run/wealthfolio-broker-sync
+Environment=BROKERSYNC_TLS=1
+# The service's key comes from the drop-in 10-key.conf that deploy/setup.sh
+# writes (LoadCredentialEncrypted= with systemd-creds, else LoadCredential=).
+# The TLS key is handed over the same way: the files stay root-only.
+LoadCredential=tls.crt:/etc/wealthfolio-broker-sync/tls/cert.pem
+LoadCredential=tls.key:/etc/wealthfolio-broker-sync/tls/key.pem
+ExecStart=/opt/wealthfolio-broker-sync/venv/bin/brokersync serve --host 0.0.0.0 --port 8443 --certfile %d/tls.crt --keyfile %d/tls.key --redirect-port 8090
 Restart=on-failure
 RestartSec=5
+# Shared with the timer, in RAM, kept until a restart: the unlocked master passphrase key.
+RuntimeDirectory=wealthfolio-broker-sync
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+UMask=0077
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 ReadWritePaths=/opt/wealthfolio-broker-sync/data
-UMask=0077
 
 [Install]
 WantedBy=multi-user.target

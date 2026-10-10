@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck
-        run: shellcheck ct/*.sh install/*.sh deploy/setup.sh deploy/brokersync-reset-password
+        run: shellcheck ct/*.sh install/*.sh deploy/setup.sh deploy/brokersync-reset-password deploy/brokersync-cli
       - name: catalog JSON
         run: python3 -m json.tool json/wealthfolio-broker-sync.json > /dev/null
       - name: install from the release tarball layout

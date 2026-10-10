@@ -31,7 +31,7 @@ from zoneinfo import ZoneInfo
 
 from . import assets as assets_mod
 from . import config as config_mod
-from . import coverage, retired
+from . import coverage, crypto, retired
 from . import repair as repair_mod
 from .adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from .dedup import ExistingIndex
@@ -83,9 +83,8 @@ class BrokerResult:
 @contextmanager
 def run_lock(data_dir: Path, wait: float = 0) -> Iterator[None]:
     """The sync lock, shared by the web UI and the timer; waits up to ``wait`` seconds."""
-    Path(data_dir).mkdir(parents=True, exist_ok=True)
     deadline = time.monotonic() + wait
-    with open(Path(data_dir) / "sync.lock", "a") as f:
+    with crypto.open_lock(Path(data_dir) / "sync.lock") as f:
         while True:
             try:
                 fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -125,7 +124,7 @@ class Syncer:
     def notifier(self, cfg: config_mod.Config) -> Notifier:
         if self._notifier:
             return self._notifier
-        return Notifier(cfg.ntfy_server, cfg.ntfy_topic, self.vault.load().get("ntfy_token"))
+        return Notifier(cfg.ntfy_server, cfg.ntfy_topic, cfg.ntfy_token, details=cfg.ntfy_details)
 
     def link(self, cfg: config_mod.Config, path: str) -> str | None:
         return f"{cfg.public_url.rstrip('/')}{path}" if cfg.public_url else None

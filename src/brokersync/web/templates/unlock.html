@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entsperren · Wealthfolio Broker Sync</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header><div class="wrap"><span class="brand">Wealthfolio Broker Sync <span class="version">v{{ version }}</span></span></div></header>
+<main class="wrap">
+  {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+  <div class="card">
+    <h1>Gesperrt</h1>
+    <p>Alle Daten des Dienstes sind mit deiner Master-Passphrase verschlüsselt. Nach einem Neustart muss sie einmal eingegeben werden; bis dahin ruft der Dienst nichts ab.</p>
+    <form method="post" action="/unlock">
+      <label for="pp">Master-Passphrase</label>
+      <input type="password" id="pp" name="passphrase" autocomplete="current-password" required autofocus>
+      <div class="actions"><button>Entsperren</button></div>
+    </form>
+  </div>
+</main>
+</body>
+</html>
