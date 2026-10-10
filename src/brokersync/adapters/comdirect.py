@@ -72,6 +72,9 @@ SETTLEMENT_DAYS = 6
 # A trade without its giro booking after this many days is reported.
 UNSETTLED_DAYS = 10
 PAGE_SIZE = 500
+# Without a date filter comdirect returns only about half a year; older bookings
+# come only when asked for explicitly. Without a start date: this far back.
+HISTORY_YEARS = 10
 
 ISIN = re.compile(r"\b([A-Z]{2}[A-Z0-9]{9}[0-9])\b")
 WKN = re.compile(r"\b([A-Z0-9]{6})\b")
@@ -310,8 +313,18 @@ class ComdirectAdapter(BrokerAdapter):
             self._clear_tokens()
             raise AuthRequired(Challenge("confirm", "Die comdirect-Sitzung ist abgelaufen. Bitte neu anmelden."))
         if r.status_code >= 400:
-            raise AdapterError(f"comdirect: {_message(r)}")
+            raise RequestRejected(r.status_code, f"comdirect: {_message(r)}")
         return r.json()
+
+    def _dated_pages(self, path: str, first_day: date, **params) -> list[dict]:
+        """Pages from ``first_day`` on (``min-bookingDate``); if comdirect rejects the date, without it."""
+        try:
+            return self._pages(path, **params, **{"min-bookingDate": first_day.isoformat()})
+        except RequestRejected as e:
+            if e.status not in (400, 422):
+                raise
+            log.warning("comdirect: %s rejects min-bookingDate %s (%s), asking without", path, first_day, e)
+            return self._pages(path, **params)
 
     def _pages(self, path: str, **params) -> list[dict]:
         out: list[dict] = []
@@ -559,18 +572,19 @@ class ComdirectAdapter(BrokerAdapter):
 
     def get_transactions(self, since: datetime | None) -> list[Transaction]:
         today = self.today or datetime.now(BERLIN).date()
-        # Without a start date: everything comdirect delivers.
         start = since.astimezone(BERLIN).date() if since else None
-        params = {"transactionState": "BOOKED"}
-        if start:
-            # A day more for the giro bookings: a trade's settlement can lie before its business date.
-            params["min-bookingDate"] = (start - timedelta(days=1)).isoformat()
-        bookings = self._pages(f"/banking/v1/accounts/{self._giro()['accountId']}/transactions", **params)
+        # A day more: a trade's settlement can lie before its business date. Without a start date
+        # comdirect is asked explicitly for HISTORY_YEARS - unasked it returns only half a year.
+        first_day = start - timedelta(days=1) if start else \
+            today.replace(year=today.year - HISTORY_YEARS, day=min(today.day, 28))
+        bookings = self._dated_pages(f"/banking/v1/accounts/{self._giro()['accountId']}/transactions", first_day,
+                                     transactionState="BOOKED")
         if self._depots is None:
             self._depots = self._pages("/brokerage/clients/user/v3/depots")
         depot_txs: list[dict] = []
         for d in self._depots:
-            depot_txs += self._pages(f"/brokerage/v3/depots/{d['depotId']}/transactions", bookingStatus="BOOKED")
+            depot_txs += self._dated_pages(f"/brokerage/v3/depots/{d['depotId']}/transactions", first_day,
+                                           bookingStatus="BOOKED")
         wkn_to_isin = {(p.get("instrument") or {}).get("wkn") or p.get("wkn"): (p.get("instrument") or {}).get("isin")
                        for p in self._all_positions() if (p.get("instrument") or {}).get("isin")}
         names = {(p.get("instrument") or {}).get("isin"): (p.get("instrument") or {}).get("name") or ""
@@ -586,12 +600,20 @@ class ComdirectAdapter(BrokerAdapter):
                  len(bookings), min((str(b.get("bookingDate")) for b in bookings if b.get("bookingDate")), default="-"),
                  len(depot_txs), min((str(d.get("businessDate") or d.get("bookingDate")) for d in depot_txs
                                       if d.get("businessDate") or d.get("bookingDate")), default="-"),
-                 start or "the beginning")
+                 start or first_day)
         txs = to_transactions(bookings, depot_txs, wkn_to_isin, today, names)
         if start is None:
             return txs
         first = _noon(start) - timedelta(hours=12)
         return [t for t in txs if t.datetime >= first]
+
+
+class RequestRejected(AdapterError):
+    """comdirect answered a read call with an error status."""
+
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
 
 
 def _message(r: httpx.Response) -> str:

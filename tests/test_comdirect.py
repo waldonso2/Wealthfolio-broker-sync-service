@@ -221,3 +221,30 @@ def test_a_push_without_status_link_is_left_to_the_web_ui(monkeypatch):
     fake.approved = True
     web.complete_login("")
     assert web.session_state()["access_token"] == "full"
+
+
+def test_without_a_start_date_comdirect_is_asked_for_ten_years_and_without_if_it_refuses():
+    seen: list[dict] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        params = dict(request.url.params)
+        seen.append({"path": request.url.path, **params})
+        if request.url.path.endswith("/accounts/balances"):
+            return httpx.Response(200, json={"paging": {"matches": 1}, "values": [
+                {"accountId": "A", "account": {"accountType": {"key": "CA"}}, "balance": {"value": "1"}}]})
+        if request.url.path.endswith("/v3/depots"):
+            return httpx.Response(200, json={"paging": {"matches": 1}, "values": [{"depotId": "D"}]})
+        if "/brokerage/" in request.url.path and request.url.path.endswith("/transactions") \
+                and "min-bookingDate" in params:
+            return httpx.Response(422, json={"code": "request.object.invalid"})
+        return httpx.Response(200, json={"paging": {"matches": 0}, "values": []})
+
+    from datetime import date
+    a = ComdirectAdapter(CREDS, {"access_token": "full", "expires_at": 4102444800})
+    a._http = httpx.Client(transport=httpx.MockTransport(handle))
+    a.today = date(2026, 10, 10)
+    assert a.get_transactions(None) == []
+    giro = [c for c in seen if "/banking/v1/" in c["path"]]
+    depot = [c for c in seen if "/brokerage/v3/depots/D/transactions" in c["path"]]
+    assert giro[0]["min-bookingDate"] == "2016-10-10"
+    assert depot[0]["min-bookingDate"] == "2016-10-10" and "min-bookingDate" not in depot[1]

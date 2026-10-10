@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.2
+
+- **Fix: comdirect returned only half a year without a start date.** Unasked, comdirect's API delivers about six months of giro bookings (and possibly depot transactions); older ones only when a date is given. Without a start date the service now asks for ten years back, giro and depot alike; if comdirect refuses the date, it asks without.
+
 ## 0.7.1
 
 - **Fix: "Neu aufsetzen" wasn't visible** in the broker settings - it had landed in the page title.
