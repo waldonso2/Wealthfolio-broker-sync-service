@@ -73,7 +73,7 @@ def test_the_check_page_offers_missing_positions_and_takes_an_opening(tmp_path):
                                                    "currency": "EUR", "cost": "25.50"}]))
     app = create_app(tmp_path, wealthfolio=syncer._wealthfolio, adapters={"fake": FakeBroker}, run_in_thread=False)
     client = TestClient(app, base_url="http://sync.local:8090")
-    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     page = client.get("/check").text
     assert "Bestand ohne Kauf in Wealthfolio: 1" in page and 'value="25.50"' in page and 'value="200"' in page
     token = csrf(client, "/check")
@@ -105,7 +105,7 @@ def test_starting_over_deletes_only_the_syncs_activities(tmp_path):
     syncer.state.add_opening("fake", "DE000TEST009", "2024-05-02", "TEST Alt AG", "1", "10", "0")
     app = create_app(tmp_path, wealthfolio=syncer._wealthfolio, adapters={"fake": FakeBroker}, run_in_thread=False)
     client = TestClient(app, base_url="http://sync.local:8090")
-    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     page = client.get("/brokers/fake").text
     # In the page, not in its <title>.
     assert "Neu aufsetzen" not in page.split("</title>")[0]

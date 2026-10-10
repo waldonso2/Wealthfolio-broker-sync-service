@@ -1,4 +1,5 @@
-"""Sync state in SQLite (``<data>/state.db``): which broker transactions the
+"""Sync state in SQLite (``<data>/state.db``, encrypted with SQLCipher, AES-256,
+key from the data tier of ``brokersync.crypto``): which broker transactions the
 sync booked (and the activity ids), which the user ignores, the run history,
 the unknown events and the last comparison with Wealthfolio.
 
@@ -10,10 +11,21 @@ Wealthfolio after every run (``brokersync.coverage``).
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+from . import crypto
+
+try:  # SQLCipher: wheels for x86-64; elsewhere the database stays plain SQLite (shown on the page Sicherheit)
+    import sqlcipher3 as sqlcipher
+except ImportError:  # pragma: no cover - depends on the platform
+    sqlcipher = None
+
+ENCRYPTED = sqlcipher is not None
+PLAIN_HEADER = b"SQLite format 3\x00"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS synced (
@@ -121,11 +133,73 @@ class Run:
     message: str
 
 
+def db_key(data_dir: Path, key: bytes | None = None) -> bytes:
+    return crypto.subkey(key or crypto.data_key(data_dir), "state db")
+
+
+def _pragma_key(key: bytes) -> str:
+    return f"\"x'{key.hex()}'\""
+
+
+def _connect(path: Path, key: bytes):
+    if sqlcipher is None:
+        return sqlite3.connect(path, timeout=30, check_same_thread=False)
+    db = sqlcipher.connect(str(path), timeout=30, check_same_thread=False)
+    db.execute(f"PRAGMA key = {_pragma_key(key)}")
+    return db
+
+
+def is_plain(path: Path) -> bool:
+    if not path.exists() or path.stat().st_size == 0:
+        return False
+    with open(path, "rb") as f:
+        return f.read(16) == PLAIN_HEADER
+
+
+def encrypt_plain(path: Path, key: bytes) -> None:
+    """A plain database (before 0.9.0) → SQLCipher, in place."""
+    tmp = path.with_name(path.name + ".enc-tmp")
+    tmp.unlink(missing_ok=True)
+    db = sqlcipher.connect(str(path))
+    try:
+        db.execute(f"ATTACH DATABASE '{tmp}' AS enc KEY {_pragma_key(key)}")
+        db.execute("SELECT sqlcipher_export('enc')")
+        db.execute("DETACH DATABASE enc")
+    finally:
+        db.close()
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+    for suffix in ("-journal", "-wal", "-shm"):
+        path.with_name(path.name + suffix).unlink(missing_ok=True)
+
+
+def rekey(data_dir: Path, old: bytes, new: bytes) -> None:
+    """Re-encrypt the database for a new data key (passphrase set, changed or removed)."""
+    if sqlcipher is None:
+        return
+    path = Path(data_dir) / "state.db"
+    if not path.exists():
+        return
+    db = _connect(path, db_key(data_dir, old))
+    try:
+        db.execute(f"PRAGMA rekey = {_pragma_key(db_key(data_dir, new))}")
+    finally:
+        db.close()
+
+
 class State:
-    def __init__(self, data_dir: Path):
-        Path(data_dir).mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(Path(data_dir) / "state.db", timeout=30, check_same_thread=False)
+    def __init__(self, data_dir: Path, key: bytes | None = None):
+        Path(data_dir).mkdir(mode=0o700, parents=True, exist_ok=True)
+        path = Path(data_dir) / "state.db"
+        k = db_key(data_dir, key) if sqlcipher is not None else b""
+        if sqlcipher is not None and is_plain(path):
+            with crypto.file_lock(data_dir, "state.lock"):
+                if is_plain(path):
+                    encrypt_plain(path, k)
+        self.db = _connect(path, k)
         self.db.executescript(SCHEMA)
+        if path.exists():
+            os.chmod(path, 0o600)
 
     def close(self) -> None:
         self.db.close()

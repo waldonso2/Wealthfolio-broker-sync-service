@@ -73,5 +73,5 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW}Open the web UI and follow the assistant:${CL}"
-echo -e "${GATEWAY}${BGN}http://${IP}:8090${CL}"
+echo -e "${INFO}${YW}Open the web UI and follow the assistant (self-signed certificate: confirm the browser warning once):${CL}"
+echo -e "${GATEWAY}${BGN}https://${IP}:8443${CL}"

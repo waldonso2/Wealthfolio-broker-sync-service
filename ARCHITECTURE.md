@@ -7,14 +7,15 @@ Wie der Wealthfolio Broker Sync aufgebaut ist und wie ein Abruf abläuft. Für d
 ```mermaid
 flowchart LR
   subgraph LXC["LXC-Container (Proxmox)"]
-    UI["Weboberfläche<br/>brokersync serve :8090"]
+    UI["Weboberfläche<br/>brokersync serve :8443 (HTTPS)"]
     Timer["systemd-Timer<br/>brokersync run (täglich 06:00)"]
     Sync["Syncer<br/>sync.py"]
     subgraph data["/opt/wealthfolio-broker-sync/data"]
-      Cfg["config.json"]
-      Vault["secrets.enc + secret.key"]
-      State["state.db (SQLite)"]
+      Cfg["config.enc + notify.enc"]
+      Vault["secrets.enc"]
+      State["state.db (SQLCipher)"]
     end
+    Key["/etc/wealthfolio-broker-sync<br/>key.cred (systemd-creds), tls/"] -. Credential beim Start .-> Sync
     UI --> Sync
     Timer --> Sync
     Sync --- Cfg & Vault & State
@@ -36,7 +37,7 @@ Es gibt zwei Prozesse mit demselben Code und demselben Datenverzeichnis:
 | `brokersync serve` | `wealthfolio-broker-sync.service` | Weboberfläche: Einrichtung, Broker-Login mit TAN oder App-Bestätigung, Abruf per Knopf, Listen (unbekannte Buchungen, Duplikate, Wertpapiere) |
 | `brokersync run` | `wealthfolio-broker-sync-run.service` + `.timer` | Ein Abruf aller aktiven Broker. Exit-Code 1, wenn ein Broker fehlschlug, damit systemd es anzeigt |
 
-Beide laufen als Systembenutzer `brokersync` mit `ProtectSystem=strict` und dürfen nur in `data/` schreiben. Eine Lock-Datei (`data/sync.lock`, `flock`) sorgt dafür, dass immer nur ein Abruf läuft, auch wenn Timer und Weboberfläche gleichzeitig starten.
+Beide laufen als Systembenutzer `brokersync` mit systemd-Härtung (`ProtectSystem=strict`, `PrivateDevices`, `CapabilityBoundingSet=` leer, `RestrictNamespaces`, `UMask=0077` …) und dürfen nur in `data/` schreiben. Den Schlüssel bekommen sie von systemd als Credential (`$CREDENTIALS_DIRECTORY/brokersync-key`, Drop-in `10-key.conf` von `setup.sh`); `/run/wealthfolio-broker-sync` (RAM, `RuntimeDirectoryPreserve=yes`) teilen sie sich für den entsperrten Passphrasen-Schlüssel. Eine Lock-Datei (`data/sync.lock`, `flock`) sorgt dafür, dass immer nur ein Abruf läuft, auch wenn Timer und Weboberfläche gleichzeitig starten.
 
 ## Module
 
@@ -199,15 +200,27 @@ Nach jedem Lauf ohne Fehler vergleicht `reconcile.py` den Kontostand und, bei Ad
 
 ## Daten und Geheimnisse
 
-Alles liegt in `BROKERSYNC_DATA` (Standard `/opt/wealthfolio-broker-sync/data`, Modus 0700):
+Alles liegt verschlüsselt in `BROKERSYNC_DATA` (Standard `/opt/wealthfolio-broker-sync/data`, Modus 0700, Dateien 0600); der Schlüssel liegt nicht dort (`crypto.py`).
 
-| Datei | Inhalt | Geschrieben von |
+**Schlüssel.** Der *Host-Schlüssel* (32 Zufallsbytes) kommt in dieser Reihenfolge aus `$CREDENTIALS_DIRECTORY/brokersync-key` (systemd: `LoadCredentialEncrypted=` aus `/etc/wealthfolio-broker-sync/key.cred`, mit `systemd-creds` verschlüsselt; wo das nicht geht `LoadCredential=` aus einer root-only Datei), `$BROKERSYNC_KEY_FILE` oder – nur Entwicklung, Tests und Installationen vor 0.9.0 – `data/secret.key`. Daraus leitet HKDF-SHA256 zwei Stufen ab:
+
+| Stufe | Schlüssel | Schützt |
 |---|---|---|
-| `config.json` | nicht geheime Einstellungen: Wealthfolio-URL, öffentliche URL, ntfy-Server und -Topic, je Broker die Konten, `enabled` und `start_date`, Wertpapier-Zuordnungen, Übertrags-Muster | nur der Weboberfläche |
-| `secrets.enc` | Fernet-verschlüsseltes JSON: Wealthfolio-Passwort, Zugangsdaten und Sessions der Broker, ntfy-Token, scrypt-Hash des UI-Passworts, Signierschlüssel der UI-Session | `vault.py`, atomar und mit Lock (zwei Prozesse) |
-| `secret.key` | Fernet-Schlüssel, 0600 | einmalig beim ersten Start |
-| `state.db` | SQLite, siehe unten | `state.py` |
-| `sync.lock`, `secrets.lock` | Sperrdateien | — |
+| Host | Host-Schlüssel | `notify.enc` – damit ein gesperrter Dienst per ntfy Bescheid sagen kann |
+| Daten | Host-Schlüssel + argon2id(Master-Passphrase), falls gesetzt | `secrets.enc`, `config.enc`, `state.db` |
+
+Mit Passphrase hält `keyring.json` Salz, argon2id-Parameter und einen Prüfwert (nie die Passphrase). Entsperren legt das argon2id-Ergebnis in `/run/wealthfolio-broker-sync/unlock.key` (RAM, weg nach Neustart). Ist der Dienst gesperrt, zeigt die Weboberfläche nur `/unlock` (`web/gate.py`), und `brokersync run` meldet sich per ntfy und endet mit 1. Setzen, Ändern und Entfernen (`security.change_passphrase`) verschlüsseln alles der Datenstufe neu (SQLCipher `PRAGMA rekey`), unter dem Sync-Lock.
+
+| Datei | Inhalt | Format |
+|---|---|---|
+| `secrets.enc` | Wealthfolio-Passwort, Zugangsdaten und Sessions der Broker, argon2id-Hash des UI-Passworts, Signierschlüssel der UI-Session | AES-256-GCM, `vault.py`, atomar und mit Lock |
+| `config.enc` | Wealthfolio-URL, je Broker Konten, `enabled`, `start_date`, Wertpapier-Zuordnungen, Übertrags-Muster | AES-256-GCM, `config.py` |
+| `notify.enc` | ntfy-Server, -Topic, -Token, Details an/aus, öffentliche URL | AES-256-GCM, Host-Stufe |
+| `state.db` | siehe unten | SQLCipher (AES-256); nur ohne SQLCipher-Wheel (nicht x86-64) unverschlüsselt, die Seite *Sicherheit* sagt es |
+| `keyring.json` | Parameter der Master-Passphrase | Klartext, nichts Geheimes |
+| `*.lock` | Sperrdateien | — |
+
+Jede verschlüsselte Datei ist `BSE1 | Nonce | Chiffrat`; ihr Zweck (`secrets`, `config`, …) ist als zusätzliche Daten authentifiziert, eine Datei lässt sich also nicht gegen eine andere tauschen. `brokersync migrate` (von `setup.sh` aufgerufen) bringt Daten von vor 0.9.0 – Fernet-`secrets.enc`, `config.json`, unverschlüsselte `state.db` – auf diesen Stand; danach löscht `setup.sh` `data/secret.key` und ersetzt Sicherungen, die ihn noch enthielten.
 
 **Tabellen in `state.db`:**
 
@@ -222,11 +235,11 @@ Alles liegt in `BROKERSYNC_DATA` (Standard `/opt/wealthfolio-broker-sync/data`, 
 | `assets` | ISIN → Wealthfolio-Asset je Broker |
 | `meta` | Flags, z. B. `assets-learned:<broker>`, `cash-assets-repaired:<broker>`, `refetch:<broker>`, und der Hinweis `retired-notice:<broker>` zu einem entfernten Broker |
 
-Geheimnisse stehen nur im Vault. Sie landen weder in `config.json` noch in Logs, Fehlermeldungen oder im Repository.
+Geheimnisse stehen nur im Vault. In Logs, Fehlermeldungen auf dem Bildschirm und ntfy-Nachrichten schwärzt `redact.py` alles, was der Vault an Zugangsdaten und Tokens hält, sowie IBANs und lange Nummern; ntfy-Nachrichten tragen ohne *Details* nur Titel und Link.
 
 ## Weboberfläche
 
-FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login mit dem UI-Passwort. Die Session liegt in einem signierten Cookie (`SameSite=strict`). Jede POST-Anfrage prüft per Dependency ein CSRF-Token aus der Session.
+FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login mit dem UI-Passwort (argon2id; nach fünf Fehlversuchen 15 Minuten Sperre je Client, `web/gate.Throttle`). `brokersync serve` (`web/serve.py`) spricht HTTPS mit dem Zertifikat aus `/etc/wealthfolio-broker-sync/tls` (`tls.py`, selbstsigniert, von `setup.sh` erneuert) und leitet Port 8090 dorthin um. Vor der App sitzt `web/gate.Gate`: Sicherheits-Header (CSP ohne Skripte, `frame-ancestors 'none'`, `no-store`, HSTS), die Entsperrseite und der Neuaufbau der App nach einem Schlüsselwechsel. Die Session liegt in einem signierten Cookie (`SameSite=strict`, `Secure`, 24 h). Jede POST-Anfrage prüft per Dependency ein CSRF-Token aus der Session.
 
 | Route | Zweck |
 |---|---|
@@ -247,6 +260,8 @@ FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login
 | `POST /check/{key}` | fehlende Transaktionen wieder anlegen lassen (`action=rebook`) oder ignorieren (`action=ignore`) |
 | `POST /check/{key}/opening` | Anfangsbestand eintragen oder (noch nicht gebucht) entfernen |
 | `POST /brokers/{key}/reset` | *Neu aufsetzen*: Buchungen des Dienstes für den Broker löschen, Status zurücksetzen (`reset.py`) |
+| `/security`, `POST /security/passphrase`, `POST /security/lock` | Prüfungen (`security.status`), Master-Passphrase setzen/ändern/entfernen, sperren |
+| `/unlock` | Entsperren mit der Master-Passphrase (nur solange gesperrt) |
 | `/retired/dismiss` | Hinweis zu einem entfernten Broker (z. B. dem Dummy) ausblenden |
 
 ## Fehlerbehandlung
@@ -264,7 +279,8 @@ FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login
 
 - **Installation:** Ein Befehl in der Proxmox-Shell. `ct/wealthfolio-broker-sync.sh` setzt `COMMUNITY_SCRIPTS_URL` auf dieses Repository und lädt dann die community-scripts-Engine (`build.func`). Die Engine legt das LXC an und führt `install/wealthfolio-broker-sync-install.sh` darin aus.
 - **Einrichtung im Container:** Das Install-Skript lädt das neueste GitHub-Release nach `/opt/wealthfolio-broker-sync/app` und ruft `deploy/setup.sh` auf. Das legt Benutzer, venv und systemd-Units an und installiert mit `brokersync install-sc` Scalables CLI nach `/opt/wealthfolio-broker-sync/bin/sc` (nur mit gültiger Signatur von Scalables Release-Schlüssel; schlägt das fehl, läuft alles außer Scalable).
-- **Update:** Der Befehl `update` im Container stoppt Dienst und Timer und sichert `data/` nach `/opt/wealthfolio-broker-sync/backup-<Zeitstempel>.tar.gz` (die letzten drei bleiben). Dann lädt er das neueste Release und ruft wieder `setup.sh` auf. Schlägt die Installation fehl, kommt das vorherige venv zurück und läuft weiter. `data/` selbst wird nie verändert.
+- **Update:** Der Befehl `update` im Container stoppt Dienst und Timer und sichert `data/` nach `/opt/wealthfolio-broker-sync/backup-<Zeitstempel>.tar.gz` (die letzten drei bleiben). Dann lädt er das neueste Release und ruft wieder `setup.sh` auf. Schlägt die Installation fehl, kommt das vorherige venv zurück und läuft weiter.
+- **Schlüssel, Zertifikat, Migration (`setup.sh`):** legt den Host-Schlüssel einmalig in `/etc/wealthfolio-broker-sync` an (aus `data/secret.key` übernommen, sonst neu; mit `systemd-creds` verschlüsselt, geprüft durch Entschlüsseln, sonst root-only), schreibt die Drop-ins `10-key.conf`, erzeugt oder erneuert das Zertifikat (`brokersync make-cert`) und führt `brokersync-cli migrate` aus (als `brokersync`, mit dem Schlüssel per `systemd-run`).
 - **Release:** Der Release-Workflow legt `v<version>` an, sobald eine neue Version in `pyproject.toml` auf `main` landet.
 
 ## Tests
@@ -285,6 +301,7 @@ FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login
 | `test_wealthfolio.py` | REST-Client gegen aufgezeichnete Antworten (`tests/fixtures/wealthfolio/`) |
 | `test_web.py` | Oberfläche von der ersten Seite bis zum ersten Abruf, Login und CSRF, Aufräumen des alten Dummys |
 | `test_cli.py` | `run`, `serve`, `reset-ui-password`, Exit-Codes |
-| `test_vault_notify.py` | Verschlüsselung, ntfy |
+| `test_vault_notify.py` | Tresor, ntfy |
+| `test_security.py` | nichts Lesbares in `data/` und im Log nach einem echten Lauf, Migration von 0.8, Schlüssel nur von systemd, Master-Passphrase (sperren, entsperren, Timer-Lauf gesperrt), Login-Bremse, argon2id statt scrypt, Header und Cookies, Schwärzung, ntfy ohne Details, Zertifikat, HTTP→HTTPS |
 | `test_packaging.py` | community-scripts-Dateien, Installationszeile, Versionen |
 | `contract/` | jeder Adapter gegen erfundene Aufzeichnungen; jede Transaktion lässt sich buchen |

@@ -105,7 +105,7 @@ def test_the_page(tmp_path):
     app = create_app(tmp_path, wealthfolio=lambda u, p: WealthfolioClient(u, p, transport=wf.transport()),
                      adapters={"fake": FakeBroker}, run_in_thread=False)
     client = TestClient(app)
-    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     page = client.get("/check").text
     assert "Test Depot <strong>-188,45 EUR</strong>" in page
     assert "bleibt stehen: -188,45 EUR" in page and "Überträge ohne Gegenstück: 0" in page

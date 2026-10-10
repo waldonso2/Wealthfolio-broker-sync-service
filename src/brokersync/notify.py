@@ -2,6 +2,10 @@
 
 A notification carries a link to the page that fixes the problem (e.g. the
 broker's login page for a TAN). Failing to notify never fails a sync.
+
+Messages leave the container (ntfy.sh is a public service): without
+``details`` they carry only the title and the link - no amounts, positions or
+error texts - and every message is passed through the log redaction.
 """
 
 from __future__ import annotations
@@ -11,16 +15,19 @@ import logging
 
 import httpx
 
+from .redact import redact
+
 log = logging.getLogger(__name__)
 
 
 class Notifier:
     def __init__(self, server: str, topic: str, token: str | None = None, *,
-                 transport: httpx.BaseTransport | None = None):
+                 transport: httpx.BaseTransport | None = None, details: bool = True):
         self.server = server.rstrip("/")
         self.topic = topic.strip()
         self.token = token or None
         self.transport = transport
+        self.details = details
 
     @property
     def enabled(self) -> bool:
@@ -31,6 +38,8 @@ class Notifier:
         if not self.enabled:
             log.info("notification (ntfy not configured): %s - %s", title, message)
             return False
+        title = redact(title)
+        message = redact(message) if self.details else "Details in der Weboberfläche."
         headers = {"Title": _header(title), "Priority": priority}
         if link:
             headers["Click"] = link

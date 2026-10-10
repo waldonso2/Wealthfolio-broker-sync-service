@@ -275,7 +275,7 @@ def test_dashboard_shows_the_holdings_check(tmp_path):
     app = create_app(tmp_path, wealthfolio=lambda u, p: WealthfolioClient(u, p, transport=wf.transport()),
                      adapters={"tr": ReplayTR}, notifier=RecordingNotifier(), run_in_thread=False)
     client = TestClient(app)
-    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     page = client.get("/").text
     assert "Abgleich mit Wealthfolio" in page and "weicht ab" in page
     assert re.search(r"<td>Cash EUR</td><td>1234.56</td>", page)
@@ -344,7 +344,7 @@ def test_duplicates_from_before_the_fix_are_found_and_only_the_sync_copy_removed
     app = create_app(tmp_path, wealthfolio=lambda u, p: WealthfolioClient(u, p, transport=wf.transport()),
                      adapters={"tr": ReplayTR}, notifier=RecordingNotifier(), run_in_thread=False)
     client = TestClient(app)
-    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     syncer.state.set_reconcile("tr", [{"name": "Cash EUR", "broker": "1", "wealthfolio": "2"}])
     page = client.get("/duplicates").text
     assert "Trade Republic: 1 doppelt" in page and "NVDA" in page and "US67066G1040" in page
@@ -408,7 +408,7 @@ def test_login_with_a_valid_session_says_no_confirmation_was_needed(tmp_path, ap
     app = create_app(tmp_path, adapters={"tr": TradeRepublicAdapter}, notifier=RecordingNotifier(),
                      run_in_thread=False)
     client = TestClient(app)
-    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     r = client.get("/brokers/tr/login")
     assert "Sitzung ist noch gültig" in r.text
     assert FakeApi.instances[-1].calls == ["resume"]

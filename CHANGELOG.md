@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.9.0
+
+- **Everything the service stores is encrypted, and the key is no longer next to the data** (waldonso2/wealthfolio-importer-addon#53).
+  - Credentials, sessions and tokens: AES-256-GCM instead of Fernet (`secrets.enc`).
+  - Settings, which include your own IBANs in the transfer patterns: `config.enc` instead of a plain `config.json`.
+  - ntfy settings, including the topic, which is a secret on ntfy.sh: `notify.enc`.
+  - Sync database: SQLCipher (AES-256).
+  - The key moves from `data/secret.key` to `/etc/wealthfolio-broker-sync/key.cred`, encrypted with `systemd-creds`; the services get it from systemd at start. A copy of `data/`, or one of the update backups, is useless without it.
+  - The update migrates everything once and replaces older backups that still held the key.
+- **Optional master passphrase** (new page *Sicherheit*): the data key is then derived from the service key and your passphrase (argon2id). Not even a full copy of the container opens the data without the passphrase. After a restart the service has to be unlocked in the web UI; until then it fetches nothing and says so via ntfy. Without the passphrase the data is lost.
+- **HTTPS for the web UI:**
+  - The UI now runs on `https://<ip>:8443` with a self-signed certificate that is created and renewed automatically. A certificate of your own in `/etc/wealthfolio-broker-sync/tls/` is kept.
+  - `http://<ip>:8090` redirects there, and links in notifications are switched to the new address.
+  - Cookies are `Secure`, with `SameSite=strict` and a 24 h lifetime; strict security headers (CSP without scripts, no framing, HSTS).
+- **Web UI password:**
+  - It is now hashed with argon2id instead of scrypt; existing passwords are upgraded at the next login.
+  - New passwords need at least 12 characters.
+  - After five wrong attempts, logins from that client pause for 15 minutes.
+  - `brokersync-reset-password` also signs everyone out.
+- **Nothing sensitive in the log or in notifications:**
+  - Credentials, tokens, IBANs and long account numbers are masked in the log and in messages on screen.
+  - ntfy messages carry only the title and a link unless *Details* is switched on under *Benachrichtigungen*.
+- **Hardened services:** no capabilities, private `/dev` and `/tmp`, kernel and namespace restrictions, and only `data/` writable (mode 0700, files 0600).
+- New commands:
+  - `brokersync-cli <command>` runs a command as the service user with the key, e.g. `brokersync-cli security-status`.
+  - `brokersync make-cert` and `brokersync migrate` are used by the installation and the update.
+
 ## 0.8.0
 
 - **Deutsche Bank** (FinTS): the giro account like DKB's (deposits, withdrawals, transfers, interest, fees; securities bookings are only checked against an import of the statements) and the **holdings of the maxblue depot**, compared with the depot account after each run - positions without a buy in Wealthfolio can be entered as opening positions on *Prüfung*. Login with the Deutsche Bank ID (or branch and account number), PIN and the bank code of the branch; confirmation with BestSign in the app. New and not yet tried against the bank: at login the log lists what it offers over FinTS (transactions, camt, holdings, depot transactions; per account its product name and type, no numbers) - that decides how depot trades are booked next.

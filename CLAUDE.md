@@ -9,7 +9,7 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 pytest -q                 # all tests
 ruff check src tests      # lint
-shellcheck ct/*.sh install/*.sh deploy/setup.sh deploy/brokersync-reset-password
+shellcheck ct/*.sh install/*.sh deploy/setup.sh deploy/brokersync-reset-password deploy/brokersync-cli
 BROKERSYNC_DATA=./data brokersync serve --port 8090   # UI locally
 BROKERSYNC_DATA=./data brokersync run                 # one sync
 ```
@@ -24,8 +24,10 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | `src/brokersync/dedup.py` | Check against existing Wealthfolio activities (CSV/PDF imports) |
 | `src/brokersync/sync.py` | One run over all enabled brokers: login, fetch, dedupe, create, report |
 | `src/brokersync/wealthfolio.py` | REST client: password login → `wf_session` JWT sent as Bearer; accounts, create, update, delete, search, holdings |
-| `src/brokersync/vault.py` | Fernet-encrypted secrets (`data/secrets.enc`, key `data/secret.key` 0600), UI password hash |
-| `src/brokersync/config.py` / `state.py` | Non-secret config (`data/config.json`, written by the UI only) / SQLite sync state, runs, unknown events |
+| `src/brokersync/crypto.py` | Keys and AES-256-GCM: host key from systemd (`$CREDENTIALS_DIRECTORY/brokersync-key`, `/etc/wealthfolio-broker-sync/key.cred` via systemd-creds), never in `data/` in production; host tier (`notify.enc`) and data tier (host key + optional master passphrase via argon2id: vault, config, state); unlock cache in `/run/wealthfolio-broker-sync` |
+| `src/brokersync/vault.py` | AES-256-GCM secrets (`data/secrets.enc`; Fernet files of before 0.9.0 are re-encrypted on read), argon2id UI password hash (scrypt ones upgraded at login) |
+| `src/brokersync/security.py` / `redact.py` / `tls.py` | Checks for the page *Sicherheit*, master passphrase set/change/remove (re-encrypts everything), `migrate` for older data / log and message redaction (vault strings, IBANs, long numbers) / self-signed certificate for the UI |
+| `src/brokersync/config.py` / `state.py` | Config, encrypted (`data/config.enc`; ntfy settings in the host tier `notify.enc`), written by the UI only / sync state, runs, unknown events in SQLCipher (`state.db`; plain SQLite only where no sqlcipher3 wheel exists) |
 | `src/brokersync/assets.py` | ISIN → Wealthfolio asset, learned from the activities of trades/dividends (holdings carry no ISIN, imports book under mapped tickers); used for the holdings check and to book new trades onto the same asset |
 | `src/brokersync/reconcile.py` | Broker cash/positions vs. Wealthfolio holdings (`GET /holdings?accountId=`) after each run, plus cash on the securities account (must be 0) and `$CASH` positions; reported when a deviation lasts two runs |
 | `src/brokersync/repair.py` | Once per broker (state flag): removes the `$CASH` asset from the sync's own cash activities (PUT `/activities`, `asset: {}`); the broker books nothing until it worked |
@@ -35,9 +37,9 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | `src/brokersync/audit.py` | Read-only check of a broker's two accounts (UI page *Prüfung*): depot moments (activities ≤10 s apart) whose cash effect isn't zero (two that cancel out within 36 h are a pair, in-kind payouts move no cash), and transfers between the two accounts without their other leg |
 | `src/brokersync/notify.py` | ntfy |
 | `src/brokersync/sc_install.py` | `brokersync install-sc`: downloads the latest `sc` release, verifies Scalable's minisign signature (pinned key) and the SHA-256 before writing `/opt/wealthfolio-broker-sync/bin/sc`; called by `deploy/setup.sh`, failure is non-fatal |
-| `src/brokersync/web/` | FastAPI + Jinja2 UI (German texts), CSRF via a dependency, own login |
+| `src/brokersync/web/` | FastAPI + Jinja2 UI (German texts), CSRF via a dependency, own login; `gate.py` in front (security headers, login brake, unlock page while locked, rebuild after a key change), `serve.py` (HTTPS on 8443 + redirect from 8090) |
 | `ct/`, `install/`, `json/` | community-scripts files (`json/` is the catalog entry for a later submission to community-scripts) |
-| `deploy/` | `setup.sh` (venv + units, used by install and update), systemd units, reset-password helper |
+| `deploy/` | `setup.sh` (venv, units, key to `/etc` + drop-ins `10-key.conf`, TLS certificate, `migrate`; used by install and update), hardened systemd units, `brokersync-cli` (a command as the service user with the key), reset-password helper |
 | `ARCHITECTURE.md` | Overview for contributors: components, run sequence, dedup layers, data files, routes |
 | `src/brokersync/retired.py` | On start (`Syncer.__init__`): removes config, vault entries and sync state of brokers that no longer exist (`dummy` up to 0.3.6); their Wealthfolio activities stay, the overview shows once how many and how to find them |
 | `tests/` | `fakes.py` (in-memory Wealthfolio), `fake_broker.py` (test-only broker with a TAN step; no test broker ships), `fake_fints.py` (fake python-fints client), unit/e2e tests, `contract/<adapter>/*.json` recorded cases, `fixtures/wealthfolio/` recorded API answers |
@@ -63,7 +65,9 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 - **Unknown event types** become `Kind.UNKNOWN`: stored, listed in the UI, notified once — never dropped, never booked.
 - **One broker failing never stops the others**; it is reported via ntfy with a link (`public_url` + path).
 - **No test broker ships.** Test brokers live under `tests/` only (`fake_broker.py`); a broker the user can set up must be a real one - the old "Dummy" booked test data into real accounts. Anything that could still reach a real Wealthfolio as test data is marked **TEST** in every activity's comment.
-- **Secrets only in the vault**, never in `config.json`, logs, exceptions shown to the user, or the repo. Test data is fabricated — no real statements, names, IBANs or account numbers.
+- **Secrets only in the vault**, never in the config, logs, exceptions shown to the user, notifications, or the repo. Test data is fabricated — no real statements, names, IBANs or account numbers.
+- **Nothing readable in `data/`, no key there** (#53): everything the service writes goes through `crypto` (sealed files) or SQLCipher; new files get mode 0600 (`crypto.write_atomic`, `crypto.open_lock`). The host key comes from systemd in production; `data/secret.key` exists only in development/tests and before `setup.sh` migrated it. `test_security.test_nothing_readable_in_data_after_a_run` scans `data/` and the log after a real run - extend its list when new data is stored. Never log the passphrase or its argon2id result; the unlock cache lives only in `/run`.
+- **Master passphrase loss = data loss**, by design: no recovery path, no backdoor key. Changing it re-encrypts everything under the sync lock; the web app is rebuilt afterwards (`gate.reset()`).
 - `ct/wealthfolio-broker-sync.sh` exports `COMMUNITY_SCRIPTS_URL` (this repo's raw `main`) **before** sourcing `community-scripts/core`'s `core/build.func`: the engine resolves `install/<slug>-install.sh` and writes the container's `update` command from it. Without it both point to community-scripts/ProxmoxVE. `test_packaging.py` checks this, and that the install line in the README matches.
 
 ## Adding a broker

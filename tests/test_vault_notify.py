@@ -1,5 +1,4 @@
 import base64
-import json
 import stat
 
 import httpx
@@ -61,8 +60,12 @@ def test_ntfy_failure_or_missing_topic_never_raises():
     assert not Notifier("https://ntfy.example", "").send("a", "b")
 
 
-def test_nothing_secret_in_the_plain_config(tmp_path):
+def test_the_config_is_encrypted_too(tmp_path):
     from brokersync import config as config_mod
 
-    config_mod.save(tmp_path, config_mod.Config(ntfy_topic="t"))
-    assert "password" not in json.loads((tmp_path / "config.json").read_text())
+    config_mod.save(tmp_path, config_mod.Config(ntfy_topic="topic-secret-42", wealthfolio_url="http://wf.example"))
+    for f in ("config.enc", "notify.enc"):
+        raw = (tmp_path / f).read_bytes()
+        assert b"topic-secret-42" not in raw and b"wf.example" not in raw
+    assert not (tmp_path / "config.json").exists()
+    assert config_mod.load(tmp_path).ntfy_topic == "topic-secret-42"

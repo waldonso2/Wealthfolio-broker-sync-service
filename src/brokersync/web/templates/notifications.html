@@ -13,7 +13,9 @@
     <label for="token">Zugangstoken (nur bei eigenem ntfy-Server mit Anmeldung)</label>
     <input type="password" id="token" name="token" autocomplete="off" placeholder="{{ '•••••••• (gespeichert)' if has_token else '' }}">
     <label for="public">Adresse dieser Oberfläche (für Links in den Nachrichten)</label>
-    <input type="url" id="public" name="public_url" value="{{ cfg.public_url }}" placeholder="http://192.168.1.51:8090">
+    <input type="url" id="public" name="public_url" value="{{ cfg.public_url }}" placeholder="https://192.168.1.51:8443">
+    <label class="check"><input type="checkbox" name="details" value="1" {{ 'checked' if cfg.ntfy_details }}> Details in den Nachrichten (Beträge, Bestände, Fehlertexte)</label>
+    <div class="muted">Aus: Die Nachricht sagt nur, was passiert ist, und verlinkt auf die Oberfläche. Auf einem öffentlichen ntfy-Server empfohlen.</div>
     <div class="actions">
       <button>Speichern</button>
       <button class="secondary" name="test" value="1">Speichern und Testnachricht senden</button>
