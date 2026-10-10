@@ -174,3 +174,18 @@ def test_login_in_the_web_ui(tmp_path, fake_sc):
     r = client.post("/brokers/scalable/login", data={"csrf": token, "code": ""})
     assert "Scalable Capital: angemeldet" in r.text
     assert "session.json" in Vault(tmp_path).broker("scalable")["session"]["files"]
+
+
+def test_the_log_shows_what_scalable_sent_without_values(caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, "brokersync.adapters.scalable")
+    rec = dict(CASE["recording"], cash={"cash_balance": None, "buying_power": {"amount": "1.5"}})
+    a = ScalableAdapter.replay(rec)
+    a.get_transactions(None)
+    assert "scalable: 19 transactions from sc (" in caplog.text
+    assert "CASH_TRANSACTION/SETTLED/DEPOSIT: 2" in caplog.text
+    with pytest.raises(AdapterError, match="keinen Kontostand"):
+        a.get_cash()
+    assert '"buying_power": {"amount": "str"}' in caplog.text
+    assert "1.5" not in caplog.text and "sc-0001" not in caplog.text and "IE00TEST0001" not in caplog.text

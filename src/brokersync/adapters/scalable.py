@@ -36,6 +36,7 @@ the same API):
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -43,6 +44,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -50,6 +52,8 @@ from pathlib import Path
 
 from ..model import BrokerAccount, CashBalance, Kind, Position, Transaction
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
+
+log = logging.getLogger(__name__)
 
 # Where install-sc puts the binary; BROKERSYNC_SC overrides, else sc on the PATH.
 DEFAULT_SC = "/opt/wealthfolio-broker-sync/bin/sc"
@@ -78,6 +82,22 @@ LABELS = {
     "TAX_RETURN": "Steuerrückerstattung", "DISTRIBUTION": "Dividende", "INTEREST": "Zinsen", "TAX": "Steuer",
     "FEE": "Gebühr", "BUY": "Kauf", "SELL": "Verkauf", "SAVINGS_PLAN": "Sparplan",
 }
+
+
+def shape(v):
+    """The structure of a CLI answer - keys and value types, no values - for the log."""
+    if isinstance(v, dict):
+        return {k: shape(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [shape(v[0]), f"x{len(v)}"] if v else []
+    return None if v is None else type(v).__name__
+
+
+def summary(items: list[dict]) -> str:
+    """Transactions by type, status and subtype, for the log (no amounts, ids or names)."""
+    kinds = Counter((i.get("type"), i.get("status"), i.get("cash_transaction_type") or i.get("side")
+                     or i.get("non_trade_security_transaction_type")) for i in items)
+    return ", ".join(f"{'/'.join(str(x) for x in k)}: {n}" for k, n in kinds.most_common()) or "none"
 
 
 def sc_binary() -> str:
@@ -509,6 +529,9 @@ class ScalableAdapter(BrokerAdapter):
             cursor = page.get("cursor")
             if not cursor or not page.get("items"):
                 break
+        log.info("scalable: %d transactions from sc (%s)", len(items), summary(items))
+        if items and not any(_when(i.get("last_event_datetime")) for i in items):
+            log.warning("scalable: transactions without a usable date, first one: %s", json.dumps(shape(items[0])))
         details = {}
         for item in items:
             if item.get("status") in ("FILLED", "SETTLED") and needs_details(item):
@@ -533,5 +556,6 @@ class ScalableAdapter(BrokerAdapter):
         data = self._run("broker", "cash-breakdown", *self._portfolio())
         amount = _dec(data.get("cash_balance"))
         if amount is None:
+            log.warning("scalable: no cash_balance in sc broker cash-breakdown: %s", json.dumps(shape(data)))
             raise AdapterError("Scalable hat keinen Kontostand geliefert.")
         return [CashBalance("EUR", amount)]

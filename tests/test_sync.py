@@ -171,6 +171,44 @@ def test_since_uses_last_success_with_overlap(tmp_path):
     assert seen[1] is not None and seen[1] < datetime.now(UTC)
 
 
+def test_refetch_from_the_start_date_once(tmp_path):
+    from brokersync.sync import refetch_flag
+
+    seen = []
+
+    class Recording(FakeBroker):
+        def get_transactions(self, since):
+            seen.append(since)
+            return []
+
+    wf = FakeWealthfolio()
+    syncer, _ = setup(tmp_path, wf)
+    syncer.adapters = {"fake": Recording}
+    syncer.run()
+    cfg = config_mod.load(tmp_path)
+    cfg.brokers["fake"].start_date = "2025-06-01"
+    config_mod.save(tmp_path, cfg)
+    syncer.run()
+    assert seen[1] != datetime(2025, 6, 1, tzinfo=UTC)  # a later start date alone changes nothing
+    syncer.state.set_flag(refetch_flag("fake"))
+    syncer.run()
+    syncer.run()
+    assert seen[2] == datetime(2025, 6, 1, tzinfo=UTC)
+    assert seen[3] != seen[2]  # only once
+    assert not syncer.state.flag(refetch_flag("fake"))
+
+
+def test_a_failed_refetch_is_tried_again(tmp_path):
+    from brokersync.sync import refetch_flag
+
+    wf = FakeWealthfolio()
+    wf.fail_types = {"BUY"}
+    syncer, _ = setup(tmp_path, wf)
+    syncer.state.set_flag(refetch_flag("fake"))
+    [r] = syncer.run()
+    assert r.failed and syncer.state.flag(refetch_flag("fake"))
+
+
 def test_inconsistent_transactions_fail_visibly(tmp_path):
     class Bad(FakeBroker):
         def get_transactions(self, since):

@@ -28,12 +28,17 @@
     </select>
     <label for="start">Buchungen übernehmen ab (beim ersten Abruf)</label>
     <input type="date" id="start" name="start_date" value="{{ b.start_date }}">
-    <div class="muted">Leer = alles, was der Broker liefert.</div>
+    <div class="muted">Leer = alles, was der Broker liefert. Gilt für den ersten Abruf; danach holt jeder Abruf ab dem letzten (minus 7 Tage) – für einen neuen Zeitraum unten „Ab Startdatum neu abrufen“.</div>
     <label class="check"><input type="checkbox" name="enabled" {{ 'checked' if b.enabled }}> Automatisch abrufen</label>
     <div class="actions">
       <button>Speichern</button>
       <a class="button secondary" href="/brokers/{{ key }}/login">Beim Broker anmelden</a>
     </div>
+  </form>
+  <form method="post" action="/brokers/{{ key }}/refetch">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <p class="muted">Fehlen Buchungen aus der Zeit vor dem letzten Abruf (etwa nach einem geänderten Startdatum)? Der nächste Abruf holt dann noch einmal alles ab dem Startdatum; schon übernommene Buchungen werden nicht doppelt angelegt.</p>
+    <div class="actions"><button class="secondary">Ab Startdatum neu abrufen</button></div>
   </form>
 </div>
 {% endblock %}

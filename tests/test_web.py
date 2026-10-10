@@ -207,3 +207,16 @@ def test_an_installation_with_the_old_dummy_broker_is_cleaned_up(tmp_path):
     client.post("/login", data={"password": "geheim123"})
     assert "Dummy (Test) entfernt" not in client.get("/").text
     assert "Unbekannter Broker" in client.get("/brokers/dummy").text
+
+
+def test_refetch_button(tmp_path):
+    from brokersync.state import State
+    from brokersync.sync import refetch_flag
+
+    client, _, _ = make(tmp_path)
+    client.post("/setup-password", data={"password": "geheim123", "password2": "geheim123"})
+    page = client.get("/brokers/fake").text
+    assert "Ab Startdatum neu abrufen" in page
+    r = client.post("/brokers/fake/refetch", data={"csrf": csrf(client, "/brokers/fake")})
+    assert "Der nächste Abruf holt noch einmal alles, was der Broker liefert." in r.text
+    assert State(tmp_path).flag(refetch_flag("fake"))

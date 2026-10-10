@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+- **"Ab Startdatum neu abrufen"** in the broker settings: the next run fetches everything from the start date again, once. Changing the start date alone only affects a broker's first run; afterwards each run starts at the last successful one (minus 7 days). Transactions already synced are not created again.
+- Each run now logs how many transactions the broker returned since when, and how many were new.
+- Scalable: the log shows what `sc` returned - transactions by type, status and subtype - and, when the cash balance is missing, the structure of the answer instead (field names and types, no amounts, ids or names). This helps to find out why a run brings nothing.
+
 ## 0.4.0
 
 - **New broker: Scalable Capital**, through Scalable's official command line [Scalable CLI](https://github.com/ScalableCapital/scalable-cli) (`sc`) instead of the web app's internal API. Enable it once in Scalable's web platform under *Profil → Sicherheit → Agentic Investing*; log in from the service's page with a link and a code confirmed in the browser. The CLI runs in read-only mode and only read commands are used.

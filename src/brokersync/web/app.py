@@ -30,7 +30,7 @@ from ..adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from ..mapping import Accounts
 from ..notify import Notifier
 from ..state import State
-from ..sync import UNMATCHED_SECURITIES, AlreadyRunning, Syncer, is_running, run_lock
+from ..sync import UNMATCHED_SECURITIES, AlreadyRunning, Syncer, is_running, refetch_flag, run_lock
 from ..vault import Vault, hash_password, verify_password
 from ..wealthfolio import WealthfolioClient, WealthfolioError
 
@@ -288,6 +288,16 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
             vault.set_broker_credentials(key, creds)
             return redirect(request, f"/brokers/{key}/login", "Gespeichert. Jetzt beim Broker anmelden.")
         return redirect(request, "/", "Gespeichert.")
+
+    @app.post("/brokers/{key}/refetch")
+    def broker_refetch(request: Request, key: str):
+        if key not in adapters:
+            return redirect(request, "/brokers", "Unbekannter Broker.", "error")
+        state.set_flag(refetch_flag(key))
+        start = cfg().broker(key).start_date
+        since = f"alles ab {start}" if start else "alles, was der Broker liefert"
+        return redirect(request, f"/brokers/{key}", f"Der nächste Abruf holt noch einmal {since}. Schon "
+                                                    "übernommene Buchungen werden nicht doppelt angelegt.")
 
     @app.get("/brokers/{key}/login", response_class=HTMLResponse)
     def broker_login_start(request: Request, key: str):
