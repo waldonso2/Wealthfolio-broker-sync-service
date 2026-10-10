@@ -475,3 +475,49 @@ def test_the_reason_of_a_failed_run_is_logged(tmp_path, caplog):
     syncer, _ = setup(tmp_path, wf, brokers=("broken",))
     syncer.run()
     assert "broken: broker is down" in caplog.text
+
+
+def test_the_tax_of_a_dividend_is_added_to_one_an_import_booked_without_it(tmp_path):
+    wf = FakeWealthfolio()
+    # The addon's CSV import of Scalable: the dividend net, no tax (the export has none).
+    imported = wf.add_existing(accountId="acc-depot", activityType="DIVIDEND", date="2026-01-05T14:00:10.000Z",
+                               quantity="1", unitPrice="3.68", amount="3.68", currency="EUR",
+                               comment="Dividend TEST Fonds", assetSymbol="IE00B4L5Y983", assetId="IE00B4L5Y983")
+    syncer, _ = setup(tmp_path, wf)
+    [r] = syncer.run()
+    assert r.status == "ok"
+    assert imported["tax"] == "1.32" and imported["amount"] == "3.68" and imported["comment"] == "Dividend TEST Fonds"
+    assert not any(a["activityType"] == "DIVIDEND" and "[SYNC" in (a.get("comment") or "") for a in wf.activities)
+    assert syncer.state.flag("dividend-tax:fake")
+
+
+class FullFake(FakeBroker):
+    full_history = True
+
+
+def test_dividends_matched_before_get_their_tax_once(tmp_path):
+    wf = FakeWealthfolio()
+    imported = wf.add_existing(accountId="acc-depot", activityType="DIVIDEND", date="2026-01-05T14:00:10.000Z",
+                               quantity="1", unitPrice="3.68", amount="3.68", currency="EUR",
+                               comment="Dividend TEST Fonds", assetSymbol="IE00B4L5Y983", assetId="IE00B4L5Y983")
+    syncer, _ = setup(tmp_path, wf)
+    syncer.adapters = {"fake": FullFake}
+    # An older version matched the dividend to the import without touching its tax.
+    syncer.state.mark("fake", "TEST-20260105-3", "existing", [imported["id"]])
+    seen: list[set] = []
+    original = FullFake.get_transactions
+
+    def spy(self, since):
+        seen.append(set(self.known_ids))
+        return original(self, since)
+
+    FullFake.get_transactions = spy
+    try:
+        syncer.run()
+        syncer.run()
+    finally:
+        FullFake.get_transactions = original
+    assert imported["tax"] == "1.32"
+    # The first run asks for the details of the matched transaction again, later runs don't.
+    assert "TEST-20260105-3" not in seen[0] and "TEST-20260105-3" in seen[1]
+    assert len([u for u in wf.updated if u["id"] == imported["id"]]) == 1

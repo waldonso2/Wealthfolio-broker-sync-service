@@ -53,6 +53,10 @@ SETTLEMENT_DAYS = 6
 UNMATCHED_SECURITIES = "WERTPAPIER_OHNE_GEGENSTUECK"
 
 
+def tax_flag(key: str) -> str:
+    return f"dividend-tax:{key}"
+
+
 def opening_id(isin: str, day: str) -> str:
     return f"start-{isin}-{day}"
 
@@ -209,7 +213,10 @@ class Syncer:
         synced = self.state.synced(key)
         try:
             adapter.login()
-            adapter.known_ids = set(synced)
+            # Once per broker: details also for transactions found in an import, for the tax of their
+            # dividends (Scalable's CSV export has none) - see _add_dividend_tax.
+            tax_backfill = not self.state.flag(tax_flag(key))
+            adapter.known_ids = {t for t, (status, _) in synced.items() if not (tax_backfill and status == "existing")}
             transactions = adapter.get_transactions(since) + self._openings(key)
             cash = self._broker_cash(key, adapter)
             positions = self._broker_positions(key, adapter) if adapter_cls.reports_positions else None
@@ -244,6 +251,21 @@ class Syncer:
                         continue
                     self._sync_tx(wf, key, tx, accounts, mappings, patterns, existing, result)
             self._compare(cfg, key, transactions, synced, activities, full, since)
+            if tax_backfill:
+                by_id = {a["id"]: a for a in activities}
+                added, tax_errors = 0, 0
+                for tx in transactions:
+                    status, ids = synced.get(tx.id, ("", []))
+                    if status == "existing" and ids and ids[0] in by_id:
+                        try:
+                            added += self._add_dividend_tax(wf, tx, by_id[ids[0]])
+                        except WealthfolioError as e:
+                            tax_errors += 1
+                            log.info("%s: tax not added to %s: %s", key, tx.id, e)
+                if added:
+                    log.info("%s: added the tax to %d imported dividends", key, added)
+                if not tax_errors and not result.failed and not adapter.incomplete:
+                    self.state.set_flag(tax_flag(key))
             try:
                 assets_mod.learn(self.state, key, transactions, wf, accounts)
                 if backfill:
@@ -311,6 +333,29 @@ class Syncer:
             if since and datetime.fromisoformat(e["occurred_at"]) < since:
                 continue
             self.state.resolve_unknown(key, e["tx_id"])
+
+    @staticmethod
+    def _add_dividend_tax(wf: WealthfolioClient, tx: Transaction, activity: dict) -> int:
+        """Put the broker's tax on a dividend an import booked without it (Scalable's CSV has none).
+
+        Only the ``tax`` field changes: amount (net) and comment stay, and tax is not part of
+        Wealthfolio's duplicate fingerprint, so a re-import still finds the activity. The
+        sync's own activities and dividends that carry a tax already are left alone.
+        """
+        if tx.kind != Kind.DIVIDEND or tx.tax <= 0 or activity.get("activityType") != "DIVIDEND":
+            return 0
+        if "[SYNC " in (activity.get("comment") or ""):
+            return 0
+        try:
+            if Decimal(str(activity.get("tax") or 0)) != 0:
+                return 0
+        except ArithmeticError:
+            return 0
+        payload = repair_mod.payload(activity)
+        payload.pop("asset", None)  # keep the asset
+        payload["tax"] = format(tx.tax.normalize(), "f")
+        wf.update_activity(payload)
+        return 1
 
     def _repair_cash_assets(self, key: str, wf: WealthfolioClient, accounts: Accounts) -> int:
         """Once per broker: the cash activities older versions created with a $CASH asset (brokersync.repair).
@@ -450,6 +495,12 @@ class Syncer:
         if match:
             self.state.mark(key, tx.id, "existing", [match])
             result.existing += 1
+            imported = next((e for e in existing.existing if e["id"] == match), None)
+            if imported is not None:
+                try:
+                    self._add_dividend_tax(wf, tx, imported)
+                except WealthfolioError as e:
+                    log.info("%s: tax not added to %s: %s", key, tx.id, e)
             return
         ids: list[str] = []
         try:

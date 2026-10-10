@@ -81,6 +81,9 @@ class BrokerAdapter(ABC):
         # Set by the sync: ids it already has, so an adapter can skip expensive
         # per-transaction queries for them (Scalable's details).
         self.known_ids: set[str] = set()
+        # Set by an adapter that couldn't fetch everything this run (Scalable's rate limit):
+        # one-off backfills wait for a complete run.
+        self.incomplete = False
 
     def close(self) -> None:  # noqa: B027 - optional hook, most adapters hold no connection
         """End the connection; afterwards ``session_state()`` is final."""
