@@ -231,6 +231,7 @@ FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login
 | `/securities` | Zuordnung ISIN → Tickersymbol und Börse |
 | `/unknown` | unbekannte Buchungen und offene Wertpapier-Gegenbuchungen |
 | `/duplicates` | Duplikate finden und die Kopien des Syncs nach Bestätigung löschen |
+| `/check` | Prüfung (nur lesend): wo im Depotkonto Bargeld stehen bleibt und welche Überträge kein Gegenstück haben (`audit.py`) |
 | `/retired/dismiss` | Hinweis zu einem entfernten Broker (z. B. dem Dummy) ausblenden |
 
 ## Fehlerbehandlung

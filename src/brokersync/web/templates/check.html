@@ -1,0 +1,41 @@
+{% extends "base.html" %}{% block title %}Prüfung{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Prüfung der Konten</h1>
+  <p>Das Depotkonto hält kein Bargeld: Jeder Kauf wird vom Verrechnungskonto bezahlt, jeder Verkauf und jede Ausschüttung dorthin übertragen. Fehlt eine Seite davon – von Hand gelöscht, ohne Übertrag importiert, doppelt gebucht –, zeigt das Depotkonto Bargeld und das Verrechnungskonto das Gegenteil. Diese Seite zeigt, wo.</p>
+  <p class="muted">Nur lesend: Korrigieren musst du in Wealthfolio. Zeitpunkte sind in UTC, wie Wealthfolio sie speichert.</p>
+  {% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error }}</div>{% endif %}
+  {% for r in report %}{% set x = r.result %}
+  <h2 style="margin-top:20px">{{ r.label }}</h2>
+  <p>Bargeld laut Buchungen: {{ r.depot_name }} <strong>{{ x.depot_cash | money }} EUR</strong> (soll 0 sein) · {{ r.cash_name }} {{ x.cash | money }} EUR</p>
+
+  <h3>Zeitpunkte im Depotkonto, an denen Bargeld stehen bleibt: {{ x.moments | length }}</h3>
+  {% if x.moments %}
+  <p class="muted">Summe: {{ x.moments_total | money }} EUR. Jeder Block sind Buchungen, die zusammengehören (wenige Sekunden auseinander); „bleibt stehen“ ist, was davon nicht ausgeglichen ist. Typisch: ein Kauf ohne „Funds from Cash …“, ein Übertrag „… -> Cash“ ohne seinen Verkauf oder seine Ausschüttung, oder eine Buchung doppelt.</p>
+  <div class="table"><table>
+    <tr><th>Zeitpunkt</th><th>Art</th><th>Betrag</th><th>Wirkung</th><th>Kommentar</th><th>Herkunft</th></tr>
+    {% for m in x.moments[:200] %}
+      {% for a in m.activities %}
+      <tr><td>{{ a.date[:19] | replace("T", " ") }}</td><td>{{ a.activityType }}{% if a.subtype %}/{{ a.subtype }}{% endif %}</td><td>{{ a.amount }}</td><td>{{ effect(a) | money }}</td><td>{{ a.assetSymbol }} {{ a.comment }}</td><td>{{ source(a) }}</td></tr>
+      {% endfor %}
+      <tr><td colspan="6"><strong>bleibt stehen: {{ m.net | money }} EUR</strong></td></tr>
+    {% endfor %}
+  </table></div>
+  {% if x.moments | length > 200 %}<p class="muted">… und {{ x.moments | length - 200 }} weitere.</p>{% endif %}
+  {% else %}<p class="muted">Keine.</p>{% endif %}
+
+  <h3>Überträge ohne Gegenstück: {{ x.lonely | length }}</h3>
+  {% if x.lonely %}
+  <p class="muted">Ein Übertrag zwischen den beiden Konten, zu dem auf dem anderen Konto der passende fehlt (gleicher Betrag, gleiche Gruppe oder höchstens eine Minute auseinander).</p>
+  <div class="table"><table>
+    <tr><th>Zeitpunkt</th><th>Konto</th><th>Art</th><th>Betrag</th><th>Kommentar</th><th>Herkunft</th></tr>
+    {% for a in x.lonely[:200] %}
+    <tr><td>{{ a.date[:19] | replace("T", " ") }}</td><td>{{ r.depot_name if a.accountId == r.depot_id else r.cash_name }}</td><td>{{ a.activityType }}</td><td>{{ a.amount }}</td><td>{{ a.comment }}</td><td>{{ source(a) }}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% else %}<p class="muted">Keine.</p>{% endif %}
+  {% else %}
+  <p>Noch kein Broker mit zwei Wealthfolio-Konten eingerichtet.</p>
+  {% endfor %}
+</div>
+{% endblock %}
