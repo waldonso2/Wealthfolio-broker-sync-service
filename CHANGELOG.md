@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.0
+
+- **Logos for securities (optional, page *Logos*).** Wealthfolio's own logos are named by ticker and exchange, so securities booked under their ISIN show none. Turned on and with a (free) logo.dev key, the service asks logo.dev for each security by ISIN after every run and sets the logo as the security's custom logo in Wealthfolio (version 3.8.0 or later) - stored in Wealthfolio's database, so it survives updates and is part of its backups. Only ISINs go to logo.dev. A logo you set yourself is never replaced; one you remove isn't set again; a security logo.dev has no logo for is asked again after 30 days. At most 50 questions per run.
+
 ## 0.11.3
 
 - **Fix: two ETFs of a savings plan were mixed up.** A PDF import ends a trade and its transfers with the same statement reference (`[PDF …]`); that now ties them together exactly, before time and amount are tried. It also corrects an asset an earlier version learned wrongly: positions that deviated in the last check are looked at again, and what a statement says replaces the stored asset.

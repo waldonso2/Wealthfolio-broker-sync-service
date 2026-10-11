@@ -251,6 +251,7 @@ Die Seite **Prüfung** zeigt außerdem, welche schon übernommenen Buchungen in 
 | Ein Broker soll noch einmal von vorn gebucht werden (z. B. nach geänderten Regeln) | In den Broker-Einstellungen *Neu aufsetzen*: löscht alle Buchungen des Dienstes für diesen Broker, der nächste Abruf holt alles ab dem Startdatum neu. Importe und Handeinträge bleiben |
 | Push-Nachricht „Abweichung zu Wealthfolio“ | Eine schon übernommene Buchung fehlt in Wealthfolio (gelöscht?), oder eine Buchung des Dienstes gibt es beim Broker nicht mehr (z. B. storniert). Seite *Prüfung* öffnen: Fehlende mit *Wieder anlegen* zurückholen oder *Ignorieren*, wenn sie zu Recht fehlen; Stornierte in Wealthfolio löschen |
 | Wertpapier soll in Wealthfolio unter seinem Ticker statt der ISIN laufen | Unter *Wertpapiere* die Zuordnung ISIN → Symbol eintragen |
+| Wertpapiere in Wealthfolio ohne Logo | Unter *Logos* einschalten und einen (kostenlosen) Schlüssel von logo.dev eintragen. Nach jedem Abruf holt der Dienst die Logos per ISIN und setzt sie in Wealthfolio (ab 3.8.0). Nur die ISINs gehen an logo.dev; eigene Logos bleiben, ein entferntes Logo kommt nicht wieder |
 | Passwort der Oberfläche vergessen | In Proxmox die Konsole des Containers öffnen und `brokersync-reset-password` eingeben. Beim nächsten Öffnen legst du ein neues fest |
 | Push-Nachricht „Broker Sync gesperrt“ (mit Master-Passphrase, nach einem Neustart) | Auf die Nachricht tippen und die Passphrase eingeben |
 
@@ -260,7 +261,7 @@ Was der Dienst speichert, ist verschlüsselt; die Seite **Sicherheit** zeigt jed
 
 | Was | Wie |
 |---|---|
-| Zugangsdaten, Sitzungen, Tokens, Wealthfolio-Passwort | AES-256-GCM (`data/secrets.enc`) |
+| Zugangsdaten, Sitzungen, Tokens, Wealthfolio-Passwort, logo.dev-Schlüssel | AES-256-GCM (`data/secrets.enc`) |
 | Einstellungen (Konten, Wertpapiere, Überträge mit IBANs) | AES-256-GCM (`data/config.enc`) |
 | Sync-Datenbank (Buchungen, Bestände, Läufe) | SQLCipher, AES-256 (`data/state.db`) |
 | ntfy-Einstellungen | AES-256-GCM (`data/notify.enc`) – nur mit dem Schlüssel des Dienstes, damit ein gesperrter Dienst Bescheid sagen kann |

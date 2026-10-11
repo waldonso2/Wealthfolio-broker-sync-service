@@ -15,9 +15,11 @@ Wealthfolio rejects an exact duplicate (same idempotency fingerprint) with
 
 from __future__ import annotations
 
+import base64
 import re
 from dataclasses import dataclass
 from datetime import date
+from urllib.parse import quote
 
 import httpx
 
@@ -30,6 +32,10 @@ class WealthfolioError(Exception):
 
 class AuthFailed(WealthfolioError):
     pass
+
+
+class LogosUnsupported(WealthfolioError):
+    """Wealthfolio before 3.8.0: no custom asset logos."""
 
 
 @dataclass(frozen=True)
@@ -137,6 +143,30 @@ class WealthfolioClient:
         r = self._request("GET", "/holdings", params={"accountId": account_id})
         _raise(r)
         return r.json()
+
+    def list_assets(self) -> list[dict]:
+        """Every asset (``id``, ``displayCode``, ``instrumentSymbol``, ``metadata.identifiers.isin``, ...)."""
+        r = self._request("GET", "/assets")
+        _raise(r)
+        return r.json()
+
+    def asset_logos(self) -> set[str]:
+        """Ids of the assets that have a custom logo (Wealthfolio 3.8.0 and later)."""
+        r = self._request("GET", "/assets/logos")
+        if r.status_code in (404, 405):
+            raise LogosUnsupported("This Wealthfolio has no custom asset logos (version 3.8.0 or later needed).")
+        _raise(r)
+        try:
+            return {s["assetId"] for s in r.json()}
+        except (ValueError, TypeError, KeyError) as e:  # an older server's page instead of the API
+            raise LogosUnsupported("This Wealthfolio answers no logo list (version 3.8.0 or later needed).") from e
+
+    def set_asset_logo(self, asset_id: str, png: bytes) -> None:
+        """``PUT /assets/logo/{id}``: a PNG of at most 256x256 pixels and 150 KB."""
+        r = self._request("PUT", f"/assets/logo/{quote(asset_id, safe='')}",
+                          json={"dataBase64": base64.b64encode(png).decode()})
+        if r.status_code >= 400:
+            raise WealthfolioError(f"Wealthfolio rejected the logo: {_detail(r)}")
 
     def search_activities(self, account_ids: list[str], date_from: date, date_to: date,
                           page_size: int = 500) -> list[dict]:

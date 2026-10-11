@@ -29,6 +29,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from .. import __version__, audit, crypto, redact, retired
 from .. import config as config_mod
 from .. import duplicates as duplicates_mod
+from .. import logos as logos_mod
 from .. import reset as reset_mod
 from .. import security as security_mod
 from ..adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
@@ -58,7 +59,8 @@ STATEMENT_KINDS = [(Kind.DIVIDEND, "Dividenden"), (Kind.BUY, "Käufe/Einbuchunge
 
 
 def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[BrokerAdapter]] | None = None,
-               notifier: Notifier | None = None, run_in_thread: bool = True, secure: bool = False) -> Gate:
+               notifier: Notifier | None = None, run_in_thread: bool = True, secure: bool = False,
+               logo_source=None) -> Gate:
     """The web UI behind its gate: security headers, and the unlock page while a master passphrase is set
     and not entered (the app itself is built once the data can be read)."""
     data_dir = Path(data_dir)
@@ -66,19 +68,20 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
     gate = Gate(data_dir, secure=secure, throttle=throttle, templates_dir=HERE / "templates",
                 static_dir=HERE / "static")
     gate.build = lambda: _create_app(data_dir, wealthfolio=wealthfolio, adapters=adapters, notifier=notifier,
-                                     run_in_thread=run_in_thread, secure=secure, gate=gate, throttle=throttle)
+                                     run_in_thread=run_in_thread, secure=secure, gate=gate, throttle=throttle,
+                                     logo_source=logo_source)
     if not crypto.is_locked(data_dir):
         gate.app()  # build it now: start-up work (retired brokers) and errors show at start, not on a first visit
     return gate
 
 
 def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_thread: bool, secure: bool, gate: Gate,
-                throttle: Throttle) -> FastAPI:
+                throttle: Throttle, logo_source=None) -> FastAPI:
     vault = Vault(data_dir)
     state = State(data_dir)
     adapters = adapters or ADAPTERS
     make_wf = wealthfolio or (lambda url, pw: WealthfolioClient(url, pw))
-    syncer = Syncer(data_dir, wealthfolio=make_wf, notifier=notifier, adapters=adapters)
+    syncer = Syncer(data_dir, wealthfolio=make_wf, notifier=notifier, adapters=adapters, logo_source=logo_source)
     templates = Jinja2Templates(directory=HERE / "templates")
     templates.env.filters["local"] = _local_time
     templates.env.filters["money"] = _money
@@ -712,6 +715,36 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
             c.security_mappings[isin] = {"symbol": symbol.strip(), "exchangeMic": exchange_mic.strip() or None}
         config_mod.save(data_dir, c)
         return redirect(request, "/securities", "Gespeichert.")
+
+    @app.get("/logos", response_class=HTMLResponse)
+    def logos_page(request: Request):
+        return render(request, "logos.html", cfg=cfg(), has_token=bool(vault.load().get("logo_dev_token")),
+                      last=logos_mod.last(state))
+
+    @app.post("/logos")
+    def logos_save(request: Request, enabled: str = Form(""), token: str = Form(""), remove_token: str = Form(""),
+                   fetch: str = Form("")):
+        c = cfg()
+        c.logos_enabled = bool(enabled)
+        config_mod.save(data_dir, c)
+        if remove_token:
+            vault.update(lambda d: d.pop("logo_dev_token", None))
+        elif token.strip():
+            vault.update(lambda d: d.__setitem__("logo_dev_token", token.strip()))
+        if not fetch:
+            return redirect(request, "/logos", "Gespeichert.")
+        if not c.logos_enabled or not vault.load().get("logo_dev_token"):
+            return redirect(request, "/logos", "Erst einschalten und einen logo.dev-Schlüssel eintragen.", "warn")
+        try:
+            result = syncer.update_logos()
+        except AlreadyRunning:
+            return redirect(request, "/logos", "Ein Abruf läuft gerade - bitte gleich noch einmal.", "warn")
+        if result is None:
+            return redirect(request, "/logos", "Logos konnten nicht geholt werden - siehe Protokoll.", "error")
+        text = f"{result.set} Logos gesetzt, {result.none} ohne Logo bei logo.dev, {result.failed} fehlgeschlagen."
+        if result.message:
+            text += f" {result.message}"
+        return redirect(request, "/logos", text, "warn" if result.message or result.failed else "ok")
 
     return app
 

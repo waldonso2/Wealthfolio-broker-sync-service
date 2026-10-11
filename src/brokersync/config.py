@@ -1,7 +1,7 @@
 """Settings, encrypted like everything else (``brokersync.crypto``).
 
 - ``<data>/config.enc`` (data tier): Wealthfolio address, brokers, accounts,
-  security mappings, transfer patterns (own IBANs).
+  security mappings, transfer patterns (own IBANs), logos on/off.
 - ``<data>/notify.enc`` (host tier): ntfy server, topic and token and the UI's
   address for links - so a locked service can still say it is locked.
 
@@ -56,6 +56,8 @@ class Config:
     # transfer is booked as TRANSFER_OUT (plus TRANSFER_IN on the destination
     # account, if one is set) instead of a withdrawal.
     transfer_patterns: list[dict] = field(default_factory=list)
+    # Logos from logo.dev by ISIN after every run (brokersync.logos); the key lives in the vault.
+    logos_enabled: bool = False
 
     def broker(self, key: str) -> BrokerConfig:
         return self.brokers.setdefault(key, BrokerConfig())
