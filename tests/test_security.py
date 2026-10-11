@@ -282,3 +282,45 @@ def test_plain_http_redirects_to_https():
     asyncio.run(redirect_app(8443)(scope, None, send))
     assert sent[0]["status"] == 308
     assert dict(sent[0]["headers"])[b"location"] == b"https://192.168.1.51:8443/brokers/dkb?x=1"
+
+
+# ── key rotation ────────────────────────────────────────────────────────────
+@pytest.mark.parametrize("passphrase", [None, "eine sehr lange passphrase"])
+def test_a_new_host_key_re_encrypts_everything_and_the_old_one_no_longer_opens_it(tmp_path, monkeypatch, passphrase):
+    old_key, new_key = tmp_path / "old.key", tmp_path / "new.key"
+    old_key.write_bytes(base64.urlsafe_b64encode(b"o" * 32))
+    new_key.write_bytes(base64.urlsafe_b64encode(b"n" * 32))
+    data = tmp_path / "data"
+    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(old_key))
+    wf = FakeWealthfolio()
+    syncer, _ = setup(data, wf)
+    syncer.run()
+    syncer.state.close()
+    if passphrase:
+        security.change_passphrase(data, passphrase)
+    security.rotate_host_key(data, new_key.read_bytes())
+    assert not list(data.glob("*.rotate"))
+    with pytest.raises(Exception):  # noqa: B017 - the old key opens nothing any more
+        Vault(data).load()
+    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(new_key))
+    assert Vault(data).load()["wealthfolio_password"]
+    assert config_mod.load(data).brokers["fake"].enabled and config_mod.load_notify(data).public_url
+    assert State(data).runs("fake")
+    if passphrase:
+        crypto.lock(data)
+        assert crypto.unlock(data, passphrase) and State(data).runs("fake")
+
+
+def test_rotation_needs_the_service_unlocked_and_a_real_key(tmp_path, monkeypatch, capsys):
+    import io
+
+    from brokersync import cli
+
+    monkeypatch.setenv("BROKERSYNC_DATA", str(tmp_path))
+    config_mod.save(tmp_path, config_mod.Config())
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(b"short\n")))
+    assert cli.main(["rotate-key"]) == 1 and "zu kurz" in capsys.readouterr().err
+    security.change_passphrase(tmp_path, "eine sehr lange passphrase")
+    crypto.lock(tmp_path)
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(base64.urlsafe_b64encode(b"n" * 32))))
+    assert cli.main(["rotate-key"]) == 1 and "gesperrt" in capsys.readouterr().err

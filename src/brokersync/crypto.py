@@ -109,8 +109,8 @@ def _hkdf(material: bytes, info: str) -> bytes:
     return HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=info.encode()).derive(material)
 
 
-def host_key(data_dir: Path) -> bytes:
-    return _hkdf(_host_material(data_dir), "brokersync host v1")
+def host_key(data_dir: Path, material: bytes | None = None) -> bytes:
+    return _hkdf(material or _host_material(data_dir), "brokersync host v1")
 
 
 # ── keyring and passphrase ──────────────────────────────────────────────────
@@ -171,9 +171,8 @@ def _argon2(passphrase: str, salt: bytes, params: dict) -> bytes:
                            type=Type.ID)
 
 
-def _data_key(data_dir: Path, pkey: bytes | None) -> bytes:
-    material = _host_material(data_dir) + (pkey or b"")
-    return _hkdf(material, "brokersync data v1")
+def _data_key(data_dir: Path, pkey: bytes | None, material: bytes | None = None) -> bytes:
+    return _hkdf((material or _host_material(data_dir)) + (pkey or b""), "brokersync data v1")
 
 
 def _check_blob(key: bytes) -> str:
@@ -212,6 +211,20 @@ def unlock(data_dir: Path, passphrase: str) -> bool:
         return False
     _cache_pkey(data_dir, pkey)
     return True
+
+
+def keys_for_new_host_key(data_dir: Path, material: bytes) -> tuple[bytes, bytes, dict]:
+    """Host key, data key and keyring for a new host key (the passphrase, if set, stays; must be unlocked)."""
+    ring = keyring(data_dir)
+    pkey = None
+    if ring.get("passphrase"):
+        pkey = _cached_pkey(data_dir)
+        if pkey is None:
+            raise Locked("Der Dienst ist gesperrt: Bitte erst in der Weboberfläche entsperren.")
+    data = _data_key(data_dir, pkey, material)
+    if ring.get("passphrase"):
+        ring = {**ring, "passphrase": {**ring["passphrase"], "check": _check_blob(data)}}
+    return host_key(data_dir, material), data, ring
 
 
 def lock(data_dir: Path) -> None:

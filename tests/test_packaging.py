@@ -61,3 +61,12 @@ def test_version_is_the_same_everywhere():
     assert project["version"] == brokersync.__version__
     changelog = (ROOT / "CHANGELOG.md").read_text()
     assert f"## {brokersync.__version__}" in changelog
+
+
+def test_setup_survives_its_own_pitfalls():
+    setup = (ROOT / "deploy" / "setup.sh").read_text()
+    # tar | grep -q under pipefail: grep stops early, tar gets SIGPIPE, the pipeline "fails" - the check never hit.
+    assert not re.search(r"tar [^|]*\| *grep -q", setup)
+    # Steps that talk to systemd never hang an update forever, and a run by hand restarts the service.
+    assert "timeout 900 /usr/local/bin/brokersync-cli migrate" in setup and "rotate-key" in setup
+    assert "systemctl try-restart wealthfolio-broker-sync" in setup

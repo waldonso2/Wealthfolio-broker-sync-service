@@ -173,11 +173,11 @@ def encrypt_plain(path: Path, key: bytes) -> None:
         path.with_name(path.name + suffix).unlink(missing_ok=True)
 
 
-def rekey(data_dir: Path, old: bytes, new: bytes) -> None:
-    """Re-encrypt the database for a new data key (passphrase set, changed or removed)."""
+def rekey(data_dir: Path, old: bytes, new: bytes, path: Path | None = None) -> None:
+    """Re-encrypt the database (or a copy of it at ``path``) for a new data key."""
     if sqlcipher is None:
         return
-    path = Path(data_dir) / "state.db"
+    path = path or Path(data_dir) / "state.db"
     if not path.exists():
         return
     db = _connect(path, db_key(data_dir, old))
