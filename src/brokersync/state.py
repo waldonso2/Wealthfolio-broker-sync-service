@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import crypto
+from . import crypto, redact
 
 try:  # SQLCipher: wheels for x86-64; elsewhere the database stays plain SQLite (shown on the page Sicherheit)
     import sqlcipher3 as sqlcipher
@@ -350,9 +350,10 @@ class State:
     def add_unknown(self, broker: str, tx_id: str, raw_type: str, occurred_at: str, payload: dict) -> bool:
         """Store an unknown event; True if it wasn't known yet (so it gets reported once).
 
-        A known one gets the current payload (a newer version may show more).
+        A known one gets the current payload (a newer version may show more). IBANs and long numbers
+        (account, depot, reference) are masked: the user needs the text, not the numbers.
         """
-        data = json.dumps(payload, default=str)
+        data = json.dumps(redact.mask_numbers(payload), default=str)
         with self.db:
             cur = self.db.execute(
                 "INSERT OR IGNORE INTO unknown_events VALUES (?, ?, ?, ?, ?, ?)",

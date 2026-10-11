@@ -223,5 +223,15 @@ def test_deutsche_bank_reads_the_giro_account_and_the_depot_from_the_user_parame
     assert ("holdings", "0000999888", "10070000") in a._client.calls
 
 
-def test_deutsche_bank_compares_its_positions():
-    assert DeutscheBankAdapter.reports_positions and not DkbAdapter.reports_positions
+def test_dkb_reads_the_depot_holdings_from_the_user_parameters(monkeypatch):
+    monkeypatch.setattr(FintsAdapter, "client_factory",
+                        staticmethod(lambda *args: GiroAndDepot(RECORDING, sca=False)))
+    a = DkbAdapter(PROFILES[DkbAdapter])
+    a.login()
+    [p] = a.get_positions()
+    assert (p.isin, p.shares) == ("DE000TEST001", D("12.5"))
+    assert ("holdings", "0000999888", "12030000") in a._client.calls
+
+
+def test_deutsche_bank_and_dkb_compare_their_positions():
+    assert DeutscheBankAdapter.reports_positions and DkbAdapter.reports_positions

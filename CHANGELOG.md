@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.8
+
+- **DKB: depot holdings.** The DKB delivers the depot's holdings over FinTS (the depot has no IBAN and is only listed in the user parameters). After each run they are compared with the DKB depot account in Wealthfolio, and a position missing there can be entered on *Prüfung* as an opening position. Depot transactions still come from a PDF import of the statements.
+- **Unknown events keep no account or depot numbers.** IBANs and long numbers (account, depot, reference) in their texts are masked before they are stored, for every broker. Events stored before are masked at their next update; an unmatched securities booking is updated by every run. ISINs, dates and amounts stay.
+
 ## 0.9.7
 
 - **Fix: dividends stay on the cash account.** 0.9.4 followed a dividend whose giro booking wasn't read (a Deutsche Bank CSV row older than the giro history) with a withdrawal of the same amount, so the money left the cash account right away. A dividend now always stays there, `external_cash` or not; purchases and sales are unchanged.
