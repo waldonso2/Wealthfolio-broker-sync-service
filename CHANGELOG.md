@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1
+
+- **Fix (FinTS depot holdings): "'NoneType' object is not subscriptable".** python-fints takes the bank's country from the account's BIC when it asks for the holdings. A depot listed only in the user parameters (DKB) has no BIC, so the request failed before it was sent. It now gets the BIC of the bank's other accounts (else one naming Germany).
+
 ## 0.10.0
 
 - **Tagesgeld as a Wealthfolio account of its own (FinTS banks, e.g. DKB).** In the broker settings, an optional third Wealthfolio account can be assigned to the bank's savings account. The service then also reads its bookings and balance:

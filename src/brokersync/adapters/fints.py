@@ -307,7 +307,11 @@ class FintsAdapter(BrokerAdapter):
         info = self._information().get("accounts") or []
         holdings_ibans = {(a.get("iban") or "").upper() for a in info if _ops(a).get("GET_HOLDINGS")}
         accounts = []
-        for a in self._call(self._client.get_sepa_accounts) or []:
+        sepa = self._call(self._client.get_sepa_accounts) or []
+        # python-fints takes the bank's country from the BIC (HKWPD's account, Account2/3): a depot without
+        # IBAN gets the BIC of the bank's other accounts, else one naming Germany.
+        bic = next((a.bic for a in sepa if getattr(a, "bic", None)), None) or "XXXXDEXXXXX"
+        for a in sepa:
             if info and a.iban and a.iban.upper() not in holdings_ibans:
                 continue  # a giro or savings account: no holdings to ask for
             accounts.append((a, "Konto mit IBAN" if a.iban else "Konto ohne IBAN"))
@@ -321,7 +325,7 @@ class FintsAdapter(BrokerAdapter):
             bank_id = a.get("bank_identifier")
             accounts.append((_sepa_account(number, a.get("subaccount_number"),
                                            getattr(bank_id, "bank_code", None) or self.blz
-                                           or (self.credentials.get("blz") or "").replace(" ", "")),
+                                           or (self.credentials.get("blz") or "").replace(" ", ""), bic),
                              f"„{a.get('product_name') or '?'}“ (Art {a.get('type') or '?'})"))
         return accounts
 
@@ -540,10 +544,10 @@ def _yes(value) -> str:
     return "ja" if value else "nein"
 
 
-def _sepa_account(number: str, subaccount, blz: str):
+def _sepa_account(number: str, subaccount, blz: str, bic: str | None = None):
     from fints.models import SEPAAccount
 
-    return SEPAAccount(iban=None, bic=None, accountnumber=number, subaccount=subaccount, blz=blz)
+    return SEPAAccount(iban=None, bic=bic, accountnumber=number, subaccount=subaccount, blz=blz)
 
 
 def to_transactions(records: list[dict], securities: re.Pattern = SECURITIES, interest: re.Pattern = INTEREST,
