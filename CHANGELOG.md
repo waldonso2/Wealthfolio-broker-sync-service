@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.0
+
+- **Imported trades older than the bank history get their money (FinTS banks, e.g. DKB).** A purchase a CSV/PDF import booked before the first day of the giro history the service read was paid from money the service never saw: the cash account went negative. Now every run adds, for each such import:
+  - a purchase: a deposit of its cost just before its transfer to the depot,
+  - a sale: a withdrawal of its proceeds just after,
+  - a dividend: nothing - its money stays on the cash account.
+  
+  Trades in the read history aren't touched (their giro booking was read and matched), nor the service's own activities. The first day read is now recorded for every FinTS bank (`history-start`); where it wasn't yet, the first successful run tells (its start date, else 89 days before it).
+- **FinTS depot transactions (diagnosis):** asked for the last 89 days (as far back as banks answer without a TAN), not just the run's window.
+
 ## 0.10.2
 
 - **FinTS depot transactions, first step (diagnosis, nothing booked).** Banks that offer depot transactions over FinTS (DKB) are asked for them (HKWDU, answered in MT536 - python-fints knows neither, the service defines both). The log names, per depot, how many came and what they would be booked as (purchase, sale, delivery, corporate action, reversal), how complete they are, and the answer's layout - counts, field names and standard codes only, no ISINs, amounts or numbers. Booking follows once a real answer has been checked.

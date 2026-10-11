@@ -30,10 +30,12 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import assets as assets_mod
+from . import audit as audit_mod
 from . import config as config_mod
 from . import coverage, crypto, retired
 from . import repair as repair_mod
 from .adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
+from .adapters.fints import NO_TAN_DAYS
 from .dedup import ExistingIndex
 from .mapping import Accounts, MappingError, SecurityMapping, TransferPattern, to_activities, tx_ref
 from .model import CashBalance, Kind, Position, Transaction
@@ -228,7 +230,8 @@ class Syncer:
             tax_backfill = not self.state.flag(tax_flag(key))
             adapter.known_ids = {t for t, (status, _) in synced.items() if not (tax_backfill and status == "existing")}
             transactions = adapter.get_transactions(since) + self._openings(key)
-            transactions += self._statements(key, adapter)
+            history = self._history_start(key, adapter, bcfg)
+            transactions += self._statements(key, adapter, history)
             cash = self._broker_cash(key, adapter)
             positions = self._broker_positions(key, adapter) if adapter_cls.reports_positions else None
         finally:
@@ -256,6 +259,10 @@ class Syncer:
             # Before the check against existing activities: it then sees them repaired.
             repaired = self._repair_cash_assets(key, wf, accounts)
             unmatched: list[Transaction] = []
+            # Trades imported from statements older than the bank account's history: their money.
+            before = self._before_history(wf, key, accounts, history, synced)
+            transactions += before
+            todo += [t for t in before if t.id not in synced]
             activities = self._activities(wf, accounts, transactions, since if full else None, full)
             if todo:
                 existing = ExistingIndex(activities)
@@ -423,18 +430,74 @@ class Syncer:
               "cost": str(p.cost) if p.cost is not None else ""} for p in positions]))
         return positions
 
-    def _statements(self, key: str, adapter: BrokerAdapter) -> list[Transaction]:
+    def _history_start(self, key: str, adapter: BrokerAdapter, bcfg: config_mod.BrokerConfig) -> date | None:
+        """The earliest day of the bank account's history the sync ever read (``meta history-start:<broker>``),
+        for adapters that read one. Versions before 0.11.0 kept it only for statements: without it, the first
+        successful run tells - it read from the start date, else NO_TAN_DAYS back."""
+        if adapter.history_start is None:
+            return None
+        stored = self.state.meta(f"history-start:{key}")
+        earliest = date.fromisoformat(stored) if stored else None
+        if earliest is None:
+            first = self.state.first_success(key)
+            if bcfg.start_date:
+                earliest = date.fromisoformat(bcfg.start_date)
+            elif first:
+                earliest = first.astimezone(BERLIN).date() - timedelta(days=NO_TAN_DAYS)
+        earliest = min(d for d in (earliest, adapter.history_start) if d)
+        if earliest.isoformat() != stored:
+            self.state.set_meta(f"history-start:{key}", earliest.isoformat())
+        return earliest
+
+    def _statements(self, key: str, adapter: BrokerAdapter, history: date | None) -> list[Transaction]:
         """Transactions from statements the user uploaded (Deutsche Bank depot CSV). Rows older than the
         earliest day of the bank account's history the sync ever read keep their money off the cash account."""
         if not type(adapter).statement_label:
             return []
-        stored = self.state.meta(f"history-start:{key}")
-        earliest = date.fromisoformat(stored) if stored else None
-        if adapter.history_start and (earliest is None or adapter.history_start < earliest):
-            earliest = adapter.history_start
-            self.state.set_meta(f"history-start:{key}", earliest.isoformat())
         rows = self.state.statement_rows(key)
-        return type(adapter).statement_transactions(rows, earliest) if rows else []
+        return type(adapter).statement_transactions(rows, history) if rows else []
+
+    def _before_history(self, wf: WealthfolioClient, key: str, accounts: Accounts, history: date | None,
+                        synced: dict[str, tuple[str, list[str]]]) -> list[Transaction]:
+        """Trades a CSV/PDF import booked before the bank account's history the sync read: their money never
+        showed up there. Like external_cash: a purchase gets a deposit of its cost just before its transfer to
+        the depot, a sale a withdrawal of its proceeds just after; dividends keep their money. Not for transfers
+        the sync matched to a bank booking (those were read), nor for the sync's own activities."""
+        if history is None:
+            return []
+        try:
+            activities = wf.search_activities([accounts.cash, accounts.portfolio], date(1970, 1, 1),
+                                              history - timedelta(days=1))
+        except WealthfolioError as e:
+            log.info("%s: imports before the bank history not checked: %s", key, e)
+            return []
+        matched = {i for _, ids in synced.values() for i in ids}
+        trades = [a for a in activities if a.get("accountId") == accounts.portfolio
+                  and a.get("activityType") in ("BUY", "SELL")]
+        first = datetime(history.year, history.month, history.day, tzinfo=BERLIN)
+        out = []
+        for a in activities:
+            if a.get("accountId") != accounts.cash or not audit_mod.is_cash_transfer(a) or a.get("id") in matched \
+                    or coverage.SYNC_REF.search(a.get("comment") or ""):
+                continue
+            when = audit_mod._when(a)
+            if when >= first:
+                continue
+            buy = a.get("activityType") == "TRANSFER_OUT"
+            if not any(t.get("activityType") == ("BUY" if buy else "SELL")
+                       and abs((audit_mod._when(t) - when).total_seconds()) <= audit_mod.MOMENT_SECONDS
+                       for t in trades):
+                continue
+            out.append(Transaction(
+                id=f"pre-{a['id']}", kind=Kind.DEPOSIT if buy else Kind.WITHDRAWAL,
+                datetime=when + timedelta(seconds=-3 if buy else 3), currency=a.get("currency") or "EUR",
+                net=abs(audit_mod._dec(a.get("amount"))),
+                label=("Deposit for a buy before the bank history read" if buy
+                       else "Withdrawal after a sale before the bank history read")))
+        if out:
+            log.info("%s: %d imported trade(s) before the bank history (%s) get their money", key, len(out),
+                     history.isoformat())
+        return out
 
     def _openings(self, key: str) -> list[Transaction]:
         """Opening positions the user entered (page Prüfung): a buy on that day, its cost deposited first."""

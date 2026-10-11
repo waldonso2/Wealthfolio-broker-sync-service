@@ -291,3 +291,55 @@ def test_close_survives_a_broken_connection(fake, monkeypatch):
     monkeypatch.setattr(FakeFinTS, "deconstruct", broken)
     a.close()  # no exception: the run's result counts more than a clean goodbye
     DkbAdapter(CREDS).close()  # never logged in
+
+
+def imported(wf, day, kind, amount, gid):
+    """A PDF import's trade (as the import books it): the trade on the depot and its transfer pair."""
+    when = f"{day}T09:00:00.000Z"
+    cash_leg = "TRANSFER_OUT" if kind == "BUY" else "TRANSFER_IN"
+    depot_leg = "TRANSFER_IN" if kind == "BUY" else "TRANSFER_OUT"
+    for account, activity, extra in (("acc-cash", cash_leg, {}), ("acc-depot", depot_leg, {}),
+                                     ("acc-depot", kind, {"quantity": "10", "assetSymbol": "IE00TEST0001"})):
+        wf.add_existing(**{"accountId": account, "activityType": activity, "date": when, "quantity": "1",
+                           "unitPrice": "1", "amount": amount, "currency": "EUR", "sourceGroupId": gid,
+                           "comment": f"{kind} TEST Fonds [PDF {gid}]", "assetSymbol": "", "assetId": "", **extra})
+
+
+def test_imported_trades_before_the_giro_history_get_their_money(tmp_path, monkeypatch):
+    wf = FakeWealthfolio()
+    imported(wf, "2026-06-15", "BUY", "1001.90", "g1")  # before the giro history (start date 2026-08-01)
+    imported(wf, "2026-06-20", "SELL", "500", "g2")
+    wf.add_existing(accountId="acc-depot", activityType="DIVIDEND", date="2026-06-25T09:00:00.000Z",
+                    quantity="10", unitPrice="1", amount="12.34", currency="EUR", comment="Dividende [PDF g3]",
+                    assetSymbol="IE00TEST0001", assetId="")
+    imported(wf, "2026-09-06", "BUY", "1001", "g4")  # in the history: its giro debit is read and matched
+    syncer, _ = setup_sync(tmp_path, wf, monkeypatch)
+    [r] = syncer.run()
+    assert r.status == "ok"
+    assert syncer.state.meta("history-start:dkb") == "2026-08-01"
+    ours = [a for a in wf.activities if "[SYNC dkb:pre-" in (a.get("comment") or "")]
+    assert sorted((a["activityType"], a["amount"], a["date"][:10]) for a in ours) == \
+        [("DEPOSIT", "1001.9", "2026-06-15"), ("WITHDRAWAL", "500", "2026-06-20")]
+    deposit = next(a for a in ours if a["activityType"] == "DEPOSIT")
+    assert deposit["accountId"] == "acc-cash" and deposit["date"] < "2026-06-15T09:00:00"
+    # The buy in the history was matched to its giro debit: no deposit, and nothing new next time.
+    [r2] = syncer.run()
+    assert (r2.created, r2.failed) == (0, 0)
+    assert len([a for a in wf.activities if "[SYNC dkb:pre-" in (a.get("comment") or "")]) == 2
+
+
+def test_without_a_recorded_history_start_the_first_run_tells(tmp_path, monkeypatch):
+    from datetime import timedelta
+
+    from brokersync.sync import BERLIN
+
+    wf = FakeWealthfolio()
+    syncer, _ = setup_sync(tmp_path, wf, monkeypatch)
+    cfg = config_mod.load(tmp_path)
+    cfg.brokers["dkb"].start_date = ""
+    config_mod.save(tmp_path, cfg)
+    run_id = syncer.state.start_run("dkb")
+    syncer.state.finish_run(run_id, "ok")
+    [r] = syncer.run()
+    first = syncer.state.first_success("dkb").astimezone(BERLIN).date()
+    assert syncer.state.meta("history-start:dkb") == (first - timedelta(days=89)).isoformat()

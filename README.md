@@ -107,6 +107,8 @@ Der Dienst liest dein **DKB-Girokonto** per FinTS (HBCI), dieselbe Schnittstelle
 
 **Zeitraum:** Ohne Datum unter *Buchungen übernehmen ab* holt der erste Abruf die letzten 89 Tage. Für ältere Umsätze verlangt die DKB eine Freigabe in der App.
 
+**Ältere Wertpapierabrechnungen:** Importierst du Abrechnungen von vor dem ersten gelesenen Girokonto-Tag, hat der Dienst das Geld dafür nie gesehen. Er bucht deshalb vor jedem solchen Kauf eine Einzahlung in gleicher Höhe und nach jedem solchen Verkauf eine Auszahlung; Dividenden bleiben auf dem Verrechnungskonto. Käufe und Verkäufe ab dem ersten gelesenen Tag sind über ihre Girobuchung abgedeckt.
+
 **Saldo:** Die Übersicht zeigt nach jedem Abruf den Saldo laut DKB (und den des Tagesgelds). Er sollte mit dem DKB-Verrechnungskonto (bzw. dem Tagesgeld-Konto) in Wealthfolio übereinstimmen.
 
 **Sicherheit:** Lehnt die DKB Anmeldename oder PIN ab, versucht der Dienst es nicht noch einmal, bis du die Zugangsdaten neu speicherst. Nach drei Fehlversuchen sperrt die DKB sonst das Online-Banking.
