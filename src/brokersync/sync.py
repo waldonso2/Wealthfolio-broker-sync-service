@@ -518,10 +518,13 @@ class Syncer:
         for o in self.state.openings(key):
             shares, price, fee = Decimal(o["shares"]), Decimal(o["price"]), Decimal(o["fee"])
             day = date.fromisoformat(o["day"])
+            # Holdings read before 0.9.9 (python-fints' parser) could carry "<ISIN>|/DE/<WKN>" as ISIN: the id
+            # keeps it (it is booked under it), the ISIN is the real one, so the holdings check finds it.
+            isin = o["isin"].split("|")[0].strip()
             out.append(Transaction(
                 id=opening_id(o["isin"], o["day"]), kind=Kind.BUY,
                 datetime=datetime(day.year, day.month, day.day, 12, tzinfo=BERLIN).astimezone(UTC),
-                currency=o["currency"], net=shares * price + fee, isin=o["isin"], name=o["name"], shares=shares,
+                currency=o["currency"], net=shares * price + fee, isin=isin, name=o["name"], shares=shares,
                 gross=shares * price, fee=fee, label="Anfangsbestand", external_cash=True))
         return out
 

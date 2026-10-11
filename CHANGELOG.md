@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.4
+
+- **Fix: an opening position entered from holdings read before 0.9.9 wasn't found by the holdings check.** python-fints' parser, used until then, read a security split over two lines as ISIN `<ISIN>|/DE/<WKN>` and kept only the name's last line (Deutsche Bank: "IEN O.N."). An opening entered from it was booked under that ISIN. Its transaction now carries the real ISIN (its id stays, so nothing is booked again), and the check finds the position.
+- **The log says why a position's Wealthfolio asset couldn't be found**: no purchase or sale whose transfer names the ISIN, its asset already belonging to another ISIN, transfers naming several ISINs, or statements naming several assets - asset ids and ISINs only.
+- An ISIN whose statements name several assets is now also tried by time and amount.
+
 ## 0.11.3
 
 - **Fix: two ETFs of a savings plan were mixed up.** A PDF import ends a trade and its transfers with the same statement reference (`[PDF …]`); that now ties them together exactly, before time and amount are tried. It also corrects an asset an earlier version learned wrongly: positions that deviated in the last check are looked at again, and what a statement says replaces the stored asset.
