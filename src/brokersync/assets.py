@@ -118,14 +118,16 @@ def _isins(text: str) -> set[str]:
 
 
 def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, accounts: Accounts,
-                       isins: set[str]) -> int:
+                       isins: set[str], recheck: frozenset[str] | set[str] = frozenset()) -> int:
     """Learn the assets of ``isins`` (positions the broker reports whose asset is unknown or doesn't fit) from
     imported trades whose transfer names the ISIN; returns how many were learned or corrected.
 
     Exact first: a PDF import ends a trade's and its transfers' comments in the same ``[PDF <statement>]``;
     what that says replaces a stored asset. Then, for ISINs still unknown, by time and amount: the transfer
     within LEG_SECONDS with the trade's amount (a savings plan's executions share a second). An ISIN on
-    trades of two assets stays unknown; what is learned narrows the next pass."""
+    trades of two assets stays unknown; what is learned narrows the next pass. ``recheck``: ISINs whose stored
+    asset didn't fit last time - time and amount may replace it too (the sync's own trades name the ISIN in
+    their transfers as well)."""
     known = state.assets(broker)
     activities = wf.search_activities([accounts.cash, accounts.portfolio], date(1970, 1, 1), date(2100, 1, 1))
     by_ref: dict[str, set[str]] = {}
@@ -148,7 +150,7 @@ def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, account
                 state.set_asset(broker, isin, **entry)
                 known[isin] = entry
                 corrected += 1
-    wanted = {i for i in isins if i not in exact and not _preferred(i, known.get(i))}
+    wanted = {i for i in isins if i not in exact and (i in recheck or not _preferred(i, known.get(i)))}
     if not wanted:
         return corrected
     transfers = [(_when(a), _amount(a), _isins(a.get("comment") or ""))
@@ -166,7 +168,7 @@ def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, account
         named = set().union(*(same or [names for _, names in near]))
         if named:
             trades.append((_entry(a), named))
-    learned, taken = corrected, {e["asset_id"] for e in known.values()}
+    learned, taken = corrected, {e["asset_id"] for i, e in known.items() if i not in wanted}
     while True:
         found: dict[str, dict[str, dict]] = {}  # ISIN -> asset id -> entry
         for entry, named in trades:
@@ -177,10 +179,11 @@ def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, account
         if not new:
             return learned
         for isin, entry in new.items():
-            state.set_asset(broker, isin, **entry)
+            if (known.get(isin) or {}).get("asset_id") != entry["asset_id"]:
+                state.set_asset(broker, isin, **entry)
+                learned += 1
             wanted.discard(isin)
             taken.add(entry["asset_id"])
-            learned += 1
 
 
 def mappings(state: State, broker: str) -> dict[str, SecurityMapping]:
