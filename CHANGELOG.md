@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.2
+
+- **Fix:** `brokersync-cli security-status` reported the web UI as plain HTTP although it runs on HTTPS; the command now knows the service's setting.
+
 ## 0.9.1
 
 - **A fresh key, once.** 0.9.0 moved the existing key from `data/secret.key` to `/etc/wealthfolio-broker-sync` instead of replacing it. Backups from before the update, or Proxmox backups, that held that key could still open the current data. The update now creates a new key once and re-encrypts everything for it; copies of the old key open nothing any more. With a master passphrase the service has to be unlocked before the update, otherwise the next update does it.

@@ -70,3 +70,10 @@ def test_setup_survives_its_own_pitfalls():
     # Steps that talk to systemd never hang an update forever, and a run by hand restarts the service.
     assert "timeout 900 /usr/local/bin/brokersync-cli migrate" in setup and "rotate-key" in setup
     assert "systemctl try-restart wealthfolio-broker-sync" in setup
+
+
+def test_the_cli_wrapper_runs_commands_like_the_web_service():
+    cli = (ROOT / "deploy" / "brokersync-cli").read_text()
+    unit = (ROOT / "deploy" / "systemd" / "wealthfolio-broker-sync.service").read_text()
+    for env in ("BROKERSYNC_DATA", "BROKERSYNC_RUNTIME", "BROKERSYNC_TLS"):
+        assert f"Environment={env}=" in unit and f"Environment={env}=" in cli
