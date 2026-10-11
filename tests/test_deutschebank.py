@@ -82,8 +82,8 @@ def test_rows_become_transactions():
     # Employee shares: delivered against payment, not paid from the giro account.
     assert (delivery.kind, delivery.net, delivery.gross, delivery.external_cash) == \
         (Kind.BUY, D("1793.40"), D("1793.40"), True)
-    # Older than the giro history read: its money never shows up on the cash account.
-    assert (old_div.kind, old_div.external_cash) == (Kind.DIVIDEND, True)
+    # Older than the giro history read: its money still stays on the cash account.
+    assert (old_div.kind, old_div.external_cash) == (Kind.DIVIDEND, False)
     assert cap1.kind == cap2.kind == Kind.UNKNOWN and cap1.id != cap2.id and cap1.raw_type == "Kapitaltransaktion"
     assert "999" not in repr(cap1.raw)
     # Stable ids: the same export again gives the same ids.
@@ -91,13 +91,13 @@ def test_rows_become_transactions():
     assert [t.id for t in again] == [t.id for t in txs]
 
 
-def test_a_dividend_paid_outside_the_cash_accounts_history_leaves_no_money_there():
+def test_a_dividend_older_than_the_giro_history_stays_on_the_cash_account():
     old = deutschebank_csv.transactions(deutschebank_csv.parse(CSV), history_start=TODAY)[3]
     payloads = to_activities(old, "deutschebank", Accounts("cash", "depot"))
-    assert [p["activityType"] for p in payloads] == ["DIVIDEND", "TRANSFER_OUT", "TRANSFER_IN", "WITHDRAWAL"]
+    assert [p["activityType"] for p in payloads] == ["DIVIDEND", "TRANSFER_OUT", "TRANSFER_IN"]
     cash = sum((1 if p["activityType"] == "TRANSFER_IN" else -1) * D(p["amount"])
                for p in payloads if p["accountId"] == "cash")
-    assert cash == 0
+    assert cash == D("343.39")
 
 
 def setup(tmp_path, monkeypatch, recording=None, client=None):
@@ -150,8 +150,9 @@ def test_upload_and_run_book_the_depot_and_match_the_giro_in_one_run(tmp_path, m
     for a in wf.activities:
         if a["accountId"] == "acc-cash":
             cash += sign[a["activityType"]] * D(a["amount"])
-    # On the cash account only what the giro account read shows: dividend +402, purchase -1001.90, card -50.
-    assert cash == D("402.00") - D("1001.90") - D("50.00")
+    # On the cash account: what the giro account read shows (dividend +402, purchase -1001.90, card -50)
+    # and the older dividend, whose money stays there too.
+    assert cash == D("402.00") - D("1001.90") - D("50.00") + D("343.39")
     [res2] = syncer.run()
     assert res2.created == 0 and res2.failed == 0
 

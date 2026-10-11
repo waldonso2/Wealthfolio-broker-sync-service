@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.7
+
+- **Fix: dividends stay on the cash account.** 0.9.4 followed a dividend whose giro booking wasn't read (a Deutsche Bank CSV row older than the giro history) with a withdrawal of the same amount, so the money left the cash account right away. A dividend now always stays there, `external_cash` or not; purchases and sales are unchanged.
+- Withdrawals booked that way before stay in Wealthfolio. Remove them by hand (comment "… paid out [SYNC deutschebank:…]"), or use *Neu aufsetzen* for the broker: it books everything again, uploaded CSV rows and opening positions are kept.
+
 ## 0.9.6
 
 - **Fix (FinTS camt): "Abrufzeitraum außerhalb des unterstützten Bereichs".** A bank states in its parameters how many days of camt bookings it keeps (Deutsche Bank). The service now asks only that far back, and the log says so ("die Bank hält camt-Umsätze N Tage vor"). Older giro bookings aren't available over FinTS at all.
