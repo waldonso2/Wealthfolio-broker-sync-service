@@ -49,6 +49,26 @@ def register_long(data, min_length: int = 20) -> None:
             register_long(v, min_length)
 
 
+# For stored texts, stricter than PATTERNS so an ISIN (LU0629459743) and the words after it stay: an IBAN
+# written without spaces (15+ characters), or in groups of four that hold a digit (but the bank code); account, depot or
+# reference numbers as 8+ digits standing alone - not inside an ISIN, a date or an amount.
+IBAN = re.compile(r"\b[A-Z]{2}\d{2}(?:[A-Z0-9]{11,30}|"
+                  r" [A-Z0-9]{4}(?: (?=[A-Z0-9]{0,3}\d)[A-Z0-9]{4}){2,6}(?: \d{1,3})?)\b")
+NUMBER = re.compile(r"(?<![\w.:,-])\d{8,}(?![\w.:,-])")
+
+
+def mask_numbers(data):
+    """``data`` (nested dicts/lists of strings) without IBANs and long numbers - for what is stored and shown,
+    like the payload of an unknown event."""
+    if isinstance(data, str):
+        return NUMBER.sub(MASK, IBAN.sub(MASK, data))
+    if isinstance(data, dict):
+        return {k: mask_numbers(v) for k, v in data.items()}
+    if isinstance(data, list | tuple):
+        return [mask_numbers(v) for v in data]
+    return data
+
+
 def redact(text: str) -> str:
     for s in sorted(_secrets, key=len, reverse=True):
         if s in text:

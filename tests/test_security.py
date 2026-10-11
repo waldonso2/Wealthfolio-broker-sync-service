@@ -413,3 +413,17 @@ def test_rotation_needs_the_service_unlocked_and_a_real_key(tmp_path, monkeypatc
     crypto.lock(tmp_path)
     monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(base64.urlsafe_b64encode(b"n" * 32))))
     assert cli.main(["rotate-key"]) == 1 and "gesperrt" in capsys.readouterr().err
+
+
+def test_unknown_events_keep_no_account_or_depot_numbers(tmp_path):
+    payload = {"betrag": "17.95", "buchungstext": "WERTPAPIERE",
+               "verwendungszweck": "Depot 0000999888 Wertpapierertrag 19.08.2026 000012345678901 WKN A0TEST "
+                                   "TEST FONDS ISIN LU0000000001 IBAN DE02 1203 0000 0000 2020 51"}
+    st = state_mod.State(tmp_path)
+    for _ in range(2):  # new, then the update of a known one
+        st.add_unknown("dkb", "tx1", "UNMATCHED", "2026-08-20T10:00:00+00:00", payload)
+        [event] = st.unknown_events("dkb")
+        text = event["payload"]["verwendungszweck"]
+        assert text == "Depot *** Wertpapierertrag 19.08.2026 *** WKN A0TEST TEST FONDS ISIN LU0000000001 IBAN ***"
+        assert event["payload"]["betrag"] == "17.95"
+    st.close()
