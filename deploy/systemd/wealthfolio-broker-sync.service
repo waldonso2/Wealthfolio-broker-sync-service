@@ -15,6 +15,7 @@ Environment=BROKERSYNC_TLS=1
 # The TLS key is handed over the same way: the files stay root-only.
 LoadCredential=tls.crt:/etc/wealthfolio-broker-sync/tls/cert.pem
 LoadCredential=tls.key:/etc/wealthfolio-broker-sync/tls/key.pem
+LoadCredential=tls.ca:/etc/wealthfolio-broker-sync/tls/ca.pem
 ExecStart=/opt/wealthfolio-broker-sync/venv/bin/brokersync serve --host 0.0.0.0 --port 8443 --certfile %d/tls.crt --keyfile %d/tls.key --redirect-port 8090
 Restart=on-failure
 RestartSec=5

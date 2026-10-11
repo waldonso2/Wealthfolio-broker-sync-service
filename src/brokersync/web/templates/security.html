@@ -14,6 +14,23 @@
   </table>
 </div>
 
+{% if ca %}
+<div class="card">
+  <h2>Dem Zertifikat vertrauen</h2>
+  <p>Der Browser zeigt „Nicht sicher“, solange er die Zertifizierungsstelle dieses Containers nicht kennt – die Verbindung ist trotzdem verschlüsselt. Einmal importiert, ist die Oberfläche auf diesem Gerät vertrauenswürdig, auch nach jeder Erneuerung des Zertifikats. Die Zertifizierungsstelle darf nur Namen im lokalen Netz bestätigen, keine Seiten im Internet.</p>
+  <p><a class="button" href="/ca.crt">CA-Zertifikat herunterladen</a></p>
+  <p class="muted">Vor dem Import vergleichen – SHA-256: <code>{{ ca_fingerprint }}</code></p>
+  <ul>
+    <li><strong>Windows (Chrome, Edge):</strong> Datei öffnen → <em>Zertifikat installieren</em> → <em>Aktueller Benutzer</em> → <em>Alle Zertifikate in folgendem Speicher speichern</em> → <em>Vertrauenswürdige Stammzertifizierungsstellen</em>. Browser neu starten.</li>
+    <li><strong>macOS (Safari, Chrome):</strong> Datei öffnen (Schlüsselbundverwaltung) → Zertifikat doppelklicken → <em>Vertrauen</em> → <em>Immer vertrauen</em>.</li>
+    <li><strong>Firefox:</strong> Einstellungen → <em>Datenschutz &amp; Sicherheit</em> → <em>Zertifikate anzeigen</em> → <em>Zertifizierungsstellen</em> → <em>Importieren</em> → „Dieser CA vertrauen, um Websites zu identifizieren“.</li>
+    <li><strong>iPhone/iPad:</strong> Datei in Safari laden → <em>Einstellungen → Profil geladen → Installieren</em>, danach <em>Allgemein → Info → Zertifikatsvertrauenseinstellungen</em> einschalten.</li>
+    <li><strong>Android:</strong> <em>Einstellungen → Sicherheit → Verschlüsselung &amp; Anmeldedaten → Zertifikat installieren → CA-Zertifikat</em>.</li>
+  </ul>
+  <p class="muted">Aufrufen dann über die IP-Adresse oder den Namen des Containers, wie im Zertifikat eingetragen.</p>
+</div>
+{% endif %}
+
 <div class="card">
   <h2>Master-Passphrase</h2>
   {% if has_passphrase %}

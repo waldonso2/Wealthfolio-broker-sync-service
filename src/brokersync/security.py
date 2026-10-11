@@ -79,18 +79,35 @@ def status(data_dir: Path, *, secure: bool) -> list[Check]:
     return out
 
 
+def ca_file() -> Path | None:
+    """The CA certificate systemd handed over (for download and its fingerprint), if any."""
+    cred = os.environ.get("CREDENTIALS_DIRECTORY")
+    path = Path(cred) / "tls.ca" if cred else None
+    return path if path and path.is_file() else None
+
+
+def ca_fingerprint() -> str:
+    path = ca_file()
+    if not path:
+        return ""
+    from cryptography import x509
+
+    from .tls import fingerprint
+
+    return fingerprint(x509.load_pem_x509_certificate(path.read_bytes()))
+
+
 def _fingerprint() -> str:
-    """SHA-256 of the certificate systemd handed over - to compare with what the browser shows."""
+    """Validity of the certificate systemd handed over, and the CA's fingerprint to compare on import."""
     cred = os.environ.get("CREDENTIALS_DIRECTORY")
     path = Path(cred) / "tls.crt" if cred else None
     if not path or not path.is_file():
         return ""
     from cryptography import x509
-    from cryptography.hazmat.primitives import hashes
 
     cert = x509.load_pem_x509_certificate(path.read_bytes())
-    fingerprint = cert.fingerprint(hashes.SHA256()).hex(":").upper()
-    return f" Zertifikat bis {cert.not_valid_after_utc:%d.%m.%Y}, SHA-256 {fingerprint}"
+    ca = ca_fingerprint()
+    return f" Zertifikat bis {cert.not_valid_after_utc:%d.%m.%Y}" + (f", CA SHA-256 {ca}" if ca else "")
 
 
 def _loose_permissions(d: Path) -> list[str]:

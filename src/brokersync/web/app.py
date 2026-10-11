@@ -41,7 +41,7 @@ from .gate import Gate, Throttle
 log = logging.getLogger(__name__)
 HERE = Path(__file__).parent
 TIMER = "wealthfolio-broker-sync-run.timer"
-PUBLIC = {"/login", "/setup-password", "/healthz"}
+PUBLIC = {"/login", "/setup-password", "/healthz", "/ca.crt"}
 # Times are shown in German time; the container usually runs in UTC.
 TZ = ZoneInfo(os.environ.get("BROKERSYNC_TZ", "Europe/Berlin"))
 STATUS_LABEL = {"ok": "OK", "needs_auth": "Anmeldung nötig", "error": "Fehler", "running": "läuft",
@@ -141,6 +141,17 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
             return [], str(e)
 
     # ── first visit / login ─────────────────────────────────────────────────
+    @app.get("/ca.crt")
+    def ca_certificate():
+        """The container's CA certificate (public), to import once so browsers trust the UI."""
+        from fastapi.responses import Response
+
+        path = security_mod.ca_file()
+        if not path:
+            raise HTTPException(404, "Kein CA-Zertifikat vorhanden.")
+        return Response(path.read_bytes(), media_type="application/x-x509-ca-cert",
+                        headers={"Content-Disposition": 'attachment; filename="wealthfolio-broker-sync-ca.crt"'})
+
     @app.get("/healthz")
     def healthz():
         return {"ok": True, "version": __version__}
@@ -411,6 +422,7 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         c = cfg()
         wf_plain = c.wealthfolio_url.startswith("http://") and not _is_local(c.wealthfolio_url)
         return render(request, "security.html", checks=security_mod.status(data_dir, secure=secure),
+                      ca=bool(security_mod.ca_file()), ca_fingerprint=security_mod.ca_fingerprint(),
                       has_passphrase=crypto.passphrase_enabled(data_dir), min_length=crypto.MIN_PASSPHRASE,
                       wf_plain=wf_plain)
 

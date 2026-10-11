@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.3
+
+- **Trusted HTTPS instead of a browser warning.** The container now has a small certificate authority of its own. It signs the web UI's certificate, and the next update replaces the self-signed one from 0.9.0. Import the CA certificate once (page *Sicherheit* → *CA-Zertifikat herunterladen*; instructions for Windows, macOS, Firefox, iPhone and Android are on the page). After that the browser shows the UI as secure, also after every renewal. The CA may only vouch for local names (private IP ranges, the container's name, `.local`, `.lan`, `.home.arpa`, `.fritz.box`): even with its key, nobody could fake a public site with it. Its key stays root-only and is never handed to the service. The certificate leaves out public IPv6 addresses.
+
 ## 0.9.2
 
 - **Fix:** `brokersync-cli security-status` reported the web UI as plain HTTP although it runs on HTTPS; the command now knows the service's setting.
