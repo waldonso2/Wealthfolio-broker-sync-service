@@ -145,7 +145,7 @@ Duplikate, die ältere Versionen trotzdem erzeugt haben, findet `duplicates.py` 
 
 ## Buchungsmodell
 
-Jeder Broker hat in Wealthfolio zwei Konten: ein **Cash-Konto** und ein **Depot**. `mapping.py` setzt das um:
+Jeder Broker hat in Wealthfolio zwei Konten: ein **Cash-Konto** und ein **Depot** (FinTS-Banken wahlweise dazu ein **Tagesgeld-Konto**: `Accounts.savings`, Buchungen mit `Transaction.account = SAVINGS`, Umbuchungen zwischen Giro und Tagesgeld als ein Übertragspaar). `mapping.py` setzt das um:
 
 | `Kind` | Aktivitäten |
 |---|---|

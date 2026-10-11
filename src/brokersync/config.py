@@ -31,6 +31,8 @@ class BrokerConfig:
     enabled: bool = False
     cash_account_id: str = ""
     portfolio_account_id: str = ""
+    # Optional: the bank's savings account (Tagesgeld), for adapters with ``savings_label``.
+    savings_account_id: str = ""
     # First run fetches from here (ISO date); later runs from the last success.
     start_date: str = ""
 

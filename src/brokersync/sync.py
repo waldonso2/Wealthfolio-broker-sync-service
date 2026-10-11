@@ -23,7 +23,7 @@ import os
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -63,6 +63,11 @@ def opening_id(isin: str, day: str) -> str:
 
 def refetch_flag(key: str) -> str:
     return f"refetch:{key}"
+
+
+def savings_flag(key: str) -> str:
+    """Meta: the savings account (Wealthfolio id) a run read without failures - another one is read anew."""
+    return f"savings-account:{key}"
 
 
 class AlreadyRunning(Exception):
@@ -208,6 +213,12 @@ class Syncer:
         # "Ab Startdatum neu abrufen" in the broker settings: once from the start date again.
         refetch = not full and self.state.flag(refetch_flag(key))
         since = self._start(bcfg) if full or backfill or refetch else self._since(key, bcfg)
+        # The savings account (Tagesgeld), if the user assigned one: read from the start date until a run
+        # read it without failures, then with the cash account.
+        savings = bcfg.savings_account_id if adapter_cls.savings_label else ""
+        adapter.with_savings = bool(savings)
+        savings_new = bool(savings) and self.state.meta(savings_flag(key)) != savings
+        adapter.savings_since = self._start(bcfg) if savings_new else since
         # Before this run books anything: what the comparison with Wealthfolio checks.
         synced = self.state.synced(key)
         try:
@@ -231,12 +242,16 @@ class Syncer:
         self._report_unknown(cfg, key, [t for t in todo if t.kind == Kind.UNKNOWN], result)
         todo = [t for t in todo if t.kind != Kind.UNKNOWN]
 
-        accounts = Accounts(bcfg.cash_account_id, bcfg.portfolio_account_id)
+        accounts = Accounts(bcfg.cash_account_id, bcfg.portfolio_account_id, savings)
         # The user's mappings win over the assets learned from earlier activities.
         mappings = assets_mod.mappings(self.state, key)
         mappings.update({isin: SecurityMapping(m.get("symbol") or isin, m.get("exchangeMic"), m.get("name"))
                          for isin, m in cfg.security_mappings.items()})
         patterns = [TransferPattern.from_config(p) for p in cfg.transfer_patterns]
+        # The savings side of a transfer between the cash and the savings account: booked with its cash side
+        # (one transfer pair) - unless that was booked on its own before the savings account was read.
+        paired = {t.id: t.pair for t in todo if t.pair and t.pair not in synced}
+        todo = [t if t.id in paired or not t.pair else replace(t, pair="") for t in todo]
         with self._wealthfolio(cfg.wealthfolio_url, secrets.get("wealthfolio_password")) as wf:
             # Before the check against existing activities: it then sees them repaired.
             repaired = self._repair_cash_assets(key, wf, accounts)
@@ -246,11 +261,18 @@ class Syncer:
                 existing = ExistingIndex(activities)
                 # Bank settlements last: the securities side booked in this run (a depot statement) is there then.
                 for tx in sorted(todo, key=lambda t: (t.kind == Kind.SECURITIES_CASH, t.datetime)):
+                    if tx.id in paired:
+                        continue  # booked with its cash side, below
                     if tx.kind == Kind.SECURITIES_CASH:
                         if not self._settle_securities_cash(key, tx, accounts, existing, result):
                             unmatched.append(tx)
                         continue
                     self._sync_tx(wf, key, tx, accounts, mappings, patterns, existing, result)
+            if paired:
+                now_synced = self.state.synced(key)
+                for tx_id, pair in paired.items():
+                    if pair in now_synced:
+                        self.state.mark(key, tx_id, "existing", now_synced[pair][1])
             self._compare(cfg, key, transactions, synced, activities, full, since)
             if tax_backfill:
                 by_id = {a["id"]: a for a in activities}
@@ -282,11 +304,13 @@ class Syncer:
             self._resolve_vanished_unknowns(key, transactions, since)
         if refetch and not result.failed:
             self.state.delete_meta(refetch_flag(key))
+        if savings_new and not result.failed:
+            self.state.set_meta(savings_flag(key), savings)
 
     @staticmethod
     def _activities(wf: WealthfolioClient, accounts: Accounts, transactions: list[Transaction],
                     since: datetime | None, full: bool) -> list[dict]:
-        """Both accounts' activities around the fetched transactions - for a full history all of them."""
+        """The broker's accounts' activities around the fetched transactions - for a full history all of them."""
         # Wide enough for a settlement a few days after the trade (SECURITIES_CASH).
         margin = timedelta(days=SETTLEMENT_DAYS + 1)
         if full:
@@ -297,7 +321,7 @@ class Syncer:
             last = (max(t.datetime for t in transactions) + margin).date()
         else:
             return []
-        return wf.search_activities([accounts.cash, accounts.portfolio], first, last)
+        return wf.search_activities(accounts.ids, first, last)
 
     def _compare(self, cfg: config_mod.Config, key: str, transactions: list[Transaction],
                  synced: dict[str, tuple[str, list[str]]], activities: list[dict], full: bool,
@@ -384,7 +408,7 @@ class Syncer:
         except (AdapterError, AuthRequired, NotImplementedError) as e:
             log.info("%s: no balance: %s", key, e)
             return None
-        self.state.set_balances(key, [(b.currency, str(b.amount)) for b in balances])
+        self.state.set_balances(key, [(b.currency, str(b.amount), b.account) for b in balances])
         return balances
 
     def _broker_positions(self, key: str, adapter: BrokerAdapter) -> list[Position] | None:
@@ -431,12 +455,15 @@ class Syncer:
         try:
             wf_cash = wf.holdings(accounts.cash)
             wf_portfolio = wf.holdings(accounts.portfolio)
+            wf_savings = wf.holdings(accounts.savings) if accounts.savings else None
         except WealthfolioError as e:
             log.info("%s: no holdings for the check: %s", key, e)
             return
         deviations = [d.as_dict() for d in compare(cash, positions, wf_cash, wf_portfolio,
                                                    {i: m.symbol for i, m in mappings.items()},
-                                                   {i: a["asset_id"] for i, a in self.state.assets(key).items()})]
+                                                   {i: a["asset_id"] for i, a in self.state.assets(key).items()},
+                                                   wf_savings=wf_savings,
+                                                   savings_label=self.adapters[key].savings_label)]
         previous = self.state.reconcile(key) or {}
         # Report only what shows up twice in a row (not a recalculation in
         # progress), and each set of deviations only once.

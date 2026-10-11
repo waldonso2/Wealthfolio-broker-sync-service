@@ -60,7 +60,7 @@ def _as_payload(a: dict) -> dict:
 
 
 def find(wf: WealthfolioClient, broker: str, accounts: Accounts) -> list[Duplicate]:
-    activities = wf.search_activities([accounts.cash, accounts.portfolio], date(1970, 1, 1), date(2100, 1, 1))
+    activities = wf.search_activities(accounts.ids, date(1970, 1, 1), date(2100, 1, 1))
     ours: dict[str, list[dict]] = {}
     others: list[dict] = []
     for a in activities:

@@ -238,7 +238,7 @@ def test_sync_books_the_timeline_and_reports_lasting_deviations(tmp_path):
     syncer, wf, notifier = setup_sync(tmp_path)
     [r] = syncer.run()
     assert (r.status, r.created, r.unknown) == ("ok", 12, 1)
-    assert syncer.state.balances("tr") == [{"currency": "EUR", "amount": "1234.56",
+    assert syncer.state.balances("tr") == [{"currency": "EUR", "account": "", "amount": "1234.56",
                                              "at": syncer.state.balances("tr")[0]["at"]}]
     devs = syncer.state.reconcile("tr")["deviations"]
     # The fabricated recording doesn't add up (sold shares never bought etc.): deviations,

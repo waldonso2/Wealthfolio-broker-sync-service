@@ -19,7 +19,7 @@ from .wealthfolio import WealthfolioClient, WealthfolioError
 
 def own_activities(wf: WealthfolioClient, broker: str, accounts: Accounts) -> list[dict]:
     tag = f"[SYNC {broker}:"
-    return [a for a in wf.search_activities([accounts.cash, accounts.portfolio], date(1970, 1, 1), date(2100, 1, 1))
+    return [a for a in wf.search_activities(accounts.ids, date(1970, 1, 1), date(2100, 1, 1))
             if tag in (a.get("comment") or "")]
 
 

@@ -87,7 +87,7 @@ Der Dienst liest dein **DKB-Girokonto** per FinTS (HBCI), dieselbe Schnittstelle
 - **Anmeldename und PIN:** dieselben wie im DKB-Banking.
 - **IBAN des Girokontos:** nur nötig, wenn du bei der DKB mehrere Konten hast.
 - **FinTS-Produkt-ID:** Banken verlangen für FinTS eine bei der Deutschen Kreditwirtschaft registrierte Produkt-ID. Sobald dieser Dienst eine hat, ist sie fest eingebaut und das Feld entfällt. Bis dahin trägst du hier eine registrierte Produkt-ID ein.
-- **Konten:** ein DKB-Verrechnungskonto und ein DKB-Depotkonto in Wealthfolio.
+- **Konten:** ein DKB-Verrechnungskonto und ein DKB-Depotkonto in Wealthfolio, wahlweise dazu ein **Tagesgeld-Konto** (siehe unten).
 
 **Freigabe in der DKB-App:** Bei der ersten Anmeldung und danach in Abständen (nach den PSD2-Regeln meist alle 90 Tage) will die DKB eine Bestätigung in der DKB-App. In der Oberfläche bestätigst du in der App und klickst dann *Ich habe in der App bestätigt*. Läuft gerade der tägliche Abruf, schickt der Dienst eine ntfy-Nachricht und wartet drei Minuten auf deine Freigabe.
 
@@ -103,9 +103,11 @@ Der Dienst liest dein **DKB-Girokonto** per FinTS (HBCI), dieselbe Schnittstelle
 
 **Wertpapiere:** Das DKB-Depot liefert FinTS nicht als Umsätze. Käufe, Verkäufe und Ausschüttungen kommen deshalb über einen Import der Wertpapierabrechnungen (PDF) in Wealthfolio, der nach demselben Zwei-Konten-Modell bucht (Übertrag vom bzw. zum Verrechnungskonto). Damit nichts doppelt zählt, bucht der Dienst die zugehörigen Girokonto-Umsätze nicht noch einmal. Er prüft nur, ob der Übertrag dazu schon da ist (gleicher Betrag, höchstens 6 Tage auseinander). Fehlt er, bekommst du eine Nachricht; sobald die Abrechnung importiert ist, erkennt der nächste Abruf sie. Den **Depotbestand** liefert die DKB per FinTS: Nach jedem Abruf vergleicht der Dienst ihn mit dem DKB-Depotkonto in Wealthfolio. Fehlt dort eine Position, legst du sie auf der Seite *Prüfung* als Anfangsbestand an.
 
+**Tagesgeld:** Wählst du in den Broker-Einstellungen ein eigenes Wealthfolio-Konto für das Tagesgeld, liest der Dienst auch dessen Umsätze und Saldo. Zinsen, Ein- und Auszahlungen landen auf diesem Konto. Umbuchungen zwischen Girokonto und Tagesgeld bucht er einmal als Übertrag zwischen den beiden Konten, nicht als Aus- und Einzahlung. Das Tagesgeld findet er selbst; klappt das nicht, trägst du seine IBAN bei den Zugangsdaten ein. Beim ersten Abruf holt er das Tagesgeld ab dem Startdatum.
+
 **Zeitraum:** Ohne Datum unter *Buchungen übernehmen ab* holt der erste Abruf die letzten 89 Tage. Für ältere Umsätze verlangt die DKB eine Freigabe in der App.
 
-**Saldo:** Die Übersicht zeigt nach jedem Abruf den Saldo laut DKB. Er sollte mit dem DKB-Verrechnungskonto in Wealthfolio übereinstimmen.
+**Saldo:** Die Übersicht zeigt nach jedem Abruf den Saldo laut DKB (und den des Tagesgelds). Er sollte mit dem DKB-Verrechnungskonto (bzw. dem Tagesgeld-Konto) in Wealthfolio übereinstimmen.
 
 **Sicherheit:** Lehnt die DKB Anmeldename oder PIN ab, versucht der Dienst es nicht noch einmal, bis du die Zugangsdaten neu speicherst. Nach drei Fehlversuchen sperrt die DKB sonst das Online-Banking.
 

@@ -376,11 +376,13 @@ class State:
             self.db.execute("DELETE FROM unknown_events WHERE broker = ? AND tx_id = ?", (broker, tx_id))
 
     # ── balances ────────────────────────────────────────────────────────────
-    def set_balances(self, broker: str, balances: list[tuple[str, str]]) -> None:
+    def set_balances(self, broker: str, balances: list[tuple]) -> None:
+        """(currency, amount) or (currency, amount, account) - a savings account's balance is kept as
+        ``<currency>:<account>``, next to the cash account's of the same currency."""
+        rows = [(broker, f"{b[0]}:{b[2]}" if len(b) > 2 and b[2] else b[0], b[1], now()) for b in balances]
         with self.db:
             self.db.execute("DELETE FROM balances WHERE broker = ?", (broker,))
-            self.db.executemany("INSERT INTO balances VALUES (?, ?, ?, ?)",
-                                [(broker, c, a, now()) for c, a in balances])
+            self.db.executemany("INSERT INTO balances VALUES (?, ?, ?, ?)", rows)
 
     def set_reconcile(self, broker: str, deviations: list[dict], notified: list[dict] | None = None) -> None:
         old = self.reconcile(broker)
@@ -403,7 +405,11 @@ class State:
     def balances(self, broker: str) -> list[dict]:
         rows = self.db.execute("SELECT currency, amount, at FROM balances WHERE broker = ? ORDER BY currency",
                                (broker,))
-        return [{"currency": c, "amount": a, "at": t} for c, a, t in rows]
+        out = []
+        for c, a, t in rows:
+            currency, _, account = c.partition(":")
+            out.append({"currency": currency, "account": account, "amount": a, "at": t})
+        return out
 
     def unknown_events(self, broker: str | None = None) -> list[dict]:
         sql = "SELECT broker, tx_id, raw_type, occurred_at, payload, first_seen FROM unknown_events"

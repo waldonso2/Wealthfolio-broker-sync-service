@@ -73,6 +73,9 @@ class BrokerAdapter(ABC):
     # A file the user exports from the broker and uploads (broker settings), for what the interface
     # doesn't deliver (the Deutsche Bank's depot transactions): what to call it, empty if there is none.
     statement_label: ClassVar[str] = ""
+    # A bank account besides the cash account that can be booked into a Wealthfolio account of its own
+    # (the bank's Tagesgeld): what to call it, empty if the adapter can't read one.
+    savings_label: ClassVar[str] = ""
 
     def __init__(self, credentials: dict[str, str], session: dict | None = None):
         self.credentials = credentials
@@ -89,6 +92,10 @@ class BrokerAdapter(ABC):
         self.incomplete = False
         # Set by an adapter that reads a bank account's history: the first day it read this run.
         self.history_start: date | None = None
+        # Set by the sync when the user assigned a Wealthfolio account to the savings account
+        # (``savings_label``): read it too, from ``savings_since`` (None: as far back as without a TAN).
+        self.with_savings = False
+        self.savings_since: datetime | None = None
 
     @staticmethod
     def parse_statement(data: bytes) -> list[dict]:

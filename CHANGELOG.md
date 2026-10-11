@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.0
+
+- **Tagesgeld as a Wealthfolio account of its own (FinTS banks, e.g. DKB).** In the broker settings, an optional third Wealthfolio account can be assigned to the bank's savings account. The service then also reads its bookings and balance:
+  - Interest, deposits and withdrawals of the Tagesgeld are booked on that account; its balance is compared with it after each run.
+  - A transfer between the giro account and the Tagesgeld is booked once, as a transfer pair (TRANSFER_OUT/TRANSFER_IN with one `sourceGroupId`), not as a withdrawal plus a deposit. Transfers the giro side booked before the Tagesgeld was assigned get their Tagesgeld side on their own.
+  - The first run with the Tagesgeld reads it from the start date (without one: the last 89 days); so does a run after another account was chosen.
+  - The Tagesgeld is found by its name or account type; where that fails, its IBAN can be entered with the credentials.
+- The giro account is no longer taken from an account named like a savings account, even when the bank reports both with the same account type (DKB).
+
 ## 0.9.9
 
 - **FinTS depot holdings: own MT535 parser and a readable log.** python-fints' parser fails on a holding without a total value and only knows share counts in one notation, and the service logged a failed holdings request at debug level only. So a depot could come back empty without a word (DKB in 0.9.8). Now:
