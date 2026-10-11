@@ -28,7 +28,7 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
    ```
 
    Es erscheint der bekannte Assistent der Community-Skripte. *Default Settings* wählen – die Standardwerte passen: 1 CPU, 512 MB RAM, 2 GB Disk, Debian 13, unprivilegiert. Der Kopf zeigt dabei „Scripts fork: waldonso2/wealthfolio-broker-sync-service“; das ist richtig, der Dienst kommt aus diesem Repository und nicht aus der offiziellen Sammlung.
-3. **Öffnen.** Am Ende zeigt die Installation die Adresse der Weboberfläche an, z. B. `https://192.168.1.51:8443`. Diese im Browser öffnen. Das Zertifikat hat der Container selbst ausgestellt: Die Warnung des Browsers einmal bestätigen. Wer prüfen will, ob es das richtige ist: Die Seite *Sicherheit* zeigt seinen SHA-256-Fingerabdruck, den der Browser in den Zertifikatsdetails ebenfalls anzeigt. Alte Adressen mit `http://…:8090` leiten dorthin weiter.
+3. **Öffnen.** Am Ende zeigt die Installation die Adresse der Weboberfläche an, z. B. `https://192.168.1.51:8443`. Diese im Browser öffnen. Das Zertifikat stellt der Container mit einer eigenen Zertifizierungsstelle (CA) aus. Beim ersten Mal die Warnung des Browsers bestätigen, dann auf der Seite *Sicherheit* das CA-Zertifikat herunterladen und einmal importieren (Anleitung für Windows, macOS, Firefox, iPhone und Android steht dort). Danach zeigt der Browser die Verbindung als sicher, auch nach jeder Erneuerung. Alte Adressen mit `http://…:8090` leiten dorthin weiter.
 
 **Aktualisieren:** In Proxmox die Konsole des Containers öffnen und `update` eingeben. Einstellungen und Zugangsdaten bleiben erhalten; vorher wird eine Sicherung der verschlüsselten Daten unter `/opt/wealthfolio-broker-sync/backup-*.tar.gz` angelegt (die letzten drei bleiben).
 
@@ -254,7 +254,7 @@ Was der Dienst speichert, ist verschlüsselt; die Seite **Sicherheit** zeigt jed
 | ntfy-Einstellungen | AES-256-GCM (`data/notify.enc`) – nur mit dem Schlüssel des Dienstes, damit ein gesperrter Dienst Bescheid sagen kann |
 | Schlüssel des Dienstes | **nicht** in `data/`: mit `systemd-creds` verschlüsselt in `/etc/wealthfolio-broker-sync/key.cred` (nur root), der Dienst bekommt ihn beim Start |
 | Passwort der Oberfläche | argon2id; nach fünf Fehlversuchen 15 Minuten Pause |
-| Oberfläche | HTTPS (Port 8443, eigenes Zertifikat in `/etc/wealthfolio-broker-sync/tls/`; ein eigenes `cert.pem`/`key.pem` dort bleibt erhalten), sichere Cookies, strenge Sicherheits-Header |
+| Oberfläche | HTTPS (Port 8443) mit einem Zertifikat der Container-eigenen CA: einmal importieren (Seite *Sicherheit*), dann vertraut der Browser. Die CA darf nur Namen im lokalen Netz bestätigen (*Name Constraints*), ihr Schlüssel bleibt root-only in `/etc/wealthfolio-broker-sync/tls/`. Ein Zertifikat eines anderen Ausstellers dort (`cert.pem`/`key.pem`) bleibt erhalten. Dazu sichere Cookies und strenge Sicherheits-Header |
 | Log und Nachrichten | Zugangsdaten, Tokens, IBANs und Kontonummern werden geschwärzt; ntfy-Nachrichten enthalten ohne *Details* keine Beträge |
 | Dienst | eigener Benutzer, systemd-Härtung (kein Schreibzugriff außer `data/`, keine Rechteausweitung), Dateien nur für den Dienst lesbar |
 

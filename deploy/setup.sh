@@ -87,7 +87,7 @@ for unit in wealthfolio-broker-sync wealthfolio-broker-sync-run; do
     >"/etc/systemd/system/$unit.service.d/10-key.conf"
 done
 
-# TLS for the web UI: self-signed for this container's name and addresses,
+# TLS for the web UI: a certificate from the container's own CA (name-constrained) for its name and addresses,
 # renewed when it runs out or an address changes; a certificate of your own in
 # $ETC/tls (cert.pem, key.pem) is kept.
 CERT_ARGS=(--dir "$ETC/tls" --host "$(hostname)")

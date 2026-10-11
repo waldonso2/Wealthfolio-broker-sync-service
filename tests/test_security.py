@@ -257,14 +257,103 @@ def test_notifications_leave_out_details_unless_asked(monkeypatch):
 
 
 # ── TLS ─────────────────────────────────────────────────────────────────────
-def test_the_certificate_is_created_kept_and_renewed(tmp_path):
+def _verify(ca_pem: bytes, chain_pem: bytes, name):
+    from cryptography import x509
+    from cryptography.x509.verification import PolicyBuilder, Store
+
+    ca = x509.load_pem_x509_certificate(ca_pem)
+    leaf, *rest = x509.load_pem_x509_certificates(chain_pem)
+    return PolicyBuilder().store(Store([ca])).build_server_verifier(name).verify(leaf, rest)
+
+
+def test_the_certificate_comes_from_the_containers_ca_and_browsers_can_verify_it(tmp_path):
+    import ipaddress
+
+    from cryptography import x509
+
     from brokersync.tls import ensure_certificate
 
     d = tmp_path / "tls"
-    assert "New self-signed" in ensure_certificate(d, ["sync"], ["192.168.1.51"])
-    assert stat.S_IMODE((d / "key.pem").stat().st_mode) == 0o600
-    assert "valid until" in ensure_certificate(d, ["sync"], ["192.168.1.51"])
-    assert "New self-signed" in ensure_certificate(d, ["sync"], ["192.168.1.52"])  # new address
+    out = ensure_certificate(d, ["wealthfolio-broker-sync"], ["192.168.178.110", "2003:ce::1", "fd1e::1", "nonsense"])
+    assert "New certificate" in out and "CA SHA-256" in out
+    for f in ("ca-key.pem", "key.pem", "cert.pem", "ca.pem"):
+        assert stat.S_IMODE((d / f).stat().st_mode) == 0o600
+    ca_pem, chain = (d / "ca.pem").read_bytes(), (d / "cert.pem").read_bytes()
+    _verify(ca_pem, chain, x509.IPAddress(ipaddress.ip_address("192.168.178.110")))
+    _verify(ca_pem, chain, x509.DNSName("wealthfolio-broker-sync"))
+    leaf = x509.load_pem_x509_certificate(chain)
+    ips = {str(i) for i in leaf.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+           .get_values_for_type(x509.IPAddress)}
+    assert ips == {"192.168.178.110", "fd1e::1", "127.0.0.1"}  # no public address in a local certificate
+    # Kept while it fits; a new address gets a new certificate from the same CA.
+    assert "valid until" in ensure_certificate(d, ["wealthfolio-broker-sync"], ["192.168.178.110"])
+    assert "New certificate" in ensure_certificate(d, ["wealthfolio-broker-sync"], ["192.168.178.111"])
+    assert (d / "ca.pem").read_bytes() == ca_pem
+
+
+def test_the_ca_cannot_vouch_for_a_public_site(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+
+    from brokersync.tls import ensure_certificate
+
+    d = tmp_path / "tls"
+    ensure_certificate(d, ["sync"], ["192.168.1.5"])
+    ca = x509.load_pem_x509_certificate((d / "ca.pem").read_bytes())
+    ca_key = serialization.load_pem_private_key((d / "ca-key.pem").read_bytes(), None)
+    key = ec.generate_private_key(ec.SECP256R1())
+    now = datetime.now(UTC)
+    forged = (x509.CertificateBuilder().subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "bank")]))
+              .issuer_name(ca.subject).public_key(key.public_key()).serial_number(1)
+              .not_valid_before(now - timedelta(minutes=1)).not_valid_after(now + timedelta(days=30))
+              .add_extension(x509.SubjectAlternativeName([x509.DNSName("www.deutsche-bank.de")]), critical=False)
+              .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+              .sign(ca_key, hashes.SHA256()))
+    with pytest.raises(Exception, match="(?i)constraint|name"):
+        _verify((d / "ca.pem").read_bytes(), forged.public_bytes(serialization.Encoding.PEM),
+                x509.DNSName("www.deutsche-bank.de"))
+
+
+def test_an_old_self_signed_certificate_is_replaced_and_a_foreign_one_kept(tmp_path):
+    from cryptography import x509
+
+    from brokersync.tls import ensure_certificate
+
+    d = tmp_path / "tls"
+    ensure_certificate(d, ["sync"], ["192.168.1.5"])
+    # 0.9.0 wrote a self-signed certificate: make one (the CA itself is self-signed) and let it be replaced.
+    (d / "cert.pem").write_bytes((d / "ca.pem").read_bytes())
+    (d / "key.pem").write_bytes((d / "ca-key.pem").read_bytes())
+    assert "New certificate" in ensure_certificate(d, ["sync"], ["192.168.1.5"])
+    # A certificate of another issuer stays.
+    other = tmp_path / "other"
+    ensure_certificate(other, ["sync"], ["192.168.1.5"])
+    (d / "cert.pem").write_bytes((other / "cert.pem").read_bytes())
+    assert "Keeping" in ensure_certificate(d, ["sync"], ["192.168.1.5"])
+    assert (d / "cert.pem").read_bytes() == (other / "cert.pem").read_bytes()
+    assert x509.load_pem_x509_certificate((d / "ca.pem").read_bytes())  # our CA stays as it was
+
+
+def test_the_ca_certificate_can_be_downloaded_and_is_explained(tmp_path, monkeypatch):
+    from brokersync.tls import ensure_certificate
+
+    ensure_certificate(tmp_path / "tls", ["sync"], ["192.168.1.5"])
+    creds = tmp_path / "creds"
+    creds.mkdir()
+    (creds / "tls.ca").write_bytes((tmp_path / "tls" / "ca.pem").read_bytes())
+    (creds / "tls.crt").write_bytes((tmp_path / "tls" / "cert.pem").read_bytes())
+    monkeypatch.setenv("CREDENTIALS_DIRECTORY", str(creds))
+    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(tmp_path / "tls" / "ca-key.pem"))  # any key will do here
+    client = logged_in(tmp_path / "data", secure=True)
+    r = client_for(tmp_path / "data", secure=True).get("/ca.crt")  # no login needed
+    assert r.status_code == 200 and r.content == (creds / "tls.ca").read_bytes()
+    assert r.headers["content-type"] == "application/x-x509-ca-cert"
+    page = client.get("/security").text
+    assert "CA-Zertifikat herunterladen" in page and security.ca_fingerprint() in page
 
 
 def test_plain_http_redirects_to_https():
