@@ -223,14 +223,21 @@ def test_deutsche_bank_reads_the_giro_account_and_the_depot_from_the_user_parame
     assert ("holdings", "0000999888", "10070000") in a._client.calls
 
 
-def test_dkb_reads_the_depot_holdings_from_the_user_parameters(monkeypatch):
+def test_dkb_reads_the_depot_holdings_from_the_user_parameters(monkeypatch, caplog):
+    import logging
+
     monkeypatch.setattr(FintsAdapter, "client_factory",
                         staticmethod(lambda *args: GiroAndDepot(RECORDING, sca=False)))
     a = DkbAdapter(PROFILES[DkbAdapter])
     a.login()
+    caplog.set_level(logging.INFO, logger="brokersync.adapters.fints")
     [p] = a.get_positions()
     assert (p.isin, p.shares) == ("DE000TEST001", D("12.5"))
     assert ("holdings", "0000999888", "12030000") in a._client.calls
+    # Giro and savings account aren't asked: the user parameters offer no holdings for them.
+    assert not [c for c in a._client.calls if c[0] == "holdings" and c[1] in ("0000303031", "0000202051")]
+    assert "Depotbestand von „maxblue Depot“ (Art 30) mit 1 Positionen" in caplog.text
+    assert "0000999888" not in caplog.text
 
 
 def test_deutsche_bank_and_dkb_compare_their_positions():

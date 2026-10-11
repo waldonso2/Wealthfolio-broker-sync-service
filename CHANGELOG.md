@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.9
+
+- **FinTS depot holdings: own MT535 parser and a readable log.** python-fints' parser fails on a holding without a total value and only knows share counts in one notation, and the service logged a failed holdings request at debug level only. So a depot could come back empty without a word (DKB in 0.9.8). Now:
+  - Holdings are read by the service's own, more tolerant parser (shares or nominal, value from price × shares when the bank sends no total).
+  - Only accounts the bank offers holdings for are asked (not the giro or savings account).
+  - The log says per depot how many positions came, why none could be read, and for an empty answer its layout (field names only, no values or numbers).
+
 ## 0.9.8
 
 - **DKB: depot holdings.** The DKB delivers the depot's holdings over FinTS (the depot has no IBAN and is only listed in the user parameters). After each run they are compared with the DKB depot account in Wealthfolio, and a position missing there can be entered on *Prüfung* as an opening position. Depot transactions still come from a PDF import of the statements.
