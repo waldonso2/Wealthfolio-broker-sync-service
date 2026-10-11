@@ -123,9 +123,17 @@ Der Dienst liest dein **Deutsche-Bank-Girokonto** und den **Bestand deines maxbl
 
 **Freigabe mit BestSign:** Bei der ersten Anmeldung und danach in Abständen will die Deutsche Bank eine Bestätigung in der Deutsche Bank App (BestSign). In der Oberfläche bestätigst du und klickst *Ich habe in der App bestätigt*; beim täglichen Abruf schickt der Dienst eine ntfy-Nachricht und wartet drei Minuten. Mit photoTAN geht die Anmeldung nur in der Weboberfläche.
 
-**Was gebucht wird:** Die Girokonto-Umsätze wie bei der DKB (Tabelle oben): Einzahlungen, Auszahlungen, Überträge, Zinsen und Entgelte. Girokonto-Buchungen zu Wertpapiergeschäften (Kauf, Verkauf, Ertragsgutschrift) bucht der Dienst nicht selbst; er prüft, ob ein Import der Wertpapierabrechnungen sie schon gebucht hat.
+**Was gebucht wird:** Die Girokonto-Umsätze wie bei der DKB (Tabelle oben): Einzahlungen, Auszahlungen, Überträge, Zinsen und Entgelte. Liefert die Bank sie nicht im MT940-Format, holt der Dienst sie im camt-Format (das Log sagt, wie viele auf welchem Weg kamen). Girokonto-Buchungen zu Wertpapiergeschäften (Kauf, Verkauf, Ertragsgutschrift) bucht er nicht selbst, sondern prüft sie gegen die Depotseite.
 
-**Depot:** Den Bestand des maxblue-Depots vergleicht der Dienst nach jedem Abruf mit dem Depotkonto in Wealthfolio. Wertpapiere ohne Kauf in Wealthfolio legst du auf der Seite *Prüfung* als Anfangsbestand an. Depotumsätze (Käufe und Verkäufe mit Stückzahl) liefert FinTS bei den meisten Banken nicht; was die Deutsche Bank anbietet, steht nach der Anmeldung im Log (`Deutsche Bank (FinTS): Umsätze …, Depotbestand …, Depotumsätze …` und eine Zeile je Konto, ohne Konto- oder Depotnummer).
+**Depot:** Den Bestand des Depots holt der Dienst per FinTS und vergleicht ihn nach jedem Abruf mit dem Depotkonto in Wealthfolio. Depotumsätze liefert die Deutsche Bank per FinTS nicht. Die kommen aus dem **CSV-Export**: im Online-Banking unter Depot → Umsätze als CSV exportieren und unter *Broker → Deutsche Bank* hochladen. Das geht beliebig oft, auch mit überlappenden Zeiträumen, denn doppelt gebucht wird nichts. Konto- und Depotnummern aus der Datei speichert der Dienst nicht.
+
+| Im Export | In Wealthfolio |
+|---|---|
+| Dividende/Ausschüttung | Dividende mit Stückzahl, Nettobetrag und Steuer (Kapitalertragsteuer, Quellensteuer); das Geld per Übertrag aufs Verrechnungskonto, wo die Gutschrift des Girokontos dagegen geprüft wird |
+| Kauf / Verkauf | Kauf/Verkauf mit Stückzahl, Spesen und Steuer; das Geld per Übertrag vom bzw. zum Verrechnungskonto |
+| Eingang mit Betrag (z. B. Mitarbeiteraktien) | Kauf; das Geld kam nicht übers Girokonto, daher davor eine Einzahlung in gleicher Höhe |
+| alles vor dem ersten gelesenen Girokonto-Tag | wie oben, aber ohne Geld auf dem Verrechnungskonto (Einzahlung vor dem Kauf bzw. Auszahlung nach Dividende/Verkauf) – die Girobuchung dazu wurde nie gelesen |
+| Kapitaltransaktion, Ausgang, Eingang ohne Betrag | **nicht gebucht**, unter *Unbekannte Buchungen* – Kapitalmaßnahmen (z. B. eine Abspaltung) und Depotüberträge legst du auf der Seite *Prüfung* als Anfangsbestand an |
 
 **Zeitraum und Sicherheit** wie bei der DKB: ohne Startdatum die letzten 89 Tage; nach einer abgelehnten PIN kein weiterer Versuch, bis du die Zugangsdaten neu speicherst.
 

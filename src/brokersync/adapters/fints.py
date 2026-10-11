@@ -329,9 +329,28 @@ class FintsAdapter(BrokerAdapter):
     def get_transactions(self, since: datetime | None) -> list[Transaction]:
         today = datetime.now(BERLIN).date()
         start = since.astimezone(BERLIN).date() if since else today - timedelta(days=NO_TAN_DAYS)
-        records = self._call(self._client.get_transactions, self._account(), start, today) or []
-        return to_transactions([r.data for r in records], self.securities_pattern, self.interest_pattern,
-                               self.fee_pattern)
+        self.history_start = start
+        account = self._account()
+        records = [r.data for r in self._call(self._client.get_transactions, account, start, today) or []]
+        source = "MT940"
+        if not records and _ops(self._information().get("bank", {})).get("GET_TRANSACTIONS_XML"):
+            # Some banks (Deutsche Bank) answer the MT940 request with nothing and deliver camt only.
+            records = self._camt(account, start, today)
+            source = "camt"
+        log.info("%s (FinTS): %d Umsätze per %s seit %s", self.label, len(records), source, start.isoformat())
+        return to_transactions(records, self.securities_pattern, self.interest_pattern, self.fee_pattern)
+
+    def _camt(self, account, start: date, end: date) -> list[dict]:
+        from fints.camt_parser import camt053_to_dict
+
+        answer = self._call(self._client.get_transactions_xml, account, start, end)
+        booked = answer[0] if answer else []
+        out = []
+        for document in booked:
+            for d in camt053_to_dict(document):
+                d.setdefault("posting_text", d.get("AdditionalEntryInformation") or "")
+                out.append(d)
+        return out
 
 
 def _cap(text: str) -> str:

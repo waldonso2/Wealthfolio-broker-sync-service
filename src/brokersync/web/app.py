@@ -13,6 +13,7 @@ import os
 import secrets
 import subprocess
 import threading
+from collections import Counter
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -22,6 +23,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.datastructures import UploadFile as StarletteUpload
 from starlette.middleware.sessions import SessionMiddleware
 
 from .. import __version__, audit, crypto, redact, retired
@@ -31,6 +33,7 @@ from .. import reset as reset_mod
 from .. import security as security_mod
 from ..adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from ..mapping import Accounts
+from ..model import Kind
 from ..notify import Notifier
 from ..state import State
 from ..sync import UNMATCHED_SECURITIES, AlreadyRunning, Syncer, is_running, opening_id, refetch_flag, run_lock
@@ -49,6 +52,9 @@ STATUS_LABEL = {"ok": "OK", "needs_auth": "Anmeldung nötig", "error": "Fehler",
 
 
 MIN_PASSWORD = 12
+MAX_STATEMENT = 5 * 1024 * 1024
+STATEMENT_KINDS = [(Kind.DIVIDEND, "Dividenden"), (Kind.BUY, "Käufe/Einbuchungen"), (Kind.SELL, "Verkäufe"),
+                   (Kind.UNKNOWN, "nicht automatisch buchbar")]
 
 
 def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[BrokerAdapter]] | None = None,
@@ -306,7 +312,8 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         stored = vault.broker(key).get("credentials", {})
         return render(request, "broker.html", key=key, adapter=adapters[key], b=c.broker(key), accounts=accounts,
                       wf_error=error, stored={k: bool(v) for k, v in stored.items()},
-                      plain={f.name: stored.get(f.name, "") for f in adapters[key].credential_fields if not f.secret})
+                      plain={f.name: stored.get(f.name, "") for f in adapters[key].credential_fields if not f.secret},
+                      statement_rows=len(state.statement_rows(key)) if adapters[key].statement_label else 0)
 
     @app.post("/brokers/{key}")
     async def broker_save(request: Request, key: str):
@@ -563,6 +570,28 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
                           str(shares), str(price), str(fee), p.get("currency") or "EUR")
         return redirect(request, "/check", f"Anfangsbestand {isin} gespeichert - der nächste Abruf bucht ihn als Kauf "
                                            f"am {bought:%d.%m.%Y} samt Einzahlung des Kaufbetrags.")
+
+    @app.post("/brokers/{key}/statement")
+    async def broker_statement(request: Request, key: str):
+        """A statement the user exported from the broker (Deutsche Bank depot CSV): keep its rows for the runs."""
+        if key not in adapters or not adapters[key].statement_label:
+            return redirect(request, "/brokers", "Für diesen Broker gibt es keinen Datei-Import.", "error")
+        file = (await request.form()).get("file")
+        if not isinstance(file, StarletteUpload):
+            return redirect(request, f"/brokers/{key}", "Bitte eine Datei auswählen.", "error")
+        data = await file.read(MAX_STATEMENT + 1)
+        if len(data) > MAX_STATEMENT:
+            return redirect(request, f"/brokers/{key}", "Die Datei ist zu groß (höchstens 5 MB).", "error")
+        try:
+            rows = adapters[key].parse_statement(data)
+        except ValueError as e:
+            return redirect(request, f"/brokers/{key}", str(e), "error")
+        new = state.add_statement_rows(key, rows)
+        kinds = Counter(t.kind for t in adapters[key].statement_transactions(rows, None))
+        summary = ", ".join(f"{n} {label}" for kind, label in STATEMENT_KINDS if (n := kinds.get(kind)))
+        log.info("%s: statement uploaded, %d rows (%d new)", key, len(rows), new)
+        return redirect(request, f"/brokers/{key}", f"{len(rows)} Zeilen gelesen ({summary}), {new} davon neu. "
+                        "Der nächste Abruf bucht sie; nicht Buchbares steht dann unter „Unbekannte Buchungen“.")
 
     @app.post("/brokers/{key}/reset")
     def broker_reset(request: Request, key: str, confirm: str = Form("")):

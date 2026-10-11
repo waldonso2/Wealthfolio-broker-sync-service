@@ -3,6 +3,14 @@
 ## 0.9.4
 
 - **Fix (FinTS, Deutsche Bank): without an IBAN the wrong account was read.** The service took the first account with an IBAN, at the Deutsche Bank the savings account, so the giro account's bookings never came. It now picks the giro account by the account type the bank reports, and the log says which one (`Umsätze und Saldo von „…“`). An IBAN entered in the settings still decides.
+- **Deutsche Bank: giro bookings as camt.** The bank answers the MT940 request with nothing. When a bank does that and offers camt, the service reads camt instead; the log says how many bookings came which way.
+- **Deutsche Bank: depot transactions from the CSV export.** FinTS doesn't deliver them, so the export of the depot's transactions can be uploaded in the broker settings, again and again, overlapping without duplicates; depot and account numbers aren't stored. What gets booked:
+  - dividends with their taxes;
+  - buys and sales, paid via the cash account; the giro bookings that settle them are matched in the same run;
+  - deliveries against payment (*Eingang*, e.g. employee shares) as a buy whose money came from outside;
+  - rows older than the giro history the service read, without money on the cash account;
+  - corporate actions and depot transfers are listed under *Unbekannte Buchungen*.
+- A dividend whose money went outside the broker's two accounts gets a withdrawal after its transfer (as a sale already did).
 - Page *Sicherheit*: the import instructions warn against Windows' automatic certificate store, and say to restart the browser after the import.
 
 ## 0.9.3
