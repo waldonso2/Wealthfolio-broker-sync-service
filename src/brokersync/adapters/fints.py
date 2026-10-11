@@ -37,6 +37,7 @@ import logging
 import re
 import time
 from collections import Counter
+from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import ClassVar
@@ -197,6 +198,9 @@ class FintsAdapter(BrokerAdapter):
                                "entsperren.") from e
         if isinstance(e, AuthRequired | AdapterError):
             raise e
+        bank_says = _bank_messages(str(e))
+        if bank_says:
+            raise AdapterError(f"{self.label} (FinTS): {_cap(self.bank)} meldet: {bank_says}") from e
         raise AdapterError(f"{self.label} (FinTS): {e}") from e
 
     def _call(self, fn, *args):
@@ -343,7 +347,8 @@ class FintsAdapter(BrokerAdapter):
     def _camt(self, account, start: date, end: date) -> list[dict]:
         from fints.camt_parser import camt053_to_dict
 
-        answer = self._call(self._client.get_transactions_xml, account, start, end)
+        with _national_account_details():
+            answer = self._call(self._client.get_transactions_xml, account, start, end)
         booked = answer[0] if answer else []
         out = []
         for document in booked:
@@ -360,6 +365,36 @@ def _cap(text: str) -> str:
 def _ops(entry: dict) -> dict[str, bool]:
     """``supported_operations`` of python-fints' information, by operation name."""
     return {getattr(k, "name", str(k)): v for k, v in (entry.get("supported_operations") or {}).items()}
+
+
+def _bank_messages(text: str) -> str:
+    """The bank's error codes and texts from python-fints' error response (it puts the whole message in)."""
+    found = re.findall(r"Response\(code='(9\d{3})', reference_element=[^,]*, text='([^']*)'", text)
+    unique = list(dict.fromkeys(f"{code} {msg}" for code, msg in found))
+    return "; ".join(unique)
+
+
+@contextmanager
+def _national_account_details():
+    """Send account number, sub-account and bank code with the IBAN in camt requests (HKCAZ).
+
+    python-fints identifies the account there by IBAN and BIC only; the Deutsche Bank answers
+    9210 "Angaben zur nationalen Kontoverbindung für Identifikation erforderlich". The FinTS
+    account identification (KTI) allows both, so the national details are added."""
+    from fints.formals import KTI1, BankIdentifier
+
+    original = KTI1.__dict__["from_sepa_account"]
+
+    def with_national(cls, acc):
+        bank = BankIdentifier(country_identifier="280", bank_code=acc.blz) if getattr(acc, "blz", None) else None
+        return cls(iban=acc.iban, bic=acc.bic, account_number=getattr(acc, "accountnumber", None) or None,
+                   subaccount_number=getattr(acc, "subaccount", None) or None, bank_identifier=bank)
+
+    KTI1.from_sepa_account = classmethod(with_national)
+    try:
+        yield
+    finally:
+        KTI1.from_sepa_account = original
 
 
 def _yes(value) -> str:
