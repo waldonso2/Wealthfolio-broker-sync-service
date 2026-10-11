@@ -302,7 +302,8 @@ class Syncer:
                 # their trades.
                 deviating = {d["key"] for d in (self.state.reconcile(key) or {}).get("deviations", [])
                              if d.get("kind") == "position"}
-                check = {p.isin for p in positions or [] if p.isin
+                # Not those the user assigned on the page Wertpapiere: the check finds them by symbol.
+                check = {p.isin for p in positions or [] if p.isin and p.isin not in cfg.security_mappings
                          and (p.isin not in self.state.assets(key) or p.isin in deviating)}
                 if check:
                     learned = assets_mod.learn_from_imports(self.state, key, wf, accounts, check,

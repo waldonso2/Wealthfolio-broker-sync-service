@@ -89,6 +89,11 @@ AMOUNT_TOLERANCE = Decimal("0.01")
 PDF_REF = re.compile(r"\[PDF [^\]]+\]")
 
 
+def clean_isin(isin: str) -> str:
+    """The ISIN of a key holdings read before 0.9.9 stored as "<ISIN>|/DE/<WKN>"."""
+    return isin.split("|")[0].strip()
+
+
 def valid_isin(code: str) -> bool:
     """ISO 6166 check digit (Luhn over the letters as numbers) - so a random 12-character word isn't one."""
     digits = "".join(str(int(c, 36)) for c in code[:-1])
@@ -171,7 +176,8 @@ def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, account
         named = set().union(*(same or [names for _, names in near]))
         if named:
             trades.append((_entry(a), named))
-    learned, taken = corrected, {e["asset_id"] for i, e in known.items() if i not in wanted}
+    # An asset stored for the same ISIN under another spelling (python-fints' "<ISIN>|/DE/<WKN>") isn't taken.
+    learned, taken = corrected, {e["asset_id"] for i, e in known.items() if clean_isin(i) not in wanted}
     while True:
         found: dict[str, dict[str, dict]] = {}  # ISIN -> asset id -> entry
         for entry, named in trades:
@@ -192,7 +198,7 @@ def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, account
 
 def _explain(broker: str, wanted: set[str], trades: list, known: dict, exact: dict) -> None:
     """Why an ISIN's asset couldn't be learned - asset ids and ISINs only, to find the cause from the log."""
-    owner = {e["asset_id"]: i for i, e in known.items()}
+    owner = {e["asset_id"]: i for i, e in known.items() if clean_isin(i) not in wanted}
     for isin in sorted(wanted):
         if isin in exact:
             reason = f"die Abrechnungen nennen mehrere Wertpapiere ({', '.join(sorted(exact[isin]))})"
