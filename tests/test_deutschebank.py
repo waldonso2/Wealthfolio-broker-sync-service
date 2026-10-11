@@ -242,3 +242,25 @@ def test_a_bank_error_reads_as_the_banks_message(monkeypatch):
         adapter.get_transactions(None)
     assert str(e.value) == ("Deutsche Bank (FinTS): Die Deutsche Bank meldet: 9050 Teilweise fehlerhaft.; "
                             "9210 Eindeutige Identifikation des Kontos nicht möglich.")
+
+
+def test_camt_asks_only_as_far_back_as_the_bank_keeps_bookings(monkeypatch):
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    asked = []
+
+    class Keeps30Days(CamtOnly):
+        bpd = SimpleNamespace(find_segment_first=lambda name: SimpleNamespace(
+            parameter=SimpleNamespace(storage_duration=30)) if name == "HICAZS" else None)
+
+        def get_transactions_xml(self, account, start_date=None, end_date=None):
+            asked.append((start_date, end_date))
+            return super().get_transactions_xml(account, start_date, end_date)
+
+    monkeypatch.setattr(DeutscheBankAdapter, "client_factory", staticmethod(lambda *a: Keeps30Days(GIRO, sca=False)))
+    adapter = DeutscheBankAdapter(CREDS)
+    adapter.login()
+    adapter.get_transactions(datetime(2019, 1, 1, tzinfo=UTC))  # a start date far back
+    [(start, end)] = asked
+    assert (end - start).days == 29 and adapter.history_start == start
