@@ -38,6 +38,28 @@ rm -rf "$BASE/venv.old"
 ETC=/etc/wealthfolio-broker-sync
 install -d -m 700 "$ETC" "$ETC/tls"
 
+new_key() {
+  "$BASE/venv/bin/python" -c 'import base64, secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())'
+}
+remove() {
+  shred -u "$1" 2>/dev/null || rm -f "$1"
+}
+# store_key <file> <suffix>: $ETC/key.cred<suffix> (systemd-creds, checked by decrypting) or, where
+# systemd-creds can't encrypt, $ETC/secret.key<suffix> (root-only). Prints the file it wrote.
+store_key() {
+  if [[ ! -f "$ETC/secret.key" ]] &&
+    timeout 60 systemd-creds encrypt --name=brokersync-key "$1" "$ETC/key.cred$2" 2>/dev/null &&
+    timeout 60 systemd-creds decrypt --name=brokersync-key "$ETC/key.cred$2" - 2>/dev/null | cmp -s - "$1"; then
+    chmod 600 "$ETC/key.cred$2"
+    echo "$ETC/key.cred$2"
+  else
+    rm -f "$ETC/key.cred$2"
+    install -m 600 "$1" "$ETC/secret.key$2"
+    [[ -n "$2" ]] || echo "Note: systemd-creds can't encrypt here - the key is kept root-only in $ETC/secret.key." >&2
+    echo "$ETC/secret.key$2"
+  fi
+}
+
 # The service's key: never in data/. Encrypted with systemd-creds (bound to this
 # container's host key), or root-only where systemd-creds can't encrypt; systemd
 # hands it to the services at start. An installation before 0.9.0 keeps its key.
@@ -46,17 +68,11 @@ if [[ ! -f "$ETC/key.cred" && ! -f "$ETC/secret.key" ]]; then
   if [[ -f "$BASE/data/secret.key" ]]; then
     cat "$BASE/data/secret.key" >"$KEY_TMP"
   else
-    "$BASE/venv/bin/python" -c 'import base64, secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())' >"$KEY_TMP"
+    new_key >"$KEY_TMP"
+    touch "$ETC/key-rotated" # a new installation: the key has never been anywhere else
   fi
-  if systemd-creds encrypt --name=brokersync-key "$KEY_TMP" "$ETC/key.cred" 2>/dev/null &&
-    systemd-creds decrypt --name=brokersync-key "$ETC/key.cred" - 2>/dev/null | cmp -s - "$KEY_TMP"; then
-    chmod 600 "$ETC/key.cred"
-  else
-    rm -f "$ETC/key.cred"
-    install -m 600 "$KEY_TMP" "$ETC/secret.key"
-    echo "Note: systemd-creds can't encrypt here - the key is kept root-only in $ETC/secret.key." >&2
-  fi
-  rm -f "$KEY_TMP"
+  store_key "$KEY_TMP" "" || true
+  remove "$KEY_TMP"
 fi
 if [[ -f "$ETC/key.cred" ]]; then
   KEY_LINE="LoadCredentialEncrypted=brokersync-key:$ETC/key.cred"
@@ -88,15 +104,32 @@ systemctl daemon-reload
 
 # Data of older versions: credentials, settings and database encrypted with the
 # key that now lives outside data/. Only then the old key file goes.
-if /usr/local/bin/brokersync-cli migrate; then
+if timeout 900 /usr/local/bin/brokersync-cli migrate; then
   if [[ -f "$BASE/data/secret.key" ]]; then
-    shred -u "$BASE/data/secret.key" 2>/dev/null || rm -f "$BASE/data/secret.key"
+    remove "$BASE/data/secret.key"
+  fi
+  # Once: a fresh key. Up to 0.9.0 the key of data/secret.key was moved to $ETC, not replaced, so
+  # backups of older versions (and old Proxmox backups) still held a key that opens the current data.
+  if [[ ! -f "$ETC/key-rotated" ]]; then
+    NEW_KEY="$(mktemp -p "$ETC")"
+    new_key >"$NEW_KEY"
+    STAGED="$(store_key "$NEW_KEY" .new)"
+    if timeout 900 /usr/local/bin/brokersync-cli rotate-key <"$NEW_KEY"; then
+      mv -f "$STAGED" "${STAGED%.new}"
+      touch "$ETC/key-rotated"
+      echo "New key: everything re-encrypted; copies of the old key no longer open the data." >&2
+    else
+      remove "$STAGED"
+      echo "Warning: the key was not replaced (locked by the master passphrase? unlock and run update again)." >&2
+    fi
+    remove "$NEW_KEY"
   fi
   # Backups of older versions hold the key next to the data: replace them by one of the encrypted data.
+  # (grep reads the whole listing: with -q it would stop early, tar would get SIGPIPE and pipefail say no.)
   replaced=0
   for f in "$BASE"/backup-*.tar.gz; do
     [[ -e "$f" ]] || continue
-    if tar -tzf "$f" 2>/dev/null | grep -qx 'data/secret.key'; then
+    if tar -tzf "$f" 2>/dev/null | grep -x 'data/secret.key' >/dev/null; then
       rm -f "$f"
       replaced=1
     fi
@@ -112,3 +145,5 @@ else
 fi
 chown -R "$USER_NAME:$USER_NAME" "$BASE/data"
 chmod -R u=rwX,go= "$BASE/data"
+# Run by hand while the service is up (the update stops it first): restart it with the new files and key.
+systemctl try-restart wealthfolio-broker-sync || true

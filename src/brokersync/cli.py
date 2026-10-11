@@ -31,6 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     cert.add_argument("--host", action="append", default=[], help="host name for the certificate (repeatable)")
     cert.add_argument("--ip", action="append", default=[], help="IP address for the certificate (repeatable)")
     sub.add_parser("migrate", help="bring the data of an older version up to date (encryption)")
+    sub.add_parser("rotate-key", help="re-encrypt everything for a new host key, read from stdin (deploy/setup.sh)")
     sub.add_parser("security-status", help="what is protected how (the page Sicherheit)")
     args = parser.parse_args(argv)
 
@@ -57,6 +58,18 @@ def main(argv: list[str] | None = None) -> int:
 
         for line in migrate(data_dir()) or ["Nothing to migrate."]:
             print(line)
+        return 0
+
+    if args.cmd == "rotate-key":
+        from . import crypto
+        from .security import rotate_host_key
+
+        try:
+            rotate_host_key(data_dir(), sys.stdin.buffer.read().strip())
+        except (crypto.Locked, ValueError) as e:
+            print(f"Key not rotated: {e}", file=sys.stderr)
+            return 1
+        print("Everything re-encrypted for the new key.")
         return 0
 
     if args.cmd == "security-status":

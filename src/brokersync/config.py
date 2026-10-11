@@ -87,12 +87,19 @@ def load(directory: Path) -> Config:
     return Config(brokers=brokers, **{k: v for k, v in raw.items() if k in known})
 
 
-def save(directory: Path, cfg: Config, key: bytes | None = None) -> None:
-    d = Path(directory)
+def sealed(cfg: Config, data_key: bytes, host_key: bytes) -> tuple[bytes, bytes]:
+    """config.enc and notify.enc for ``cfg``."""
     data = asdict(cfg)
     notify = {k: data.pop(k) for k in NOTIFY_FIELDS}
-    crypto.write_atomic(d / "config.enc", crypto.seal(key or crypto.data_key(d), json.dumps(data).encode(), "config"))
-    crypto.write_atomic(d / "notify.enc", crypto.seal(crypto.host_key(d), json.dumps(notify).encode(), "notify"))
+    return (crypto.seal(data_key, json.dumps(data).encode(), "config"),
+            crypto.seal(host_key, json.dumps(notify).encode(), "notify"))
+
+
+def save(directory: Path, cfg: Config, key: bytes | None = None) -> None:
+    d = Path(directory)
+    config_blob, notify_blob = sealed(cfg, key or crypto.data_key(d), crypto.host_key(d))
+    crypto.write_atomic(d / "config.enc", config_blob)
+    crypto.write_atomic(d / "notify.enc", notify_blob)
 
 
 def _migrate(d: Path) -> None:

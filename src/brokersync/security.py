@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import stat
 from dataclasses import dataclass
 from pathlib import Path
@@ -149,3 +150,40 @@ def migrate(data_dir: Path) -> list[str]:
         if mode & 0o077:
             os.chmod(f, want)
     return done
+
+
+def rotate_host_key(data_dir: Path, material: bytes) -> None:
+    """Re-encrypt everything for a new host key (``deploy/setup.sh`` hands it over, then stores it).
+
+    Everything is written next to the old files first and only then swapped in, so a failure before the swap
+    leaves the data readable with the old key."""
+    d = Path(data_dir)
+    if len(material) < 32:
+        raise ValueError("Der neue Schlüssel ist zu kurz.")
+    with run_lock(d, wait=30), crypto.file_lock(d, "secrets.lock"):
+        old_data = crypto.data_key(d)
+        secrets_data = Vault(d).load() if (d / "secrets.enc").exists() else None
+        cfg = config_mod.load(d)
+        new_host, new_data, ring = crypto.keys_for_new_host_key(d, material)
+        staged: list[tuple[Path, Path]] = []
+
+        def stage(name: str, blob: bytes) -> None:
+            tmp = d / f"{name}.rotate"
+            crypto.write_atomic(tmp, blob)
+            staged.append((tmp, d / name))
+
+        if secrets_data is not None:
+            stage("secrets.enc", crypto.seal(new_data, json.dumps(secrets_data).encode(), "secrets"))
+        config_blob, notify_blob = config_mod.sealed(cfg, new_data, new_host)
+        stage("config.enc", config_blob)
+        stage("notify.enc", notify_blob)
+        db = d / "state.db"
+        if db.exists() and state_mod.ENCRYPTED:
+            tmp = d / "state.db.rotate"
+            shutil.copy2(db, tmp)
+            os.chmod(tmp, 0o600)
+            state_mod.rekey(d, old_data, new_data, path=tmp)
+            staged.append((tmp, db))
+        stage("keyring.json", json.dumps(ring, indent=2).encode())
+        for tmp, target in staged:
+            os.replace(tmp, target)

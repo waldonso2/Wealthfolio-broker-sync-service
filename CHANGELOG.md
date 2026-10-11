@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.1
+
+- **A fresh key, once.** 0.9.0 moved the existing key from `data/secret.key` to `/etc/wealthfolio-broker-sync` instead of replacing it. Backups from before the update, or Proxmox backups, that held that key could still open the current data. The update now creates a new key once and re-encrypts everything for it; copies of the old key open nothing any more. With a master passphrase the service has to be unlocked before the update, otherwise the next update does it.
+- **Fix: older backups holding the key were not replaced.** The check never matched (`tar | grep -q` under `pipefail`). They are now deleted and replaced by one backup of the encrypted data.
+- **The update no longer hangs.** Steps that go through systemd (`systemd-creds`, the migration) have time limits. Running `deploy/setup.sh` by hand restarts a running service with the new files.
+
 ## 0.9.0
 
 - **Everything the service stores is encrypted, and the key is no longer next to the data** (waldonso2/wealthfolio-importer-addon#53).
