@@ -22,7 +22,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import ClassVar
 
 from ..model import BrokerAccount, CashBalance, Position, Transaction
@@ -70,6 +70,9 @@ class BrokerAdapter(ABC):
     # it (from the start date) and the comparison with Wealthfolio also finds
     # synced activities the broker no longer lists (brokersync.coverage).
     full_history: ClassVar[bool] = False
+    # A file the user exports from the broker and uploads (broker settings), for what the interface
+    # doesn't deliver (the Deutsche Bank's depot transactions): what to call it, empty if there is none.
+    statement_label: ClassVar[str] = ""
 
     def __init__(self, credentials: dict[str, str], session: dict | None = None):
         self.credentials = credentials
@@ -84,6 +87,18 @@ class BrokerAdapter(ABC):
         # Set by an adapter that couldn't fetch everything this run (Scalable's rate limit):
         # one-off backfills wait for a complete run.
         self.incomplete = False
+        # Set by an adapter that reads a bank account's history: the first day it read this run.
+        self.history_start: date | None = None
+
+    @staticmethod
+    def parse_statement(data: bytes) -> list[dict]:
+        """The rows of an uploaded statement, without account numbers; ``ValueError`` if it isn't one."""
+        raise NotImplementedError
+
+    @staticmethod
+    def statement_transactions(rows: list[dict], history_start: date | None) -> list[Transaction]:
+        """Transactions from stored statement rows; ``history_start``: first day of the bank account's history."""
+        raise NotImplementedError
 
     def close(self) -> None:  # noqa: B027 - optional hook, most adapters hold no connection
         """End the connection; afterwards ``session_state()`` is final."""

@@ -182,12 +182,15 @@ class GiroAndDepot(FakeFinTS):
     def get_sepa_accounts(self):
         depot = fints_mod._Account("DE00000000000000000000")
         depot.iban = None
-        return [depot] + super().get_sepa_accounts()
+        savings = fints_mod._Account("DE12100700000000303031")  # listed before the giro account, as at the bank
+        return [depot, savings] + super().get_sepa_accounts()
 
     def get_information(self):
         return {"bank": {"supported_operations": {Op("GET_TRANSACTIONS"): True, Op("GET_HOLDINGS"): True}},
                 "accounts": [
-                    {"iban": "DE02100700000000202051", "account_number": "0000202051", "subaccount_number": "00",
+                    {"iban": "DE12100700000000303031", "account_number": "0000303031", "subaccount_number": "00",
+                     "type": 10, "product_name": "Sparkonto", "supported_operations": {Op("GET_TRANSACTIONS"): True}},
+                    {"iban": "DE02120300000000202051", "account_number": "0000202051", "subaccount_number": "00",
                      "type": 1, "product_name": "Girokonto", "supported_operations": {Op("GET_TRANSACTIONS"): True}},
                     {"iban": None, "account_number": "0000999888", "subaccount_number": None, "type": 30,
                      "product_name": "maxblue Depot", "supported_operations": {Op("GET_HOLDINGS"): True}},
@@ -207,13 +210,14 @@ def test_deutsche_bank_reads_the_giro_account_and_the_depot_from_the_user_parame
     monkeypatch.setattr(FintsAdapter, "client_factory",
                         staticmethod(lambda *args: GiroAndDepot(RECORDING, sca=False)))
     a = DeutscheBankAdapter(PROFILES[DeutscheBankAdapter])
-    with caplog.at_level(logging.INFO, logger="brokersync.adapters.fints"):
-        a.login()
+    caplog.set_level(logging.INFO, logger="brokersync.adapters.fints")
+    a.login()
     log = caplog.text
     assert "Depotbestand ja, Depotumsätze nein" in log and "„maxblue Depot“ (Art 30, IBAN nein)" in log
     assert "0000999888" not in log and "202051" not in log  # no account numbers in the log
-    # The giro account is the first with an IBAN, not the depot listed before it.
-    assert a.get_cash()
+    # The giro account by its type - not the depot nor the savings account listed before it.
+    assert a.get_cash() and a._account().iban == "DE02120300000000202051"
+    assert "Umsätze und Saldo von „Girokonto“" in caplog.text
     [p] = a.get_positions()
     assert (p.isin, p.shares) == ("DE000TEST001", D("12.5"))
     assert ("holdings", "0000999888", "10070000") in a._client.calls

@@ -43,6 +43,18 @@
   </form>
   {% endif %}
 </div>
+{% if adapter.statement_label %}
+<div class="card">
+  <h2>{{ adapter.statement_label }}</h2>
+  <p>Depotumsätze liefert die Schnittstelle nicht. Exportiere sie im Online-Banking (Depot → Umsätze → Export als CSV) und lade die Datei hier hoch – gern auch wiederholt oder überlappend, nichts wird doppelt gebucht. Der Dienst bucht Dividenden, Käufe, Verkäufe und Einbuchungen (z. B. Mitarbeiteraktien); Kapitalmaßnahmen und Depotüberträge stehen danach unter „Unbekannte Buchungen“. Konto- und Depotnummern aus der Datei werden nicht gespeichert.</p>
+  {% if statement_rows %}<p class="muted">Bisher hochgeladen: {{ statement_rows }} Zeilen.</p>{% endif %}
+  <form method="post" action="/brokers/{{ key }}/statement" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="file" name="file" accept=".csv,text/csv" required>
+    <div class="actions"><button>Hochladen</button></div>
+  </form>
+</div>
+{% endif %}
 <div class="card">
   <h2>Neu aufsetzen</h2>
   <p>Löscht alle Buchungen, die der Dienst für {{ adapter.label }} in Wealthfolio angelegt hat (Kommentar „[SYNC {{ key }}:…]“), und vergisst, was schon übernommen wurde. Der nächste Abruf holt dann alles ab dem Startdatum neu – nach den aktuellen Regeln. CSV-/PDF-Importe, von Hand angelegte Buchungen und eingetragene Anfangsbestände bleiben.</p>

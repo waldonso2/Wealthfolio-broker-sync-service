@@ -217,6 +217,7 @@ class Syncer:
             tax_backfill = not self.state.flag(tax_flag(key))
             adapter.known_ids = {t for t, (status, _) in synced.items() if not (tax_backfill and status == "existing")}
             transactions = adapter.get_transactions(since) + self._openings(key)
+            transactions += self._statements(key, adapter)
             cash = self._broker_cash(key, adapter)
             positions = self._broker_positions(key, adapter) if adapter_cls.reports_positions else None
         finally:
@@ -243,7 +244,8 @@ class Syncer:
             activities = self._activities(wf, accounts, transactions, since if full else None, full)
             if todo:
                 existing = ExistingIndex(activities)
-                for tx in sorted(todo, key=lambda t: t.datetime):
+                # Bank settlements last: the securities side booked in this run (a depot statement) is there then.
+                for tx in sorted(todo, key=lambda t: (t.kind == Kind.SECURITIES_CASH, t.datetime)):
                     if tx.kind == Kind.SECURITIES_CASH:
                         if not self._settle_securities_cash(key, tx, accounts, existing, result):
                             unmatched.append(tx)
@@ -397,6 +399,19 @@ class Syncer:
               "cost": str(p.cost) if p.cost is not None else ""} for p in positions]))
         return positions
 
+    def _statements(self, key: str, adapter: BrokerAdapter) -> list[Transaction]:
+        """Transactions from statements the user uploaded (Deutsche Bank depot CSV). Rows older than the
+        earliest day of the bank account's history the sync ever read keep their money off the cash account."""
+        if not type(adapter).statement_label:
+            return []
+        stored = self.state.meta(f"history-start:{key}")
+        earliest = date.fromisoformat(stored) if stored else None
+        if adapter.history_start and (earliest is None or adapter.history_start < earliest):
+            earliest = adapter.history_start
+            self.state.set_meta(f"history-start:{key}", earliest.isoformat())
+        rows = self.state.statement_rows(key)
+        return type(adapter).statement_transactions(rows, earliest) if rows else []
+
     def _openings(self, key: str) -> list[Transaction]:
         """Opening positions the user entered (page Prüfung): a buy on that day, its cost deposited first."""
         out = []
@@ -508,6 +523,12 @@ class Syncer:
                 if isinstance(created, Duplicate):
                     continue  # this leg was created by an earlier, interrupted run
                 ids.append(created.get("id", ""))
+                # A bank settlement later in this run (SECURITIES_CASH) can match the cash leg of a trade
+                # or payout booked now - not the legs of a transfer to an own account.
+                if tx.kind in (Kind.BUY, Kind.SELL, Kind.DIVIDEND) and not tx.external_cash:
+                    existing.existing.append({"id": created.get("id", ""), "accountId": p["accountId"],
+                                              "activityType": p["activityType"], "amount": p.get("amount"),
+                                              "date": p["activityDate"], "comment": p.get("comment", "")})
         except WealthfolioError as e:
             # Not marked: the next run retries; legs created now come back as duplicates.
             result.failed += 1

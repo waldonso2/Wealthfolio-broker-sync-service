@@ -127,3 +127,15 @@ def test_cash_symbols():
 
     assert all(is_cash_symbol(s) for s in ("$CASH-EUR", "$cash-usd", " CASH:GBP ", "CASH_EUR", "$CASH"))
     assert not any(is_cash_symbol(s) for s in ("CASH", "NVDA", "$CASHX", "IE00TEST0001", "", None))
+
+
+def test_a_dividend_paid_outside_the_two_accounts_moves_no_money():
+    div = tx(kind=Kind.DIVIDEND, net=D("402"), gross=D("546"), tax=D("144"), shares=D("156"), fee=D(0),
+             label="Dividende", external_cash=True)
+    acts = to_activities(div, "deutschebank", ACC)
+    assert [a["activityType"] for a in acts] == ["DIVIDEND", "TRANSFER_OUT", "TRANSFER_IN", "WITHDRAWAL"]
+    assert acts[0]["tax"] == "144" and acts[-1]["activityDate"] > acts[-2]["activityDate"]
+    assert not cash_by_account(acts)  # nothing left on either account
+    plain = to_activities(tx(kind=Kind.DIVIDEND, net=D("402"), gross=D("546"), tax=D("144"), shares=D("156"),
+                             fee=D(0)), "deutschebank", ACC)
+    assert [a["activityType"] for a in plain] == ["DIVIDEND", "TRANSFER_OUT", "TRANSFER_IN"]

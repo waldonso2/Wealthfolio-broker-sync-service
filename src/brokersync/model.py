@@ -94,10 +94,11 @@ class Transaction:
     # A buy the broker paid for (Trade Republic Saveback): booked as a bonus
     # credit on the securities account that funds the buy, no cash transfer.
     bonus_funded: bool = False
-    # The money of a trade comes from / goes to outside the broker's two
-    # accounts (comdirect, whose giro account isn't booked; an opening
-    # position): a buy is preceded by a deposit of its cost on the cash account,
-    # a sale followed by a withdrawal of its proceeds.
+    # The money of a trade or payout comes from / goes to outside the broker's
+    # two accounts (comdirect, whose giro account isn't booked; an opening
+    # position; a Deutsche Bank depot row older than the giro history read): a
+    # buy is preceded by a deposit of its cost on the cash account, a sale or
+    # dividend followed by a withdrawal of its proceeds.
     external_cash: bool = False
     # Signed amount for SECURITIES_CASH: negative = paid out of the account.
     signed: Decimal | None = None

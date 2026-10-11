@@ -106,6 +106,7 @@ class FintsAdapter(BrokerAdapter):
         self._client = None
         self._pending = None
         self._open = False
+        self._logged_account = False
 
     # ── login ───────────────────────────────────────────────────────────────
     def _make_client(self):
@@ -269,8 +270,18 @@ class FintsAdapter(BrokerAdapter):
                 if (a.iban or "").upper() == wanted:
                     return a
             raise AdapterError(f"Die IBAN {wanted} gehört nicht zu diesem {self.label}-Zugang.")
-        # A depot listed with the giro account has no IBAN: the giro account is the first with one.
-        return next((a for a in accounts if a.iban), accounts[0])
+        # Without an IBAN: the giro account by the account type the bank reports (FinTS: 1-9 current
+        # accounts; 10-19 savings, 30-39 depots), else the first account with an IBAN.
+        giro = {(a.get("iban") or "").upper() for a in self._information().get("accounts") or []
+                if isinstance(a.get("type"), int) and 1 <= a["type"] <= 9 and a.get("iban")}
+        chosen = (next((a for a in accounts if (a.iban or "").upper() in giro), None)
+                  or next((a for a in accounts if a.iban), accounts[0]))
+        if not self._logged_account:
+            self._logged_account = True
+            name = next((a.get("product_name") for a in self._information().get("accounts") or []
+                         if a.get("iban") and (a.get("iban") or "").upper() == (chosen.iban or "").upper()), None)
+            log.info("%s (FinTS): Umsätze und Saldo von „%s“", self.label, name or "?")
+        return chosen
 
     def _depot_accounts(self) -> list:
         """Accounts to ask for holdings: the SEPA accounts, plus accounts the user parameters
@@ -318,9 +329,28 @@ class FintsAdapter(BrokerAdapter):
     def get_transactions(self, since: datetime | None) -> list[Transaction]:
         today = datetime.now(BERLIN).date()
         start = since.astimezone(BERLIN).date() if since else today - timedelta(days=NO_TAN_DAYS)
-        records = self._call(self._client.get_transactions, self._account(), start, today) or []
-        return to_transactions([r.data for r in records], self.securities_pattern, self.interest_pattern,
-                               self.fee_pattern)
+        self.history_start = start
+        account = self._account()
+        records = [r.data for r in self._call(self._client.get_transactions, account, start, today) or []]
+        source = "MT940"
+        if not records and _ops(self._information().get("bank", {})).get("GET_TRANSACTIONS_XML"):
+            # Some banks (Deutsche Bank) answer the MT940 request with nothing and deliver camt only.
+            records = self._camt(account, start, today)
+            source = "camt"
+        log.info("%s (FinTS): %d Umsätze per %s seit %s", self.label, len(records), source, start.isoformat())
+        return to_transactions(records, self.securities_pattern, self.interest_pattern, self.fee_pattern)
+
+    def _camt(self, account, start: date, end: date) -> list[dict]:
+        from fints.camt_parser import camt053_to_dict
+
+        answer = self._call(self._client.get_transactions_xml, account, start, end)
+        booked = answer[0] if answer else []
+        out = []
+        for document in booked:
+            for d in camt053_to_dict(document):
+                d.setdefault("posting_text", d.get("AdditionalEntryInformation") or "")
+                out.append(d)
+        return out
 
 
 def _cap(text: str) -> str:

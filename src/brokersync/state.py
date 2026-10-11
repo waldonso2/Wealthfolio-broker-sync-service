@@ -94,6 +94,14 @@ CREATE TABLE IF NOT EXISTS openings (
   currency TEXT NOT NULL,
   PRIMARY KEY (broker, isin, day)
 );
+-- Rows of statements the user uploaded (Deutsche Bank depot CSV), without account numbers.
+CREATE TABLE IF NOT EXISTS statements (
+  broker TEXT NOT NULL,
+  row_key TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  payload TEXT NOT NULL,
+  PRIMARY KEY (broker, row_key)
+);
 -- What the last run found comparing the broker with Wealthfolio (brokersync.coverage).
 CREATE TABLE IF NOT EXISTS gaps (
   broker TEXT NOT NULL,
@@ -251,6 +259,26 @@ class State:
         return [{"isin": i, "day": d, "name": n, "shares": s, "price": p, "fee": f, "currency": c}
                 for i, d, n, s, p, f, c in rows]
 
+    def add_statement_rows(self, broker: str, rows: list[dict]) -> int:
+        """Keep uploaded statement rows; returns how many were new. A row twice in one file stays twice."""
+        seen: dict[str, int] = {}
+        new = 0
+        with self.db:
+            start = self.db.execute("SELECT COALESCE(MAX(position), 0) FROM statements WHERE broker = ?",
+                                    (broker,)).fetchone()[0]
+            for row in rows:
+                payload = json.dumps(row, sort_keys=True, ensure_ascii=False)
+                seen[payload] = seen.get(payload, 0) + 1
+                key = f"{payload}#{seen[payload]}"
+                cur = self.db.execute("INSERT OR IGNORE INTO statements VALUES (?, ?, ?, ?)",
+                                      (broker, key, start + new + 1, payload))
+                new += cur.rowcount
+        return new
+
+    def statement_rows(self, broker: str) -> list[dict]:
+        rows = self.db.execute("SELECT payload FROM statements WHERE broker = ? ORDER BY position", (broker,))
+        return [json.loads(p) for (p,) in rows]
+
     def set_gaps(self, broker: str, gaps: list[dict]) -> None:
         with self.db:
             self.db.execute("DELETE FROM gaps WHERE broker = ?", (broker,))
@@ -302,7 +330,8 @@ class State:
         created = sum(len(json.loads(ids)) for (ids,) in self.db.execute(
             "SELECT activity_ids FROM synced WHERE broker = ? AND status = 'imported'", (broker,)))
         with self.db:
-            for table in ("synced", "runs", "reconcile", "balances", "assets", "unknown_events", "gaps", "openings"):
+            for table in ("synced", "runs", "reconcile", "balances", "assets", "unknown_events", "gaps", "openings",
+                          "statements"):
                 self.db.execute(f"DELETE FROM {table} WHERE broker = ?", (broker,))
             self.db.execute("DELETE FROM meta WHERE key LIKE ?", (f"%:{broker}",))
         return created
@@ -310,7 +339,7 @@ class State:
     def reset_broker(self, broker: str) -> None:
         """Forget what was synced for a broker (brokersync.reset): the next run starts from the start date.
 
-        Keeps what the user entered (opening positions) and the learned assets.
+        Keeps what the user entered (opening positions, uploaded statements) and the learned assets.
         """
         with self.db:
             for table in ("synced", "runs", "reconcile", "balances", "unknown_events", "gaps"):

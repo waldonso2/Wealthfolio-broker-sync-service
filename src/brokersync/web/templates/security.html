@@ -21,13 +21,13 @@
   <p><a class="button" href="/ca.crt">CA-Zertifikat herunterladen</a></p>
   <p class="muted">Vor dem Import vergleichen – SHA-256: <code>{{ ca_fingerprint }}</code></p>
   <ul>
-    <li><strong>Windows (Chrome, Edge):</strong> Datei öffnen → <em>Zertifikat installieren</em> → <em>Aktueller Benutzer</em> → <em>Alle Zertifikate in folgendem Speicher speichern</em> → <em>Vertrauenswürdige Stammzertifizierungsstellen</em>. Browser neu starten.</li>
+    <li><strong>Windows (Chrome, Edge):</strong> Datei öffnen → <em>Zertifikat installieren</em> → <em>Aktueller Benutzer</em> → <em>Alle Zertifikate in folgendem Speicher speichern</em> → <em>Vertrauenswürdige Stammzertifizierungsstellen</em> – nicht „automatisch auswählen“, sonst landet es unter den Zwischenzertifizierungsstellen und wirkt nicht. Prüfen lässt es sich mit <code>certmgr.msc</code>.</li>
     <li><strong>macOS (Safari, Chrome):</strong> Datei öffnen (Schlüsselbundverwaltung) → Zertifikat doppelklicken → <em>Vertrauen</em> → <em>Immer vertrauen</em>.</li>
     <li><strong>Firefox:</strong> Einstellungen → <em>Datenschutz &amp; Sicherheit</em> → <em>Zertifikate anzeigen</em> → <em>Zertifizierungsstellen</em> → <em>Importieren</em> → „Dieser CA vertrauen, um Websites zu identifizieren“.</li>
     <li><strong>iPhone/iPad:</strong> Datei in Safari laden → <em>Einstellungen → Profil geladen → Installieren</em>, danach <em>Allgemein → Info → Zertifikatsvertrauenseinstellungen</em> einschalten.</li>
     <li><strong>Android:</strong> <em>Einstellungen → Sicherheit → Verschlüsselung &amp; Anmeldedaten → Zertifikat installieren → CA-Zertifikat</em>.</li>
   </ul>
-  <p class="muted">Aufrufen dann über die IP-Adresse oder den Namen des Containers, wie im Zertifikat eingetragen.</p>
+  <p class="muted">Danach den Browser ganz beenden und neu starten (Chrome/Edge: <code>chrome://restart</code>; Android: App „Beenden erzwingen“) – ein Browser, der vorher die Warnung übergangen hat, zeigt die Seite sonst weiter als „nicht sicher“. Aufrufen über die IP-Adresse oder den Namen des Containers, wie im Zertifikat eingetragen.</p>
 </div>
 {% endif %}
 
