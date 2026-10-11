@@ -37,6 +37,7 @@ import logging
 import re
 import time
 from collections import Counter
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -287,22 +288,29 @@ class FintsAdapter(BrokerAdapter):
             log.info("%s (FinTS): Umsätze und Saldo von „%s“", self.label, name or "?")
         return chosen
 
-    def _depot_accounts(self) -> list:
-        """Accounts to ask for holdings: the SEPA accounts, plus accounts the user parameters
-        list with holdings that have no IBAN (a depot is not a SEPA account at most banks)."""
-        accounts = list(self._call(self._client.get_sepa_accounts) or [])
-        known = {(a.accountnumber, a.subaccount if hasattr(a, "subaccount") else None) for a in accounts}
-        for a in self._information().get("accounts") or []:
-            ops = _ops(a)
+    def _depot_accounts(self) -> list[tuple[object, str]]:
+        """Accounts to ask for holdings, each with how it was found (for the log): the SEPA accounts the user
+        parameters allow holdings for (all of them if the bank says nothing), plus accounts listed there with
+        holdings but without IBAN (a depot is not a SEPA account at most banks)."""
+        info = self._information().get("accounts") or []
+        holdings_ibans = {(a.get("iban") or "").upper() for a in info if _ops(a).get("GET_HOLDINGS")}
+        accounts = []
+        for a in self._call(self._client.get_sepa_accounts) or []:
+            if info and a.iban and a.iban.upper() not in holdings_ibans:
+                continue  # a giro or savings account: no holdings to ask for
+            accounts.append((a, "Konto mit IBAN" if a.iban else "Konto ohne IBAN"))
+        known = {(a.accountnumber, getattr(a, "subaccount", None)) for a, _ in accounts}
+        for a in info:
             number = a.get("account_number")
-            if not ops.get("GET_HOLDINGS") or a.get("iban") or not number:
+            if not _ops(a).get("GET_HOLDINGS") or a.get("iban") or not number:
                 continue
             if (number, a.get("subaccount_number")) in known:
                 continue
             bank_id = a.get("bank_identifier")
-            accounts.append(_sepa_account(number, a.get("subaccount_number"),
-                                          getattr(bank_id, "bank_code", None) or self.blz
-                                          or (self.credentials.get("blz") or "").replace(" ", "")))
+            accounts.append((_sepa_account(number, a.get("subaccount_number"),
+                                           getattr(bank_id, "bank_code", None) or self.blz
+                                           or (self.credentials.get("blz") or "").replace(" ", "")),
+                             f"„{a.get('product_name') or '?'}“ (Art {a.get('type') or '?'})"))
         return accounts
 
     def get_accounts(self) -> list[BrokerAccount]:
@@ -317,15 +325,23 @@ class FintsAdapter(BrokerAdapter):
 
     def get_positions(self) -> list[Position]:
         out: list[Position] = []
-        for account in self._depot_accounts():
+        accounts = self._depot_accounts()
+        if not accounts:
+            log.info("%s (FinTS): kein Konto mit Depotbestand gefunden", self.label)
+        for account, what in accounts:
+            seen: list[str] = []
             try:
-                holdings = self._call(self._client.get_holdings, account) or []
+                with _mt535_parser(seen):
+                    holdings = self._call(self._client.get_holdings, account) or []
             except AdapterError as e:
-                log.debug("%s (FinTS): kein Depotbestand für ein Konto: %s", self.label, e)
+                log.info("%s (FinTS): Depotbestand von %s nicht lesbar: %s", self.label, what, e)
                 continue  # not a depot, or the bank doesn't offer holdings over FinTS
-            if holdings:
-                log.info("%s (FinTS): Depotbestand mit %d Positionen", self.label, len(holdings))
+            log.info("%s (FinTS): Depotbestand von %s mit %d Positionen%s", self.label, what, len(holdings),
+                     f" (Antwort: {'; '.join(seen)})" if seen and not holdings else "")
             for h in holdings:
+                if not h.ISIN or h.pieces is None:
+                    log.info("%s (FinTS): eine Position ohne ISIN oder Stückzahl übersprungen", self.label)
+                    continue
                 out.append(Position(h.ISIN, h.name, Decimal(str(h.pieces)), h.value_symbol or "EUR",
                                     Decimal(str(h.total_value)) if h.total_value is not None else None))
         return out
@@ -410,6 +426,27 @@ def _national_account_details():
         yield
     finally:
         KTI1.from_sepa_account = original
+
+
+@contextmanager
+def _mt535_parser(seen: list[str]) -> Iterator[None]:
+    """python-fints parses holdings with its ``MT535_Miniparser``; ours (``mt535``) is used instead, and the
+    layout of each answer (tags only, no values) goes to ``seen`` for the log."""
+    import fints.client
+
+    from . import mt535
+
+    class Parser:
+        def parse(self, lines):
+            seen.append(mt535.structure(lines))
+            return mt535.parse(lines)
+
+    original = fints.client.MT535_Miniparser
+    fints.client.MT535_Miniparser = Parser
+    try:
+        yield
+    finally:
+        fints.client.MT535_Miniparser = original
 
 
 def _yes(value) -> str:
