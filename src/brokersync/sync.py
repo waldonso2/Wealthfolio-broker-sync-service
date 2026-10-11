@@ -298,6 +298,13 @@ class Syncer:
                     self.state.set_flag(tax_flag(key))
             try:
                 assets_mod.learn(self.state, key, transactions, wf, accounts)
+                # Positions whose asset is still unknown: maybe only an import booked their trades.
+                unknown = {p.isin for p in positions or [] if p.isin} - set(self.state.assets(key))
+                if unknown:
+                    learned = assets_mod.learn_from_imports(self.state, key, wf, accounts, unknown)
+                    if learned:
+                        log.info("%s: learned the Wealthfolio asset of %d position(s) from imported trades", key,
+                                 learned)
                 if backfill:
                     self.state.set_flag(f"assets-learned:{key}")
             except WealthfolioError as e:
