@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.2
+
+- **Fix: positions of a savings plan stayed unmatched.** The executions of a savings plan are booked in the same second, so the transfers next to a trade named several ISINs and 0.11.1 learned nothing for them. A trade's transfer is now also told apart by its amount, and what is learned narrows the rest in the same run.
+- The log names imported trades before the bank history only when new ones get their money (not the same count every run).
+
 ## 0.11.1
 
 - **Fix: positions bought only by an import were reported as missing.** The holdings check finds a position's Wealthfolio asset through the activities the service booked or matched. Trades a PDF/CSV import booked on its own (e.g. all DKB statements from before the giro history) were unknown, so every position showed up twice: at the bank, and under the import's ticker in Wealthfolio. Now, for a position whose asset is still unknown, the service looks for imported purchases and sales whose cash transfer names the ISIN ("Funds for <ISIN> …", "<ISIN> (…) sale"), and learns their asset - only when the ISIN is on one asset only, and only for a valid ISIN (check digit).

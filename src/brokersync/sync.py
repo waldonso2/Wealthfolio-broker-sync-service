@@ -501,8 +501,9 @@ class Syncer:
                 net=abs(audit_mod._dec(a.get("amount"))),
                 label=("Deposit for a buy before the bank history read" if buy
                        else "Withdrawal after a sale before the bank history read")))
-        if out:
-            log.info("%s: %d imported trade(s) before the bank history (%s) get their money", key, len(out),
+        new = [t for t in out if t.id not in synced]
+        if new:
+            log.info("%s: %d imported trade(s) before the bank history (%s) get their money", key, len(new),
                      history.isoformat())
         return out
 
