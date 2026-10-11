@@ -2,7 +2,7 @@
 
 import logging
 from contextlib import contextmanager
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal as D
 
 from brokersync.adapters import fints as fints_mod
@@ -152,8 +152,9 @@ def test_the_dkb_logs_its_depot_transactions_without_booking_them(monkeypatch, c
     a.login()
     caplog.set_level(logging.INFO, logger="brokersync.adapters.fints")
     txs = a.get_transactions(datetime(2026, 8, 1, tzinfo=UTC))
-    assert ("movements", "0000999888", date(2026, 8, 1)) in a._client.calls
-    assert "Depotumsätze von „maxblue Depot“ (Art 30) seit 2026-08-01 (Test, nichts gebucht): 4 - " in caplog.text
+    first = datetime.now(fints_mod.BERLIN).date() - timedelta(days=fints_mod.NO_TAN_DAYS)
+    assert ("movements", "0000999888", first) in a._client.calls  # the last 89 days, not just the run's window
+    assert f"Depotumsätze von „maxblue Depot“ (Art 30) seit {first} (Test, nichts gebucht): 4 - " in caplog.text
     assert "Kauf 1" in caplog.text and "LU0000000001" not in caplog.text and "0000999888" not in caplog.text
     assert not any(t.isin for t in txs)  # nothing booked from them yet
 

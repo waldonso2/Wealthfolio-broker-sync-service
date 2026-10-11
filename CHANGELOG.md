@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.3
+
+- **FinTS depot transactions (diagnosis):** asked for the last 89 days (as far back as banks answer without a TAN), not just the run's window - the DKB answered 0.10.2's shorter window, which held no purchases or sales, with nothing.
+
 ## 0.10.2
 
 - **FinTS depot transactions, first step (diagnosis, nothing booked).** Banks that offer depot transactions over FinTS (DKB) are asked for them (HKWDU, answered in MT536 - python-fints knows neither, the service defines both). The log names, per depot, how many came and what they would be booked as (purchase, sale, delivery, corporate action, reversal), how complete they are, and the answer's layout - counts, field names and standard codes only, no ISINs, amounts or numbers. Booking follows once a real answer has been checked.

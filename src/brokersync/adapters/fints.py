@@ -418,7 +418,8 @@ class FintsAdapter(BrokerAdapter):
         out = to_transactions(records, self.securities_pattern, self.interest_pattern, self.fee_pattern)
         if self.with_savings:
             out = self._with_savings(out, account, today)
-        self._depot_movements(start, today)
+        # As far back as the bank answers without a TAN - not just this run's window: there is more to check.
+        self._depot_movements(min(start, today - timedelta(days=NO_TAN_DAYS)), today)
         return out
 
     def _depot_movements(self, start: date, end: date) -> None:
