@@ -298,10 +298,15 @@ class Syncer:
                     self.state.set_flag(tax_flag(key))
             try:
                 assets_mod.learn(self.state, key, transactions, wf, accounts)
-                # Positions whose asset is still unknown: maybe only an import booked their trades.
-                unknown = {p.isin for p in positions or [] if p.isin} - set(self.state.assets(key))
-                if unknown:
-                    learned = assets_mod.learn_from_imports(self.state, key, wf, accounts, unknown)
+                # Positions whose asset is unknown, or didn't fit last time: maybe only an import booked
+                # their trades.
+                deviating = {d["key"] for d in (self.state.reconcile(key) or {}).get("deviations", [])
+                             if d.get("kind") == "position"}
+                check = {p.isin for p in positions or [] if p.isin
+                         and (p.isin not in self.state.assets(key) or p.isin in deviating)}
+                if check:
+                    learned = assets_mod.learn_from_imports(self.state, key, wf, accounts, check,
+                                                            recheck=check & deviating)
                     if learned:
                         log.info("%s: learned the Wealthfolio asset of %d position(s) from imported trades", key,
                                  learned)
@@ -535,6 +540,11 @@ class Syncer:
                                                    {i: a["asset_id"] for i, a in self.state.assets(key).items()},
                                                    wf_savings=wf_savings,
                                                    savings_label=self.adapters[key].savings_label)]
+        assets = self.state.assets(key)
+        for d in deviations:
+            if d["kind"] == "position" and d["key"] in assets:
+                log.info("%s: position %s deviates; its Wealthfolio asset: %s (%s)", key, d["key"],
+                         assets[d["key"]]["asset_id"], assets[d["key"]]["symbol"])
         previous = self.state.reconcile(key) or {}
         # Report only what shows up twice in a row (not a recalculation in
         # progress), and each set of deviations only once.

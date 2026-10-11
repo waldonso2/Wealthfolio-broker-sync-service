@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.3
+
+- **Fix: two ETFs of a savings plan were mixed up.** A PDF import ends a trade and its transfers with the same statement reference (`[PDF …]`); that now ties them together exactly, before time and amount are tried. It also corrects an asset an earlier version learned wrongly: positions that deviated in the last check are looked at again, and what a statement says replaces the stored asset.
+- **Fix: a position booked by the service itself (an opening position) stayed unmatched** when another asset was stored for its ISIN. For a deviating position, the trade whose transfer names the ISIN with the same amount and time - the service's own as well as an import's - now replaces the stored asset.
+- The log names the stored Wealthfolio asset of every deviating position, to see at once why it doesn't fit.
+
 ## 0.11.2
 
 - **Fix: positions of a savings plan stayed unmatched.** The executions of a savings plan are booked in the same second, so the transfers next to a trade named several ISINs and 0.11.1 learned nothing for them. A trade's transfer is now also told apart by its amount, and what is learned narrows the rest in the same run.

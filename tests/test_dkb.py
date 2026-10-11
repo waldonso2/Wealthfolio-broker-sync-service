@@ -407,3 +407,57 @@ def test_a_savings_plan_executed_in_the_same_second_is_told_apart_by_amount(tmp_
     assert learned == 2
     assert {i: a["asset_id"] for i, a in state.assets("dkb").items()} == {"IE00TEST0000": "AAA", "US00TEST0008": "BBB"}
     state.close()
+
+
+def test_the_statement_reference_ties_a_trade_to_its_transfer_and_corrects_a_wrong_asset(tmp_path):
+    from brokersync import assets
+    from brokersync.mapping import Accounts
+    from brokersync.state import State
+
+    wf = FakeWealthfolio()
+    when = "2026-06-02T07:00:00.000Z"
+    # A savings plan: two buys in the same second with the same amount - only the statement tells them apart.
+    for isin, ticker in (("IE00TEST0000", "AAA"), ("US00TEST0008", "BBB")):
+        base = {"date": when, "quantity": "1", "unitPrice": "1", "amount": "50", "currency": "EUR",
+                "assetSymbol": "", "assetId": ""}
+        wf.add_existing(**{**base, "accountId": "acc-cash", "activityType": "TRANSFER_OUT",
+                           "comment": f"Funds for {isin} (TEST) buy -> Portfolio [PDF {ticker}-1]"})
+        wf.add_existing(**{**base, "accountId": "acc-depot", "activityType": "BUY", "quantity": "2",
+                           "assetSymbol": ticker, "assetId": ticker, "comment": f"Sparplan TEST [PDF {ticker}-1]"})
+    state = State(tmp_path)
+    # Learned wrongly by an earlier version: both ISINs on the same asset.
+    state.set_asset("dkb", "IE00TEST0000", asset_id="BBB", symbol="BBB", exchange_mic=None, name=None)
+    state.set_asset("dkb", "US00TEST0008", asset_id="BBB", symbol="BBB", exchange_mic=None, name=None)
+    client = WealthfolioClient("http://wf", PASSWORD, transport=wf.transport())
+    learned = assets.learn_from_imports(state, "dkb", client, Accounts("acc-cash", "acc-depot"),
+                                        {"IE00TEST0000", "US00TEST0008"})
+    assert learned == 1  # the wrong one corrected, the right one kept
+    assert {i: a["asset_id"] for i, a in state.assets("dkb").items()} == {"IE00TEST0000": "AAA", "US00TEST0008": "BBB"}
+    state.close()
+
+
+def test_a_deviating_position_relearns_its_asset_from_the_syncs_own_opening(tmp_path):
+    from brokersync import assets
+    from brokersync.mapping import Accounts
+    from brokersync.state import State
+
+    isin = "IE00TEST0000"
+    wf = FakeWealthfolio()
+    ref = f"[SYNC deutschebank:start-{isin}-2024-01-02]"
+    base = {"date": "2024-01-02T11:00:00.000Z", "quantity": "1", "unitPrice": "1", "amount": "440",
+            "currency": "EUR", "assetSymbol": "", "assetId": ""}
+    wf.add_existing(**{**base, "accountId": "acc-cash", "activityType": "TRANSFER_OUT",
+                       "date": "2024-01-02T10:59:58.000Z",
+                       "comment": f"Funds for {isin} (TEST AG) buy -> Portfolio{ref}"})
+    wf.add_existing(**{**base, "accountId": "acc-depot", "activityType": "BUY", "quantity": "22", "unitPrice": "20",
+                       "assetSymbol": "TAG", "assetId": "asset-new", "comment": f"Anfangsbestand TEST AG{ref}"})
+    state = State(tmp_path)
+    state.set_asset("deutschebank", isin, asset_id="asset-old", symbol="OLD", exchange_mic=None, name=None)
+    client = WealthfolioClient("http://wf", PASSWORD, transport=wf.transport())
+    accounts = Accounts("acc-cash", "acc-depot")
+    # Not deviating: the stored asset stays (it came from the sync's own activities, which win).
+    assert assets.learn_from_imports(state, "deutschebank", client, accounts, {isin}) == 0
+    # Deviating: time and amount of its own opening say which asset it is.
+    assert assets.learn_from_imports(state, "deutschebank", client, accounts, {isin}, recheck={isin}) == 1
+    assert state.assets("deutschebank")[isin]["asset_id"] == "asset-new"
+    state.close()

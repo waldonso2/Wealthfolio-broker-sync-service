@@ -82,6 +82,8 @@ ISIN = re.compile(r"\b([A-Z]{2}[A-Z0-9]{9}\d)\b")
 # A trade and its transfer legs are booked this close together (the addon: 1-2 seconds apart).
 LEG_SECONDS = 10
 AMOUNT_TOLERANCE = Decimal("0.01")
+# The reference a PDF import ends every activity of one statement with.
+PDF_REF = re.compile(r"\[PDF [^\]]+\]")
 
 
 def valid_isin(code: str) -> bool:
@@ -98,6 +100,12 @@ def _when(a: dict) -> datetime:
     return datetime.fromisoformat(str(a.get("date")).replace("Z", "+00:00"))
 
 
+def _entry(a: dict) -> dict:
+    asset_id = a.get("assetId") or ""
+    return {"asset_id": asset_id, "symbol": a.get("assetSymbol") or asset_id,
+            "exchange_mic": a.get("exchangeMic") or None, "name": a.get("assetName") or None}
+
+
 def _amount(a: dict) -> Decimal | None:
     try:
         return abs(Decimal(str(a.get("amount")))) if a.get("amount") not in (None, "") else None
@@ -105,18 +113,47 @@ def _amount(a: dict) -> Decimal | None:
         return None
 
 
+def _isins(text: str) -> set[str]:
+    return {i for i in ISIN.findall(text) if valid_isin(i)}
+
+
 def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, accounts: Accounts,
-                       isins: set[str]) -> int:
-    """Learn the assets of ``isins`` (positions the broker reports, none known yet) from imported trades whose
-    transfer names the ISIN; returns how many were learned. A trade's transfer is booked within LEG_SECONDS
-    with the trade's amount (the addon books a savings plan's executions in the same second, so time alone
-    isn't enough). An ISIN on trades of two assets stays unknown; what is learned narrows the next pass."""
+                       isins: set[str], recheck: frozenset[str] | set[str] = frozenset()) -> int:
+    """Learn the assets of ``isins`` (positions the broker reports whose asset is unknown or doesn't fit) from
+    imported trades whose transfer names the ISIN; returns how many were learned or corrected.
+
+    Exact first: a PDF import ends a trade's and its transfers' comments in the same ``[PDF <statement>]``;
+    what that says replaces a stored asset. Then, for ISINs still unknown, by time and amount: the transfer
+    within LEG_SECONDS with the trade's amount (a savings plan's executions share a second). An ISIN on
+    trades of two assets stays unknown; what is learned narrows the next pass. ``recheck``: ISINs whose stored
+    asset didn't fit last time - time and amount may replace it too (the sync's own trades name the ISIN in
+    their transfers as well)."""
     known = state.assets(broker)
-    wanted = {i for i in isins if not _preferred(i, known.get(i))}
-    if not wanted:
-        return 0
     activities = wf.search_activities([accounts.cash, accounts.portfolio], date(1970, 1, 1), date(2100, 1, 1))
-    transfers = [(_when(a), _amount(a), {i for i in ISIN.findall(a.get("comment") or "") if valid_isin(i)})
+    by_ref: dict[str, set[str]] = {}
+    for a in activities:
+        m = PDF_REF.search(a.get("comment") or "")
+        if m and a.get("activityType") in ("TRANSFER_IN", "TRANSFER_OUT"):
+            by_ref.setdefault(m.group(0), set()).update(_isins(a.get("comment") or ""))
+    exact: dict[str, dict[str, dict]] = {}  # ISIN -> asset id -> entry
+    for a in activities:
+        m = PDF_REF.search(a.get("comment") or "")
+        named = by_ref.get(m.group(0), set()) & isins if m else set()
+        if len(named) == 1 and a.get("activityType") in ("BUY", "SELL") and a.get("assetId") \
+                and not is_cash_symbol(a.get("assetId")):
+            exact.setdefault(next(iter(named)), {})[a["assetId"]] = _entry(a)
+    corrected = 0
+    for isin, assets in exact.items():
+        if len(assets) == 1:
+            entry = next(iter(assets.values()))
+            if (known.get(isin) or {}).get("asset_id") != entry["asset_id"]:
+                state.set_asset(broker, isin, **entry)
+                known[isin] = entry
+                corrected += 1
+    wanted = {i for i in isins if i not in exact and (i in recheck or not _preferred(i, known.get(i)))}
+    if not wanted:
+        return corrected
+    transfers = [(_when(a), _amount(a), _isins(a.get("comment") or ""))
                  for a in activities if a.get("activityType") in ("TRANSFER_IN", "TRANSFER_OUT")]
     trades = []  # (asset entry, ISINs its transfers name)
     for a in activities:
@@ -130,10 +167,8 @@ def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, account
                 if amount is not None and t_amount is not None and abs(t_amount - amount) <= AMOUNT_TOLERANCE]
         named = set().union(*(same or [names for _, names in near]))
         if named:
-            trades.append(({"asset_id": asset_id, "symbol": a.get("assetSymbol") or asset_id,
-                            "exchange_mic": a.get("exchangeMic") or None, "name": a.get("assetName") or None},
-                           named))
-    learned, taken = 0, {e["asset_id"] for e in known.values()}
+            trades.append((_entry(a), named))
+    learned, taken = corrected, {e["asset_id"] for i, e in known.items() if i not in wanted}
     while True:
         found: dict[str, dict[str, dict]] = {}  # ISIN -> asset id -> entry
         for entry, named in trades:
@@ -144,10 +179,11 @@ def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, account
         if not new:
             return learned
         for isin, entry in new.items():
-            state.set_asset(broker, isin, **entry)
+            if (known.get(isin) or {}).get("asset_id") != entry["asset_id"]:
+                state.set_asset(broker, isin, **entry)
+                learned += 1
             wanted.discard(isin)
             taken.add(entry["asset_id"])
-            learned += 1
 
 
 def mappings(state: State, broker: str) -> dict[str, SecurityMapping]:
