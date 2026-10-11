@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 
 from .mapping import Accounts, SecurityMapping, is_cash_symbol
 from .model import Kind, Transaction
@@ -80,6 +81,7 @@ def learn(state: State, broker: str, transactions: list[Transaction], wf: Wealth
 ISIN = re.compile(r"\b([A-Z]{2}[A-Z0-9]{9}\d)\b")
 # A trade and its transfer legs are booked this close together (the addon: 1-2 seconds apart).
 LEG_SECONDS = 10
+AMOUNT_TOLERANCE = Decimal("0.01")
 
 
 def valid_isin(code: str) -> bool:
@@ -96,37 +98,56 @@ def _when(a: dict) -> datetime:
     return datetime.fromisoformat(str(a.get("date")).replace("Z", "+00:00"))
 
 
+def _amount(a: dict) -> Decimal | None:
+    try:
+        return abs(Decimal(str(a.get("amount")))) if a.get("amount") not in (None, "") else None
+    except InvalidOperation:
+        return None
+
+
 def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, accounts: Accounts,
                        isins: set[str]) -> int:
     """Learn the assets of ``isins`` (positions the broker reports, none known yet) from imported trades whose
-    transfer names the ISIN; returns how many were learned. An ISIN on trades of two assets stays unknown."""
+    transfer names the ISIN; returns how many were learned. A trade's transfer is booked within LEG_SECONDS
+    with the trade's amount (the addon books a savings plan's executions in the same second, so time alone
+    isn't enough). An ISIN on trades of two assets stays unknown; what is learned narrows the next pass."""
     known = state.assets(broker)
     wanted = {i for i in isins if not _preferred(i, known.get(i))}
     if not wanted:
         return 0
     activities = wf.search_activities([accounts.cash, accounts.portfolio], date(1970, 1, 1), date(2100, 1, 1))
-    transfers = [(_when(a), {i for i in ISIN.findall(a.get("comment") or "") if valid_isin(i)})
+    transfers = [(_when(a), _amount(a), {i for i in ISIN.findall(a.get("comment") or "") if valid_isin(i)})
                  for a in activities if a.get("activityType") in ("TRANSFER_IN", "TRANSFER_OUT")]
-    found: dict[str, dict[str, dict]] = {}  # ISIN -> asset id -> entry
+    trades = []  # (asset entry, ISINs its transfers name)
     for a in activities:
         asset_id = a.get("assetId") or ""
         if a.get("activityType") not in ("BUY", "SELL") or not asset_id or is_cash_symbol(asset_id):
             continue
-        when = _when(a)
-        named = set().union(*(names for t, names in transfers
-                              if abs((t - when).total_seconds()) <= LEG_SECONDS)) & wanted
-        if len(named) != 1:
-            continue
-        found.setdefault(named.pop(), {})[asset_id] = {
-            "asset_id": asset_id, "symbol": a.get("assetSymbol") or asset_id,
-            "exchange_mic": a.get("exchangeMic") or None, "name": a.get("assetName") or None}
-    learned = 0
-    for isin, assets in found.items():
-        if len(assets) == 1:
-            entry = next(iter(assets.values()))
+        when, amount = _when(a), _amount(a)
+        near = [(t_amount, names) for t, t_amount, names in transfers
+                if names and abs((t - when).total_seconds()) <= LEG_SECONDS]
+        same = [names for t_amount, names in near
+                if amount is not None and t_amount is not None and abs(t_amount - amount) <= AMOUNT_TOLERANCE]
+        named = set().union(*(same or [names for _, names in near]))
+        if named:
+            trades.append(({"asset_id": asset_id, "symbol": a.get("assetSymbol") or asset_id,
+                            "exchange_mic": a.get("exchangeMic") or None, "name": a.get("assetName") or None},
+                           named))
+    learned, taken = 0, {e["asset_id"] for e in known.values()}
+    while True:
+        found: dict[str, dict[str, dict]] = {}  # ISIN -> asset id -> entry
+        for entry, named in trades:
+            left = named & wanted
+            if len(left) == 1 and entry["asset_id"] not in taken:
+                found.setdefault(next(iter(left)), {})[entry["asset_id"]] = entry
+        new = {isin: next(iter(assets.values())) for isin, assets in found.items() if len(assets) == 1}
+        if not new:
+            return learned
+        for isin, entry in new.items():
             state.set_asset(broker, isin, **entry)
+            wanted.discard(isin)
+            taken.add(entry["asset_id"])
             learned += 1
-    return learned
 
 
 def mappings(state: State, broker: str) -> dict[str, SecurityMapping]:

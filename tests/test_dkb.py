@@ -384,3 +384,26 @@ def test_an_isin_needs_a_valid_check_digit():
 
     assert valid_isin("US0378331005") and valid_isin("IE00TEST0000")
     assert not valid_isin("US0378331006") and not valid_isin("IE00TEST0001")
+
+
+def test_a_savings_plan_executed_in_the_same_second_is_told_apart_by_amount(tmp_path):
+    from brokersync import assets
+    from brokersync.mapping import Accounts
+    from brokersync.state import State
+
+    wf = FakeWealthfolio()
+    when = "2026-06-02T07:00:00.000Z"
+    for isin, ticker, amount in (("IE00TEST0000", "AAA", "50"), ("US00TEST0008", "BBB", "25")):
+        base = {"date": when, "quantity": "1", "unitPrice": "1", "amount": amount, "currency": "EUR",
+                "assetSymbol": "", "assetId": ""}
+        wf.add_existing(**{**base, "accountId": "acc-cash", "activityType": "TRANSFER_OUT",
+                           "comment": f"Funds for {isin} (TEST) buy -> Portfolio [PDF {ticker}]"})
+        wf.add_existing(**{**base, "accountId": "acc-depot", "activityType": "BUY", "quantity": "2",
+                           "assetSymbol": ticker, "assetId": ticker, "comment": f"Sparplan TEST [PDF {ticker}]"})
+    state = State(tmp_path)
+    client = WealthfolioClient("http://wf", PASSWORD, transport=wf.transport())
+    learned = assets.learn_from_imports(state, "dkb", client, Accounts("acc-cash", "acc-depot"),
+                                        {"IE00TEST0000", "US00TEST0008"})
+    assert learned == 2
+    assert {i: a["asset_id"] for i, a in state.assets("dkb").items()} == {"IE00TEST0000": "AAA", "US00TEST0008": "BBB"}
+    state.close()
