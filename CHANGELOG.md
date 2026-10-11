@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.4
+
+- **The log says why a position's Wealthfolio asset couldn't be found**: no purchase or sale whose transfer names the ISIN, its asset already belonging to another ISIN, transfers naming several ISINs, or statements naming several assets - asset ids and ISINs only.
+- An ISIN whose statements name several assets is now also tried by time and amount.
+
 ## 0.11.3
 
 - **Fix: two ETFs of a savings plan were mixed up.** A PDF import ends a trade and its transfers with the same statement reference (`[PDF …]`); that now ties them together exactly, before time and amount are tried. It also corrects an asset an earlier version learned wrongly: positions that deviated in the last check are looked at again, and what a statement says replaces the stored asset.

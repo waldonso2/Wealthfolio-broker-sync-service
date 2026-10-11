@@ -461,3 +461,29 @@ def test_a_deviating_position_relearns_its_asset_from_the_syncs_own_opening(tmp_
     assert assets.learn_from_imports(state, "deutschebank", client, accounts, {isin}, recheck={isin}) == 1
     assert state.assets("deutschebank")[isin]["asset_id"] == "asset-new"
     state.close()
+
+
+def test_the_log_says_why_an_asset_isnt_learned(tmp_path, caplog):
+    import logging
+
+    from brokersync import assets
+    from brokersync.mapping import Accounts
+    from brokersync.state import State
+
+    wf = FakeWealthfolio()
+    base = {"date": "2026-06-02T07:00:00.000Z", "quantity": "1", "unitPrice": "1", "amount": "50",
+            "currency": "EUR", "assetSymbol": "", "assetId": ""}
+    wf.add_existing(**{**base, "accountId": "acc-cash", "activityType": "TRANSFER_OUT",
+                       "comment": "Funds for IE00TEST0000 (TEST) buy -> Portfolio"})
+    wf.add_existing(**{**base, "accountId": "acc-depot", "activityType": "BUY", "assetSymbol": "AAA",
+                       "assetId": "AAA", "comment": "Kauf TEST"})
+    state = State(tmp_path)
+    state.set_asset("dkb", "DE000TEST009", asset_id="AAA", symbol="AAA", exchange_mic=None, name=None)
+    client = WealthfolioClient("http://wf", PASSWORD, transport=wf.transport())
+    caplog.set_level(logging.INFO, logger="brokersync.assets")
+    assert assets.learn_from_imports(state, "dkb", client, Accounts("acc-cash", "acc-depot"),
+                                     {"IE00TEST0000", "US00TEST0008"}) == 0
+    assert "zu IE00TEST0000 nicht zugeordnet: Käufe/Verkäufe auf AAA; schon vergeben: AAA (gehört zu DE000TEST009)" \
+        in caplog.text
+    assert "zu US00TEST0008 nicht zugeordnet: kein Kauf/Verkauf, dessen Übertrag die ISIN nennt" in caplog.text
+    state.close()
