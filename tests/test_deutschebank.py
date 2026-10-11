@@ -193,3 +193,52 @@ def test_camt_when_the_bank_sends_no_mt940(tmp_path, monkeypatch, caplog):
         (Kind.DEPOSIT, D("2500.00"), "SEPA-Gutschrift", "Muster GmbH", "Gehalt")
     assert "1 Umsätze per camt" in caplog.text and "Umsätze und Saldo von „AktivKonto“" in caplog.text
     assert adapter.history_start == TODAY - timedelta(days=89)
+
+
+def test_camt_requests_name_the_account_nationally_too(monkeypatch):
+    from fints.formals import KTI1
+    from fints.models import SEPAAccount
+
+    sent = []
+
+    class NeedsNational(CamtOnly):
+        def get_sepa_accounts(self):
+            return [SEPAAccount(iban="DE02100700000000202051", bic="DEUTDEFFXXX", accountnumber="0202051",
+                                subaccount="00", blz="10070000")]
+
+        def get_transactions_xml(self, account, start_date=None, end_date=None):
+            sent.append(KTI1.from_sepa_account(account))  # what python-fints puts into HKCAZ
+            return super().get_transactions_xml(account, start_date, end_date)
+
+    monkeypatch.setattr(DeutscheBankAdapter, "client_factory",
+                        staticmethod(lambda *a: NeedsNational(GIRO, sca=False)))
+    adapter = DeutscheBankAdapter(CREDS)
+    adapter.login()
+    assert len(adapter.get_transactions(None)) == 1
+    [kti] = sent
+    assert (kti.iban, kti.account_number, kti.subaccount_number, kti.bank_identifier.bank_code) == \
+        ("DE02100700000000202051", "0202051", "00", "10070000")
+    # Only for that request: python-fints' own behaviour is back afterwards.
+    assert KTI1.from_sepa_account(NeedsNational(GIRO).get_sepa_accounts()[0]).account_number is None
+
+
+def test_a_bank_error_reads_as_the_banks_message(monkeypatch):
+    import pytest
+
+    from brokersync.adapters.base import AdapterError
+
+    class Refuses(CamtOnly):
+        def get_transactions_xml(self, account, start_date=None, end_date=None):
+            raise RuntimeError("Error response: fints.message.FinTSInstituteMessage([... HIRMG2(responses=["
+                               "fints.formals.Response(code='9050', reference_element=None, text='Teilweise "
+                               "fehlerhaft.')]), HIRMS2(responses=[fints.formals.Response(code='9210', "
+                               "reference_element=None, text='Eindeutige Identifikation des Kontos nicht möglich.')"
+                               "]) dialog_id='abc' user_id='1234567890'])")
+
+    monkeypatch.setattr(DeutscheBankAdapter, "client_factory", staticmethod(lambda *a: Refuses(GIRO, sca=False)))
+    adapter = DeutscheBankAdapter(CREDS)
+    adapter.login()
+    with pytest.raises(AdapterError) as e:
+        adapter.get_transactions(None)
+    assert str(e.value) == ("Deutsche Bank (FinTS): Die Deutsche Bank meldet: 9050 Teilweise fehlerhaft.; "
+                            "9210 Eindeutige Identifikation des Kontos nicht möglich.")

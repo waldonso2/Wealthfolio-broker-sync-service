@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.5
+
+- **Fix (Deutsche Bank): the camt request was refused.**
+  - The bank answered "9210 Eindeutige Identifikation des Kontos nicht möglich - Angaben zur nationalen Kontoverbindung erforderlich".
+  - The reason: python-fints names the account by IBAN and BIC only in camt requests.
+  - The service now adds account number, sub-account and bank code, which FinTS provides for in the same field.
+- **Readable bank errors (FinTS).** Instead of the whole technical answer, the overview and the notification say "Die Deutsche Bank meldet: 9210 …" with the bank's codes and texts.
+
 ## 0.9.4
 
 - **Fix (FinTS, Deutsche Bank): without an IBAN the wrong account was read.** The service took the first account with an IBAN, at the Deutsche Bank the savings account, so the giro account's bookings never came. It now picks the giro account by the account type the bank reports, and the log says which one (`Umsätze und Saldo von „…“`). An IBAN entered in the settings still decides.
