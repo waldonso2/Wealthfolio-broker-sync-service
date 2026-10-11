@@ -11,9 +11,9 @@ them into transactions like any other broker's:
 - **Kauf** / **Verkauf** → BUY / SELL, paid from / to the giro account.
 - **Eingang** with an amount → BUY whose money came from outside (employee
   shares, a delivery against payment): ``external_cash``.
-- Rows older than the giro history the service read are booked with
-  ``external_cash`` too: their giro booking was never read, so the cash account
-  must not keep their money.
+- Purchases and sales older than the giro history the service read are booked
+  with ``external_cash`` too: their giro booking was never read. Dividends never
+  are: their money stays on the cash account.
 - Everything else (**Kapitaltransaktion**, **Ausgang**, an *Eingang* without
   amount, …) is ``UNKNOWN``: corporate actions and transfers are booked by hand.
 
@@ -100,7 +100,7 @@ def transactions(rows: list[dict], history_start: date | None) -> list[Transacti
                 out.append(_unknown(row, common))
                 continue
             out.append(Transaction(kind=Kind.DIVIDEND, net=amount, shares=shares or None, gross=amount + tax, tax=tax,
-                                   external_cash=before_history, **common))
+                                   **common))
         elif kind in ("kauf", "eingang") and amount < 0 and shares > 0 and row["ISIN"]:
             net = -amount
             out.append(Transaction(kind=Kind.BUY, net=net, shares=shares, gross=net - fee - tax, fee=fee, tax=tax,

@@ -250,9 +250,8 @@ def to_activities(
         }))
         if refund:
             out.append(refund_credit("dividend"))
+        # A payout always stays on the cash account, whatever external_cash says.
         sweep_to_cash(f"{label} {tx.name}")
-        if tx.external_cash:
-            out.append(cash(accounts.cash, "WITHDRAWAL", 3, tx.net, f"{label} {tx.name} paid out{ref}"))
         return out
 
     quantity = fmt(tx.shares)

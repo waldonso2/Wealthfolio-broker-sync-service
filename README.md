@@ -132,7 +132,7 @@ Der Dienst liest dein **Deutsche-Bank-Girokonto** und den **Bestand deines maxbl
 | Dividende/Ausschüttung | Dividende mit Stückzahl, Nettobetrag und Steuer (Kapitalertragsteuer, Quellensteuer); das Geld per Übertrag aufs Verrechnungskonto, wo die Gutschrift des Girokontos dagegen geprüft wird |
 | Kauf / Verkauf | Kauf/Verkauf mit Stückzahl, Spesen und Steuer; das Geld per Übertrag vom bzw. zum Verrechnungskonto |
 | Eingang mit Betrag (z. B. Mitarbeiteraktien) | Kauf; das Geld kam nicht übers Girokonto, daher davor eine Einzahlung in gleicher Höhe |
-| alles vor dem ersten gelesenen Girokonto-Tag | wie oben, aber ohne Geld auf dem Verrechnungskonto (Einzahlung vor dem Kauf bzw. Auszahlung nach Dividende/Verkauf) – die Girobuchung dazu wurde nie gelesen |
+| Käufe/Verkäufe vor dem ersten gelesenen Girokonto-Tag | wie oben, aber mit Einzahlung vor dem Kauf bzw. Auszahlung nach dem Verkauf – die Girobuchung dazu wurde nie gelesen. Dividenden bleiben immer auf dem Verrechnungskonto |
 | Kapitaltransaktion, Ausgang, Eingang ohne Betrag | **nicht gebucht**, unter *Unbekannte Buchungen* – Kapitalmaßnahmen (z. B. eine Abspaltung) und Depotüberträge legst du auf der Seite *Prüfung* als Anfangsbestand an |
 
 **Zeitraum und Sicherheit** wie bei der DKB: ohne Startdatum die letzten 89 Tage; nach einer abgelehnten PIN kein weiterer Versuch, bis du die Zugangsdaten neu speicherst.
