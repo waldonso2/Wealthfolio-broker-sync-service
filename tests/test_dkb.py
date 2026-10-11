@@ -343,3 +343,44 @@ def test_without_a_recorded_history_start_the_first_run_tells(tmp_path, monkeypa
     [r] = syncer.run()
     first = syncer.state.first_success("dkb").astimezone(BERLIN).date()
     assert syncer.state.meta("history-start:dkb") == (first - timedelta(days=89)).isoformat()
+
+
+def test_positions_bought_only_by_an_import_are_found_by_the_isin_in_its_transfer(tmp_path, monkeypatch):
+    from .test_fints import GiroAndDepot
+
+    isin = "IE00TEST0000"  # fabricated, with a valid check digit
+
+    class Depot(GiroAndDepot):
+        def get_holdings(self, account):
+            if account.accountnumber != "0000999888":
+                raise ValueError("no depot")
+            return [type("Holding", (), {"ISIN": isin, "name": "TEST FONDS", "pieces": 10.0,
+                                         "value_symbol": "EUR", "total_value": 1000.0})()]
+
+    wf = FakeWealthfolio()
+    # The import booked the buy under the user's ticker; only its transfer names the ISIN.
+    common = {"date": "2026-06-15T09:00:00.000Z", "quantity": "1", "unitPrice": "1", "amount": "1001.90",
+              "currency": "EUR", "sourceGroupId": "pdf-dkb-1", "assetSymbol": "", "assetId": ""}
+    wf.add_existing(**{**common, "accountId": "acc-cash", "activityType": "TRANSFER_OUT",
+                       "date": "2026-06-15T08:59:58Z",
+                       "comment": f"Funds for {isin} (TEST Fonds) buy -> Portfolio [PDF 1]"})
+    wf.add_existing(**{**common, "accountId": "acc-depot", "activityType": "TRANSFER_IN",
+                       "date": "2026-06-15T08:59:59Z", "comment": f"Funds from Cash for {isin} buy [PDF 1]"})
+    wf.add_existing(**{**common, "accountId": "acc-depot", "activityType": "BUY", "quantity": "10", "unitPrice": "100",
+                       "assetSymbol": "TFW", "assetId": "TFW", "comment": "Kauf TEST Fonds [PDF 1]"})
+    syncer, _ = setup_sync(tmp_path, wf, monkeypatch)
+    monkeypatch.setattr(DkbAdapter, "client_factory", staticmethod(lambda *a: Depot(RECORDING, sca=False)))
+    monkeypatch.setattr(DkbAdapter, "reports_positions", True)
+    syncer.recalc_wait = 0
+    [r] = syncer.run()
+    assert r.status == "ok"
+    assert syncer.state.assets("dkb")[isin]["asset_id"] == "TFW"
+    deviations = syncer.state.reconcile("dkb")["deviations"]
+    assert not [d for d in deviations if d["kind"] == "position"], deviations
+
+
+def test_an_isin_needs_a_valid_check_digit():
+    from brokersync.assets import valid_isin
+
+    assert valid_isin("US0378331005") and valid_isin("IE00TEST0000")
+    assert not valid_isin("US0378331006") and not valid_isin("IE00TEST0001")

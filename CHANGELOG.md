@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.1
+
+- **Fix: positions bought only by an import were reported as missing.** The holdings check finds a position's Wealthfolio asset through the activities the service booked or matched. Trades a PDF/CSV import booked on its own (e.g. all DKB statements from before the giro history) were unknown, so every position showed up twice: at the bank, and under the import's ticker in Wealthfolio. Now, for a position whose asset is still unknown, the service looks for imported purchases and sales whose cash transfer names the ISIN ("Funds for <ISIN> …", "<ISIN> (…) sale"), and learns their asset - only when the ISIN is on one asset only, and only for a valid ISIN (check digit).
+
 ## 0.11.0
 
 - **Imported trades older than the bank history get their money (FinTS banks, e.g. DKB).** A purchase a CSV/PDF import booked before the first day of the giro history the service read was paid from money the service never saw: the cash account went negative. Now every run adds, for each such import:
