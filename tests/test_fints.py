@@ -235,6 +235,13 @@ def test_dkb_reads_the_depot_holdings_from_the_user_parameters(monkeypatch, capl
     [p] = a.get_positions()
     assert (p.isin, p.shares) == ("DE000TEST001", D("12.5"))
     assert ("holdings", "0000999888", "12030000") in a._client.calls
+    # python-fints builds HKWPD's account from it - with the bank's country from the BIC (none: Germany).
+    from fints.formals import Account2, Account3
+
+    depot = next(acc for acc, _ in a._depot_accounts() if acc.accountnumber == "0000999888")
+    for kind in (Account2, Account3):
+        assert kind.from_sepa_account(depot).account_number == "0000999888"
+    assert Account3.from_sepa_account(depot).bank_identifier.country_identifier == "280"
     # Giro and savings account aren't asked: the user parameters offer no holdings for them.
     assert not [c for c in a._client.calls if c[0] == "holdings" and c[1] in ("0000303031", "0000202051")]
     assert "Depotbestand von „maxblue Depot“ (Art 30) mit 1 Positionen" in caplog.text
