@@ -1,8 +1,14 @@
 # Changelog
 
-## 0.10.3
+## 0.11.0
 
-- **FinTS depot transactions (diagnosis):** asked for the last 89 days (as far back as banks answer without a TAN), not just the run's window - the DKB answered 0.10.2's shorter window, which held no purchases or sales, with nothing.
+- **Imported trades older than the bank history get their money (FinTS banks, e.g. DKB).** A purchase a CSV/PDF import booked before the first day of the giro history the service read was paid from money the service never saw: the cash account went negative. Now every run adds, for each such import:
+  - a purchase: a deposit of its cost just before its transfer to the depot,
+  - a sale: a withdrawal of its proceeds just after,
+  - a dividend: nothing - its money stays on the cash account.
+  
+  Trades in the read history aren't touched (their giro booking was read and matched), nor the service's own activities. The first day read is now recorded for every FinTS bank (`history-start`); where it wasn't yet, the first successful run tells (its start date, else 89 days before it).
+- **FinTS depot transactions (diagnosis):** asked for the last 89 days (as far back as banks answer without a TAN), not just the run's window.
 
 ## 0.10.2
 

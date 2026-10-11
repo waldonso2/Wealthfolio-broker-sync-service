@@ -465,6 +465,12 @@ class State:
         r = self.runs(broker, 1)
         return r[0] if r else None
 
+    def first_success(self, broker: str) -> datetime | None:
+        row = self.db.execute(
+            "SELECT started_at FROM runs WHERE broker = ? AND status = 'ok' ORDER BY id LIMIT 1", (broker,)
+        ).fetchone()
+        return datetime.fromisoformat(row[0]) if row else None
+
     def last_success(self, broker: str) -> datetime | None:
         row = self.db.execute(
             "SELECT started_at FROM runs WHERE broker = ? AND status = 'ok' ORDER BY id DESC LIMIT 1", (broker,)
