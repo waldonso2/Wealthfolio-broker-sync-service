@@ -39,12 +39,13 @@ import time
 from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import ClassVar
 from zoneinfo import ZoneInfo
 
-from ..model import BrokerAccount, CashBalance, Kind, Position, Transaction
+from ..model import SAVINGS, BrokerAccount, CashBalance, Kind, Position, Transaction
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
 
 log = logging.getLogger(__name__)
@@ -64,6 +65,11 @@ DECOUPLED_POLL = 5
 SECURITIES = re.compile(r"wertpapier|wp-abr|depot|ertragsgutschrift|dividende|aussch[uü]ttung|kupon", re.IGNORECASE)
 INTEREST = re.compile(r"\bzins|habenzins|guthabenzins", re.IGNORECASE)
 FEE = re.compile(r"entgelt|geb[uü]hr|kontof[uü]hrung|abschluss", re.IGNORECASE)
+# Product names of savings accounts - not the giro account, even when the bank reports them as account type 1-9
+# (the DKB's Tagesgeld).
+SAVINGS_NAME = re.compile(r"tagesgeld|spar|festgeld|geldmarkt|zinskonto", re.IGNORECASE)
+# Days between the two sides of a transfer between the cash and the savings account.
+OWN_TRANSFER_DAYS = 3
 
 
 def credential_fields(bank: str, banking: str, *, blz: bool = False, username_help: str = "") -> list[CredentialField]:
@@ -77,6 +83,9 @@ def credential_fields(bank: str, banking: str, *, blz: bool = False, username_he
     fields += [
         CredentialField("iban", "IBAN des Girokontos",
                         help=f"Leer lassen, wenn du bei {bank} nur ein Konto hast."),
+        CredentialField("savings_iban", "IBAN des Tagesgeldkontos",
+                        help="Nur nötig, wenn du unten ein Wealthfolio-Konto für das Tagesgeld wählst und der Dienst "
+                             "es nicht selbst findet."),
         CredentialField("product_id", "FinTS-Produkt-ID",
                         help="Wird bald fest eingebaut. Bis dahin hier die registrierte Produkt-ID eintragen."),
     ]
@@ -99,6 +108,7 @@ class FintsAdapter(BrokerAdapter):
     securities_pattern: ClassVar[re.Pattern] = SECURITIES
     interest_pattern: ClassVar[re.Pattern] = INTEREST
     fee_pattern: ClassVar[re.Pattern] = FEE
+    savings_label = "Tagesgeld"
 
     # Replaced in tests with a fake; real runs use python-fints.
     client_factory = None
@@ -109,6 +119,7 @@ class FintsAdapter(BrokerAdapter):
         self._pending = None
         self._open = False
         self._logged_account = False
+        self._logged_savings = False
 
     # ── login ───────────────────────────────────────────────────────────────
     def _make_client(self):
@@ -278,7 +289,8 @@ class FintsAdapter(BrokerAdapter):
         # Without an IBAN: the giro account by the account type the bank reports (FinTS: 1-9 current
         # accounts; 10-19 savings, 30-39 depots), else the first account with an IBAN.
         giro = {(a.get("iban") or "").upper() for a in self._information().get("accounts") or []
-                if isinstance(a.get("type"), int) and 1 <= a["type"] <= 9 and a.get("iban")}
+                if isinstance(a.get("type"), int) and 1 <= a["type"] <= 9 and a.get("iban")
+                and not SAVINGS_NAME.search(a.get("product_name") or "")}
         chosen = (next((a for a in accounts if (a.iban or "").upper() in giro), None)
                   or next((a for a in accounts if a.iban), accounts[0]))
         if not self._logged_account:
@@ -317,11 +329,49 @@ class FintsAdapter(BrokerAdapter):
         return [BrokerAccount(a.iban or a.accountnumber, a.iban or a.accountnumber, "EUR")
                 for a in self._call(self._client.get_sepa_accounts)]
 
+    def _savings_account(self):
+        """The savings account (Tagesgeld): by the IBAN the user entered, else the account the bank calls a
+        savings account (type 10-19, or its product name) other than the giro account."""
+        accounts = [a for a in self._call(self._client.get_sepa_accounts) or [] if a.iban]
+        giro = (self._account().iban or "").upper()
+        wanted = (self.credentials.get("savings_iban") or "").replace(" ", "").upper()
+        if wanted:
+            chosen = next((a for a in accounts if a.iban.upper() == wanted), None)
+            if chosen is None:
+                raise AdapterError(f"Die IBAN des Tagesgeldkontos gehört nicht zu diesem {self.label}-Zugang.")
+        else:
+            info = {(a.get("iban") or "").upper(): a for a in self._information().get("accounts") or []
+                    if a.get("iban")}
+
+            def savings(a) -> bool:
+                entry = info.get(a.iban.upper(), {})
+                kind = entry.get("type")
+                return (isinstance(kind, int) and 10 <= kind <= 19) or bool(
+                    SAVINGS_NAME.search(entry.get("product_name") or ""))
+
+            chosen = next((a for a in accounts if a.iban.upper() != giro and savings(a)), None)
+            if chosen is None:
+                raise AdapterError(f"{_cap(self.bank)} meldet kein Tagesgeldkonto für diesen Zugang - bitte die "
+                                   "IBAN des Tagesgeldkontos in den Broker-Einstellungen eintragen.")
+        if chosen.iban.upper() == giro:
+            raise AdapterError("Girokonto und Tagesgeldkonto sind dasselbe Konto - bitte die IBANs prüfen.")
+        if not self._logged_savings:
+            self._logged_savings = True
+            name = next((a.get("product_name") for a in self._information().get("accounts") or []
+                         if (a.get("iban") or "").upper() == chosen.iban.upper()), None)
+            log.info("%s (FinTS): Tagesgeld: Umsätze und Saldo von „%s“", self.label, name or "?")
+        return chosen
+
     def get_cash(self) -> list[CashBalance]:
+        out = []
         balance = self._call(self._client.get_balance, self._account())
-        if balance is None:
-            return []
-        return [CashBalance(balance.amount.currency, Decimal(str(balance.amount.amount)))]
+        if balance is not None:
+            out.append(CashBalance(balance.amount.currency, Decimal(str(balance.amount.amount))))
+        if self.with_savings:
+            balance = self._call(self._client.get_balance, self._savings_account())
+            if balance is not None:
+                out.append(CashBalance(balance.amount.currency, Decimal(str(balance.amount.amount)), SAVINGS))
+        return out
 
     def get_positions(self) -> list[Position]:
         out: list[Position] = []
@@ -346,20 +396,57 @@ class FintsAdapter(BrokerAdapter):
                                     Decimal(str(h.total_value)) if h.total_value is not None else None))
         return out
 
+    def _records(self, account, start: date, end: date) -> tuple[list[dict], str]:
+        records = [r.data for r in self._call(self._client.get_transactions, account, start, end) or []]
+        if not records and _ops(self._information().get("bank", {})).get("GET_TRANSACTIONS_XML"):
+            # Some banks (Deutsche Bank) answer the MT940 request with nothing and deliver camt only.
+            return self._camt(account, start, end), "camt"
+        return records, "MT940"
+
     def get_transactions(self, since: datetime | None) -> list[Transaction]:
         today = datetime.now(BERLIN).date()
         start = since.astimezone(BERLIN).date() if since else today - timedelta(days=NO_TAN_DAYS)
         self.history_start = start
         account = self._account()
-        records = [r.data for r in self._call(self._client.get_transactions, account, start, today) or []]
-        source = "MT940"
-        if not records and _ops(self._information().get("bank", {})).get("GET_TRANSACTIONS_XML"):
-            # Some banks (Deutsche Bank) answer the MT940 request with nothing and deliver camt only.
-            records = self._camt(account, start, today)
-            source = "camt"
+        records, source = self._records(account, start, today)
         log.info("%s (FinTS): %d Umsätze per %s seit %s", self.label, len(records), source,
                  (self.history_start or start).isoformat())
-        return to_transactions(records, self.securities_pattern, self.interest_pattern, self.fee_pattern)
+        out = to_transactions(records, self.securities_pattern, self.interest_pattern, self.fee_pattern)
+        if self.with_savings:
+            out = self._with_savings(out, account, today)
+        return out
+
+    def _with_savings(self, giro_txs: list[Transaction], giro_account, today: date) -> list[Transaction]:
+        """The savings account's bookings (on its own Wealthfolio account); transfers between the two
+        accounts are booked once, as a transfer pair, from the giro side."""
+        account = self._savings_account()
+        start = (self.savings_since.astimezone(BERLIN).date() if self.savings_since
+                 else today - timedelta(days=NO_TAN_DAYS))
+        giro_start = self.history_start
+        records, source = self._records(account, start, today)
+        self.history_start = giro_start  # the giro account's history decides what counts as read (statements)
+        log.info("%s (FinTS): %d Tagesgeld-Umsätze per %s seit %s", self.label, len(records), source,
+                 start.isoformat())
+        savings_iban = (account.iban or "").upper()
+        giro_iban = (giro_account.iban or "").upper()
+        moves = (Kind.DEPOSIT, Kind.WITHDRAWAL)
+        giro_txs = [replace(t, own_transfer=True) if t.kind in moves and t.counterparty_iban == savings_iban
+                    else t for t in giro_txs]
+        used: set[str] = set()
+        savings_txs = []
+        for t in to_transactions(records, self.securities_pattern, self.interest_pattern, self.fee_pattern,
+                                 prefix="sav-"):
+            t = replace(t, account=SAVINGS)
+            if t.kind in moves and t.counterparty_iban == giro_iban:
+                other = Kind.WITHDRAWAL if t.kind == Kind.DEPOSIT else Kind.DEPOSIT
+                partner = next((g for g in giro_txs if g.own_transfer and g.kind == other and g.net == t.net
+                                and g.id not in used
+                                and abs((g.datetime - t.datetime).days) <= OWN_TRANSFER_DAYS), None)
+                if partner:
+                    used.add(partner.id)
+                    t = replace(t, pair=partner.id)
+            savings_txs.append(t)
+        return giro_txs + savings_txs
 
     def _camt_storage_days(self) -> int | None:
         """How many days back the bank keeps camt bookings (its parameters, HICAZS), if it says."""
@@ -460,8 +547,9 @@ def _sepa_account(number: str, subaccount, blz: str):
 
 
 def to_transactions(records: list[dict], securities: re.Pattern = SECURITIES, interest: re.Pattern = INTEREST,
-                    fee: re.Pattern = FEE) -> list[Transaction]:
-    """MT940/camt records (python-fints ``Transaction.data``) → transactions."""
+                    fee: re.Pattern = FEE, prefix: str = "") -> list[Transaction]:
+    """MT940/camt records (python-fints ``Transaction.data``) → transactions; ``prefix`` for the ids of a
+    second account's bookings (the savings account: ``sav-``), so they never collide with the giro's."""
     seen: Counter[str] = Counter()
     out: list[Transaction] = []
     for d in records:
@@ -477,7 +565,7 @@ def to_transactions(records: list[dict], securities: re.Pattern = SECURITIES, in
                                          d.get("end_to_end_reference") or "", d.get("customer_reference") or ""))
         digest = hashlib.sha256(key.encode()).hexdigest()[:16]
         seen[digest] += 1
-        tx_id = f"{day:%Y%m%d}-{digest}-{seen[digest]}"
+        tx_id = f"{prefix}{day:%Y%m%d}-{digest}-{seen[digest]}"
         when = datetime(day.year, day.month, day.day, 12, tzinfo=BERLIN).astimezone(UTC)
         if securities.search(f"{posting} {purpose}"):
             kind = Kind.SECURITIES_CASH

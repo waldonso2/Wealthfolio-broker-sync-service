@@ -57,10 +57,16 @@ class Position:
     cost: Decimal | None = None
 
 
+# ``Transaction.account`` / ``CashBalance.account`` of the broker's savings account (a bank's Tagesgeld);
+# empty = the cash account.
+SAVINGS = "savings"
+
+
 @dataclass(frozen=True)
 class CashBalance:
     currency: str
     amount: Decimal
+    account: str = ""  # SAVINGS for the savings account's balance
 
 
 @dataclass(frozen=True)
@@ -101,6 +107,15 @@ class Transaction:
     # followed by a withdrawal of its proceeds. A dividend ignores it: its
     # money stays on the cash account.
     external_cash: bool = False
+    # Which of the broker's bank accounts it was booked on: empty = the cash
+    # account, SAVINGS = the savings account (a bank's Tagesgeld).
+    account: str = ""
+    # A transfer between the broker's cash and savings account, seen on the
+    # cash account: booked as one transfer pair between the two. Its other side,
+    # seen on the savings account, names this one's id in ``pair`` and is not
+    # booked on its own.
+    own_transfer: bool = False
+    pair: str = ""
     # Signed amount for SECURITIES_CASH: negative = paid out of the account.
     signed: Decimal | None = None
     # The broker's raw event type, shown for UNKNOWN events.

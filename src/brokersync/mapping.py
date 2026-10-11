@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from .model import Kind, Transaction
+from .model import SAVINGS, Kind, Transaction
 
 # "$CASH-EUR", "CASH:USD", ... as Wealthfolio's is_cash_symbol, plus the bare
 # "$CASH" its holdings show for such an asset ("CASH" alone is a ticker).
@@ -44,6 +44,12 @@ TOLERANCE = Decimal("0.01")
 class Accounts:
     cash: str
     portfolio: str
+    savings: str = ""  # optional: the bank's savings account (Tagesgeld), if the user assigned one
+
+    @property
+    def ids(self) -> list[str]:
+        """The broker's Wealthfolio accounts: cash, portfolio and, if assigned, savings."""
+        return [a for a in (self.cash, self.portfolio, self.savings) if a]
 
 
 @dataclass(frozen=True)
@@ -182,39 +188,51 @@ def to_activities(
     tax_field = fmt(tx.tax) if tx.tax > 0 else None
     refund = -tx.tax if tx.tax < 0 else Decimal(0)
 
-    # Cash-only kinds live on the cash account.
+    # Cash-only kinds live on the cash account - or on the savings account they were booked on.
+    if tx.account == SAVINGS and not accounts.savings:
+        raise MappingError("A booking of the savings account, but no Wealthfolio account is assigned to it.")
+    own = accounts.savings if tx.account == SAVINGS else accounts.cash
+    if tx.own_transfer and tx.kind in (Kind.DEPOSIT, Kind.WITHDRAWAL):
+        if not accounts.savings:
+            raise MappingError("A transfer to the savings account, but no Wealthfolio account is assigned to it.")
+        what = tx.text or tx.label or "Transfer"
+        source, target = ((accounts.cash, accounts.savings) if tx.kind == Kind.WITHDRAWAL
+                          else (accounts.savings, accounts.cash))
+        names = {accounts.cash: "Cash", accounts.savings: "Savings"}
+        return [cash(source, "TRANSFER_OUT", 0, tx.net, f"-> {names[target]}: {what}{ref}", source_group=gid),
+                cash(target, "TRANSFER_IN", 0, tx.net, f"<- {names[source]}: {what}{ref}", source_group=gid)]
     if tx.kind == Kind.DEPOSIT:
-        return [cash(accounts.cash, "DEPOSIT", 0, tx.net, f"{tx.label or 'Deposit'}{_name(tx)}{_text(tx)}{ref}")]
+        return [cash(own, "DEPOSIT", 0, tx.net, f"{tx.label or 'Deposit'}{_name(tx)}{_text(tx)}{ref}")]
     if tx.kind == Kind.WITHDRAWAL:
         # Only outbound money checks the transfer patterns (addon rule): an
         # inbound transfer is always a deposit.
         p = match_pattern(tx, patterns or [])
         if p:
             what = tx.text or tx.label or "Transfer"
-            out.append(cash(accounts.cash, "TRANSFER_OUT", 0, tx.net, f"-> {p.label}: {what}{_name(tx, ' (')}{ref}",
+            out.append(cash(own, "TRANSFER_OUT", 0, tx.net, f"-> {p.label}: {what}{_name(tx, ' (')}{ref}",
                             source_group=gid if p.destination_account_id else None))
             if p.destination_account_id:
                 out.append(cash(p.destination_account_id, "TRANSFER_IN", 0, tx.net,
                                 f"<- {broker.upper()}: {what}{ref}", source_group=gid))
             return out
-        return [cash(accounts.cash, "WITHDRAWAL", 0, tx.net,
+        return [cash(own, "WITHDRAWAL", 0, tx.net,
                      f"{tx.label or 'Withdrawal'}{_name(tx)}{_text(tx)}{ref}")]
     if tx.kind == Kind.FEE:
-        return [cash(accounts.cash, "FEE", 0, tx.net, f"{tx.label or 'Fee'}{_name(tx)}{_text(tx)}{ref}")]
+        return [cash(own, "FEE", 0, tx.net, f"{tx.label or 'Fee'}{_name(tx)}{_text(tx)}{ref}")]
     if tx.kind == Kind.TAX:
-        return [cash(accounts.cash, "TAX", 0, tx.net, f"{tx.label or 'Tax'}{_name(tx)}{ref}")]
+        return [cash(own, "TAX", 0, tx.net, f"{tx.label or 'Tax'}{_name(tx)}{ref}")]
     if tx.kind == Kind.BONUS:
-        return [cash(accounts.cash, "CREDIT", 0, tx.net, f"{tx.label or 'Bonus'}{_name(tx)}{_text(tx)}{ref}",
+        return [cash(own, "CREDIT", 0, tx.net, f"{tx.label or 'Bonus'}{_name(tx)}{_text(tx)}{ref}",
                      subtype="BONUS")]
     if tx.kind == Kind.TAX_REFUND:
-        return [cash(accounts.cash, "CREDIT", 0, tx.net, f"{tx.label or 'Tax refund'}{_name(tx)}{ref}",
+        return [cash(own, "CREDIT", 0, tx.net, f"{tx.label or 'Tax refund'}{_name(tx)}{ref}",
                      subtype="TAX_REFUND")]
     if tx.kind == Kind.INTEREST:
-        out.append(cash(accounts.cash, "INTEREST", 0, tx.net - refund,
+        out.append(cash(own, "INTEREST", 0, tx.net - refund,
                         f"{tx.label or 'Interest'}{_name(tx)}{_text(tx)}{ref}",
                         tax=tx.tax if tx.tax > 0 else None))
         if refund:
-            out.append(cash(accounts.cash, "CREDIT", 0, refund, f"Tax refund on interest{ref}", subtype="TAX_REFUND"))
+            out.append(cash(own, "CREDIT", 0, refund, f"Tax refund on interest{ref}", subtype="TAX_REFUND"))
         return out
 
     m = mappings.get(tx.isin or "")

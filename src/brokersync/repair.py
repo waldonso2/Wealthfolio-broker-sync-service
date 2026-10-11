@@ -37,7 +37,7 @@ def with_cash_asset(a: dict) -> bool:
 
 def find(wf: WealthfolioClient, broker: str, accounts: Accounts) -> list[dict]:
     """The broker's sync activities that still carry a ``$CASH`` asset."""
-    activities = wf.search_activities([accounts.cash, accounts.portfolio], date(1970, 1, 1), date(2100, 1, 1))
+    activities = wf.search_activities(accounts.ids, date(1970, 1, 1), date(2100, 1, 1))
     out = []
     for a in activities:
         m = REF.search(a.get("comment") or "")

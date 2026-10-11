@@ -22,7 +22,7 @@ from dataclasses import asdict, dataclass
 from decimal import Decimal, InvalidOperation
 
 from .mapping import is_cash_symbol
-from .model import CashBalance, Position
+from .model import SAVINGS, CashBalance, Position
 
 CASH_TOLERANCE = Decimal("0.01")
 SHARES_TOLERANCE = Decimal("0.0001")
@@ -67,7 +67,8 @@ def _is_security(h: dict) -> bool:
 
 def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: list[dict],
             wf_portfolio: list[dict], symbol_of: dict[str, str],
-            asset_of: dict[str, str] | None = None) -> list[Deviation]:
+            asset_of: dict[str, str] | None = None, *, wf_savings: list[dict] | None = None,
+            savings_label: str = "") -> list[Deviation]:
     """Deviations between broker and Wealthfolio.
 
     A position is found by its asset (``asset_of``: ISIN → Wealthfolio asset id,
@@ -76,7 +77,17 @@ def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: 
     """
     out: list[Deviation] = []
     wf_cash_by_ccy = _cash(wf_cash)
+    wf_savings_by_ccy = _cash(wf_savings or [])
     for c in cash:
+        if c.account == SAVINGS:
+            # The savings account's balance (Tagesgeld) against its own Wealthfolio account.
+            if wf_savings is None:
+                continue
+            have = wf_savings_by_ccy.get(c.currency, Decimal(0))
+            if abs(have - c.amount) > CASH_TOLERANCE:
+                out.append(Deviation("cash", f"savings:{c.currency}", f"{savings_label or 'Sparkonto'} {c.currency}",
+                                     _fmt(c.amount), _fmt(have)))
+            continue
         have = wf_cash_by_ccy.get(c.currency, Decimal(0))
         if abs(have - c.amount) > CASH_TOLERANCE:
             out.append(Deviation("cash", c.currency, f"Cash {c.currency}", _fmt(c.amount), _fmt(have)))

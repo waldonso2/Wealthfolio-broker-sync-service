@@ -52,7 +52,7 @@
         {% endif %}
       {% endif %}
       {% if b.balances %}
-      <div class="muted">Saldo laut {{ b.label }}: {% for x in b.balances %}{{ x.amount | money }} {{ x.currency }}{% if not loop.last %}, {% endif %}{% endfor %} (Stand {{ b.balances[0].at | local }}) – zum Vergleich mit dem Verrechnungskonto in Wealthfolio</div>
+      <div class="muted">Saldo laut {{ b.label }}: {% for x in b.balances %}{{ x.amount | money }} {{ x.currency }}{% if x.account %} ({{ b.savings_label }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %} (Stand {{ b.balances[0].at | local }}) – zum Vergleich mit {{ 'den Konten' if b.balances | length > 1 else 'dem Verrechnungskonto' }} in Wealthfolio</div>
       {% endif %}
     </div>
     <div class="actions" style="margin:0">

@@ -228,6 +228,7 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
             brokers.append({
                 "key": key,
                 "label": adapter.label,
+                "savings_label": adapter.savings_label,
                 "config": b,
                 "has_credentials": bool(secrets_.get("brokers", {}).get(key, {}).get("credentials")),
                 "last": state.last_run(key),
@@ -325,12 +326,16 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         b.enabled = form.get("enabled") == "on"
         b.cash_account_id = str(form.get("cash_account_id", ""))
         b.portfolio_account_id = str(form.get("portfolio_account_id", ""))
+        b.savings_account_id = str(form.get("savings_account_id", "")) if adapters[key].savings_label else ""
         b.start_date = str(form.get("start_date", ""))
         if b.enabled and (not b.cash_account_id or not b.portfolio_account_id):
             return redirect(request, f"/brokers/{key}", "Bitte ein Verrechnungs- und ein Depotkonto wählen.", "error")
         if b.enabled and b.cash_account_id == b.portfolio_account_id:
             return redirect(request, f"/brokers/{key}",
                             "Verrechnungs- und Depotkonto müssen verschiedene Konten sein.", "error")
+        if b.savings_account_id and b.savings_account_id in (b.cash_account_id, b.portfolio_account_id):
+            return redirect(request, f"/brokers/{key}", f"Das {adapters[key].savings_label}-Konto muss ein eigenes "
+                            "Wealthfolio-Konto sein, nicht das Verrechnungs- oder Depotkonto.", "error")
         config_mod.save(data_dir, c)
         old = vault.broker(key).get("credentials", {})
         creds = {}
@@ -506,7 +511,7 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
                 names = {a.id: a.name for a in wf.list_accounts()}
                 for key, b in c.brokers.items():
                     if key in adapters and b.cash_account_id and b.portfolio_account_id:
-                        accounts = Accounts(b.cash_account_id, b.portfolio_account_id)
+                        accounts = accounts_of(b)
                         report.append({"key": key, "label": adapters[key].label, "result": audit.run(wf, accounts),
                                        "cash_name": names.get(b.cash_account_id, "Verrechnungskonto"),
                                        "depot_name": names.get(b.portfolio_account_id, "Depotkonto"),
@@ -604,7 +609,7 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
             return redirect(request, f"/brokers/{key}", "Erst die beiden Wealthfolio-Konten wählen.", "error")
         try:
             with run_lock(data_dir, wait=5), wf_client(cfg()) as wf:
-                deleted, errors = reset_mod.reset(wf, state, key, Accounts(b.cash_account_id, b.portfolio_account_id))
+                deleted, errors = reset_mod.reset(wf, state, key, accounts_of(b))
         except AlreadyRunning:
             return redirect(request, f"/brokers/{key}", "Gerade läuft ein Abruf - bitte gleich noch einmal.", "warn")
         except WealthfolioError as e:
@@ -646,7 +651,7 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
             with wf_client(c) as wf:
                 for key, b in c.brokers.items():
                     if key in adapters and b.cash_account_id and b.portfolio_account_id:
-                        found = duplicates_mod.find(wf, key, Accounts(b.cash_account_id, b.portfolio_account_id))
+                        found = duplicates_mod.find(wf, key, accounts_of(b))
                         report.append({"key": key, "label": adapters[key].label, "found": found})
         except WealthfolioError as e:
             error = str(e)
@@ -668,7 +673,7 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         try:
             # Not while a sync runs: it could create what is being removed.
             with run_lock(data_dir, wait=5), wf_client(c) as wf:
-                found = duplicates_mod.find(wf, broker, Accounts(b.cash_account_id, b.portfolio_account_id))
+                found = duplicates_mod.find(wf, broker, accounts_of(b))
                 deleted, done, errors = duplicates_mod.remove(wf, found)
         except AlreadyRunning:
             return redirect(request, "/duplicates", "Gerade läuft ein Abruf - bitte gleich noch einmal.", "warn")
@@ -709,6 +714,10 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         return redirect(request, "/securities", "Gespeichert.")
 
     return app
+
+
+def accounts_of(b: config_mod.BrokerConfig) -> Accounts:
+    return Accounts(b.cash_account_id, b.portfolio_account_id, b.savings_account_id)
 
 
 def _wf_done(secrets_: dict, c: config_mod.Config) -> bool:

@@ -75,7 +75,8 @@ def test_each_profile_connects_to_its_bank(opts):
 
 
 def test_a_bank_code_per_branch_is_a_credential(opts):
-    assert [f.name for f in ExampleBank.credential_fields] == ["username", "pin", "blz", "iban", "product_id"]
+    assert [f.name for f in ExampleBank.credential_fields] == \
+        ["username", "pin", "blz", "iban", "savings_iban", "product_id"]
     assert "blz" not in [f.name for f in DkbAdapter.credential_fields]
     assert "blz" in [f.name for f in DeutscheBankAdapter.credential_fields]
     with pytest.raises(AdapterError, match="Bankleitzahl fehlt"):

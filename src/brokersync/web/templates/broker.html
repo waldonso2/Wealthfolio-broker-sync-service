@@ -26,6 +26,13 @@
     <select id="portfolio" name="portfolio_account_id"><option value="">– wählen –</option>
       {% for a in accounts %}<option value="{{ a.id }}" {{ 'selected' if a.id == b.portfolio_account_id }}>{{ a.name }} ({{ a.currency }})</option>{% endfor %}
     </select>
+    {% if adapter.savings_label %}
+    <label for="savings">{{ adapter.savings_label }}-Konto (optional)</label>
+    <select id="savings" name="savings_account_id"><option value="">– nicht abrufen –</option>
+      {% for a in accounts %}<option value="{{ a.id }}" {{ 'selected' if a.id == b.savings_account_id }}>{{ a.name }} ({{ a.currency }})</option>{% endfor %}
+    </select>
+    <div class="muted">Ein eigenes Wealthfolio-Konto für das {{ adapter.savings_label }}: Der Dienst liest dann auch dessen Umsätze und Saldo. Umbuchungen zwischen Girokonto und {{ adapter.savings_label }} werden als ein Übertrag gebucht. Beim ersten Abruf holt er das {{ adapter.savings_label }} ab dem Startdatum.</div>
+    {% endif %}
     <label for="start">Buchungen übernehmen ab (beim ersten Abruf)</label>
     <input type="date" id="start" name="start_date" value="{{ b.start_date }}">
     <div class="muted">Leer = alles, was der Broker liefert. Gilt für den ersten Abruf; danach holt jeder Abruf ab dem letzten (minus 7 Tage) – für einen neuen Zeitraum unten „Ab Startdatum neu abrufen“.</div>
