@@ -15,7 +15,8 @@ MASK = "***"
 # IBANs (with or without spaces) and runs of 8+ digits (account, card, customer numbers).
 PATTERNS = [
     re.compile(r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,3})?\b"),
-    re.compile(r"(?<![\d.:-])\d{8,}(?![\d.:-])"),
+    # Not the digits of an ISIN (US0378331005) or another code that starts with letters.
+    re.compile(r"(?<![A-Za-z\d.:-])\d{8,}(?![\d.:-])"),
 ]
 # Shorter values (a PIN of 4 digits, "EUR", "true") would mask ordinary text.
 MIN_SECRET = 6

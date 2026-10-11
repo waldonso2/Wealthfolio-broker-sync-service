@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.5
+
+- **Fix: an opening position entered from the old parser's ISIN still stayed unmatched.** Its Wealthfolio asset counted as taken by that spelling (`<ISIN>|/DE/<WKN>`) - which is the same ISIN. It isn't taken from the real ISIN any more.
+- **The log masked ISINs** of US securities ("US***"): long digit runs after letters (an ISIN) are no longer taken for account numbers; account, depot and reference numbers still are.
+- ISINs assigned on the page *Wertpapiere* are no longer looked up in imported trades every run (the holdings check finds them by symbol).
+
 ## 0.11.4
 
 - **Fix: an opening position entered from holdings read before 0.9.9 wasn't found by the holdings check.** python-fints' parser, used until then, read a security split over two lines as ISIN `<ISIN>|/DE/<WKN>` and kept only the name's last line (Deutsche Bank: "IEN O.N."). An opening entered from it was booked under that ISIN. Its transaction now carries the real ISIN (its id stays, so nothing is booked again), and the check finds the position.
