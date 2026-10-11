@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.4
+
+- **Fix (FinTS, Deutsche Bank): without an IBAN the wrong account was read.** The service took the first account with an IBAN, at the Deutsche Bank the savings account, so the giro account's bookings never came. It now picks the giro account by the account type the bank reports, and the log says which one (`Umsätze und Saldo von „…“`). An IBAN entered in the settings still decides.
+- Page *Sicherheit*: the import instructions warn against Windows' automatic certificate store, and say to restart the browser after the import.
+
 ## 0.9.3
 
 - **Trusted HTTPS instead of a browser warning.** The container now has a small certificate authority of its own. It signs the web UI's certificate, and the next update replaces the self-signed one from 0.9.0. Import the CA certificate once (page *Sicherheit* → *CA-Zertifikat herunterladen*; instructions for Windows, macOS, Firefox, iPhone and Android are on the page). After that the browser shows the UI as secure, also after every renewal. The CA may only vouch for local names (private IP ranges, the container's name, `.local`, `.lan`, `.home.arpa`, `.fritz.box`): even with its key, nobody could fake a public site with it. Its key stays root-only and is never handed to the service. The certificate leaves out public IPv6 addresses.

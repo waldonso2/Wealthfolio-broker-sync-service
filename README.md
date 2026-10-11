@@ -117,7 +117,7 @@ Der Dienst liest dein **Deutsche-Bank-Girokonto** und den **Bestand deines maxbl
 
 - **Anmeldename:** deine Deutsche-Bank-ID oder Filialnummer und Kontonummer (zehnstellig, ggf. mit führenden Nullen), wie im Online-Banking. Dazu die **PIN**.
 - **Bankleitzahl:** die deines Kontos (sie hängt bei der Deutschen Bank von der Filiale ab, steht in deiner IBAN an Stelle 5 bis 12).
-- **IBAN des Girokontos:** nur nötig, wenn du mehrere Girokonten hast.
+- **IBAN des Girokontos:** nur nötig, wenn du mehrere Girokonten hast. Ohne IBAN nimmt der Dienst das Girokonto (nicht Spar- oder Depotkonto); welches, steht im Log.
 - **FinTS-Produkt-ID:** wie bei der DKB.
 - **Konten:** ein Deutsche-Bank-Verrechnungskonto und ein Depotkonto (maxblue) in Wealthfolio.
 

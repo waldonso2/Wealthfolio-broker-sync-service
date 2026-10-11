@@ -106,6 +106,7 @@ class FintsAdapter(BrokerAdapter):
         self._client = None
         self._pending = None
         self._open = False
+        self._logged_account = False
 
     # ── login ───────────────────────────────────────────────────────────────
     def _make_client(self):
@@ -269,8 +270,18 @@ class FintsAdapter(BrokerAdapter):
                 if (a.iban or "").upper() == wanted:
                     return a
             raise AdapterError(f"Die IBAN {wanted} gehört nicht zu diesem {self.label}-Zugang.")
-        # A depot listed with the giro account has no IBAN: the giro account is the first with one.
-        return next((a for a in accounts if a.iban), accounts[0])
+        # Without an IBAN: the giro account by the account type the bank reports (FinTS: 1-9 current
+        # accounts; 10-19 savings, 30-39 depots), else the first account with an IBAN.
+        giro = {(a.get("iban") or "").upper() for a in self._information().get("accounts") or []
+                if isinstance(a.get("type"), int) and 1 <= a["type"] <= 9 and a.get("iban")}
+        chosen = (next((a for a in accounts if (a.iban or "").upper() in giro), None)
+                  or next((a for a in accounts if a.iban), accounts[0]))
+        if not self._logged_account:
+            self._logged_account = True
+            name = next((a.get("product_name") for a in self._information().get("accounts") or []
+                         if a.get("iban") and (a.get("iban") or "").upper() == (chosen.iban or "").upper()), None)
+            log.info("%s (FinTS): Umsätze und Saldo von „%s“", self.label, name or "?")
+        return chosen
 
     def _depot_accounts(self) -> list:
         """Accounts to ask for holdings: the SEPA accounts, plus accounts the user parameters
