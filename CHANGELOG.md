@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.6
+
+- **Fix (FinTS camt): "Abrufzeitraum außerhalb des unterstützten Bereichs".** A bank states in its parameters how many days of camt bookings it keeps (Deutsche Bank). The service now asks only that far back, and the log says so ("die Bank hält camt-Umsätze N Tage vor"). Older giro bookings aren't available over FinTS at all.
+
 ## 0.9.5
 
 - **Fix (Deutsche Bank): the camt request was refused.**

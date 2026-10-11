@@ -341,12 +341,27 @@ class FintsAdapter(BrokerAdapter):
             # Some banks (Deutsche Bank) answer the MT940 request with nothing and deliver camt only.
             records = self._camt(account, start, today)
             source = "camt"
-        log.info("%s (FinTS): %d Umsätze per %s seit %s", self.label, len(records), source, start.isoformat())
+        log.info("%s (FinTS): %d Umsätze per %s seit %s", self.label, len(records), source,
+                 (self.history_start or start).isoformat())
         return to_transactions(records, self.securities_pattern, self.interest_pattern, self.fee_pattern)
+
+    def _camt_storage_days(self) -> int | None:
+        """How many days back the bank keeps camt bookings (its parameters, HICAZS), if it says."""
+        try:
+            days = self._client.bpd.find_segment_first("HICAZS").parameter.storage_duration
+            return int(days) if days else None
+        except Exception:
+            return None
 
     def _camt(self, account, start: date, end: date) -> list[dict]:
         from fints.camt_parser import camt053_to_dict
 
+        days = self._camt_storage_days()
+        if days and start < end - timedelta(days=days - 1):
+            start = end - timedelta(days=days - 1)
+            log.info("%s (FinTS): die Bank hält camt-Umsätze %d Tage vor - Abruf ab %s", self.label, days,
+                     start.isoformat())
+            self.history_start = start
         with _national_account_details():
             answer = self._call(self._client.get_transactions_xml, account, start, end)
         booked = answer[0] if answer else []
