@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.2
+
+- **FinTS depot transactions, first step (diagnosis, nothing booked).** Banks that offer depot transactions over FinTS (DKB) are asked for them (HKWDU, answered in MT536 - python-fints knows neither, the service defines both). The log names, per depot, how many came and what they would be booked as (purchase, sale, delivery, corporate action, reversal), how complete they are, and the answer's layout - counts, field names and standard codes only, no ISINs, amounts or numbers. Booking follows once a real answer has been checked.
+  - Not asked when the bank wants a TAN for them; a failure never stops the run.
+
 ## 0.10.1
 
 - **Fix (FinTS depot holdings): "'NoneType' object is not subscriptable".** python-fints takes the bank's country from the account's BIC when it asks for the holdings. A depot listed only in the user parameters (DKB) has no BIC, so the request failed before it was sent. It now gets the BIC of the bank's other accounts (else one naming Germany).

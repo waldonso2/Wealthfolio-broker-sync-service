@@ -418,7 +418,48 @@ class FintsAdapter(BrokerAdapter):
         out = to_transactions(records, self.securities_pattern, self.interest_pattern, self.fee_pattern)
         if self.with_savings:
             out = self._with_savings(out, account, today)
+        self._depot_movements(start, today)
         return out
+
+    def _depot_movements(self, start: date, end: date) -> None:
+        """Diagnosis, nothing booked yet: the depot transactions (HKWDU, MT536) if the bank offers them -
+        what they would be booked as and the answer's layout, counts and field names only."""
+        try:
+            if not self._client.bpd.find_segment_first("HIWDUS"):
+                return
+        except Exception:
+            return
+        from . import mt536
+
+        if mt536.needs_tan(self._client):
+            log.info("%s (FinTS): Depotumsätze verlangen eine Freigabe in der App - nicht abgerufen", self.label)
+            return
+        fetch = getattr(self._client, "get_depot_transactions", None) or (
+            lambda account, a, b: mt536.fetch(self._client, account, a, b))
+        try:
+            depots = self._depot_accounts()
+        except AdapterError as e:
+            log.info("%s (FinTS): Depotumsätze: kein Depot gefunden: %s", self.label, e)
+            return
+        for account, what in depots:
+            try:
+                texts = fetch(account, start, end)
+            except Exception as e:
+                log.info("%s (FinTS): Depotumsätze von %s nicht lesbar: %s", self.label, what,
+                         _bank_messages(str(e)) or f"{type(e).__name__}: {e}")
+                continue
+            if _needs_tan(texts):
+                log.info("%s (FinTS): Depotumsätze von %s verlangen eine Freigabe - nicht abgerufen", self.label,
+                         what)
+                continue
+            try:
+                movements = [m for t in texts for m in mt536.parse(t)]
+                log.info("%s (FinTS): Depotumsätze von %s seit %s (Test, nichts gebucht): %d - %s. Aufbau: %s",
+                         self.label, what, start.isoformat(), len(movements), mt536.summary(movements),
+                         mt536.structure(texts))
+            except Exception as e:
+                log.info("%s (FinTS): Depotumsätze von %s nicht auswertbar: %s: %s", self.label, what,
+                         type(e).__name__, e)
 
     def _with_savings(self, giro_txs: list[Transaction], giro_account, today: date) -> list[Transaction]:
         """The savings account's bookings (on its own Wealthfolio account); transfers between the two
