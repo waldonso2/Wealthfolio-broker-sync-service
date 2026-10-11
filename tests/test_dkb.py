@@ -487,3 +487,10 @@ def test_the_log_says_why_an_asset_isnt_learned(tmp_path, caplog):
         in caplog.text
     assert "zu US00TEST0008 nicht zugeordnet: kein Kauf/Verkauf, dessen Übertrag die ISIN nennt" in caplog.text
     state.close()
+
+
+def test_an_opening_with_the_old_parsers_isin_keeps_its_id_but_gets_the_real_isin(tmp_path, monkeypatch):
+    syncer, _ = setup_sync(tmp_path, FakeWealthfolio(), monkeypatch)
+    syncer.state.add_opening("dkb", "IE00TEST0000|/DE/A0TEST", "2024-01-02", "IEN O.N.", "22", "20", "0")
+    [tx] = syncer._openings("dkb")
+    assert (tx.id, tx.isin) == ("start-IE00TEST0000|/DE/A0TEST-2024-01-02", "IE00TEST0000")
