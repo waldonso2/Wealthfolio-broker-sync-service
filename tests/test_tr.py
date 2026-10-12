@@ -279,6 +279,7 @@ def test_dashboard_shows_the_holdings_check(tmp_path):
     page = client.get("/").text
     assert "Abweichungen zu Wealthfolio (" in page and 'class="light yellow"' in page
     assert re.search(r"<td[^>]*>Cash EUR</td><td[^>]*>1234.56</td>", page)
+    assert 'Saldo <strong class="warn-text">weicht ab</strong>' in page
 
 
 def test_positions_in_the_current_and_the_older_format():
@@ -322,7 +323,7 @@ def test_dividend_with_another_symbol_matches_only_when_unambiguous():
     assert ExistingIndex(two).find("[SYNC tr:1]", [payload]) is None
 
 
-def test_duplicates_from_before_the_fix_are_found_and_only_the_sync_copy_removed(tmp_path):
+def test_duplicates_from_before_the_fix_are_found_and_only_the_sync_copy_removed(tmp_path, hidden_pages):
     from fastapi.testclient import TestClient
 
     from brokersync.web.app import create_app

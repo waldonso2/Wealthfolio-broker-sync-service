@@ -37,7 +37,7 @@
   </div>
   <p class="summary-line">
     {% if b.last %}Zuletzt {{ b.last.started_at | local }} · <strong>{{ b.last.created }}</strong> neu{% if b.last.existing %} · {{ b.last.existing }} vorhanden{% endif %}{% else %}Noch nie abgerufen{% endif %}
-    {% if b.balances %} · Saldo {% for x in b.balances %}<strong>{{ x.amount | money }} {{ x.currency }}</strong>{% if x.account %} ({{ b.savings_label }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+    {% if b.saldo == "ok" %} · Saldo <strong class="ok-text">stimmt</strong>{% elif b.saldo == "off" %} · Saldo <strong class="warn-text">weicht ab</strong>{% endif %}
   </p>
   {% if b.light in ("yellow", "red") %}
   <ul class="reasons">{% for r in b.reasons %}<li>{{ r }}</li>{% endfor %}</ul>

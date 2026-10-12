@@ -173,3 +173,4 @@ ul.rows .grow { flex: 1 1 180px; min-width: 0; display: flex; flex-direction: co
 ul.rows .grow .muted { font-size: 13px; }
 .nowrap { white-space: nowrap; }
 .error-text { color: var(--error); }
+.summary-line strong.ok-text { color: var(--ok); } .summary-line strong.warn-text { color: var(--warn); }

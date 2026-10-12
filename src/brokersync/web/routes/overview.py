@@ -48,6 +48,10 @@ def _brokers(ctx: AppContext, c: config_mod.Config, secrets_: dict) -> list[dict
         reconcile = ctx.state.reconcile(key)
         unknown = len(ctx.state.unknown_events(key))
         gaps = sum(1 for g in ctx.state.gaps(key) if g["kind"] in ("missing", "partial", "orphan"))
+        balances = ctx.state.balances(key)
+        # The overview shows no amounts, only whether the broker's balance matches Wealthfolio (#83).
+        cash_off = [d for d in (reconcile or {}).get("deviations", []) if d.get("kind") == "cash"]
+        saldo = None if not balances or reconcile is None else ("off" if cash_off else "ok")
         light, reasons = views.broker_light(asdict(last) if last else None, reconcile, unknown, gaps, b.enabled)
         brokers.append({
             "key": key,
@@ -56,7 +60,7 @@ def _brokers(ctx: AppContext, c: config_mod.Config, secrets_: dict) -> list[dict
             "config": b,
             "has_credentials": bool(secrets_.get("brokers", {}).get(key, {}).get("credentials")),
             "last": last,
-            "balances": ctx.state.balances(key),
+            "saldo": saldo,
             "reconcile": reconcile,
             "unknown": unknown,
             "gaps": gaps,
