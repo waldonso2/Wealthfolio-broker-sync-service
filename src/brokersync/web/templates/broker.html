@@ -16,7 +16,7 @@
     {% endfor %}
 
     <h2 style="margin-top:22px">Wealthfolio-Konten</h2>
-    {% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error }} – <a href="/setup/wealthfolio">Verbindung prüfen</a></div>{% endif %}
+    {% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error | redact }} – <a href="/setup/wealthfolio">Verbindung prüfen</a></div>{% endif %}
     <p class="muted">Ein Verrechnungskonto für Ein- und Auszahlungen, ein Depotkonto für die Wertpapiere. Hast du schon per CSV/PDF importiert, nimm dieselben Konten, dann werden diese Buchungen erkannt.</p>
     <label for="cash">Verrechnungskonto (Cash)</label>
     <select id="cash" name="cash_account_id"><option value="">– wählen –</option>

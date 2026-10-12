@@ -71,6 +71,35 @@ def test_nothing_readable_in_data_after_a_run(tmp_path, caplog):
         assert s not in caplog.text
 
 
+def test_error_texts_are_stored_and_shown_masked(tmp_path):
+    client = logged_in(tmp_path)
+    Vault(tmp_path).update(lambda d: d.__setitem__("wealthfolio_password", "wf-pw-very-secret"))
+    cfg = config_mod.load(tmp_path)
+    cfg.brokers["fake"] = config_mod.BrokerConfig(enabled=True)
+    config_mod.save(tmp_path, cfg)
+    state = State(tmp_path)
+    run = state.start_run("fake")
+    text = "Bank: Konto DE02500105170137075030 gesperrt, Auftrag 123456789; login wf-pw-very-secret rejected"
+    state.finish_run(run, "error", message=text)
+    stored = state.last_run("fake").message
+    assert "DE02500105170137075030" not in stored and "123456789" not in stored and "wf-pw-very-secret" not in stored
+    # Runs stored by an older version: masked when shown.
+    with state.db:
+        state.db.execute("UPDATE runs SET message = ? WHERE id = ?", (text, run))
+    page = client.get("/").text
+    assert "gesperrt" in page
+    for s in ("DE02500105170137075030", "123456789", "wf-pw-very-secret"):
+        assert s not in page
+
+
+def test_request_urls_are_not_logged():
+    from brokersync import cli
+
+    cli.setup_logging()
+    assert logging.getLogger("httpx").getEffectiveLevel() == logging.WARNING
+    assert logging.getLogger("httpcore").getEffectiveLevel() == logging.WARNING
+
+
 def test_an_installation_of_0_8_is_migrated(tmp_path):
     # What 0.8 left: the Fernet key in data/, secrets.enc as Fernet, config.json, a plain state.db.
     key = Fernet.generate_key()

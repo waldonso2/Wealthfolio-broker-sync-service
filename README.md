@@ -268,7 +268,7 @@ Was der Dienst speichert, ist verschlüsselt; die Seite **Sicherheit** zeigt jed
 | Schlüssel des Dienstes | **nicht** in `data/`: mit `systemd-creds` verschlüsselt in `/etc/wealthfolio-broker-sync/key.cred` (nur root), der Dienst bekommt ihn beim Start |
 | Passwort der Oberfläche | argon2id; nach fünf Fehlversuchen 15 Minuten Pause |
 | Oberfläche | HTTPS (Port 8443) mit einem Zertifikat der Container-eigenen CA: einmal importieren (Seite *Sicherheit*), dann vertraut der Browser. Die CA darf nur Namen im lokalen Netz bestätigen (*Name Constraints*), ihr Schlüssel bleibt root-only in `/etc/wealthfolio-broker-sync/tls/`. Ein Zertifikat eines anderen Ausstellers dort (`cert.pem`/`key.pem`) bleibt erhalten. Dazu sichere Cookies und strenge Sicherheits-Header |
-| Log und Nachrichten | Zugangsdaten, Tokens, IBANs und Kontonummern werden geschwärzt; ntfy-Nachrichten enthalten ohne *Details* keine Beträge |
+| Log, Nachrichten und Fehlermeldungen | Zugangsdaten, Tokens, IBANs und Kontonummern werden geschwärzt – im Log, in ntfy-Nachrichten und in Fehlermeldungen der Oberfläche; Anfrage-Adressen werden nicht protokolliert; ntfy-Nachrichten enthalten ohne *Details* keine Beträge |
 | Dienst | eigener Benutzer, systemd-Härtung (kein Schreibzugriff außer `data/`, keine Rechteausweitung), Dateien nur für den Dienst lesbar |
 
 **Master-Passphrase (wahlweise, Seite *Sicherheit*):** Ohne sie kann jemand, der den ganzen Container samt Schlüssel kopiert (z. B. ein Proxmox-Backup), die Daten entschlüsseln. Mit ihr nicht: Der Schlüssel entsteht erst aus Schlüssel des Dienstes **und** Passphrase (argon2id). Dafür musst du den Dienst nach jedem Neustart des Containers in der Oberfläche entsperren; bis dahin ruft er nichts ab und schickt eine ntfy-Nachricht. **Ohne die Passphrase sind die Daten verloren** – dann bleibt nur, den Dienst neu einzurichten.
@@ -297,6 +297,7 @@ Für Mitwirkende: [ARCHITECTURE.md](ARCHITECTURE.md) erklärt Aufbau und Ablauf,
 - Python-Dienst `brokersync` (FastAPI-Oberfläche per HTTPS auf Port 8443, Port 8090 leitet weiter; `brokersync run` für den systemd-Timer) unter `/opt/wealthfolio-broker-sync`; verschlüsselte Daten in `/opt/wealthfolio-broker-sync/data`, Schlüssel und Zertifikat in `/etc/wealthfolio-broker-sync`; läuft als eigener Benutzer `brokersync`. Befehle mit dem Schlüssel des Dienstes: `brokersync-cli <befehl>`.
 - Wealthfolio wird über seine REST-API (`/api/v1`) mit dem Wealthfolio-Passwort angesprochen.
 - Scalables CLI `sc` liegt unter `/opt/wealthfolio-broker-sync/bin/sc`; `brokersync install-sc` installiert bzw. aktualisiert es (Installation und Update rufen es auf).
+- Abhängigkeiten werden nur in den Versionen aus `requirements.txt` installiert, jede mit Prüfsumme; die Installations-Engine von community-scripts ist auf einen geprüften Stand festgelegt. Sicherheitslücken bitte privat melden, siehe [SECURITY.md](SECURITY.md).
 - Releases: Ein neuer Stand wird installierbar, sobald die Version in `pyproject.toml` erhöht und nach `main` gemergt ist; der Release-Workflow legt dann das GitHub-Release an, aus dem Installation und Update laden.
 
 ## Danke

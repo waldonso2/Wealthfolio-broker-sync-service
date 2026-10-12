@@ -35,8 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("security-status", help="what is protected how (the page Sicherheit)")
     args = parser.parse_args(argv)
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    redact.install()
+    setup_logging()
 
     if args.cmd == "serve":
         from .web.serve import serve
@@ -121,6 +120,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Scalable CLI {version} {'installed' if new else 'is up to date'} in {args.dir}.")
         return 0
     return 2
+
+
+def setup_logging() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    redact.install()
+    # httpx logs every request with its full URL (query parameters included) on INFO; the service
+    # logs what it does itself, so only their warnings.
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def _notify_locked() -> None:

@@ -86,7 +86,7 @@
   <h1>Prüfung der Konten</h1>
   <p>Das Depotkonto hält kein Bargeld: Jeder Kauf wird vom Verrechnungskonto bezahlt, jeder Verkauf und jede Ausschüttung dorthin übertragen. Fehlt eine Seite davon – von Hand gelöscht, ohne Übertrag importiert, doppelt gebucht –, zeigt das Depotkonto Bargeld und das Verrechnungskonto das Gegenteil. Diese Seite zeigt, wo.</p>
   <p class="muted">Nur lesend: Korrigieren musst du in Wealthfolio. Zeitpunkte sind in UTC, wie Wealthfolio sie speichert.</p>
-  {% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error }}</div>{% endif %}
+  {% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error | redact }}</div>{% endif %}
   {% for r in report %}{% set x = r.result %}
   <h2 style="margin-top:20px">{{ r.label }}</h2>
   <p>Bargeld laut Buchungen: {{ r.depot_name }} <strong>{{ x.depot_cash | money }} EUR</strong> (soll 0 sein) · {{ r.cash_name }} {{ x.cash | money }} EUR</p>

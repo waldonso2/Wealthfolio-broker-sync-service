@@ -19,8 +19,13 @@ chown -R "$USER_NAME:$USER_NAME" "$BASE/data"
 # leaving a service that can't start. The service is stopped meanwhile.
 rm -rf "$BASE/venv.old"
 [[ -d "$BASE/venv" ]] && mv "$BASE/venv" "$BASE/venv.old"
+# Only the locked versions (requirements.txt, with hashes): a package that was changed on PyPI,
+# or a dependency nobody tested, is refused. The package itself is built with the locked
+# setuptools, nothing else is fetched.
+PIP=("$BASE/venv/bin/pip" install --quiet --disable-pip-version-check --no-cache-dir)
 if ! { python3 -m venv "$BASE/venv" &&
-  "$BASE/venv/bin/pip" install --quiet --disable-pip-version-check --no-cache-dir "$APP" &&
+  "${PIP[@]}" --require-hashes --only-binary :all: -r "$APP/requirements.txt" &&
+  "${PIP[@]}" --no-deps --no-build-isolation "$APP" &&
   "$BASE/venv/bin/brokersync" --version >/dev/null; }; then
   rm -rf "$BASE/venv"
   [[ -d "$BASE/venv.old" ]] && mv "$BASE/venv.old" "$BASE/venv"
@@ -136,8 +141,7 @@ if timeout 900 /usr/local/bin/brokersync-cli migrate; then
   done
   if [[ "$replaced" == 1 ]]; then
     BACKUP="$BASE/backup-$(date +%Y%m%d-%H%M%S)-encrypted.tar.gz"
-    tar -czf "$BACKUP" -C "$BASE" data
-    chmod 600 "$BACKUP"
+    (umask 077 && tar -czf "$BACKUP" -C "$BASE" data)
     echo "Older backups held the key next to the data; replaced by $BACKUP (encrypted data only)." >&2
   fi
 else

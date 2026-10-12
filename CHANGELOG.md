@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.1
+
+Security hardening from the audit (waldonso2/wealthfolio-importer-addon#55):
+
+- **Dependencies only at locked, hash-checked versions.** Install and update used to fetch the newest version of every dependency from PyPI; a tampered or broken release would have landed in the container unseen, next to the bank credentials. Now `requirements.txt` holds each one at an exact version with its hashes (for every supported Python and platform), `setup.sh` installs only those, only as ready-built packages, and the CI tests exactly them. Dependabot proposes updates.
+- **The install engine is pinned.** The install and `update` load community-scripts' engine, which runs as root on the Proxmox host, from a reviewed commit instead of its moving main branch; a weekly check reports newer ones.
+- **Error texts are masked on the pages too.** A bank's or broker's error message shown on the overview (or Wealthfolio's on the other pages) no longer shows IBANs, account numbers or stored secrets - as in the log and the notifications. The log no longer lists request addresses.
+- Backups are created readable for root only from the first byte.
+- A secret just saved is masked in the log at once, not only after the next read.
+- Repository: secret scan of the whole history in the CI, `.gitignore` for keys and data, GitHub Actions pinned to commits, `SECURITY.md` for private reports.
+
 ## 0.12.0
 
 - **Logos for securities (optional, page *Logos*).** Wealthfolio's own logos are named by ticker and exchange, so securities booked under their ISIN show none. Turned on and with a (free) logo.dev key, the service asks logo.dev for each security by ISIN after every run and sets the logo as the security's custom logo in Wealthfolio (version 3.8.0 or later) - stored in Wealthfolio's database, so it survives updates and is part of its backups. Only ISINs go to logo.dev. A logo you set yourself is never replaced; one you remove isn't set again; a security logo.dev has no logo for is asked again after 30 days. At most 50 questions per run.

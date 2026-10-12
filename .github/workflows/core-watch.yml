@@ -1,0 +1,39 @@
+name: Engine watch
+
+# ct/wealthfolio-broker-sync.sh pins community-scripts/core (the install/update engine, run as
+# root on the Proxmox host) to a commit. Once a week: when core's main has moved on, open an
+# issue to review the changes and move the pin deliberately.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Compare the pin with core's main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PIN=$(grep -oE 'community-scripts/core/[0-9a-f]{40}' ct/wealthfolio-broker-sync.sh | cut -d/ -f3)
+          MAIN=$(git ls-remote https://github.com/community-scripts/core refs/heads/main | cut -f1)
+          echo "pinned $PIN, main $MAIN"
+          [ -n "$PIN" ] && [ -n "$MAIN" ] || { echo "pin or main not found"; exit 1; }
+          [ "$PIN" = "$MAIN" ] && exit 0
+          TITLE="community-scripts/core has moved on: review and update the pin"
+          if gh issue list --state open --search "\"$TITLE\" in:title" --json number --jq length | grep -qx 0; then
+            gh issue create --title "$TITLE" --body "The install/update engine is pinned to \`$PIN\`; core's main is at \`$MAIN\`.
+
+          Changes: https://github.com/community-scripts/core/compare/$PIN...$MAIN
+
+          Review them (the engine runs as root on the Proxmox host), then set the new commit in \`ct/wealthfolio-broker-sync.sh\` and run a test install."
+          fi

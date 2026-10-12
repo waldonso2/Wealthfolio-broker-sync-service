@@ -74,6 +74,7 @@ class Vault:
             data = self.load()
             change(data)
             self._save(data)
+            _register(data)  # a secret just stored is masked from now on, not only after the next read
             return data
 
     # ── convenience ─────────────────────────────────────────────────────────

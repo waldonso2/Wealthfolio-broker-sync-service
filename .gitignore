@@ -7,3 +7,15 @@ dist/
 .ruff_cache/
 /data/
 *.whl
+
+# Never in the repository: keys, credentials, the service's data and its backups (see .gitleaks.toml).
+.env
+.env.*
+*.key
+*.pem
+*.cred
+*.enc
+secret.key
+keyring.json
+state.db*
+backup-*.tar.gz
