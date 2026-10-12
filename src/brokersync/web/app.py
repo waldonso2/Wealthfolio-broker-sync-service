@@ -85,6 +85,8 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
     templates = Jinja2Templates(directory=HERE / "templates")
     templates.env.filters["local"] = _local_time
     templates.env.filters["money"] = _money
+    # Foreign error texts (banks, brokers, Wealthfolio) on a page: never a secret or an account number.
+    templates.env.filters["redact"] = lambda text: redact.redact(str(text)) if text else text
     templates.env.globals["STATUS"] = STATUS_LABEL
     templates.env.globals["UNMATCHED_SECURITIES"] = UNMATCHED_SECURITIES
     # Adapters waiting for a TAN, between the two requests of a login.

@@ -23,7 +23,7 @@
   </form>
   {% if last %}
   <h2>Letzter Durchlauf</h2>
-  <p>{{ last.at | local }}: {{ last.set }} gesetzt, {{ last.none }} ohne Logo bei logo.dev, {{ last.failed }} fehlgeschlagen{% if last.open %}, {{ last.open }} beim nächsten Abruf{% endif %}.{% if last.message %} {{ last.message }}{% endif %}</p>
+  <p>{{ last.at | local }}: {{ last.set }} gesetzt, {{ last.none }} ohne Logo bei logo.dev, {{ last.failed }} fehlgeschlagen{% if last.open %}, {{ last.open }} beim nächsten Abruf{% endif %}.{% if last.message %} {{ last.message | redact }}{% endif %}</p>
   {% endif %}
   <p class="muted">Logos von <a href="https://logo.dev" target="_blank" rel="noopener">Logo.dev</a>.</p>
 </div>

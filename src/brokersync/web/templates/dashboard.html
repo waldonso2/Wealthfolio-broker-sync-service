@@ -37,7 +37,7 @@
       {% if b.last %}
       <div class="muted">Letzter Abruf: {{ b.last.started_at | local }} ·
         {{ b.last.created }} neu, {{ b.last.existing }} schon vorhanden{% if b.last.failed %}, {{ b.last.failed }} fehlgeschlagen{% endif %}{% if b.last.unknown %}, <a href="/unknown">{{ b.last.unknown }} unbekannt</a>{% endif %}</div>
-      {% if b.last.message and b.last.status != "ok" %}<pre class="muted">{{ b.last.message }}</pre>{% endif %}
+      {% if b.last.message and b.last.status != "ok" %}<pre class="muted">{{ b.last.message | redact }}</pre>{% endif %}
       {% endif %}
       {% if b.reconcile %}
         {% if b.reconcile.deviations %}

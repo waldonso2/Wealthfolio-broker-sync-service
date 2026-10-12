@@ -6,10 +6,12 @@ Service that fetches broker transactions and writes them, deduplicated, into a s
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]"
+pip install --require-hashes --only-binary :all: -r requirements.txt   # the locked versions users get
+pip install --no-deps --no-build-isolation -e . && pip install pytest respx ruff
 pytest -q                 # all tests
 ruff check src tests      # lint
-shellcheck ct/*.sh install/*.sh deploy/setup.sh deploy/brokersync-reset-password deploy/brokersync-cli
+shellcheck ct/*.sh install/*.sh deploy/setup.sh deploy/brokersync-reset-password deploy/brokersync-cli scripts/*.sh
+scripts/lock.sh           # after changing a dependency in pyproject.toml (needs uv); --upgrade: newest versions
 BROKERSYNC_DATA=./data brokersync serve --port 8090   # UI locally
 BROKERSYNC_DATA=./data brokersync run                 # one sync
 ```
@@ -39,6 +41,8 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | `src/brokersync/logos.py` | Optional (UI *Logos*, `Config.logos_enabled`, key `logo_dev_token` in the vault): after every run, PNG logos from logo.dev by ISIN (Wealthfolio's `metadata.identifiers.isin`, an ISIN as symbol, or `state.assets`) → `PUT /assets/logo/{id}` (Wealthfolio ≥ 3.8.0); status per asset in `meta` `logo:<asset id>` |
 | `src/brokersync/sc_install.py` | `brokersync install-sc`: downloads the latest `sc` release, verifies Scalable's minisign signature (pinned key) and the SHA-256 before writing `/opt/wealthfolio-broker-sync/bin/sc`; called by `deploy/setup.sh`, failure is non-fatal |
 | `src/brokersync/web/` | FastAPI + Jinja2 UI (German texts), CSRF via a dependency, own login; `gate.py` in front (security headers, login brake, unlock page while locked, rebuild after a key change), `serve.py` (HTTPS on 8443 + redirect from 8090) |
+| `requirements.txt` / `requirements-build.in` / `scripts/lock.sh` | Every runtime dependency (and setuptools) at an exact version with hashes, for all supported Pythons and platforms (`uv pip compile --universal`); `setup.sh` installs only from it |
+| `.gitleaks.toml`, `SECURITY.md` | Secret scan of the whole history in CI (job `secrets`; allowed fabricated test values only); private reporting of vulnerabilities |
 | `ct/`, `install/`, `json/` | community-scripts files (`json/` is the catalog entry for a later submission to community-scripts) |
 | `deploy/` | `setup.sh` (venv, units, key to `/etc` + drop-ins `10-key.conf`, TLS certificate, `migrate`; used by install and update), hardened systemd units, `brokersync-cli` (a command as the service user with the key), reset-password helper |
 | `ARCHITECTURE.md` | Overview for contributors: components, run sequence, dedup layers, data files, routes |
@@ -74,6 +78,9 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 - **Nothing readable in `data/`, no key there** (#53): everything the service writes goes through `crypto` (sealed files) or SQLCipher; new files get mode 0600 (`crypto.write_atomic`, `crypto.open_lock`). The host key comes from systemd in production; `data/secret.key` exists only in development/tests and before `setup.sh` migrated it. `test_security.test_nothing_readable_in_data_after_a_run` scans `data/` and the log after a real run - extend its list when new data is stored. Never log the passphrase or its argon2id result; the unlock cache lives only in `/run`.
 - **Rotating the host key** (`security.rotate_host_key`, `brokersync rotate-key` with the new key on stdin, run once by `setup.sh` behind the marker `key-rotated`): stage every re-encrypted file next to the old one, swap them in, and only then replace the stored key - never the other way round.
 - **Master passphrase loss = data loss**, by design: no recovery path, no backdoor key. Changing it re-encrypts everything under the sync lock; the web app is rebuilt afterwards (`gate.reset()`).
+- **Dependencies only at locked, hash-checked versions** (#58): `deploy/setup.sh` installs `requirements.txt` with `--require-hashes --only-binary :all:` (no sdist build code runs) and then the package with `--no-deps --no-build-isolation`. A new or changed dependency in `pyproject.toml` means running `scripts/lock.sh` in the same change; `test_packaging` fails otherwise. CI tests exactly these versions.
+- **The install engine is pinned** (#61): `ct/wealthfolio-broker-sync.sh` sets `COMMUNITY_SCRIPTS_CORE_URL` to a commit of community-scripts/core, unconditionally (an `update` command written earlier still exports its old URL) - it runs as root on the Proxmox host. Move the pin only after reviewing core's changes (`core-watch.yml` opens an issue when main moved on). Backups are created under `umask 077`.
+- **Foreign error texts are masked where stored and shown** (#60): `State.finish_run` stores `redact.redact(message)`, templates show error texts through the `redact` filter; httpx/httpcore log only warnings (request URLs can carry tokens). GitHub Actions are pinned to commit SHAs.
 - `ct/wealthfolio-broker-sync.sh` exports `COMMUNITY_SCRIPTS_URL` (this repo's raw `main`) **before** sourcing `community-scripts/core`'s `core/build.func`: the engine resolves `install/<slug>-install.sh` and writes the container's `update` command from it. Without it both point to community-scripts/ProxmoxVE. `test_packaging.py` checks this, and that the install line in the README matches.
 
 ## Adding a broker

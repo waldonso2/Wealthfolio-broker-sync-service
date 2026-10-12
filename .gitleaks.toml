@@ -1,0 +1,13 @@
+# Secret scan (CI job "secrets", gitleaks): the default rules, minus the fabricated values the
+# tests use on purpose. Add a value here only if it is test data that can't be anything real.
+title = "wealthfolio-broker-sync"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fabricated test values"
+regexes = [
+  '''^geheim-123456$''',          # UI password in the web tests
+  '''^pk_test-logo-key-123$''',   # logo.dev key in tests/test_logos.py
+]

@@ -14,7 +14,7 @@
     {% endfor %}
   </table></div>
   {% endif %}
-  {% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error }}</div>{% endif %}
+  {% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error | redact }}</div>{% endif %}
   <form method="post">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label for="label">Name</label><input type="text" id="label" name="label" placeholder="Trade Republic" required>

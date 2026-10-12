@@ -449,7 +449,8 @@ class State:
             self.db.execute(
                 "UPDATE runs SET finished_at = ?, status = ?, created = ?, existing = ?, failed = ?, unknown = ?,"
                 " message = ? WHERE id = ?",
-                (now(), status, created, existing, failed, unknown, message, run_id),
+                # Error texts of brokers and banks can carry account numbers: stored and shown masked.
+                (now(), status, created, existing, failed, unknown, redact.redact(message), run_id),
             )
 
     def runs(self, broker: str | None = None, limit: int = 20) -> list[Run]:

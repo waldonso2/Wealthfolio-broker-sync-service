@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # requirements.txt: the locked runtime dependencies (scripts/lock.sh). Security updates and a
+  # monthly round of version updates; pytr stays pinned in pyproject.toml and is updated by hand.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    ignore:
+      - dependency-name: "pytr"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"

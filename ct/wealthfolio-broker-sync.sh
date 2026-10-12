@@ -6,8 +6,12 @@
 # The engine comes from community-scripts/core; COMMUNITY_SCRIPTS_URL points it
 # at this repository, so it loads install/wealthfolio-broker-sync-install.sh
 # from here and writes an `update` command that runs this script again.
+# The engine runs as root on the Proxmox host: it is pinned to a reviewed commit, not
+# core's moving main branch, and set every run (the `update` command keeps the URL of
+# the run that wrote it). .github/workflows/core-watch.yml reports newer commits.
 export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/waldonso2/wealthfolio-broker-sync-service/main}"
-source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
+export COMMUNITY_SCRIPTS_CORE_URL="https://raw.githubusercontent.com/community-scripts/core/2f446f0dfc33538a1e842a447100b86d8b6412f2"
+source <(curl -fsSL "$COMMUNITY_SCRIPTS_CORE_URL/core/build.func")
 # Copyright (c) 2026 waldonso2
 # License: MIT | https://github.com/waldonso2/wealthfolio-broker-sync-service/raw/main/LICENSE
 # Source: https://github.com/waldonso2/wealthfolio-broker-sync-service
@@ -43,8 +47,8 @@ function update_script() {
 
     msg_info "Backing up configuration and credentials"
     BACKUP="/opt/wealthfolio-broker-sync/backup-$(date +%Y%m%d-%H%M%S).tar.gz"
-    tar -czf "$BACKUP" -C /opt/wealthfolio-broker-sync data
-    chmod 600 "$BACKUP"
+    # umask 077: the file is never readable by others, not even until a chmod.
+    (umask 077 && tar -czf "$BACKUP" -C /opt/wealthfolio-broker-sync data)
     find /opt/wealthfolio-broker-sync -maxdepth 1 -name 'backup-*.tar.gz' | sort -r | tail -n +4 | xargs -r rm -f
     msg_ok "Backed up to ${BACKUP}"
 
