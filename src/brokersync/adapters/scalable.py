@@ -157,6 +157,14 @@ def _when(v) -> datetime | None:
     return d if d.tzinfo else d.replace(tzinfo=UTC)
 
 
+def _at(v) -> datetime:
+    """``_when`` for a transaction that has a time (``to_transactions`` books only those)."""
+    when = _when(v)
+    if when is None:
+        raise AdapterError("Scalable: a transaction without a time")
+    return when
+
+
 def _first(*values):
     return next((v for v in values if v is not None), None)
 
@@ -239,7 +247,7 @@ def _netted(items: list[dict]) -> set[str]:
     """Ids of depot-migration pairs that cancel out (security legs and their cash leg)."""
     done: set[str] = set()
     transfers = [i for i in items if i.get("type") == "NON_TRADE_SECURITY_TRANSACTION" and _direction(i)]
-    outs = sorted((i for i in transfers if _direction(i) < 0), key=lambda i: _when(i["last_event_datetime"]))
+    outs = sorted((i for i in transfers if _direction(i) < 0), key=lambda i: _at(i["last_event_datetime"]))
     ins = [i for i in transfers if _direction(i) > 0]
     for o in outs:
         best = None
@@ -248,7 +256,7 @@ def _netted(items: list[dict]) -> set[str]:
                 continue
             if abs(_dec(i.get("quantity")) or 0) != abs(_dec(o.get("quantity")) or 0):
                 continue
-            gap = abs(_when(i["last_event_datetime"]) - _when(o["last_event_datetime"]))
+            gap = abs(_at(i["last_event_datetime"]) - _at(o["last_event_datetime"]))
             if gap <= NETTING_WINDOW and (best is None or gap < best[0]):
                 best = (gap, i)
         if best:
@@ -261,7 +269,7 @@ def _netted(items: list[dict]) -> set[str]:
         for w in withdrawals:
             if w["id"] in done or abs(_dec(w.get("amount")) or 0) != abs(_dec(dep.get("amount")) or 0):
                 continue
-            gap = abs(_when(w["last_event_datetime"]) - _when(dep["last_event_datetime"]))
+            gap = abs(_at(w["last_event_datetime"]) - _at(dep["last_event_datetime"]))
             if gap <= NETTING_WINDOW and (best is None or gap < best[0]):
                 best = (gap, w)
         if best:
@@ -270,7 +278,7 @@ def _netted(items: list[dict]) -> set[str]:
 
 
 def _day(item: dict):
-    return _when(item["last_event_datetime"]).astimezone(BERLIN).date()
+    return _at(item["last_event_datetime"]).astimezone(BERLIN).date()
 
 
 def _sales(items: list[dict]) -> tuple[list[Transaction], set[str]]:
@@ -303,9 +311,9 @@ def _sales(items: list[dict]) -> tuple[list[Transaction], set[str]]:
             cash, swap = cash_leg(leg, "DISTRIBUTION"), False
         if cash is None:
             continue
-        proceeds = _dec(cash["amount"])
+        proceeds = _dec(cash["amount"]) or Decimal(0)
         out.append(Transaction(
-            id=leg["id"], kind=Kind.SELL, datetime=_when(leg["last_event_datetime"]),
+            id=leg["id"], kind=Kind.SELL, datetime=_at(leg["last_event_datetime"]),
             currency=cash.get("currency") or "EUR", net=proceeds, isin=leg["isin"],
             name=leg.get("description") or cash.get("description") or "", shares=shares, gross=proceeds,
             label="Fondstausch" if swap else "Rückzahlung"))
@@ -320,14 +328,14 @@ def _cancelled(items: list[dict]) -> set[str]:
     used: set[str] = set()
     originals = sorted((i for i in items if i.get("cash_transaction_type") == "DISTRIBUTION"
                         and not i.get("is_cancellation") and (_dec(i.get("amount")) or Decimal(0)) > 0),
-                       key=lambda i: _when(i["last_event_datetime"]), reverse=True)
+                       key=lambda i: _at(i["last_event_datetime"]), reverse=True)
     for c in items:
         if not (c.get("is_cancellation") and c.get("cash_transaction_type") == "DISTRIBUTION"):
             continue
         amount = abs(_dec(c.get("amount")) or Decimal(0))
         original = next((o for o in originals if o["id"] not in used and o.get("related_isin") == c.get("related_isin")
                          and _dec(o.get("amount")) == amount
-                         and _when(o["last_event_datetime"]) <= _when(c["last_event_datetime"])), None)
+                         and _at(o["last_event_datetime"]) <= _at(c["last_event_datetime"])), None)
         if original:
             used.update((c["id"], original["id"]))
     return used
@@ -342,7 +350,7 @@ def to_transactions(items: list[dict], details: dict[str, dict]) -> list[Transac
     for item in booked:
         if item["id"] in netted:
             continue
-        when = _when(item["last_event_datetime"])
+        when = _at(item["last_event_datetime"])
         typ = item.get("type") or ""
         if item.get("is_cancellation"):
             out.append(_unknown(item, when, f"{item.get('cash_transaction_type') or typ}_CANCELLATION",
@@ -420,8 +428,12 @@ class ScCli:
             raise AdapterError("Scalable CLI (sc) ist nicht installiert - im Container `update` ausführen.") from e
         found = threading.Event()
 
+        stdout = self.login_process.stdout
+        if stdout is None:
+            raise AdapterError("Scalable CLI (sc): keine Ausgabe beim Login.")
+
         def read() -> None:
-            for line in self.login_process.stdout:
+            for line in stdout:
                 self._login_output.append(line.rstrip("\n"))
                 if _parse_prompt(self._login_output):
                     found.set()

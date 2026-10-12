@@ -602,7 +602,9 @@ def to_transactions(records: list[dict], securities: re.Pattern = SECURITIES, in
         amount = d["amount"]
         value = Decimal(str(amount.amount))
         currency = amount.currency or "EUR"
-        day: date = d.get("entry_date") or d.get("date")
+        day = d.get("entry_date") or d.get("date")
+        if day is None:
+            raise AdapterError("FinTS: a booking without a date")
         posting = (d.get("posting_text") or "").strip()
         purpose = " ".join((d.get("purpose") or "").split())
         name = (d.get("applicant_name") or "").strip()

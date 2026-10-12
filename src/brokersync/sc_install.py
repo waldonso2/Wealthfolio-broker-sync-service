@@ -105,7 +105,10 @@ def install(directory: Path, *, http: httpx.Client | None = None, machine: str |
         raise InstallError(f"Checksum of {asset} doesn't match.")
     with tarfile.open(fileobj=io.BytesIO(tarball), mode="r:gz") as tar:
         member = tar.getmember(f"sc-{tag}-linux-{arch}-gnu/sc")
-        data = tar.extractfile(member).read()
+        extracted = tar.extractfile(member)
+        if extracted is None:
+            raise InstallError(f"{asset} holds no file sc.")
+        data = extracted.read()
     Path(directory).mkdir(parents=True, exist_ok=True)
     tmp = binary.with_suffix(".new")
     tmp.write_bytes(data)

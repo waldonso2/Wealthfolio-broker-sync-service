@@ -220,3 +220,29 @@ def test_refetch_button(tmp_path):
     r = client.post("/brokers/fake/refetch", data={"csrf": csrf(client, "/brokers/fake")})
     assert "Der nächste Abruf holt noch einmal alles, was der Broker liefert." in r.text
     assert State(tmp_path).flag(refetch_flag("fake"))
+
+
+def test_navigation_groups_the_settings(tmp_path):
+    from brokersync.state import State
+
+    client, _, _ = make(tmp_path)
+    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    page = client.get("/").text
+    nav = re.search(r'<nav aria-label="Hauptmenü">(.*?)</nav>', page, re.S).group(1)
+    assert re.findall(r'<a href="([^"]+)"', nav) == ["/", "/check", "/unknown", "/settings"]
+    assert 'class="count"' not in nav and 'class="subnav"' not in page
+
+    index = client.get("/settings").text
+    for href in ("/setup/wealthfolio", "/brokers", "/notifications", "/securities", "/transfers", "/logos",
+                 "/security", "/duplicates"):
+        assert f'href="{href}"' in index
+    assert 'href="/settings" aria-current="page"' in index
+
+    page = client.get("/transfers").text
+    assert 'class="subnav"' in page and 'href="/transfers" aria-current="page"' in page
+    assert 'href="/settings" aria-current="page"' in page
+
+    State(tmp_path).add_unknown("fake", "x1", "ODD", "2026-01-02", {"eventType": "ODD"})
+    page = client.get("/unknown").text
+    assert '<span class="count" aria-label="1 offen">1</span>' in page
+    assert '<td data-label="Typ">' in page  # stacked on narrow screens

@@ -84,7 +84,9 @@ def _ensure_ca(directory: Path, hosts: list[str]) -> tuple[x509.Certificate, ec.
     if ca_file.exists() and ca_key_file.exists():
         ca = x509.load_pem_x509_certificate(ca_file.read_bytes())
         if ca.not_valid_after_utc - datetime.now(UTC) > timedelta(days=CA_RENEW_DAYS):
-            return ca, serialization.load_pem_private_key(ca_key_file.read_bytes(), None), False
+            ca_key = serialization.load_pem_private_key(ca_key_file.read_bytes(), None)
+            if isinstance(ca_key, ec.EllipticCurvePrivateKey):
+                return ca, ca_key, False
     key = ec.generate_private_key(ec.SECP256R1())
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, f"{CA_NAME} ({hosts[0]})"),
                       x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Wealthfolio Broker Sync")])

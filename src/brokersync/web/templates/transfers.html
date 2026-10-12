@@ -8,8 +8,8 @@
   <div class="table"><table>
     <tr><th>Name</th><th>IBAN</th><th>Stichwort</th><th>Gegenkonto in Wealthfolio</th><th></th></tr>
     {% for p in patterns %}
-    <tr><td>{{ p.label }}</td><td><code>{{ p.iban }}</code></td><td>{{ p.keyword }}</td>
-      <td>{{ names.get(p.destinationAccountId, "– nur als Übertrag markieren –" if not p.destinationAccountId else p.destinationAccountId) }}</td>
+    <tr><td data-label="Name">{{ p.label }}</td><td data-label="IBAN"><code>{{ p.iban }}</code></td><td data-label="Stichwort">{{ p.keyword }}</td>
+      <td data-label="Gegenkonto in Wealthfolio">{{ names.get(p.destinationAccountId, "– nur als Übertrag markieren –" if not p.destinationAccountId else p.destinationAccountId) }}</td>
       <td><form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link" name="delete" value="{{ loop.index0 }}">Entfernen</button></form></td></tr>
     {% endfor %}
   </table></div>

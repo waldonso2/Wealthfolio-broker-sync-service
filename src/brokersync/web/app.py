@@ -54,6 +54,18 @@ STATUS_LABEL = {"ok": "OK", "needs_auth": "Anmeldung nötig", "error": "Fehler",
                 "aborted": "abgebrochen"}
 
 
+# The pages under *Einstellungen*: (path, title, what it is for). The header shows the daily pages only (#71).
+SETTINGS_PAGES = [
+    ("/setup/wealthfolio", "Wealthfolio", "Adresse und Passwort deines Wealthfolio"),
+    ("/brokers", "Broker", "Zugangsdaten, Konten, Startdatum, Anmeldung"),
+    ("/notifications", "Benachrichtigungen", "ntfy für TAN-Anfragen und Fehler"),
+    ("/securities", "Wertpapiere", "ISIN unter eigenem Symbol führen"),
+    ("/transfers", "Überträge", "Auszahlungen auf eigene Konten erkennen"),
+    ("/logos", "Logos", "Logos der Wertpapiere von logo.dev"),
+    ("/security", "Sicherheit", "Verschlüsselung, Master-Passphrase, Zertifikat"),
+    ("/duplicates", "Duplikate", "Doppelte Buchungen finden und entfernen"),
+]
+
 MIN_PASSWORD = 12
 MAX_STATEMENT = 5 * 1024 * 1024
 STATEMENT_KINDS = [(Kind.DIVIDEND, "Dividenden"), (Kind.BUY, "Käufe/Einbuchungen"), (Kind.SELL, "Verkäufe"),
@@ -77,7 +89,7 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
     return gate
 
 
-def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_thread: bool, secure: bool, gate: Gate,
+def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_thread: bool, secure: bool, gate: Gate,  # noqa: C901 (#76)
                 throttle: Throttle, logo_source=None) -> FastAPI:
     vault = Vault(data_dir)
     state = State(data_dir)
@@ -130,8 +142,10 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         if "csrf" not in request.session:
             request.session["csrf"] = secrets.token_urlsafe(16)
         flash = request.session.pop("flash", None)
+        nav_unknown = state.unknown_count() if request.session.get("user") else 0
         return templates.TemplateResponse(request, name, {
-            "csrf": request.session["csrf"], "flash": flash, "version": __version__, "adapters": adapters, **ctx,
+            "csrf": request.session["csrf"], "flash": flash, "version": __version__, "adapters": adapters,
+            "nav_unknown": nav_unknown, "settings_pages": SETTINGS_PAGES, **ctx,
         })
 
     def redirect(request: Request, url: str, flash: str | None = None, level: str = "ok") -> RedirectResponse:
@@ -206,7 +220,7 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         stored = vault.load().get("ui_password_hash")
         if verify_password(password, stored):
             throttle.success(client)
-            if needs_rehash(stored):
+            if stored and needs_rehash(stored):
                 vault.update(lambda d: d.__setitem__("ui_password_hash", hash_password(password)))
             request.session.clear()
             request.session["user"] = "admin"
@@ -281,6 +295,10 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
             return redirect(request, "/", "Abruf gestartet. Die Seite aktualisiert sich, bis er fertig ist.")
         work()
         return redirect(request, "/", "Abruf beendet.")
+
+    @app.get("/settings", response_class=HTMLResponse)
+    def settings_page(request: Request):
+        return render(request, "settings.html")
 
     # ── Wealthfolio ─────────────────────────────────────────────────────────
     @app.get("/setup/wealthfolio", response_class=HTMLResponse)

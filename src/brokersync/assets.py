@@ -26,6 +26,7 @@ import logging
 import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from typing import Any
 
 from .mapping import Accounts, SecurityMapping, is_cash_symbol
 from .model import Kind, Transaction
@@ -40,7 +41,7 @@ SECURITY_TYPES = ("BUY", "SELL", "DIVIDEND")
 
 def _preferred(isin: str, known: dict | None) -> bool:
     """True when ``known`` is already the asset to keep (one the addon created)."""
-    return bool(known) and known["symbol"] != isin
+    return known is not None and bool(known) and known["symbol"] != isin
 
 
 def learn(state: State, broker: str, transactions: list[Transaction], wf: WealthfolioClient,
@@ -73,8 +74,8 @@ def learn(state: State, broker: str, transactions: list[Transaction], wf: Wealth
             current = known.get(isin)
             if _preferred(isin, current) or (current and current["asset_id"] == asset_id):
                 continue
-            entry = {"asset_id": asset_id, "symbol": symbol, "exchange_mic": a.get("exchangeMic") or None,
-                     "name": a.get("assetName") or None}
+            entry: dict[str, Any] = {"asset_id": asset_id, "symbol": symbol,
+                                     "exchange_mic": a.get("exchangeMic") or None, "name": a.get("assetName") or None}
             state.set_asset(broker, isin, **entry)
             known[isin] = entry
             learned += 1
@@ -125,7 +126,7 @@ def _isins(text: str) -> set[str]:
     return {i for i in ISIN.findall(text) if valid_isin(i)}
 
 
-def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, accounts: Accounts,
+def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, accounts: Accounts,  # noqa: C901 (#80)
                        isins: set[str], recheck: frozenset[str] | set[str] = frozenset()) -> int:
     """Learn the assets of ``isins`` (positions the broker reports whose asset is unknown or doesn't fit) from
     imported trades whose transfer names the ISIN; returns how many were learned or corrected.

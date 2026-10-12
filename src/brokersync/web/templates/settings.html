@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block title %}Einstellungen{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Einstellungen</h1>
+  <ul class="settings-index">
+    {% for href, title, hint in settings_pages %}
+    <li><a href="{{ href }}">{{ title }}</a><span class="muted">{{ hint }}</span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

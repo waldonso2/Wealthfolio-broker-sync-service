@@ -65,7 +65,7 @@ def _is_security(h: dict) -> bool:
     return (h.get("holdingType") or "").lower() == "security" and not h.get("isClosed")
 
 
-def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: list[dict],
+def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: list[dict],  # noqa: C901 (#80)
             wf_portfolio: list[dict], symbol_of: dict[str, str],
             asset_of: dict[str, str] | None = None, *, wf_savings: list[dict] | None = None,
             savings_label: str = "") -> list[Deviation]:

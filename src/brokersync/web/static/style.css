@@ -46,3 +46,28 @@ pre { white-space: pre-wrap; font-size: 13px; margin: 4px 0 0; }
 code { font-size: 14px; }
 .inline-form { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 12px; }
 .inline-form .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 12px; }
+header nav { align-items: center; }
+header nav a[aria-current] { color: var(--text); font-weight: 600; }
+form.logout { display: inline; margin: 0; }
+.count { display: inline-block; min-width: 18px; padding: 0 6px; border-radius: 99px; background: var(--warn); color: var(--card);
+  font-size: 12px; font-weight: 600; line-height: 18px; text-align: center; }
+nav.subnav { display: flex; gap: 6px; flex-wrap: wrap; margin: 16px 0 0; font-size: 14px; }
+nav.subnav a { padding: 4px 10px; border: 1px solid var(--line); border-radius: 99px; text-decoration: none; color: var(--muted); background: var(--card); }
+nav.subnav a[aria-current] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+ul.settings-index { list-style: none; padding: 0; margin: 0; }
+ul.settings-index li { padding: 10px 0; border-bottom: 1px solid var(--line); }
+ul.settings-index li:last-child { border-bottom: none; }
+ul.settings-index a { font-weight: 600; }
+ul.settings-index .muted { display: block; }
+td { overflow-wrap: anywhere; }
+/* Narrow screens: every table row becomes a block, each cell with its column name (data-label). */
+@media (max-width: 600px) {
+  .table table, .table tbody, .table tr, .table td { display: block; width: 100%; }
+  .table tr:has(th) { display: none; }
+  .table tr { border-bottom: 1px solid var(--line); padding: 6px 0; }
+  .table td { border: none; padding: 3px 0; }
+  .table td[data-label]::before { content: attr(data-label); display: block; font-size: 12px; color: var(--muted); }
+  .table td:empty { display: none; }
+  .wrap { padding: 10px 12px; }
+  .card { padding: 14px; }
+}

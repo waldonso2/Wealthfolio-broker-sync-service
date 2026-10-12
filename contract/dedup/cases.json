@@ -1,0 +1,597 @@
+{
+ "version": 1,
+ "cases": [
+  {
+   "name": "buy with the same symbol",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "depot",
+     "activityType": "BUY",
+     "date": "2024-03-05T09:00:00Z",
+     "amount": "201",
+     "quantity": "2",
+     "unitPrice": "100",
+     "assetSymbol": "IE00B4L5Y983",
+     "assetId": "IE00B4L5Y983"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "depot",
+     "activityType": "BUY",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "201",
+     "quantity": "2",
+     "symbol": "IE00B4L5Y983"
+    }
+   ],
+   "expect": {
+    "1": "e1"
+   }
+  },
+  {
+   "name": "buy under another symbol (mapped ticker vs ISIN): shares, amount and time decide",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "depot",
+     "activityType": "BUY",
+     "date": "2024-03-05T09:00:00Z",
+     "amount": "201",
+     "quantity": "2",
+     "unitPrice": "100",
+     "assetSymbol": "EUNL",
+     "assetId": "asset-1"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "depot",
+     "activityType": "BUY",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "201",
+     "quantity": "2",
+     "symbol": "IE00B4L5Y983"
+    }
+   ],
+   "expect": {
+    "1": "e1"
+   }
+  },
+  {
+   "name": "buy with another share count",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "depot",
+     "activityType": "BUY",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "201",
+     "quantity": "3",
+     "unitPrice": "67",
+     "assetSymbol": "IE00B4L5Y983"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "depot",
+     "activityType": "BUY",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "201",
+     "quantity": "2",
+     "symbol": "IE00B4L5Y983"
+    }
+   ],
+   "expect": {
+    "1": null
+   }
+  },
+  {
+   "name": "sell: amount within 0.02 matches",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "depot",
+     "activityType": "SELL",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "99.98",
+     "quantity": "1",
+     "unitPrice": "100",
+     "assetSymbol": "US0378331005"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "depot",
+     "activityType": "SELL",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "100.00",
+     "quantity": "1",
+     "symbol": "US0378331005"
+    }
+   ],
+   "expect": {
+    "1": "e1"
+   }
+  },
+  {
+   "name": "sell: amount 0.03 off does not match",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "depot",
+     "activityType": "SELL",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "99.97",
+     "quantity": "1",
+     "unitPrice": "100",
+     "assetSymbol": "US0378331005"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "depot",
+     "activityType": "SELL",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "100.00",
+     "quantity": "1",
+     "symbol": "US0378331005"
+    }
+   ],
+   "expect": {
+    "1": null
+   }
+  },
+  {
+   "name": "buy more than 36 hours apart",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "depot",
+     "activityType": "BUY",
+     "date": "2024-03-03T21:00:00Z",
+     "amount": "201",
+     "quantity": "2",
+     "unitPrice": "100",
+     "assetSymbol": "IE00B4L5Y983"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "depot",
+     "activityType": "BUY",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "201",
+     "quantity": "2",
+     "symbol": "IE00B4L5Y983"
+    }
+   ],
+   "expect": {
+    "1": null
+   }
+  },
+  {
+   "name": "buy on another account",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "other-depot",
+     "activityType": "BUY",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "201",
+     "quantity": "2",
+     "unitPrice": "100",
+     "assetSymbol": "IE00B4L5Y983"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "depot",
+     "activityType": "BUY",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "201",
+     "quantity": "2",
+     "symbol": "IE00B4L5Y983"
+    }
+   ],
+   "expect": {
+    "1": null
+   }
+  },
+  {
+   "name": "existing activity without amount: quantity x unit price",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "depot",
+     "activityType": "BUY",
+     "date": "2024-03-05T10:00:00Z",
+     "quantity": "2",
+     "unitPrice": "100.5",
+     "assetSymbol": "IE00B4L5Y983"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "depot",
+     "activityType": "BUY",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "201",
+     "quantity": "2",
+     "symbol": "IE00B4L5Y983"
+    }
+   ],
+   "expect": {
+    "1": "e1"
+   }
+  },
+  {
+   "name": "dividend under another symbol, the only candidate",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "depot",
+     "activityType": "DIVIDEND",
+     "date": "2024-03-05T07:00:00Z",
+     "amount": "19.14",
+     "quantity": "1",
+     "unitPrice": "19.14",
+     "assetSymbol": "EUNL"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "depot",
+     "activityType": "DIVIDEND",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "19.14",
+     "quantity": "16",
+     "symbol": "IE00B4L5Y983"
+    }
+   ],
+   "expect": {
+    "1": "e1"
+   }
+  },
+  {
+   "name": "dividend under another symbol with two candidates: none",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "depot",
+     "activityType": "DIVIDEND",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "19.14",
+     "quantity": "1",
+     "unitPrice": "19.14",
+     "assetSymbol": "EUNL"
+    },
+    {
+     "id": "e2",
+     "accountId": "depot",
+     "activityType": "DIVIDEND",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "19.14",
+     "quantity": "1",
+     "unitPrice": "19.14",
+     "assetSymbol": "VWRL"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "depot",
+     "activityType": "DIVIDEND",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "19.14",
+     "quantity": "16",
+     "symbol": "IE00B4L5Y983"
+    }
+   ],
+   "expect": {
+    "1": null
+   }
+  },
+  {
+   "name": "dividend: the same symbol wins among several candidates",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "depot",
+     "activityType": "DIVIDEND",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "19.14",
+     "quantity": "1",
+     "unitPrice": "19.14",
+     "assetSymbol": "VWRL"
+    },
+    {
+     "id": "e2",
+     "accountId": "depot",
+     "activityType": "DIVIDEND",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "19.14",
+     "quantity": "1",
+     "unitPrice": "19.14",
+     "assetSymbol": "IE00B4L5Y983"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "depot",
+     "activityType": "DIVIDEND",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "19.14",
+     "quantity": "16",
+     "symbol": "IE00B4L5Y983"
+    }
+   ],
+   "expect": {
+    "1": "e2"
+   }
+  },
+  {
+   "name": "deposit on the cash account",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "cash",
+     "activityType": "DEPOSIT",
+     "date": "2024-03-04T23:30:00Z",
+     "amount": "500",
+     "quantity": "1",
+     "unitPrice": "1"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "cash",
+     "activityType": "DEPOSIT",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "500"
+    }
+   ],
+   "expect": {
+    "1": "e1"
+   }
+  },
+  {
+   "name": "withdrawal is not a deposit",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "cash",
+     "activityType": "DEPOSIT",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "500",
+     "quantity": "1",
+     "unitPrice": "1"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "cash",
+     "activityType": "WITHDRAWAL",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "500"
+    }
+   ],
+   "expect": {
+    "1": null
+   }
+  },
+  {
+   "name": "two equal card payments on one day: each existing one matches once",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "cash",
+     "activityType": "WITHDRAWAL",
+     "date": "2024-03-05T08:00:00Z",
+     "amount": "12.90",
+     "quantity": "1",
+     "unitPrice": "1"
+    },
+    {
+     "id": "e2",
+     "accountId": "cash",
+     "activityType": "WITHDRAWAL",
+     "date": "2024-03-05T15:00:00Z",
+     "amount": "12.90",
+     "quantity": "1",
+     "unitPrice": "1"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "cash",
+     "activityType": "WITHDRAWAL",
+     "date": "2024-03-05T08:00:01Z",
+     "amount": "12.90"
+    },
+    {
+     "line": 2,
+     "accountId": "cash",
+     "activityType": "WITHDRAWAL",
+     "date": "2024-03-05T15:00:01Z",
+     "amount": "12.90"
+    }
+   ],
+   "expect": {
+    "1": "e1",
+    "2": "e2"
+   }
+  },
+  {
+   "name": "two equal card payments, only one in Wealthfolio: the second is new",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "cash",
+     "activityType": "WITHDRAWAL",
+     "date": "2024-03-05T08:00:00Z",
+     "amount": "12.90",
+     "quantity": "1",
+     "unitPrice": "1"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "cash",
+     "activityType": "WITHDRAWAL",
+     "date": "2024-03-05T08:00:01Z",
+     "amount": "12.90"
+    },
+    {
+     "line": 2,
+     "accountId": "cash",
+     "activityType": "WITHDRAWAL",
+     "date": "2024-03-05T15:00:01Z",
+     "amount": "12.90"
+    }
+   ],
+   "expect": {
+    "1": "e1",
+    "2": null
+   }
+  },
+  {
+   "name": "interest, fee and tax",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "cash",
+     "activityType": "INTEREST",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "3.21",
+     "quantity": "1",
+     "unitPrice": "1"
+    },
+    {
+     "id": "e2",
+     "accountId": "cash",
+     "activityType": "FEE",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "1.00",
+     "quantity": "1",
+     "unitPrice": "1"
+    },
+    {
+     "id": "e3",
+     "accountId": "cash",
+     "activityType": "TAX",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "0.85",
+     "quantity": "1",
+     "unitPrice": "1"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "cash",
+     "activityType": "INTEREST",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "3.21"
+    },
+    {
+     "line": 2,
+     "accountId": "cash",
+     "activityType": "FEE",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "1.00"
+    },
+    {
+     "line": 3,
+     "accountId": "cash",
+     "activityType": "TAX",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "0.85"
+    }
+   ],
+   "expect": {
+    "1": "e1",
+    "2": "e2",
+    "3": "e3"
+   }
+  },
+  {
+   "name": "tax refund needs the same subtype",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "cash",
+     "activityType": "CREDIT",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "4.10",
+     "quantity": "1",
+     "unitPrice": "1"
+    },
+    {
+     "id": "e2",
+     "accountId": "cash",
+     "activityType": "CREDIT",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "4.10",
+     "quantity": "1",
+     "unitPrice": "1",
+     "subtype": "TAX_REFUND"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "cash",
+     "activityType": "CREDIT",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "4.10",
+     "subtype": "TAX_REFUND"
+    }
+   ],
+   "expect": {
+    "1": "e2"
+   }
+  },
+  {
+   "name": "transfers are not matched by substance (their pair and Wealthfolio's own check decide)",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "cash",
+     "activityType": "TRANSFER_OUT",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "250",
+     "quantity": "1",
+     "unitPrice": "1"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "cash",
+     "activityType": "TRANSFER_OUT",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "250"
+    }
+   ],
+   "expect": {
+    "1": null
+   }
+  }
+ ]
+}

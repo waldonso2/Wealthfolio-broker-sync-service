@@ -11,8 +11,8 @@
   <div class="table"><table>
     <tr><th>Datum</th><th>Art</th><th>Betrag</th><th>Vom Dienst</th><th>Schon vorhanden (CSV/PDF)</th></tr>
     {% for d in r.found[:300] %}
-    <tr><td>{{ d.sync.date[:10] }}</td><td>{{ d.sync.activityType }}</td><td>{{ d.sync.amount }}</td>
-      <td>{{ d.sync.assetSymbol }} – {{ d.sync.comment }}</td><td>{{ d.original.assetSymbol }} – {{ d.original.comment }}</td></tr>
+    <tr><td data-label="Datum">{{ d.sync.date[:10] }}</td><td data-label="Art">{{ d.sync.activityType }}</td><td data-label="Betrag">{{ d.sync.amount }}</td>
+      <td data-label="Vom Dienst">{{ d.sync.assetSymbol }} – {{ d.sync.comment }}</td><td data-label="Schon vorhanden (CSV/PDF)">{{ d.original.assetSymbol }} – {{ d.original.comment }}</td></tr>
     {% endfor %}
   </table></div>
   {% if r.found | length > 300 %}<p class="muted">… und {{ r.found | length - 300 }} weitere.</p>{% endif %}
