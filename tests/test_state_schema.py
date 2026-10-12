@@ -2,7 +2,8 @@
 
 import pytest
 
-from brokersync import meta_keys, state as state_mod
+from brokersync import meta_keys
+from brokersync import state as state_mod
 from brokersync.state import State
 
 
