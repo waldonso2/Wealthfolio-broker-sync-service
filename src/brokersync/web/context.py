@@ -39,10 +39,12 @@ SETTINGS_PAGES = [
     ("/brokers", "Broker", "Zugangsdaten, Konten, Startdatum, Anmeldung"),
     ("/notifications", "Benachrichtigungen", "ntfy für TAN-Anfragen und Fehler"),
     ("/securities", "Wertpapiere", "ISIN unter eigenem Symbol führen"),
-    ("/transfers", "Überträge", "Auszahlungen auf eigene Konten erkennen"),
+    # Hidden for now (waldonso2/wealthfolio-importer-addon#84):
+    # ("/transfers", "Überträge", "Auszahlungen auf eigene Konten erkennen"),
     ("/logos", "Logos", "Logos der Wertpapiere von logo.dev"),
     ("/security", "Sicherheit", "Verschlüsselung, Master-Passphrase, Zertifikat"),
-    ("/duplicates", "Duplikate", "Doppelte Buchungen finden und entfernen"),
+    # Hidden for now (waldonso2/wealthfolio-importer-addon#84):
+    # ("/duplicates", "Duplikate", "Doppelte Buchungen finden und entfernen"),
 ]
 
 

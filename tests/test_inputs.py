@@ -48,7 +48,7 @@ def test_isin_iban_mic_symbol_date():
         inputs.security_id("<b>")
 
 
-def test_forms_reject_bad_input_and_keep_the_config(tmp_path):
+def test_forms_reject_bad_input_and_keep_the_config(tmp_path, hidden_pages):
     client = logged_in(tmp_path)
     token = csrf(client, "/setup/wealthfolio")
     r = client.post("/setup/wealthfolio", data={"csrf": token, "url": "file:///etc/passwd"})

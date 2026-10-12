@@ -27,3 +27,12 @@ def _fast_key_derivation(monkeypatch, tmp_path_factory):
     for var in ("CREDENTIALS_DIRECTORY", "BROKERSYNC_KEY_FILE", "BROKERSYNC_KEY_SOURCE"):
         monkeypatch.delenv(var, raising=False)
     crypto._memory.clear()
+
+
+@pytest.fixture
+def hidden_pages(monkeypatch):
+    """Include the pages hidden for now (waldonso2/wealthfolio-importer-addon#84) so their code stays tested."""
+    from brokersync.web import app as app_mod
+    from brokersync.web.routes import HIDDEN, ROUTERS
+
+    monkeypatch.setattr(app_mod, "ROUTERS", ROUTERS + HIDDEN)

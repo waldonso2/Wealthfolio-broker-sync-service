@@ -162,7 +162,7 @@ def test_sync_books_the_giro_and_checks_securities_against_the_pdf_import(tmp_pa
     assert (r3.created, r3.existing) == (0, 0)
 
 
-def test_web_login_with_app_confirmation_and_transfer_patterns(tmp_path, fake):
+def test_web_login_with_app_confirmation_and_transfer_patterns(tmp_path, fake, hidden_pages):
     import re
 
     from fastapi.testclient import TestClient

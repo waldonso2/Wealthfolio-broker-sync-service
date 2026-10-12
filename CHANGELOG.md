@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.1
+
+Tidier settings and overview (waldonso2/wealthfolio-importer-addon#84):
+
+- **Überträge and Duplikate are hidden for now.** Both pages are gone from *Einstellungen* and their addresses no longer answer. Transfer patterns you saved before still apply to new bookings.
+- **The overview shows no amounts**: per broker only whether the balance matches Wealthfolio ("Saldo stimmt" / "Saldo weicht ab"). The details of a deviation can still be opened.
+- The broker list no longer says "Scalable Capital folgt".
+
 ## 0.15.0
 
 A new look for the web UI, made for phones (waldonso2/wealthfolio-importer-addon#83):

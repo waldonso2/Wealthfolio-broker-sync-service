@@ -1,4 +1,4 @@
-"""Settings pages without a broker of their own: Wealthfolio, notifications, securities, transfers, logos."""
+"""Settings pages without a broker of their own: Wealthfolio, notifications, securities, logos."""
 
 from __future__ import annotations
 
@@ -44,41 +44,6 @@ def wealthfolio_save(request: Request, ctx: Ctx, url: str = Form(...), password:
         return redirect(request, "/setup/wealthfolio", f"Verbindung fehlgeschlagen: {error}", "error")
     ctx.vault.update(lambda d: d.__setitem__("wealthfolio_checked", True))
     return redirect(request, "/brokers", f"Verbunden - {len(accounts)} Konten in Wealthfolio gefunden.")
-
-
-# ── transfer patterns ───────────────────────────────────────────────────────
-@router.get("/transfers", response_class=HTMLResponse)
-def transfers_page(request: Request, ctx: Ctx):
-    c = ctx.cfg()
-    accounts, error = ctx.wf_accounts(c)
-    names = {a.id: f"{a.name} ({a.currency})" for a in accounts}
-    return ctx.render(request, "transfers.html", patterns=c.transfer_patterns, accounts=accounts, names=names,
-                      wf_error=error)
-
-
-@router.post("/transfers")
-def transfers_save(request: Request, ctx: Ctx, label: str = Form(""), iban: str = Form(""),
-                   keyword: str = Form(""), destination: str = Form(""), delete: str = Form("")):
-    c = ctx.cfg()
-    if delete:
-        i = int(delete) if delete.isdigit() else -1
-        if 0 <= i < len(c.transfer_patterns):
-            c.transfer_patterns.pop(i)
-    else:
-        try:
-            label = inputs.text(label, "Name", max_len=100)
-            iban = inputs.iban(iban)
-            keyword = inputs.text(keyword, "Stichwort", max_len=100)
-            destination = inputs.text(destination, "Zielkonto", max_len=100)
-        except inputs.Invalid as e:
-            return redirect(request, "/transfers", str(e), "error")
-        if not label or not (iban or keyword):
-            return redirect(request, "/transfers", "Bitte einen Namen und eine IBAN oder ein Stichwort angeben.",
-                            "error")
-        c.transfer_patterns.append({"label": label, "iban": iban, "keyword": keyword,
-                                    "destinationAccountId": destination})
-    ctx.save(c)
-    return redirect(request, "/transfers", "Gespeichert.")
 
 
 # ── notifications ───────────────────────────────────────────────────────────

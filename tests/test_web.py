@@ -77,6 +77,7 @@ def test_assistant_from_first_visit_to_first_sync(tmp_path):
     r = client.post("/run", data={"csrf": token})
     assert "Abruf beendet" in r.text
     assert "<strong>3</strong> neu" in r.text
+    assert 'Saldo <strong class="ok-text">stimmt</strong>' in r.text and "502,68" not in r.text  # no amounts (#83)
     assert len(wf.activities) == 7
     r = client.post("/run", data={"csrf": token})
     assert len(wf.activities) == 7  # no duplicates
@@ -233,13 +234,15 @@ def test_navigation_groups_the_settings(tmp_path):
     assert 'class="count"' not in nav and 'class="subnav"' not in page
 
     index = client.get("/settings").text
-    for href in ("/setup/wealthfolio", "/brokers", "/notifications", "/securities", "/transfers", "/logos",
-                 "/security", "/duplicates"):
+    for href in ("/setup/wealthfolio", "/brokers", "/notifications", "/securities", "/logos", "/security"):
         assert f'href="{href}"' in index
     assert 'href="/settings" aria-current="page"' in index
+    # Hidden for now (waldonso2/wealthfolio-importer-addon#84): not listed, not served.
+    for href in ("/transfers", "/duplicates"):
+        assert f'href="{href}"' not in index and client.get(href).status_code == 404
 
-    page = client.get("/transfers").text
-    assert 'class="subnav"' in page and 'href="/transfers" aria-current="page"' in page
+    page = client.get("/logos").text
+    assert 'class="subnav"' in page and 'href="/logos" aria-current="page"' in page
     assert 'href="/settings" aria-current="page"' in page
 
     State(tmp_path).add_unknown("fake", "x1", "ODD", "2026-01-02", {"eventType": "ODD"})
