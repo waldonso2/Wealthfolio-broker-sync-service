@@ -4,6 +4,18 @@
 
 - **Logos for securities (optional, page *Logos*).** Wealthfolio's own logos are named by ticker and exchange, so securities booked under their ISIN show none. Turned on and with a (free) logo.dev key, the service asks logo.dev for each security by ISIN after every run and sets the logo as the security's custom logo in Wealthfolio (version 3.8.0 or later) - stored in Wealthfolio's database, so it survives updates and is part of its backups. Only ISINs go to logo.dev. A logo you set yourself is never replaced; one you remove isn't set again; a security logo.dev has no logo for is asked again after 30 days. At most 50 questions per run.
 
+## 0.11.5
+
+- **Fix: an opening position entered from the old parser's ISIN still stayed unmatched.** Its Wealthfolio asset counted as taken by that spelling (`<ISIN>|/DE/<WKN>`) - which is the same ISIN. It isn't taken from the real ISIN any more.
+- **The log masked ISINs** of US securities ("US***"): long digit runs after letters (an ISIN) are no longer taken for account numbers; account, depot and reference numbers still are.
+- ISINs assigned on the page *Wertpapiere* are no longer looked up in imported trades every run (the holdings check finds them by symbol).
+
+## 0.11.4
+
+- **Fix: an opening position entered from holdings read before 0.9.9 wasn't found by the holdings check.** python-fints' parser, used until then, read a security split over two lines as ISIN `<ISIN>|/DE/<WKN>` and kept only the name's last line (Deutsche Bank: "IEN O.N."). An opening entered from it was booked under that ISIN. Its transaction now carries the real ISIN (its id stays, so nothing is booked again), and the check finds the position.
+- **The log says why a position's Wealthfolio asset couldn't be found**: no purchase or sale whose transfer names the ISIN, its asset already belonging to another ISIN, transfers naming several ISINs, or statements naming several assets - asset ids and ISINs only.
+- An ISIN whose statements name several assets is now also tried by time and amount.
+
 ## 0.11.3
 
 - **Fix: two ETFs of a savings plan were mixed up.** A PDF import ends a trade and its transfers with the same statement reference (`[PDF …]`); that now ties them together exactly, before time and amount are tried. It also corrects an asset an earlier version learned wrongly: positions that deviated in the last check are looked at again, and what a statement says replaces the stored asset.

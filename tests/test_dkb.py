@@ -461,3 +461,70 @@ def test_a_deviating_position_relearns_its_asset_from_the_syncs_own_opening(tmp_
     assert assets.learn_from_imports(state, "deutschebank", client, accounts, {isin}, recheck={isin}) == 1
     assert state.assets("deutschebank")[isin]["asset_id"] == "asset-new"
     state.close()
+
+
+def test_the_log_says_why_an_asset_isnt_learned(tmp_path, caplog):
+    import logging
+
+    from brokersync import assets
+    from brokersync.mapping import Accounts
+    from brokersync.state import State
+
+    wf = FakeWealthfolio()
+    base = {"date": "2026-06-02T07:00:00.000Z", "quantity": "1", "unitPrice": "1", "amount": "50",
+            "currency": "EUR", "assetSymbol": "", "assetId": ""}
+    wf.add_existing(**{**base, "accountId": "acc-cash", "activityType": "TRANSFER_OUT",
+                       "comment": "Funds for IE00TEST0000 (TEST) buy -> Portfolio"})
+    wf.add_existing(**{**base, "accountId": "acc-depot", "activityType": "BUY", "assetSymbol": "AAA",
+                       "assetId": "AAA", "comment": "Kauf TEST"})
+    state = State(tmp_path)
+    state.set_asset("dkb", "DE000TEST009", asset_id="AAA", symbol="AAA", exchange_mic=None, name=None)
+    client = WealthfolioClient("http://wf", PASSWORD, transport=wf.transport())
+    caplog.set_level(logging.INFO, logger="brokersync.assets")
+    assert assets.learn_from_imports(state, "dkb", client, Accounts("acc-cash", "acc-depot"),
+                                     {"IE00TEST0000", "US00TEST0008"}) == 0
+    assert "zu IE00TEST0000 nicht zugeordnet: Käufe/Verkäufe auf AAA; schon vergeben: AAA (gehört zu DE000TEST009)" \
+        in caplog.text
+    assert "zu US00TEST0008 nicht zugeordnet: kein Kauf/Verkauf, dessen Übertrag die ISIN nennt" in caplog.text
+    state.close()
+
+
+def test_an_opening_with_the_old_parsers_isin_keeps_its_id_but_gets_the_real_isin(tmp_path, monkeypatch):
+    syncer, _ = setup_sync(tmp_path, FakeWealthfolio(), monkeypatch)
+    syncer.state.add_opening("dkb", "IE00TEST0000|/DE/A0TEST", "2024-01-02", "IEN O.N.", "22", "20", "0")
+    [tx] = syncer._openings("dkb")
+    assert (tx.id, tx.isin) == ("start-IE00TEST0000|/DE/A0TEST-2024-01-02", "IE00TEST0000")
+
+
+def test_an_asset_stored_under_the_old_parsers_isin_is_not_taken_from_the_real_isin(tmp_path):
+    from brokersync import assets
+    from brokersync.mapping import Accounts
+    from brokersync.state import State
+
+    isin = "IE00TEST0000"
+    wf = FakeWealthfolio()
+    ref = f"[SYNC deutschebank:start-{isin}|/DE/A0TEST-2024-01-02]"
+    base = {"date": "2024-01-02T11:00:00.000Z", "quantity": "1", "unitPrice": "1", "amount": "440",
+            "currency": "EUR", "assetSymbol": "", "assetId": ""}
+    wf.add_existing(**{**base, "accountId": "acc-cash", "activityType": "TRANSFER_OUT",
+                       "date": "2024-01-02T10:59:58.000Z",
+                       "comment": f"Funds for {isin}|/DE/A0TEST (IEN O.N.) buy -> Portfolio{ref}"})
+    wf.add_existing(**{**base, "accountId": "acc-depot", "activityType": "BUY", "quantity": "22", "unitPrice": "20",
+                       "assetSymbol": f"{isin}|/DE/A0TEST", "assetId": "asset-opening",
+                       "comment": f"Anfangsbestand{ref}"})
+    state = State(tmp_path)
+    state.set_asset("deutschebank", f"{isin}|/DE/A0TEST", asset_id="asset-opening", symbol="x", exchange_mic=None,
+                    name=None)
+    state.set_asset("deutschebank", isin, asset_id="asset-dividends", symbol=isin, exchange_mic=None, name=None)
+    client = WealthfolioClient("http://wf", PASSWORD, transport=wf.transport())
+    assert assets.learn_from_imports(state, "deutschebank", client, Accounts("acc-cash", "acc-depot"), {isin},
+                                     recheck={isin}) == 1
+    assert state.assets("deutschebank")[isin]["asset_id"] == "asset-opening"
+    state.close()
+
+
+def test_the_log_keeps_isins_but_masks_account_numbers():
+    from brokersync import redact
+
+    assert redact.redact("ISIN US0378331005, IE00BYPLS672") == "ISIN US0378331005, IE00BYPLS672"
+    assert redact.redact("Depot 0503766396 Ref 000073163808330") == "Depot *** Ref ***"

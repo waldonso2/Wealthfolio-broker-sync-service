@@ -22,6 +22,7 @@ booked a few seconds from the trade itself.
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -30,6 +31,8 @@ from .mapping import Accounts, SecurityMapping, is_cash_symbol
 from .model import Kind, Transaction
 from .state import State
 from .wealthfolio import WealthfolioClient
+
+log = logging.getLogger(__name__)
 
 SECURITY_KINDS = (Kind.BUY, Kind.SELL, Kind.DIVIDEND)
 SECURITY_TYPES = ("BUY", "SELL", "DIVIDEND")
@@ -84,6 +87,11 @@ LEG_SECONDS = 10
 AMOUNT_TOLERANCE = Decimal("0.01")
 # The reference a PDF import ends every activity of one statement with.
 PDF_REF = re.compile(r"\[PDF [^\]]+\]")
+
+
+def clean_isin(isin: str) -> str:
+    """The ISIN of a key holdings read before 0.9.9 stored as "<ISIN>|/DE/<WKN>"."""
+    return isin.split("|")[0].strip()
 
 
 def valid_isin(code: str) -> bool:
@@ -150,7 +158,7 @@ def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, account
                 state.set_asset(broker, isin, **entry)
                 known[isin] = entry
                 corrected += 1
-    wanted = {i for i in isins if i not in exact and (i in recheck or not _preferred(i, known.get(i)))}
+    wanted = {i for i in isins if len(exact.get(i, {})) != 1 and (i in recheck or not _preferred(i, known.get(i)))}
     if not wanted:
         return corrected
     transfers = [(_when(a), _amount(a), _isins(a.get("comment") or ""))
@@ -168,7 +176,8 @@ def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, account
         named = set().union(*(same or [names for _, names in near]))
         if named:
             trades.append((_entry(a), named))
-    learned, taken = corrected, {e["asset_id"] for i, e in known.items() if i not in wanted}
+    # An asset stored for the same ISIN under another spelling (python-fints' "<ISIN>|/DE/<WKN>") isn't taken.
+    learned, taken = corrected, {e["asset_id"] for i, e in known.items() if clean_isin(i) not in wanted}
     while True:
         found: dict[str, dict[str, dict]] = {}  # ISIN -> asset id -> entry
         for entry, named in trades:
@@ -177,6 +186,7 @@ def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, account
                 found.setdefault(next(iter(left)), {})[entry["asset_id"]] = entry
         new = {isin: next(iter(assets.values())) for isin, assets in found.items() if len(assets) == 1}
         if not new:
+            _explain(broker, wanted, trades, known, exact)
             return learned
         for isin, entry in new.items():
             if (known.get(isin) or {}).get("asset_id") != entry["asset_id"]:
@@ -184,6 +194,28 @@ def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, account
                 learned += 1
             wanted.discard(isin)
             taken.add(entry["asset_id"])
+
+
+def _explain(broker: str, wanted: set[str], trades: list, known: dict, exact: dict) -> None:
+    """Why an ISIN's asset couldn't be learned - asset ids and ISINs only, to find the cause from the log."""
+    owner = {e["asset_id"]: i for i, e in known.items() if clean_isin(i) not in wanted}
+    for isin in sorted(wanted):
+        if isin in exact:
+            reason = f"die Abrechnungen nennen mehrere Wertpapiere ({', '.join(sorted(exact[isin]))})"
+        else:
+            assets_ = sorted({e["asset_id"] for e, named in trades if isin in named})
+            if not assets_:
+                reason = "kein Kauf/Verkauf, dessen Übertrag die ISIN nennt (Konten, Zeitabstand, ISIN geändert?)"
+            else:
+                taken = [f"{a} (gehört zu {owner[a]})" for a in assets_ if a in owner and owner[a] != isin]
+                shared = [a for a in assets_ if any(isin in named and len(named) > 1
+                                                    for e, named in trades if e["asset_id"] == a)]
+                reason = f"Käufe/Verkäufe auf {', '.join(assets_)}"
+                if taken:
+                    reason += f"; schon vergeben: {', '.join(taken)}"
+                if shared:
+                    reason += "; Überträge nennen dort mehrere ISINs"
+        log.info("%s: Wealthfolio-Wertpapier zu %s nicht zugeordnet: %s", broker, isin, reason)
 
 
 def mappings(state: State, broker: str) -> dict[str, SecurityMapping]:
