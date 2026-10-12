@@ -88,6 +88,41 @@ class BrokerResult:
     messages: list[str] = field(default_factory=list)
 
 
+@dataclass
+class RunContext:
+    """What one broker's run carries from step to step (``Syncer._sync_broker``)."""
+    cfg: config_mod.Config
+    key: str
+    bcfg: config_mod.BrokerConfig
+    result: BrokerResult
+    secrets: dict
+    adapter: BrokerAdapter
+    # plan_window
+    backfill: bool = False
+    full: bool = False
+    refetch: bool = False
+    since: datetime | None = None
+    savings: str = ""
+    savings_new: bool = False
+    synced: dict[str, tuple[str, list[str]]] = field(default_factory=dict)
+    # fetch
+    tax_backfill: bool = False
+    transactions: list[Transaction] = field(default_factory=list)
+    history: date | None = None
+    cash: list[CashBalance] | None = None
+    positions: list[Position] | None = None
+    # prepare
+    todo: list[Transaction] = field(default_factory=list)
+    accounts: Accounts = field(default_factory=lambda: Accounts("", ""))
+    mappings: dict[str, SecurityMapping] = field(default_factory=dict)
+    patterns: list[TransferPattern] = field(default_factory=list)
+    paired: dict[str, str] = field(default_factory=dict)
+    # with Wealthfolio
+    repaired: int = 0
+    activities: list[dict] = field(default_factory=list)
+    unmatched: list[Transaction] = field(default_factory=list)
+
+
 @contextmanager
 def run_lock(data_dir: Path, wait: float = 0) -> Iterator[None]:
     """The sync lock, shared by the web UI and the timer; waits up to ``wait`` seconds."""
@@ -223,7 +258,27 @@ class Syncer:
             log.warning("%s: %s", key, " | ".join(result.messages[:5]))
         return result
 
-    def _sync_broker(self, cfg: config_mod.Config, key: str, result: BrokerResult) -> None:  # noqa: C901 (#75)
+    def _sync_broker(self, cfg: config_mod.Config, key: str, result: BrokerResult) -> None:
+        """One broker's run, as named steps in this order (ARCHITECTURE.md, *Ablauf eines Laufs*)."""
+        run = self._plan_window(cfg, key, result)
+        self._fetch(run)
+        self._prepare(run)
+        with self._wealthfolio(cfg.wealthfolio_url, run.secrets.get("wealthfolio_password")) as wf:
+            # Before the check against existing activities: it then sees them repaired.
+            run.repaired = self._repair_cash_assets(key, wf, run.accounts)
+            self._add_before_history(run, wf)
+            run.activities = self._activities(wf, run.accounts, run.transactions, run.since if run.full else None,
+                                              run.full)
+            self._book(run, wf)
+            self._compare(cfg, key, run.transactions, run.synced, run.activities, run.full, run.since)
+            if run.tax_backfill:
+                self._backfill_tax(run, wf)
+            self._learn_assets(run, wf)
+            self._check_holdings(run, wf)
+        self._commit_flags(run)
+
+    def _plan_window(self, cfg: config_mod.Config, key: str, result: BrokerResult) -> RunContext:
+        """The adapter with its session, and from when it reads (full history, backfill, refetch, savings)."""
         bcfg = cfg.brokers[key]
         if not bcfg.cash_account_id or not bcfg.portfolio_account_id:
             raise AdapterError("No Wealthfolio accounts assigned - finish the setup for this broker.")
@@ -234,124 +289,148 @@ class Syncer:
         label = adapter_cls.label
         adapter.on_user_action = lambda message: self.notifier(cfg).send(
             f"{label}: Bestätigung nötig", message, link=self.link(cfg, "/"), priority="high", tags="key")
+        run = RunContext(cfg=cfg, key=key, bcfg=bcfg, result=result, secrets=secrets, adapter=adapter)
         # Once, for brokers with positions: the whole history, to learn the
         # Wealthfolio asset of every ISIN (brokersync.assets) for the check.
-        backfill = adapter_cls.reports_positions and not self.state.flag(meta_keys.ASSETS_LEARNED(key))
-        full = adapter_cls.full_history
+        run.backfill = adapter_cls.reports_positions and not self.state.flag(meta_keys.ASSETS_LEARNED(key))
+        run.full = adapter_cls.full_history
         # "Ab Startdatum neu abrufen" in the broker settings: once from the start date again.
-        refetch = not full and self.state.flag(refetch_flag(key))
-        since = self._start(bcfg) if full or backfill or refetch else self._since(key, bcfg)
+        run.refetch = not run.full and self.state.flag(refetch_flag(key))
+        run.since = self._start(bcfg) if run.full or run.backfill or run.refetch else self._since(key, bcfg)
         # The savings account (Tagesgeld), if the user assigned one: read from the start date until a run
         # read it without failures, then with the cash account.
-        savings = bcfg.savings_account_id if adapter_cls.savings_label else ""
-        adapter.with_savings = bool(savings)
-        savings_new = bool(savings) and self.state.meta(savings_flag(key)) != savings
-        adapter.savings_since = self._start(bcfg) if savings_new else since
+        run.savings = bcfg.savings_account_id if adapter_cls.savings_label else ""
+        adapter.with_savings = bool(run.savings)
+        run.savings_new = bool(run.savings) and self.state.meta(savings_flag(key)) != run.savings
+        adapter.savings_since = self._start(bcfg) if run.savings_new else run.since
         # Before this run books anything: what the comparison with Wealthfolio checks.
-        synced = self.state.synced(key)
+        run.synced = self.state.synced(key)
+        return run
+
+    def _fetch(self, run: RunContext) -> None:
+        """Log in and read transactions, statements, opening positions, cash and positions."""
+        adapter, key = run.adapter, run.key
         try:
             adapter.login()
             # Once per broker: details also for transactions found in an import, for the tax of their
             # dividends (Scalable's CSV export has none) - see _add_dividend_tax.
-            tax_backfill = not self.state.flag(tax_flag(key))
-            adapter.known_ids = {t for t, (status, _) in synced.items() if not (tax_backfill and status == "existing")}
-            transactions = adapter.get_transactions(since) + self._openings(key)
-            history = self._history_start(key, adapter, bcfg)
-            transactions += self._statements(key, adapter, history)
-            cash = self._broker_cash(key, adapter)
-            positions = self._broker_positions(key, adapter) if adapter_cls.reports_positions else None
+            run.tax_backfill = not self.state.flag(tax_flag(key))
+            adapter.known_ids = {t for t, (status, _) in run.synced.items()
+                                 if not (run.tax_backfill and status == "existing")}
+            run.transactions = adapter.get_transactions(run.since) + self._openings(key)
+            run.history = self._history_start(key, adapter, run.bcfg)
+            run.transactions += self._statements(key, adapter, run.history)
+            run.cash = self._broker_cash(key, adapter)
+            run.positions = self._broker_positions(key, adapter) if type(adapter).reports_positions else None
         finally:
             # Keep whatever session the adapter has, even half-way through a login.
             adapter.close()
             self.vault.set_broker_session(key, adapter.session_state())
 
-        todo = [t for t in transactions if t.id not in synced]
-        log.info("%s: %d transactions from the broker since %s, %d not synced yet", key, len(transactions),
-                 since.date().isoformat() if since else "the beginning", len(todo))
-        self._report_unknown(cfg, key, [t for t in todo if t.kind == Kind.UNKNOWN], result)
+    def _prepare(self, run: RunContext) -> None:
+        """What is new, unknown events reported, accounts, mappings, patterns, savings transfer pairs."""
+        cfg, key = run.cfg, run.key
+        todo = [t for t in run.transactions if t.id not in run.synced]
+        log.info("%s: %d transactions from the broker since %s, %d not synced yet", key, len(run.transactions),
+                 run.since.date().isoformat() if run.since else "the beginning", len(todo))
+        self._report_unknown(cfg, key, [t for t in todo if t.kind == Kind.UNKNOWN], run.result)
         todo = [t for t in todo if t.kind != Kind.UNKNOWN]
 
-        accounts = Accounts(bcfg.cash_account_id, bcfg.portfolio_account_id, savings)
+        run.accounts = Accounts(run.bcfg.cash_account_id, run.bcfg.portfolio_account_id, run.savings)
         # The user's mappings win over the assets learned from earlier activities.
-        mappings = assets_mod.mappings(self.state, key)
-        mappings.update({isin: SecurityMapping(m.get("symbol") or isin, m.get("exchangeMic"), m.get("name"))
-                         for isin, m in cfg.security_mappings.items()})
-        patterns = [TransferPattern.from_config(p) for p in cfg.transfer_patterns]
+        run.mappings = assets_mod.mappings(self.state, key)
+        run.mappings.update({isin: SecurityMapping(m.get("symbol") or isin, m.get("exchangeMic"), m.get("name"))
+                             for isin, m in cfg.security_mappings.items()})
+        run.patterns = [TransferPattern.from_config(p) for p in cfg.transfer_patterns]
         # The savings side of a transfer between the cash and the savings account: booked with its cash side
         # (one transfer pair) - unless that was booked on its own before the savings account was read.
-        paired = {t.id: t.pair for t in todo if t.pair and t.pair not in synced}
-        todo = [t if t.id in paired or not t.pair else replace(t, pair="") for t in todo]
-        with self._wealthfolio(cfg.wealthfolio_url, secrets.get("wealthfolio_password")) as wf:
-            # Before the check against existing activities: it then sees them repaired.
-            repaired = self._repair_cash_assets(key, wf, accounts)
-            unmatched: list[Transaction] = []
-            # Trades imported from statements older than the bank account's history: their money.
-            before = self._before_history(wf, key, accounts, history, synced)
-            transactions += before
-            todo += [t for t in before if t.id not in synced]
-            activities = self._activities(wf, accounts, transactions, since if full else None, full)
-            if todo:
-                existing = ExistingIndex(activities)
-                # Bank settlements last: the securities side booked in this run (a depot statement) is there then.
-                for tx in sorted(todo, key=lambda t: (t.kind == Kind.SECURITIES_CASH, t.datetime)):
-                    if tx.id in paired:
-                        continue  # booked with its cash side, below
-                    if tx.kind == Kind.SECURITIES_CASH:
-                        if not self._settle_securities_cash(key, tx, accounts, existing, result):
-                            unmatched.append(tx)
-                        continue
-                    self._sync_tx(wf, key, tx, accounts, mappings, patterns, existing, result)
-            if paired:
-                now_synced = self.state.synced(key)
-                for tx_id, pair in paired.items():
-                    if pair in now_synced:
-                        self.state.mark(key, tx_id, "existing", now_synced[pair][1])
-            self._compare(cfg, key, transactions, synced, activities, full, since)
-            if tax_backfill:
-                by_id = {a["id"]: a for a in activities}
-                added, tax_errors = 0, 0
-                for tx in transactions:
-                    status, ids = synced.get(tx.id, ("", []))
-                    if status == "existing" and ids and ids[0] in by_id:
-                        try:
-                            added += self._add_dividend_tax(wf, tx, by_id[ids[0]])
-                        except WealthfolioError as e:
-                            tax_errors += 1
-                            log.info("%s: tax not added to %s: %s", key, tx.id, e)
-                if added:
-                    log.info("%s: added the tax to %d imported dividends", key, added)
-                if not tax_errors and not result.failed and not adapter.incomplete:
-                    self.state.set_flag(tax_flag(key))
-            try:
-                assets_mod.learn(self.state, key, transactions, wf, accounts)
-                # Positions whose asset is unknown, or didn't fit last time: maybe only an import booked
-                # their trades.
-                deviating = {d["key"] for d in (self.state.reconcile(key) or {}).get("deviations", [])
-                             if d.get("kind") == "position"}
-                # Not those the user assigned on the page Wertpapiere: the check finds them by symbol.
-                check = {p.isin for p in positions or [] if p.isin and p.isin not in cfg.security_mappings
-                         and (p.isin not in self.state.assets(key) or p.isin in deviating)}
-                if check:
-                    learned = assets_mod.learn_from_imports(self.state, key, wf, accounts, check,
-                                                            recheck=check & deviating)
-                    if learned:
-                        log.info("%s: learned the Wealthfolio asset of %d position(s) from imported trades", key,
-                                 learned)
-                if backfill:
-                    self.state.set_flag(meta_keys.ASSETS_LEARNED(key))
-            except WealthfolioError as e:
-                log.info("%s: assets not learned: %s", key, e)
-            if cash is not None and not result.failed:
-                if result.created or repaired:
-                    time.sleep(self.recalc_wait)  # Wealthfolio recalculates holdings in the background
-                self._reconcile(cfg, key, wf, accounts, cash, positions, mappings)
-        self._report_unmatched(cfg, key, unmatched, result)
-        if full:
-            self._resolve_vanished_unknowns(key, transactions, since)
-        if refetch and not result.failed:
+        run.paired = {t.id: t.pair for t in todo if t.pair and t.pair not in run.synced}
+        run.todo = [t if t.id in run.paired or not t.pair else replace(t, pair="") for t in todo]
+
+    def _add_before_history(self, run: RunContext, wf: WealthfolioClient) -> None:
+        """Trades imported from statements older than the bank account's history: their money."""
+        before = self._before_history(wf, run.key, run.accounts, run.history, run.synced)
+        run.transactions += before
+        run.todo += [t for t in before if t.id not in run.synced]
+
+    def _book(self, run: RunContext, wf: WealthfolioClient) -> None:
+        """Create what is missing; savings sides of transfer pairs are marked with their cash side."""
+        key = run.key
+        if run.todo:
+            existing = ExistingIndex(run.activities)
+            # Bank settlements last: the securities side booked in this run (a depot statement) is there then.
+            for tx in sorted(run.todo, key=lambda t: (t.kind == Kind.SECURITIES_CASH, t.datetime)):
+                if tx.id in run.paired:
+                    continue  # booked with its cash side, below
+                if tx.kind == Kind.SECURITIES_CASH:
+                    if not self._settle_securities_cash(key, tx, run.accounts, existing, run.result):
+                        run.unmatched.append(tx)
+                    continue
+                self._sync_tx(wf, key, tx, run.accounts, run.mappings, run.patterns, existing, run.result)
+        if run.paired:
+            now_synced = self.state.synced(key)
+            for tx_id, pair in run.paired.items():
+                if pair in now_synced:
+                    self.state.mark(key, tx_id, "existing", now_synced[pair][1])
+
+    def _backfill_tax(self, run: RunContext, wf: WealthfolioClient) -> None:
+        """Once per broker: the tax of dividends matched with an import before (see _add_dividend_tax)."""
+        by_id = {a["id"]: a for a in run.activities}
+        added, tax_errors = 0, 0
+        for tx in run.transactions:
+            status, ids = run.synced.get(tx.id, ("", []))
+            if status == "existing" and ids and ids[0] in by_id:
+                try:
+                    added += self._add_dividend_tax(wf, tx, by_id[ids[0]])
+                except WealthfolioError as e:
+                    tax_errors += 1
+                    log.info("%s: tax not added to %s: %s", run.key, tx.id, e)
+        if added:
+            log.info("%s: added the tax to %d imported dividends", run.key, added)
+        if not tax_errors and not run.result.failed and not run.adapter.incomplete:
+            self.state.set_flag(tax_flag(run.key))
+
+    def _learn_assets(self, run: RunContext, wf: WealthfolioClient) -> None:
+        """The Wealthfolio asset of every ISIN, from the sync's activities and, for positions, from imports."""
+        key, cfg = run.key, run.cfg
+        try:
+            assets_mod.learn(self.state, key, run.transactions, wf, run.accounts)
+            # Positions whose asset is unknown, or didn't fit last time: maybe only an import booked
+            # their trades.
+            deviating = {d["key"] for d in (self.state.reconcile(key) or {}).get("deviations", [])
+                         if d.get("kind") == "position"}
+            # Not those the user assigned on the page Wertpapiere: the check finds them by symbol.
+            check = {p.isin for p in run.positions or [] if p.isin and p.isin not in cfg.security_mappings
+                     and (p.isin not in self.state.assets(key) or p.isin in deviating)}
+            if check:
+                learned = assets_mod.learn_from_imports(self.state, key, wf, run.accounts, check,
+                                                        recheck=check & deviating)
+                if learned:
+                    log.info("%s: learned the Wealthfolio asset of %d position(s) from imported trades", key,
+                             learned)
+            if run.backfill:
+                self.state.set_flag(meta_keys.ASSETS_LEARNED(key))
+        except WealthfolioError as e:
+            log.info("%s: assets not learned: %s", key, e)
+
+    def _check_holdings(self, run: RunContext, wf: WealthfolioClient) -> None:
+        """Broker cash and positions vs. Wealthfolio's holdings - only after a run without failures."""
+        if run.cash is None or run.result.failed:
+            return
+        if run.result.created or run.repaired:
+            time.sleep(self.recalc_wait)  # Wealthfolio recalculates holdings in the background
+        self._reconcile(run.cfg, run.key, wf, run.accounts, run.cash, run.positions, run.mappings)
+
+    def _commit_flags(self, run: RunContext) -> None:
+        """Report unmatched settlements, resolve vanished unknowns, and clear the one-off flags of a good run."""
+        key = run.key
+        self._report_unmatched(run.cfg, key, run.unmatched, run.result)
+        if run.full:
+            self._resolve_vanished_unknowns(key, run.transactions, run.since)
+        if run.refetch and not run.result.failed:
             self.state.delete_meta(refetch_flag(key))
-        if savings_new and not result.failed:
-            self.state.set_meta(savings_flag(key), savings)
+        if run.savings_new and not run.result.failed:
+            self.state.set_meta(savings_flag(key), run.savings)
 
     @staticmethod
     def _activities(wf: WealthfolioClient, accounts: Accounts, transactions: list[Transaction],
