@@ -5,9 +5,15 @@
   <p>Diese Buchungen kennt der Dienst noch nicht. Sie wurden <strong>nicht</strong> nach Wealthfolio übernommen – trage sie bei Bedarf von Hand ein. Ein Fehlerbericht mit dem Typ hilft, sie künftig zu unterstützen.</p>
   {% if events %}
   <div class="table"><table>
-    <tr><th>Datum</th><th>Broker</th><th>Typ</th><th>Details</th></tr>
-    {% for e in events %}
-    <tr><td data-label="Datum">{{ e.occurred_at[:10] }}</td><td data-label="Broker">{{ adapters[e.broker].label if e.broker in adapters else e.broker }}</td><td data-label="Typ">{% if e.raw_type == UNMATCHED_SECURITIES %}Wertpapier-Buchung ohne Gegenstück – die Wertpapierabrechnung (PDF) in Wealthfolio importieren, dann erkennt der nächste Abruf sie{% else %}<code>{{ e.raw_type }}</code>{% endif %}</td><td data-label="Details"><pre>{{ e.payload | tojson(indent=1) }}</pre></td></tr>
+    <tr><th>Datum</th><th>Broker</th><th>Art</th><th>Betrag</th><th>Wertpapier</th><th>Text</th></tr>
+    {% for e in events %}{% set d = describe_unknown(e.payload) %}
+    <tr><td data-label="Datum">{{ e.occurred_at | day }}</td>
+      <td data-label="Broker">{{ adapters[e.broker].label if e.broker in adapters else e.broker }}</td>
+      <td data-label="Art">{% if e.raw_type == UNMATCHED_SECURITIES %}Wertpapier-Buchung ohne Gegenstück – die Wertpapierabrechnung (PDF) in Wealthfolio importieren, dann erkennt der nächste Abruf sie{% else %}<code>{{ e.raw_type }}</code>{% endif %}</td>
+      <td data-label="Betrag">{{ d.amount }}</td>
+      <td data-label="Wertpapier">{{ d.security }}{% if d.shares %} <span class="muted">({{ d.shares }} Stück)</span>{% endif %}</td>
+      <td data-label="Text">{{ d.text }}
+        <details><summary class="muted">Rohdaten für einen Fehlerbericht</summary><pre>{{ e.payload | tojson(indent=1) }}</pre></details></td></tr>
     {% endfor %}
   </table></div>
   {% else %}<p class="muted">Keine.</p>{% endif %}

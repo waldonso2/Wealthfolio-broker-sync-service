@@ -58,7 +58,7 @@
   <div class="table"><table>
     <tr><th>Wertpapier</th><th>Kaufdatum</th><th>Stück</th><th>Kurs</th><th>Gebühr</th><th>Status</th></tr>
     {% for o in b.openings %}
-    <tr><td data-label="Wertpapier">{{ o.name }} <span class="muted">{{ o.isin }}</span></td><td data-label="Kaufdatum">{{ o.day }}</td><td data-label="Stück">{{ o.shares }}</td><td data-label="Kurs">{{ o.price }} {{ o.currency }}</td><td data-label="Gebühr">{{ o.fee }}</td>
+    <tr><td data-label="Wertpapier">{{ o.name }} <span class="muted">{{ o.isin }}</span></td><td data-label="Kaufdatum">{{ o.day | day }}</td><td data-label="Stück">{{ o.shares }}</td><td data-label="Kurs">{{ o.price }} {{ o.currency }}</td><td data-label="Gebühr">{{ o.fee }}</td>
       <td data-label="Status">{% if o.booked %}gebucht{% else %}wird beim nächsten Abruf gebucht
         <form method="post" action="/check/{{ b.key }}/opening" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ o.isin }}"><input type="hidden" name="day" value="{{ o.day }}"><button class="secondary" name="action" value="delete">Entfernen</button></form>{% endif %}</td></tr>
     {% endfor %}
@@ -85,7 +85,7 @@
 <div class="card">
   <h1>Prüfung der Konten</h1>
   <p>Das Depotkonto hält kein Bargeld: Jeder Kauf wird vom Verrechnungskonto bezahlt, jeder Verkauf und jede Ausschüttung dorthin übertragen. Fehlt eine Seite davon – von Hand gelöscht, ohne Übertrag importiert, doppelt gebucht –, zeigt das Depotkonto Bargeld und das Verrechnungskonto das Gegenteil. Diese Seite zeigt, wo.</p>
-  <p class="muted">Nur lesend: Korrigieren musst du in Wealthfolio. Zeitpunkte sind in UTC, wie Wealthfolio sie speichert.</p>
+  <p class="muted">Nur lesend: Korrigieren musst du in Wealthfolio. Zeitpunkte in deutscher Zeit.</p>
   {% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error | redact }}</div>{% endif %}
   {% for r in report %}{% set x = r.result %}
   <h2 style="margin-top:20px">{{ r.label }}</h2>
@@ -98,7 +98,7 @@
     <tr><th>Zeitpunkt</th><th>Art</th><th>Betrag</th><th>Wirkung</th><th>Kommentar</th><th>Herkunft</th></tr>
     {% for m in x.moments[:200] %}
       {% for a in m.activities %}
-      <tr><td data-label="Zeitpunkt">{{ a.date[:19] | replace("T", " ") }}</td><td data-label="Art">{{ a.activityType }}{% if a.subtype %}/{{ a.subtype }}{% endif %}</td><td data-label="Betrag">{{ a.amount }}</td><td data-label="Wirkung">{{ effect(a) | money }}</td><td data-label="Kommentar">{{ a.assetSymbol }} {{ a.comment }}</td><td data-label="Herkunft">{{ source(a) }}</td></tr>
+      <tr><td data-label="Zeitpunkt"><time datetime="{{ a.date | utc }}" title="UTC: {{ a.date | utc }}">{{ a.date | local(seconds=True) }}</time></td><td data-label="Art">{{ a.activityType }}{% if a.subtype %}/{{ a.subtype }}{% endif %}</td><td data-label="Betrag">{{ a.amount }}</td><td data-label="Wirkung">{{ effect(a) | money }}</td><td data-label="Kommentar">{{ a.assetSymbol }} {{ a.comment }}</td><td data-label="Herkunft">{{ source(a) }}</td></tr>
       {% endfor %}
       <tr><td colspan="6"><strong>bleibt stehen: {{ m.net | money }} EUR</strong></td></tr>
     {% endfor %}
@@ -112,7 +112,7 @@
   <div class="table"><table>
     <tr><th>Zeitpunkt</th><th>Konto</th><th>Art</th><th>Betrag</th><th>Kommentar</th><th>Herkunft</th></tr>
     {% for a in x.lonely[:200] %}
-    <tr><td data-label="Zeitpunkt">{{ a.date[:19] | replace("T", " ") }}</td><td data-label="Konto">{{ r.depot_name if a.accountId == r.depot_id else r.cash_name }}</td><td data-label="Art">{{ a.activityType }}</td><td data-label="Betrag">{{ a.amount }}</td><td data-label="Kommentar">{{ a.comment }}</td><td data-label="Herkunft">{{ source(a) }}</td></tr>
+    <tr><td data-label="Zeitpunkt"><time datetime="{{ a.date | utc }}" title="UTC: {{ a.date | utc }}">{{ a.date | local(seconds=True) }}</time></td><td data-label="Konto">{{ r.depot_name if a.accountId == r.depot_id else r.cash_name }}</td><td data-label="Art">{{ a.activityType }}</td><td data-label="Betrag">{{ a.amount }}</td><td data-label="Kommentar">{{ a.comment }}</td><td data-label="Herkunft">{{ source(a) }}</td></tr>
     {% endfor %}
   </table></div>
   {% else %}<p class="muted">Keine.</p>{% endif %}
