@@ -51,7 +51,7 @@ target-version = "py311"
 select = ["E", "F", "W", "I", "B", "UP", "C901"]
 
 [tool.ruff.lint.mccabe]
-# New code stays below this; the few older functions above it are marked (noqa: C901) and listed in #75, #76, #80.
+# New code stays below this; the few older functions above it are marked (noqa: C901) and listed in #75, #80.
 max-complexity = 15
 
 [tool.ruff.lint.per-file-ignores]

@@ -3,69 +3,38 @@
 Everything a user configures happens here; nobody edits files. The UI is
 protected by its own password, chosen on the first visit. Texts are German,
 the audience are users of German brokers.
+
+This module builds the app: templates, session, login check and the routers
+of ``web/routes/`` (one per area, #76), which share an ``AppContext``
+(``web/context.py``).
 """
 
 from __future__ import annotations
 
-import json
-import logging
-import re
 import secrets
-import subprocess
-import threading
-from collections import Counter
-from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from starlette.datastructures import UploadFile as StarletteUpload
 from starlette.middleware.sessions import SessionMiddleware
 
-from .. import __version__, audit, crypto, redact, retired
-from .. import config as config_mod
-from .. import duplicates as duplicates_mod
-from .. import logos as logos_mod
-from .. import reset as reset_mod
-from .. import security as security_mod
-from ..adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
-from ..mapping import Accounts
-from ..model import Kind
+from .. import crypto, redact
+from ..adapters import ADAPTERS, BrokerAdapter
 from ..notify import Notifier
 from ..state import State
-from ..sync import UNMATCHED_SECURITIES, AlreadyRunning, Syncer, is_running, opening_id, refetch_flag, run_lock
-from ..vault import Vault, hash_password, needs_rehash, verify_password
-from ..wealthfolio import WealthfolioClient, WealthfolioError
-from . import inputs, views
+from ..sync import UNMATCHED_SECURITIES, Syncer
+from ..vault import Vault
+from ..wealthfolio import WealthfolioClient
+from . import views
+from .context import PUBLIC, SETTINGS_PAGES, STATUS_LABEL, AppContext, accounts_of, csrf_guard
 from .gate import Gate, Throttle
+from .routes import ROUTERS
 
-log = logging.getLogger(__name__)
+__all__ = ["PUBLIC", "SETTINGS_PAGES", "STATUS_LABEL", "accounts_of", "create_app"]
+
 HERE = Path(__file__).parent
-TIMER = "wealthfolio-broker-sync-run.timer"
-PUBLIC = {"/login", "/setup-password", "/healthz", "/ca.crt"}
-STATUS_LABEL = {"ok": "OK", "needs_auth": "Anmeldung nötig", "error": "Fehler", "running": "läuft",
-                "aborted": "abgebrochen"}
-
-
-# The pages under *Einstellungen*: (path, title, what it is for). The header shows the daily pages only (#71).
-SETTINGS_PAGES = [
-    ("/setup/wealthfolio", "Wealthfolio", "Adresse und Passwort deines Wealthfolio"),
-    ("/brokers", "Broker", "Zugangsdaten, Konten, Startdatum, Anmeldung"),
-    ("/notifications", "Benachrichtigungen", "ntfy für TAN-Anfragen und Fehler"),
-    ("/securities", "Wertpapiere", "ISIN unter eigenem Symbol führen"),
-    ("/transfers", "Überträge", "Auszahlungen auf eigene Konten erkennen"),
-    ("/logos", "Logos", "Logos der Wertpapiere von logo.dev"),
-    ("/security", "Sicherheit", "Verschlüsselung, Master-Passphrase, Zertifikat"),
-    ("/duplicates", "Duplikate", "Doppelte Buchungen finden und entfernen"),
-]
-
-MIN_PASSWORD = 12
-MAX_STATEMENT = 5 * 1024 * 1024
-STATEMENT_KINDS = [(Kind.DIVIDEND, "Dividenden"), (Kind.BUY, "Käufe/Einbuchungen"), (Kind.SELL, "Verkäufe"),
-                   (Kind.UNKNOWN, "nicht automatisch buchbar")]
 
 
 def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[BrokerAdapter]] | None = None,
@@ -85,42 +54,25 @@ def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[Bro
     return gate
 
 
-def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_thread: bool, secure: bool, gate: Gate,  # noqa: C901 (#76)
+def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_thread: bool, secure: bool, gate: Gate,
                 throttle: Throttle, logo_source=None) -> FastAPI:
     vault = Vault(data_dir)
-    state = State(data_dir)
     adapters = adapters or ADAPTERS
     make_wf = wealthfolio or (lambda url, pw: WealthfolioClient(url, pw))
-    syncer = Syncer(data_dir, wealthfolio=make_wf, notifier=notifier, adapters=adapters, logo_source=logo_source)
-    templates = Jinja2Templates(directory=HERE / "templates")
-    # One format for every date and time, German time (#73).
-    templates.env.filters["local"] = views.local_time
-    templates.env.filters["day"] = views.local_day
-    templates.env.filters["utc"] = views.utc_iso
-    templates.env.filters["money"] = views.money
-    templates.env.globals["describe_unknown"] = views.describe_unknown
-    # Foreign error texts (banks, brokers, Wealthfolio) on a page: never a secret or an account number.
-    templates.env.filters["redact"] = lambda text: redact.redact(str(text)) if text else text
-    templates.env.globals["STATUS"] = STATUS_LABEL
-    templates.env.globals["UNMATCHED_SECURITIES"] = UNMATCHED_SECURITIES
-    # Adapters waiting for a TAN, between the two requests of a login.
-    pending: dict[str, BrokerAdapter] = {}
-    running = threading.Event()
+    ctx = AppContext(data_dir=data_dir, vault=vault, state=State(data_dir), adapters=adapters, make_wf=make_wf,
+                     syncer=Syncer(data_dir, wealthfolio=make_wf, notifier=notifier, adapters=adapters,
+                                   logo_source=logo_source),
+                     templates=_templates(), notifier=notifier, run_in_thread=run_in_thread, secure=secure,
+                     gate=gate, throttle=throttle)
 
     session_key = vault.load().get("ui_session_key")
     if not session_key:
         session_key = secrets.token_urlsafe(32)
         vault.update(lambda d: d.__setitem__("ui_session_key", session_key))
 
-    async def csrf_guard(request: Request) -> None:
-        # Starlette caches the parsed form, so the endpoints can still read it.
-        if request.method == "POST" and request.url.path not in PUBLIC:
-            form = await request.form()
-            if not request.session.get("csrf") or form.get("csrf") != request.session.get("csrf"):
-                raise HTTPException(400, "Formular abgelaufen - bitte die Seite neu laden.")
-
     app = FastAPI(title="Wealthfolio Broker Sync", docs_url=None, redoc_url=None, openapi_url=None,
                   dependencies=[Depends(csrf_guard)])
+    app.state.ctx = ctx
 
     @app.middleware("http")
     async def require_login(request: Request, call_next):
@@ -137,703 +89,21 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
     app.add_middleware(SessionMiddleware, secret_key=session_key, same_site="strict", https_only=secure,
                        max_age=24 * 3600)
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
-
-    def render(request: Request, name: str, **ctx) -> HTMLResponse:
-        if "csrf" not in request.session:
-            request.session["csrf"] = secrets.token_urlsafe(16)
-        flash = request.session.pop("flash", None)
-        nav_unknown = state.unknown_count() if request.session.get("user") else 0
-        return templates.TemplateResponse(request, name, {
-            "csrf": request.session["csrf"], "flash": flash, "version": __version__, "adapters": adapters,
-            "nav_unknown": nav_unknown, "settings_pages": SETTINGS_PAGES, **ctx,
-        })
-
-    def redirect(request: Request, url: str, flash: str | None = None, level: str = "ok") -> RedirectResponse:
-        if flash:
-            # Messages can carry a broker's error text: never a secret or an account number on screen.
-            request.session["flash"] = {"text": redact.redact(flash), "level": level}
-        return RedirectResponse(url, 303)
-
-    def cfg() -> config_mod.Config:
-        return config_mod.load(data_dir)
-
-    def wf_client(c: config_mod.Config) -> WealthfolioClient:
-        return make_wf(c.wealthfolio_url, vault.load().get("wealthfolio_password"))
-
-    def wf_accounts(c: config_mod.Config):
-        try:
-            with wf_client(c) as wf:
-                return [a for a in wf.list_accounts() if a.is_active], None
-        except WealthfolioError as e:
-            return [], str(e)
-
-    # ── first visit / login ─────────────────────────────────────────────────
-    @app.get("/ca.crt")
-    def ca_certificate():
-        """The container's CA certificate (public), to import once so browsers trust the UI."""
-        from fastapi.responses import Response
-
-        path = security_mod.ca_file()
-        if not path:
-            raise HTTPException(404, "Kein CA-Zertifikat vorhanden.")
-        return Response(path.read_bytes(), media_type="application/x-x509-ca-cert",
-                        headers={"Content-Disposition": 'attachment; filename="wealthfolio-broker-sync-ca.crt"'})
-
-    @app.get("/healthz")
-    def healthz():
-        return {"ok": True, "version": __version__}
-
-    @app.get("/setup-password", response_class=HTMLResponse)
-    def setup_password_page(request: Request):
-        if vault.load().get("ui_password_hash"):
-            return RedirectResponse("/login", 303)
-        return render(request, "setup_password.html")
-
-    @app.post("/setup-password")
-    def setup_password(request: Request, password: str = Form(...), password2: str = Form(...)):
-        if vault.load().get("ui_password_hash"):
-            return RedirectResponse("/login", 303)
-        if len(password) < MIN_PASSWORD or password != password2:
-            return redirect(request, "/setup-password",
-                            f"Das Passwort braucht mindestens {MIN_PASSWORD} Zeichen, beide Eingaben müssen gleich "
-                            "sein.", "error")
-        vault.update(lambda d: d.__setitem__("ui_password_hash", hash_password(password)))
-        request.session.clear()  # a fresh session, nothing carried over from before the password existed
-        request.session["user"] = "admin"
-        if not cfg().public_url:
-            c = cfg()
-            c.public_url = str(request.base_url).rstrip("/")
-            config_mod.save(data_dir, c)
-        return redirect(request, "/", "Passwort gespeichert. Jetzt Schritt für Schritt einrichten.")
-
-    @app.get("/login", response_class=HTMLResponse)
-    def login_page(request: Request):
-        return render(request, "login.html")
-
-    @app.post("/login")
-    def login(request: Request, password: str = Form(...)):
-        client = request.client.host if request.client else "?"
-        wait = throttle.blocked(client)
-        if wait:
-            return redirect(request, "/login", f"Zu viele Fehlversuche. Bitte in {wait // 60 + 1} Minuten erneut "
-                            "versuchen.", "error")
-        stored = vault.load().get("ui_password_hash")
-        if verify_password(password, stored):
-            throttle.success(client)
-            if stored and needs_rehash(stored):
-                vault.update(lambda d: d.__setitem__("ui_password_hash", hash_password(password)))
-            request.session.clear()
-            request.session["user"] = "admin"
-            return redirect(request, "/")
-        throttle.failure(client)
-        log.warning("web UI: wrong password from %s", client)
-        return redirect(request, "/login", "Falsches Passwort.", "error")
-
-    @app.post("/logout")
-    def logout(request: Request):
-        request.session.clear()
-        return RedirectResponse("/login", 303)
-
-    # ── dashboard ───────────────────────────────────────────────────────────
-    @app.get("/", response_class=HTMLResponse)
-    def dashboard(request: Request):
-        # A run whose process died stays at 'running' in the database; close it
-        # unless a sync (here or the timer's) really is in progress.
-        if not running.is_set():
-            syncer.cleanup()
-        busy = running.is_set() or is_running(data_dir)
-        c = cfg()
-        secrets_ = vault.load()
-        brokers = []
-        for key, adapter in adapters.items():
-            b = c.brokers.get(key, config_mod.BrokerConfig())
-            brokers.append({
-                "key": key,
-                "label": adapter.label,
-                "savings_label": adapter.savings_label,
-                "config": b,
-                "has_credentials": bool(secrets_.get("brokers", {}).get(key, {}).get("credentials")),
-                "last": state.last_run(key),
-                "balances": state.balances(key),
-                "reconcile": state.reconcile(key),
-            })
-        steps = [
-            ("Wealthfolio verbinden", "/setup/wealthfolio", bool(c.wealthfolio_url and _wf_done(secrets_, c))),
-            ("Broker einrichten und Konten zuordnen", "/brokers", any(b["config"].enabled for b in brokers)),
-            ("Benachrichtigungen (ntfy)", "/notifications", bool(c.ntfy_topic)),
-            ("Erster Abruf", "#run", any(b["last"] for b in brokers)),
-        ]
-        return render(request, "dashboard.html", brokers=brokers, steps=steps, all_done=all(s[2] for s in steps),
-                      running=busy,
-                      next_run=_next_timer_run(), unknown=len(state.unknown_events()), runs=state.runs(limit=10),
-                      retired_notices=retired.notices(state))
-
-    @app.post("/retired/dismiss")
-    def retired_dismiss(request: Request, broker: str = Form(...)):
-        retired.dismiss(state, broker)
-        return redirect(request, "/")
-
-    @app.post("/run")
-    def run_now(request: Request, broker: str = Form("")):
-        if running.is_set():
-            return redirect(request, "/", "Ein Abruf läuft bereits.", "warn")
-        only = [broker] if broker else None
-
-        def work():
-            try:
-                syncer.run(only)
-            except AlreadyRunning:
-                log.info("sync skipped: already running (timer)")
-            except Exception:
-                log.exception("sync failed")
-            finally:
-                running.clear()
-
-        running.set()  # before the thread starts, so the next page view already shows it
-        if run_in_thread:
-            threading.Thread(target=work, daemon=True).start()
-            return redirect(request, "/", "Abruf gestartet. Die Seite aktualisiert sich, bis er fertig ist.")
-        work()
-        return redirect(request, "/", "Abruf beendet.")
-
-    @app.get("/settings", response_class=HTMLResponse)
-    def settings_page(request: Request):
-        return render(request, "settings.html")
-
-    # ── Wealthfolio ─────────────────────────────────────────────────────────
-    @app.get("/setup/wealthfolio", response_class=HTMLResponse)
-    def wealthfolio_page(request: Request):
-        c = cfg()
-        has_pw = bool(vault.load().get("wealthfolio_password"))
-        return render(request, "wealthfolio.html", cfg=c, has_password=has_pw)
-
-    @app.post("/setup/wealthfolio")
-    def wealthfolio_save(request: Request, url: str = Form(...), password: str = Form(""),
-                         no_password: str = Form("")):
-        c = cfg()
-        try:
-            c.wealthfolio_url = inputs.http_url(url, "Wealthfolio-Adresse")
-        except inputs.Invalid as e:
-            return redirect(request, "/setup/wealthfolio", str(e), "error")
-        config_mod.save(data_dir, c)
-        if no_password:
-            vault.update(lambda d: d.pop("wealthfolio_password", None))
-        elif password:
-            vault.update(lambda d: d.__setitem__("wealthfolio_password", password))
-        vault.update(lambda d: d.__setitem__("wealthfolio_checked", False))
-        accounts, error = wf_accounts(c)
-        if error:
-            return redirect(request, "/setup/wealthfolio", f"Verbindung fehlgeschlagen: {error}", "error")
-        vault.update(lambda d: d.__setitem__("wealthfolio_checked", True))
-        return redirect(request, "/brokers", f"Verbunden - {len(accounts)} Konten in Wealthfolio gefunden.")
-
-    # ── brokers ─────────────────────────────────────────────────────────────
-    @app.get("/brokers", response_class=HTMLResponse)
-    def brokers_page(request: Request):
-        c = cfg()
-        return render(request, "brokers.html", cfg=c)
-
-    @app.get("/brokers/{key}", response_class=HTMLResponse)
-    def broker_page(request: Request, key: str):
-        if key not in adapters:
-            return redirect(request, "/brokers", "Unbekannter Broker.", "error")
-        c = cfg()
-        accounts, error = wf_accounts(c)
-        stored = vault.broker(key).get("credentials", {})
-        return render(request, "broker.html", key=key, adapter=adapters[key], b=c.broker(key), accounts=accounts,
-                      wf_error=error, stored={k: bool(v) for k, v in stored.items()},
-                      plain={f.name: stored.get(f.name, "") for f in adapters[key].credential_fields if not f.secret},
-                      statement_rows=len(state.statement_rows(key)) if adapters[key].statement_label else 0)
-
-    @app.post("/brokers/{key}")
-    async def broker_save(request: Request, key: str):
-        if key not in adapters:
-            return redirect(request, "/brokers", "Unbekannter Broker.", "error")
-        form = await request.form()
-        c = cfg()
-        b = c.broker(key)
-        b.enabled = form.get("enabled") == "on"
-        try:
-            b.cash_account_id = inputs.text(str(form.get("cash_account_id", "")), "Konto", max_len=100)
-            b.portfolio_account_id = inputs.text(str(form.get("portfolio_account_id", "")), "Konto", max_len=100)
-            b.savings_account_id = (inputs.text(str(form.get("savings_account_id", "")), "Konto", max_len=100)
-                                    if adapters[key].savings_label else "")
-            b.start_date = inputs.iso_date(str(form.get("start_date", "")), "Startdatum")
-        except inputs.Invalid as e:
-            return redirect(request, f"/brokers/{key}", str(e), "error")
-        if b.enabled and (not b.cash_account_id or not b.portfolio_account_id):
-            return redirect(request, f"/brokers/{key}", "Bitte ein Verrechnungs- und ein Depotkonto wählen.", "error")
-        if b.enabled and b.cash_account_id == b.portfolio_account_id:
-            return redirect(request, f"/brokers/{key}",
-                            "Verrechnungs- und Depotkonto müssen verschiedene Konten sein.", "error")
-        if b.savings_account_id and b.savings_account_id in (b.cash_account_id, b.portfolio_account_id):
-            return redirect(request, f"/brokers/{key}", f"Das {adapters[key].savings_label}-Konto muss ein eigenes "
-                            "Wealthfolio-Konto sein, nicht das Verrechnungs- oder Depotkonto.", "error")
-        config_mod.save(data_dir, c)
-        old = vault.broker(key).get("credentials", {})
-        creds = {}
-        for f in adapters[key].credential_fields:
-            v = str(form.get(f"cred_{f.name}", ""))
-            if len(v) > inputs.MAX_TEXT:
-                return redirect(request, f"/brokers/{key}", f"{f.label}: höchstens {inputs.MAX_TEXT} Zeichen.", "error")
-            creds[f.name] = v if v or not f.secret else old.get(f.name, "")
-        if creds != old:
-            vault.set_broker_credentials(key, creds)
-            return redirect(request, f"/brokers/{key}/login", "Gespeichert. Jetzt beim Broker anmelden.")
-        return redirect(request, "/", "Gespeichert.")
-
-    @app.post("/brokers/{key}/refetch")
-    def broker_refetch(request: Request, key: str):
-        if key not in adapters:
-            return redirect(request, "/brokers", "Unbekannter Broker.", "error")
-        state.set_flag(refetch_flag(key))
-        start = cfg().broker(key).start_date
-        since = f"alles ab {start}" if start else "alles, was der Broker liefert"
-        return redirect(request, f"/brokers/{key}", f"Der nächste Abruf holt noch einmal {since}. Schon "
-                                                    "übernommene Buchungen werden nicht doppelt angelegt.")
-
-    @app.get("/brokers/{key}/login", response_class=HTMLResponse)
-    def broker_login_start(request: Request, key: str):
-        if key not in adapters:
-            return redirect(request, "/brokers", "Unbekannter Broker.", "error")
-        old = pending.pop(key, None)
-        if old is not None:
-            old.close()
-        stored = vault.broker(key)
-        adapter = adapters[key](stored.get("credentials", {}), stored.get("session"))
-        try:
-            adapter.login()
-        except AuthRequired as e:
-            pending[key] = adapter
-            vault.set_broker_session(key, adapter.session_state())
-            return render(request, "broker_login.html", key=key, adapter=adapters[key], challenge=e.challenge)
-        except AdapterError as e:
-            finish_login(key, adapter)  # keeps e.g. a rejected PIN, so nothing retries it
-            return redirect(request, f"/brokers/{key}", f"Anmeldung fehlgeschlagen: {e}", "error")
-        finish_login(key, adapter)
-        return redirect(request, "/", f"{adapters[key].label}: angemeldet - die gespeicherte Sitzung ist noch gültig, "
-                                      "eine Bestätigung war nicht nötig. Du kannst jetzt abrufen.")
-
-    def finish_login(key: str, adapter: BrokerAdapter) -> None:
-        adapter.close()
-        vault.set_broker_session(key, adapter.session_state())
-
-    @app.post("/brokers/{key}/login")
-    def broker_login_finish(request: Request, key: str, code: str = Form("")):
-        adapter = pending.get(key)
-        if adapter is None:
-            return redirect(request, f"/brokers/{key}/login", "Die Anmeldung ist abgelaufen, bitte neu starten.",
-                            "warn")
-        try:
-            adapter.complete_login(code)
-        except AuthRequired as e:
-            return render(request, "broker_login.html", key=key, adapter=adapters[key], challenge=e.challenge)
-        except AdapterError as e:
-            pending.pop(key, None)
-            finish_login(key, adapter)
-            return redirect(request, f"/brokers/{key}", f"Anmeldung fehlgeschlagen: {e}", "error")
-        pending.pop(key, None)
-        finish_login(key, adapter)
-        return redirect(request, "/", f"{adapters[key].label}: angemeldet. Du kannst jetzt abrufen.")
-
-    # ── transfer patterns ───────────────────────────────────────────────────
-    @app.get("/transfers", response_class=HTMLResponse)
-    def transfers_page(request: Request):
-        c = cfg()
-        accounts, error = wf_accounts(c)
-        names = {a.id: f"{a.name} ({a.currency})" for a in accounts}
-        return render(request, "transfers.html", patterns=c.transfer_patterns, accounts=accounts, names=names,
-                      wf_error=error)
-
-    @app.post("/transfers")
-    def transfers_save(request: Request, label: str = Form(""), iban: str = Form(""), keyword: str = Form(""),
-                       destination: str = Form(""), delete: str = Form("")):
-        c = cfg()
-        if delete:
-            i = int(delete) if delete.isdigit() else -1
-            if 0 <= i < len(c.transfer_patterns):
-                c.transfer_patterns.pop(i)
-        else:
-            try:
-                label = inputs.text(label, "Name", max_len=100)
-                iban = inputs.iban(iban)
-                keyword = inputs.text(keyword, "Stichwort", max_len=100)
-                destination = inputs.text(destination, "Zielkonto", max_len=100)
-            except inputs.Invalid as e:
-                return redirect(request, "/transfers", str(e), "error")
-            if not label or not (iban or keyword):
-                return redirect(request, "/transfers", "Bitte einen Namen und eine IBAN oder ein Stichwort angeben.",
-                                "error")
-            c.transfer_patterns.append({"label": label, "iban": iban, "keyword": keyword,
-                                        "destinationAccountId": destination})
-        config_mod.save(data_dir, c)
-        return redirect(request, "/transfers", "Gespeichert.")
-
-    # ── security ────────────────────────────────────────────────────────────
-    @app.get("/security", response_class=HTMLResponse)
-    def security_page(request: Request):
-        c = cfg()
-        wf_plain = c.wealthfolio_url.startswith("http://") and not _is_local(c.wealthfolio_url)
-        return render(request, "security.html", checks=security_mod.status(data_dir, secure=secure),
-                      ca=bool(security_mod.ca_file()), ca_fingerprint=security_mod.ca_fingerprint(),
-                      has_passphrase=crypto.passphrase_enabled(data_dir), min_length=crypto.MIN_PASSPHRASE,
-                      wf_plain=wf_plain)
-
-    @app.post("/security/passphrase")
-    def security_passphrase(request: Request, password: str = Form(...), action: str = Form(...),
-                            new: str = Form(""), new2: str = Form("")):
-        client = request.client.host if request.client else "?"
-        if throttle.blocked(client):
-            return redirect(request, "/security", "Zu viele Fehlversuche. Bitte später erneut versuchen.", "error")
-        if not verify_password(password, vault.load().get("ui_password_hash")):
-            throttle.failure(client)
-            return redirect(request, "/security", "Das Passwort der Oberfläche stimmt nicht.", "error")
-        throttle.success(client)
-        if action == "remove":
-            target = None
-        else:
-            if new != new2:
-                return redirect(request, "/security", "Die beiden Eingaben der Passphrase sind verschieden.", "error")
-            target = new
-        try:
-            security_mod.change_passphrase(data_dir, target)
-        except ValueError as e:
-            return redirect(request, "/security", str(e), "error")
-        except AlreadyRunning:
-            return redirect(request, "/security", "Gerade läuft ein Abruf. Bitte danach erneut versuchen.", "warn")
-        log.info("master passphrase %s", "removed" if target is None else "set")
-        gate.reset()  # the database connection and the vault use the new key from the next request on
-        done = ("Master-Passphrase entfernt." if target is None
-                else "Master-Passphrase gesetzt. Merke sie dir gut: Ohne sie sind die Daten verloren.")
-        return redirect(request, "/security", done)
-
-    @app.post("/security/lock")
-    def security_lock(request: Request):
-        crypto.lock(data_dir)
-        gate.reset()
-        log.info("web UI: service locked")
-        return RedirectResponse("/unlock", 303)
-
-    # ── notifications ───────────────────────────────────────────────────────
-    @app.get("/notifications", response_class=HTMLResponse)
-    def notifications_page(request: Request):
-        c = cfg()
-        if not c.ntfy_topic:
-            c.ntfy_topic = f"wealthfolio-sync-{secrets.token_hex(6)}"
-        return render(request, "notifications.html", cfg=c, has_token=bool(c.ntfy_token))
-
-    @app.post("/notifications")
-    def notifications_save(request: Request, server: str = Form(...), topic: str = Form(""), token: str = Form(""),
-                           public_url: str = Form(""), details: str = Form(""), test: str = Form("")):
-        c = cfg()
-        try:
-            c.ntfy_server = inputs.http_url(server, "ntfy-Server")
-            c.ntfy_topic = inputs.text(topic, "Thema", max_len=64)
-            c.public_url = inputs.http_url(public_url, "Adresse dieser Oberfläche", required=False)
-            token = inputs.text(token, "Zugangstoken")
-        except inputs.Invalid as e:
-            return redirect(request, "/notifications", str(e), "error")
-        if c.ntfy_topic and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", c.ntfy_topic):
-            return redirect(request, "/notifications", "Thema: nur Buchstaben, Ziffern, - und _.", "error")
-        c.ntfy_details = bool(details)
-        if token:
-            c.ntfy_token = token
-        config_mod.save(data_dir, c)
-        if test:
-            n = notifier or Notifier(c.ntfy_server, c.ntfy_topic, c.ntfy_token)
-            ok = n.send("Wealthfolio Broker Sync", "Testnachricht - Benachrichtigungen funktionieren.",
-                        link=c.public_url or None, tags="white_check_mark")
-            if not ok:
-                return redirect(request, "/notifications", "Testnachricht konnte nicht gesendet werden.", "error")
-            return redirect(request, "/notifications", "Testnachricht gesendet.")
-        return redirect(request, "/", "Benachrichtigungen gespeichert.")
-
-    # ── account check (read only) ───────────────────────────────────────────
-    @app.get("/check", response_class=HTMLResponse)
-    def check_page(request: Request):
-        c = cfg()
-        report, error = [], None
-        try:
-            with wf_client(c) as wf:
-                names = {a.id: a.name for a in wf.list_accounts()}
-                for key, b in c.brokers.items():
-                    if key in adapters and b.cash_account_id and b.portfolio_account_id:
-                        accounts = accounts_of(b)
-                        report.append({"key": key, "label": adapters[key].label, "result": audit.run(wf, accounts),
-                                       "cash_name": names.get(b.cash_account_id, "Verrechnungskonto"),
-                                       "depot_name": names.get(b.portfolio_account_id, "Depotkonto"),
-                                       "depot_id": b.portfolio_account_id})
-        except WealthfolioError as e:
-            error = str(e)
-        brokers = [{"key": k, "label": adapters[k].label, "full": adapters[k].full_history, "gaps": state.gaps(k),
-                    "checked": bool(state.last_run(k)), "missing": missing_positions(k),
-                    "openings": [{**o, "booked": opening_id(o["isin"], o["day"]) in synced}
-                                 for synced in [state.synced(k)] for o in state.openings(k)]}
-                   for k, b in c.brokers.items() if k in adapters and b.cash_account_id and b.portfolio_account_id]
-        return render(request, "check.html", report=report, wf_error=error, source=audit.source,
-                      effect=audit.cash_effect, brokers=brokers)
-
-    def missing_positions(key: str) -> list[dict]:
-        """Positions the broker holds more of than Wealthfolio (last check), pre-filled for an opening position."""
-        if not adapters[key].reports_positions:
-            return []
-        known = {p["isin"]: p for p in json.loads(state.meta(f"positions:{key}") or "[]")}
-        entered = {o["isin"] for o in state.openings(key)}
-        out = []
-        for d in (state.reconcile(key) or {}).get("deviations", []):
-            if d["kind"] != "position" or ":" in d["key"] or d["key"] in entered:
-                continue
-            try:
-                missing = Decimal(d["broker"]) - Decimal(d["wealthfolio"])
-            except InvalidOperation:
-                continue
-            if missing > 0:
-                p = known.get(d["key"], {})
-                out.append({"isin": d["key"], "name": d["name"], "shares": format(missing.normalize(), "f"),
-                            "price": p.get("cost") or "", "currency": p.get("currency") or "EUR"})
-        return out
-
-    @app.post("/check/{key}/opening")
-    async def check_opening(request: Request, key: str):
-        """An opening position: bought on a day before the start date; the next run books it."""
-        if key not in adapters:
-            return redirect(request, "/check", "Unbekannter Broker.", "error")
-        form = await request.form()
-        isin = str(form.get("isin", "")).strip().upper()
-        day = str(form.get("day", "")).strip()
-        if form.get("action") != "delete":
-            try:
-                isin = inputs.security_id(isin)
-            except inputs.Invalid as e:
-                return redirect(request, "/check", str(e), "error")
-        if form.get("action") == "delete":
-            if opening_id(isin, day) not in state.synced(key):
-                state.delete_opening(key, isin, day)
-            return redirect(request, "/check", "Anfangsbestand entfernt.")
-        try:
-            shares = Decimal(str(form.get("shares", "")).replace(",", "."))
-            price = Decimal(str(form.get("price", "")).replace(",", "."))
-            fee = Decimal(str(form.get("fee") or "0").replace(",", "."))
-            bought = date.fromisoformat(day)
-        except (InvalidOperation, ValueError):
-            return redirect(request, "/check", "Bitte Kaufdatum, Stückzahl, Kurs und Gebühr als Zahlen angeben.",
-                            "error")
-        if shares <= 0 or price <= 0 or fee < 0 or bought > date.today() or not isin:
-            return redirect(request, "/check", "Stückzahl und Kurs müssen größer 0 sein, die Gebühr mindestens 0, "
-                                               "das Kaufdatum darf nicht in der Zukunft liegen.", "error")
-        known = {p["isin"]: p for p in json.loads(state.meta(f"positions:{key}") or "[]")}
-        p = known.get(isin, {})
-        name = str(form.get("name") or p.get("name") or isin)[:200]
-        state.add_opening(key, isin, bought.isoformat(), name,
-                          str(shares), str(price), str(fee), p.get("currency") or "EUR")
-        return redirect(request, "/check", f"Anfangsbestand {isin} gespeichert - der nächste Abruf bucht ihn als Kauf "
-                                           f"am {bought:%d.%m.%Y} samt Einzahlung des Kaufbetrags.")
-
-    @app.post("/brokers/{key}/statement")
-    async def broker_statement(request: Request, key: str):
-        """A statement the user exported from the broker (Deutsche Bank depot CSV): keep its rows for the runs."""
-        if key not in adapters or not adapters[key].statement_label:
-            return redirect(request, "/brokers", "Für diesen Broker gibt es keinen Datei-Import.", "error")
-        file = (await request.form()).get("file")
-        if not isinstance(file, StarletteUpload):
-            return redirect(request, f"/brokers/{key}", "Bitte eine Datei auswählen.", "error")
-        data = await file.read(MAX_STATEMENT + 1)
-        if len(data) > MAX_STATEMENT:
-            return redirect(request, f"/brokers/{key}", "Die Datei ist zu groß (höchstens 5 MB).", "error")
-        try:
-            rows = adapters[key].parse_statement(data)
-        except ValueError as e:
-            return redirect(request, f"/brokers/{key}", str(e), "error")
-        new = state.add_statement_rows(key, rows)
-        kinds = Counter(t.kind for t in adapters[key].statement_transactions(rows, None))
-        summary = ", ".join(f"{n} {label}" for kind, label in STATEMENT_KINDS if (n := kinds.get(kind)))
-        log.info("%s: statement uploaded, %d rows (%d new)", key, len(rows), new)
-        return redirect(request, f"/brokers/{key}", f"{len(rows)} Zeilen gelesen ({summary}), {new} davon neu. "
-                        "Der nächste Abruf bucht sie; nicht Buchbares steht dann unter „Unbekannte Buchungen“.")
-
-    @app.post("/brokers/{key}/reset")
-    def broker_reset(request: Request, key: str, confirm: str = Form("")):
-        if key not in adapters:
-            return redirect(request, "/brokers", "Unbekannter Broker.", "error")
-        if not confirm:
-            return redirect(request, f"/brokers/{key}", "Bitte bestätige das Neu-Aufsetzen mit dem Häkchen.", "error")
-        b = cfg().broker(key)
-        if not b.cash_account_id or not b.portfolio_account_id:
-            return redirect(request, f"/brokers/{key}", "Erst die beiden Wealthfolio-Konten wählen.", "error")
-        try:
-            with run_lock(data_dir, wait=5), wf_client(cfg()) as wf:
-                deleted, errors = reset_mod.reset(wf, state, key, accounts_of(b))
-        except AlreadyRunning:
-            return redirect(request, f"/brokers/{key}", "Gerade läuft ein Abruf - bitte gleich noch einmal.", "warn")
-        except WealthfolioError as e:
-            return redirect(request, f"/brokers/{key}", f"Wealthfolio nicht erreichbar: {e}", "error")
-        if errors:
-            return redirect(request, f"/brokers/{key}", f"{deleted} Buchungen gelöscht, {len(errors)} nicht: "
-                                                        + "; ".join(errors[:3]) + " - bitte noch einmal versuchen.",
-                            "error")
-        return redirect(request, f"/brokers/{key}", f"{deleted} Buchungen des Dienstes gelöscht. Der nächste Abruf "
-                                                    "holt alles ab dem Startdatum neu.")
-
-    @app.post("/check/{key}")
-    async def check_decide(request: Request, key: str):
-        """The user's decision on transactions missing in Wealthfolio: book them again, or ignore them."""
-        if key not in adapters:
-            return redirect(request, "/check", "Unbekannter Broker.", "error")
-        form = await request.form()
-        action = str(form.get("action", ""))
-        open_refs = {g["ref"] for g in state.gaps(key) if g["kind"] != "orphan"}
-        tx_ids = [str(t) for t in form.getlist("tx") if str(t) in open_refs]
-        if not tx_ids:
-            return redirect(request, "/check", "Keine Buchung ausgewählt.", "warn")
-        if action == "ignore":
-            state.ignore(key, tx_ids)
-            return redirect(request, "/check", f"{len(tx_ids)} Buchung(en) werden nicht mehr gebucht.")
-        if action != "rebook":
-            return redirect(request, "/check", "Unbekannte Aktion.", "error")
-        state.forget(key, tx_ids)
-        if not adapters[key].full_history:
-            state.set_flag(refetch_flag(key))  # they may lie before the next run's window
-        return redirect(request, "/check", f"{len(tx_ids)} Buchung(en) legt der nächste Abruf wieder an – außer "
-                                           "sie sind inzwischen in Wealthfolio (z. B. aus einem Import).")
-
-    # ── unknown events, securities ──────────────────────────────────────────
-    # ── duplicates of CSV/PDF imports ───────────────────────────────────────
-    def duplicate_report(c: config_mod.Config):
-        report, error = [], None
-        try:
-            with wf_client(c) as wf:
-                for key, b in c.brokers.items():
-                    if key in adapters and b.cash_account_id and b.portfolio_account_id:
-                        found = duplicates_mod.find(wf, key, accounts_of(b))
-                        report.append({"key": key, "label": adapters[key].label, "found": found})
-        except WealthfolioError as e:
-            error = str(e)
-        return report, error
-
-    @app.get("/duplicates", response_class=HTMLResponse)
-    def duplicates_page(request: Request):
-        report, error = duplicate_report(cfg())
-        return render(request, "duplicates.html", report=report, wf_error=error)
-
-    @app.post("/duplicates")
-    def duplicates_remove(request: Request, broker: str = Form(...), confirm: str = Form("")):
-        if not confirm:
-            return redirect(request, "/duplicates", "Bitte bestätige das Löschen mit dem Häkchen.", "error")
-        c = cfg()
-        b = c.brokers.get(broker)
-        if broker not in adapters or b is None:
-            return redirect(request, "/duplicates", "Unbekannter Broker.", "error")
-        try:
-            # Not while a sync runs: it could create what is being removed.
-            with run_lock(data_dir, wait=5), wf_client(c) as wf:
-                found = duplicates_mod.find(wf, broker, accounts_of(b))
-                deleted, done, errors = duplicates_mod.remove(wf, found)
-        except AlreadyRunning:
-            return redirect(request, "/duplicates", "Gerade läuft ein Abruf - bitte gleich noch einmal.", "warn")
-        except WealthfolioError as e:
-            return redirect(request, "/duplicates", f"Wealthfolio: {e}", "error")
-        for d in found:
-            if d.tx_id in done:
-                state.mark(broker, d.tx_id, "existing", [d.original["id"]])
-        message = f"{len(done)} doppelte Vorgänge entfernt ({deleted} Buchungen). Die CSV-/PDF-Buchungen bleiben."
-        if done:
-            # The check on the status page was computed with the duplicates in it.
-            state.clear_reconcile(broker)
-            message += (f" Der Abgleich wird beim nächsten Abruf neu berechnet - auf der Startseite bei "
-                        f"{adapters[broker].label} „Jetzt abrufen“ klicken.")
-        if errors:
-            message += f" {len(errors)} nicht entfernt: " + "; ".join(errors[:3])
-            return redirect(request, "/duplicates", message, "warn")
-        return redirect(request, "/duplicates", message)
-
-    @app.get("/unknown", response_class=HTMLResponse)
-    def unknown_page(request: Request):
-        return render(request, "unknown.html", events=state.unknown_events())
-
-    @app.get("/securities", response_class=HTMLResponse)
-    def securities_page(request: Request):
-        return render(request, "securities.html", mappings=cfg().security_mappings)
-
-    @app.post("/securities")
-    def securities_save(request: Request, isin: str = Form(...), symbol: str = Form(""), exchange_mic: str = Form(""),
-                        delete: str = Form("")):
-        c = cfg()
-        isin = isin.strip().upper()
-        if delete:
-            c.security_mappings.pop(isin, None)
-        else:
-            try:
-                isin = inputs.isin(isin)
-                c.security_mappings[isin] = {"symbol": inputs.symbol(symbol), "exchangeMic": inputs.mic(exchange_mic)}
-            except inputs.Invalid as e:
-                return redirect(request, "/securities", str(e), "error")
-        config_mod.save(data_dir, c)
-        return redirect(request, "/securities", "Gespeichert.")
-
-    @app.get("/logos", response_class=HTMLResponse)
-    def logos_page(request: Request):
-        return render(request, "logos.html", cfg=cfg(), has_token=bool(vault.load().get("logo_dev_token")),
-                      last=logos_mod.last(state))
-
-    @app.post("/logos")
-    def logos_save(request: Request, enabled: str = Form(""), token: str = Form(""), remove_token: str = Form(""),
-                   fetch: str = Form("")):
-        c = cfg()
-        c.logos_enabled = bool(enabled)
-        config_mod.save(data_dir, c)
-        if remove_token:
-            vault.update(lambda d: d.pop("logo_dev_token", None))
-        elif token.strip():
-            if len(token.strip()) > 200 or not re.fullmatch(r"[A-Za-z0-9_-]+", token.strip()):
-                return redirect(request, "/logos", "Der Schlüssel sieht nicht wie ein logo.dev-Schlüssel aus.", "error")
-            vault.update(lambda d: d.__setitem__("logo_dev_token", token.strip()))
-        if not fetch:
-            return redirect(request, "/logos", "Gespeichert.")
-        if not c.logos_enabled or not vault.load().get("logo_dev_token"):
-            return redirect(request, "/logos", "Erst einschalten und einen logo.dev-Schlüssel eintragen.", "warn")
-        try:
-            result = syncer.update_logos()
-        except AlreadyRunning:
-            return redirect(request, "/logos", "Ein Abruf läuft gerade - bitte gleich noch einmal.", "warn")
-        if result is None:
-            return redirect(request, "/logos", "Logos konnten nicht geholt werden - siehe Protokoll.", "error")
-        text = f"{result.set} Logos gesetzt, {result.none} ohne Logo bei logo.dev, {result.failed} fehlgeschlagen."
-        if result.message:
-            text += f" {result.message}"
-        return redirect(request, "/logos", text, "warn" if result.message or result.failed else "ok")
-
+    for router in ROUTERS:
+        app.include_router(router)
     return app
 
 
-def accounts_of(b: config_mod.BrokerConfig) -> Accounts:
-    return Accounts(b.cash_account_id, b.portfolio_account_id, b.savings_account_id)
-
-
-def _wf_done(secrets_: dict, c: config_mod.Config) -> bool:
-    return bool(secrets_.get("wealthfolio_checked"))
-
-
-def _is_local(url: str) -> bool:
-    from urllib.parse import urlparse
-
-    host = urlparse(url).hostname or ""
-    return host in ("localhost", "127.0.0.1", "::1")
-
-
-
-
-def _next_timer_run() -> str | None:
-    """Next run of the systemd timer, if it is installed."""
-    try:
-        out = subprocess.run(["systemctl", "show", TIMER, "-p", "NextElapseUSecRealtime", "--value"],
-                             capture_output=True, text=True, timeout=5).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if not out or out == "n/a":
-        return None
-    # "Fri 2026-10-09 06:12:00 CEST" - already local time of the host.
-    parts = out.split()
-    try:
-        return datetime.strptime(f"{parts[1]} {parts[2]}", "%Y-%m-%d %H:%M:%S").strftime("%d.%m.%Y %H:%M")
-    except (IndexError, ValueError):
-        return out
+def _templates() -> Jinja2Templates:
+    templates = Jinja2Templates(directory=HERE / "templates")
+    # One format for every date and time, German time (#73).
+    templates.env.filters["local"] = views.local_time
+    templates.env.filters["day"] = views.local_day
+    templates.env.filters["utc"] = views.utc_iso
+    templates.env.filters["money"] = views.money
+    templates.env.globals["describe_unknown"] = views.describe_unknown
+    # Foreign error texts (banks, brokers, Wealthfolio) on a page: never a secret or an account number.
+    templates.env.filters["redact"] = lambda text: redact.redact(str(text)) if text else text
+    templates.env.globals["STATUS"] = STATUS_LABEL
+    templates.env.globals["UNMATCHED_SECURITIES"] = UNMATCHED_SECURITIES
+    return templates
