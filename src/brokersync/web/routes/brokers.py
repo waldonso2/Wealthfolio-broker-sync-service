@@ -77,6 +77,8 @@ async def broker_save(request: Request, ctx: Ctx, key: str):
         if len(v) > inputs.MAX_TEXT:
             return redirect(request, f"/brokers/{key}", f"{f.label}: höchstens {inputs.MAX_TEXT} Zeichen.", "error")
         creds[f.name] = v if v or not f.secret else old.get(f.name, "")
+        if f.ask and form.get(f"forget_{f.name}"):
+            creds[f.name] = ""  # typed at every login from now on, never stored (#85)
     if creds != old:
         ctx.vault.set_broker_credentials(key, creds)
         return redirect(request, f"/brokers/{key}/login", "Gespeichert. Jetzt beim Broker anmelden.")

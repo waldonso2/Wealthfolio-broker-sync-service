@@ -21,7 +21,8 @@
     <button {% if running %}disabled{% endif %}>{% if running %}Abruf läuft …{% else %}Alle abrufen{% endif %}</button>
   </form>
 </div>
-<p class="muted">Automatischer Abruf: {% if next_run %}nächster Lauf {{ next_run }}{% else %}täglich{% endif %}{% if brokers | selectattr("has_credentials") | rejectattr("config.enabled") | list %} · Broker ohne automatischen Abruf nur einzeln{% endif %}.</p>
+{% if safe_mode %}<p class="muted">Sicherer Modus: Jeder Abruf beginnt mit deiner Anmeldung, danach meldet sich der Dienst ab. <a href="/security#mode">Ändern</a></p>
+{% else %}<p class="muted">Automatischer Abruf: {% if next_run %}nächster Lauf {{ next_run }}{% else %}täglich{% endif %}{% if brokers | selectattr("has_credentials") | rejectattr("config.enabled") | list %} · Broker ohne automatischen Abruf nur einzeln{% endif %}.</p>{% endif %}
 
 {% if wf_missing %}
 <div class="card"><div class="card-head"><span class="light red" role="img" aria-label="Status: Handlungsbedarf"></span><h2>Wealthfolio nicht verbunden</h2></div>

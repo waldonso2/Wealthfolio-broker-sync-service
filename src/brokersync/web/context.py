@@ -66,6 +66,8 @@ class AppContext:
     pending: dict[str, BrokerAdapter] = field(default_factory=dict)
     # Set while a sync started from the UI runs.
     running: threading.Event = field(default_factory=threading.Event)
+    # PINs typed at a login that aren't stored (#85): kept in memory only until the run that follows.
+    pins: dict[str, str] = field(default_factory=dict)
 
     def render(self, request: Request, name: str, **ctx) -> HTMLResponse:
         if "csrf" not in request.session:
@@ -92,6 +94,13 @@ class AppContext:
                 return [a for a in wf.list_accounts() if a.is_active], None
         except WealthfolioError as e:
             return [], str(e)
+
+    def needs_login(self, key: str, c: config_mod.Config) -> bool:
+        """A fetch starts with a login in the UI: in the safe mode, or when a credential is typed each time (#85)."""
+        if c.safe_mode:
+            return True
+        stored = self.vault.broker(key).get("credentials", {})
+        return any(f.ask and not stored.get(f.name) for f in self.adapters[key].credential_fields)
 
     def finish_login(self, key: str, adapter: BrokerAdapter) -> None:
         adapter.close()

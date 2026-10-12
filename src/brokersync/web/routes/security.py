@@ -25,7 +25,28 @@ def security_page(request: Request, ctx: Ctx):
     return ctx.render(request, "security.html", checks=security_mod.status(ctx.data_dir, secure=ctx.secure),
                       ca=bool(security_mod.ca_file()), ca_fingerprint=security_mod.ca_fingerprint(),
                       has_passphrase=crypto.passphrase_enabled(ctx.data_dir), min_length=crypto.MIN_PASSPHRASE,
-                      wf_plain=wf_plain)
+                      wf_plain=wf_plain, sync_mode=c.sync_mode)
+
+
+@router.post("/security/mode")
+def security_mode(request: Request, ctx: Ctx, mode: str = Form("")):
+    """Abrufmodus (#85): "auto" keeps the brokers' sessions, "safe" ends them after every fetch."""
+    if mode not in ("auto", "safe"):
+        return redirect(request, "/security", "Unbekannter Abrufmodus.", "error")
+    c = ctx.cfg()
+    c.sync_mode = mode
+    ctx.save(c)
+    if mode == "safe":
+        ctx.syncer.end_sessions()  # every saved login ends now, not only after the next fetch
+        for adapter in ctx.pending.values():
+            adapter.close()
+        ctx.pending.clear()
+        log.info("sync mode: safe - broker sessions ended")
+        return redirect(request, "/security", "Sicherer Modus an: Alle gespeicherten Anmeldungen sind beendet. Jeder "
+                        "Abruf startet jetzt mit einer Anmeldung, danach meldet sich der Dienst wieder ab.")
+    log.info("sync mode: auto")
+    return redirect(request, "/security", "Automatischer Modus an: Anmeldungen bleiben gespeichert, der tägliche "
+                    "Abruf läuft ohne dich.")
 
 
 @router.post("/security/passphrase")
