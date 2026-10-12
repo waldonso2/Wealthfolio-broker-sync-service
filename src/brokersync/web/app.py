@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import secrets
 import subprocess
 import threading
@@ -40,6 +41,7 @@ from ..state import State
 from ..sync import UNMATCHED_SECURITIES, AlreadyRunning, Syncer, is_running, opening_id, refetch_flag, run_lock
 from ..vault import Vault, hash_password, needs_rehash, verify_password
 from ..wealthfolio import WealthfolioClient, WealthfolioError
+from . import inputs
 from .gate import Gate, Throttle
 
 log = logging.getLogger(__name__)
@@ -182,6 +184,7 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
                             f"Das Passwort braucht mindestens {MIN_PASSWORD} Zeichen, beide Eingaben müssen gleich "
                             "sein.", "error")
         vault.update(lambda d: d.__setitem__("ui_password_hash", hash_password(password)))
+        request.session.clear()  # a fresh session, nothing carried over from before the password existed
         request.session["user"] = "admin"
         if not cfg().public_url:
             c = cfg()
@@ -290,7 +293,10 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
     def wealthfolio_save(request: Request, url: str = Form(...), password: str = Form(""),
                          no_password: str = Form("")):
         c = cfg()
-        c.wealthfolio_url = url.strip().rstrip("/")
+        try:
+            c.wealthfolio_url = inputs.http_url(url, "Wealthfolio-Adresse")
+        except inputs.Invalid as e:
+            return redirect(request, "/setup/wealthfolio", str(e), "error")
         config_mod.save(data_dir, c)
         if no_password:
             vault.update(lambda d: d.pop("wealthfolio_password", None))
@@ -329,10 +335,14 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         c = cfg()
         b = c.broker(key)
         b.enabled = form.get("enabled") == "on"
-        b.cash_account_id = str(form.get("cash_account_id", ""))
-        b.portfolio_account_id = str(form.get("portfolio_account_id", ""))
-        b.savings_account_id = str(form.get("savings_account_id", "")) if adapters[key].savings_label else ""
-        b.start_date = str(form.get("start_date", ""))
+        try:
+            b.cash_account_id = inputs.text(str(form.get("cash_account_id", "")), "Konto", max_len=100)
+            b.portfolio_account_id = inputs.text(str(form.get("portfolio_account_id", "")), "Konto", max_len=100)
+            b.savings_account_id = (inputs.text(str(form.get("savings_account_id", "")), "Konto", max_len=100)
+                                    if adapters[key].savings_label else "")
+            b.start_date = inputs.iso_date(str(form.get("start_date", "")), "Startdatum")
+        except inputs.Invalid as e:
+            return redirect(request, f"/brokers/{key}", str(e), "error")
         if b.enabled and (not b.cash_account_id or not b.portfolio_account_id):
             return redirect(request, f"/brokers/{key}", "Bitte ein Verrechnungs- und ein Depotkonto wählen.", "error")
         if b.enabled and b.cash_account_id == b.portfolio_account_id:
@@ -346,6 +356,8 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         creds = {}
         for f in adapters[key].credential_fields:
             v = str(form.get(f"cred_{f.name}", ""))
+            if len(v) > inputs.MAX_TEXT:
+                return redirect(request, f"/brokers/{key}", f"{f.label}: höchstens {inputs.MAX_TEXT} Zeichen.", "error")
             creds[f.name] = v if v or not f.secret else old.get(f.name, "")
         if creds != old:
             vault.set_broker_credentials(key, creds)
@@ -420,15 +432,21 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
                        destination: str = Form(""), delete: str = Form("")):
         c = cfg()
         if delete:
-            i = int(delete)
+            i = int(delete) if delete.isdigit() else -1
             if 0 <= i < len(c.transfer_patterns):
                 c.transfer_patterns.pop(i)
         else:
-            iban = iban.replace(" ", "").upper()
-            if not label.strip() or not (iban or keyword.strip()):
+            try:
+                label = inputs.text(label, "Name", max_len=100)
+                iban = inputs.iban(iban)
+                keyword = inputs.text(keyword, "Stichwort", max_len=100)
+                destination = inputs.text(destination, "Zielkonto", max_len=100)
+            except inputs.Invalid as e:
+                return redirect(request, "/transfers", str(e), "error")
+            if not label or not (iban or keyword):
                 return redirect(request, "/transfers", "Bitte einen Namen und eine IBAN oder ein Stichwort angeben.",
                                 "error")
-            c.transfer_patterns.append({"label": label.strip(), "iban": iban, "keyword": keyword.strip(),
+            c.transfer_patterns.append({"label": label, "iban": iban, "keyword": keyword,
                                         "destinationAccountId": destination})
         config_mod.save(data_dir, c)
         return redirect(request, "/transfers", "Gespeichert.")
@@ -490,9 +508,15 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
     def notifications_save(request: Request, server: str = Form(...), topic: str = Form(""), token: str = Form(""),
                            public_url: str = Form(""), details: str = Form(""), test: str = Form("")):
         c = cfg()
-        c.ntfy_server = server.strip().rstrip("/")
-        c.ntfy_topic = topic.strip()
-        c.public_url = public_url.strip().rstrip("/")
+        try:
+            c.ntfy_server = inputs.http_url(server, "ntfy-Server")
+            c.ntfy_topic = inputs.text(topic, "Thema", max_len=64)
+            c.public_url = inputs.http_url(public_url, "Adresse dieser Oberfläche", required=False)
+            token = inputs.text(token, "Zugangstoken")
+        except inputs.Invalid as e:
+            return redirect(request, "/notifications", str(e), "error")
+        if c.ntfy_topic and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", c.ntfy_topic):
+            return redirect(request, "/notifications", "Thema: nur Buchstaben, Ziffern, - und _.", "error")
         c.ntfy_details = bool(details)
         if token:
             c.ntfy_token = token
@@ -557,8 +581,13 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         if key not in adapters:
             return redirect(request, "/check", "Unbekannter Broker.", "error")
         form = await request.form()
-        isin = str(form.get("isin", "")).strip()
+        isin = str(form.get("isin", "")).strip().upper()
         day = str(form.get("day", "")).strip()
+        if form.get("action") != "delete":
+            try:
+                isin = inputs.security_id(isin)
+            except inputs.Invalid as e:
+                return redirect(request, "/check", str(e), "error")
         if form.get("action") == "delete":
             if opening_id(isin, day) not in state.synced(key):
                 state.delete_opening(key, isin, day)
@@ -576,7 +605,8 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
                                                "das Kaufdatum darf nicht in der Zukunft liegen.", "error")
         known = {p["isin"]: p for p in json.loads(state.meta(f"positions:{key}") or "[]")}
         p = known.get(isin, {})
-        state.add_opening(key, isin, bought.isoformat(), str(form.get("name") or p.get("name") or isin),
+        name = str(form.get("name") or p.get("name") or isin)[:200]
+        state.add_opening(key, isin, bought.isoformat(), name,
                           str(shares), str(price), str(fee), p.get("currency") or "EUR")
         return redirect(request, "/check", f"Anfangsbestand {isin} gespeichert - der nächste Abruf bucht ihn als Kauf "
                                            f"am {bought:%d.%m.%Y} samt Einzahlung des Kaufbetrags.")
@@ -713,8 +743,12 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         isin = isin.strip().upper()
         if delete:
             c.security_mappings.pop(isin, None)
-        elif isin and symbol.strip():
-            c.security_mappings[isin] = {"symbol": symbol.strip(), "exchangeMic": exchange_mic.strip() or None}
+        else:
+            try:
+                isin = inputs.isin(isin)
+                c.security_mappings[isin] = {"symbol": inputs.symbol(symbol), "exchangeMic": inputs.mic(exchange_mic)}
+            except inputs.Invalid as e:
+                return redirect(request, "/securities", str(e), "error")
         config_mod.save(data_dir, c)
         return redirect(request, "/securities", "Gespeichert.")
 
@@ -732,6 +766,8 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         if remove_token:
             vault.update(lambda d: d.pop("logo_dev_token", None))
         elif token.strip():
+            if len(token.strip()) > 200 or not re.fullmatch(r"[A-Za-z0-9_-]+", token.strip()):
+                return redirect(request, "/logos", "Der Schlüssel sieht nicht wie ein logo.dev-Schlüssel aus.", "error")
             vault.update(lambda d: d.__setitem__("logo_dev_token", token.strip()))
         if not fetch:
             return redirect(request, "/logos", "Gespeichert.")
