@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.0
+
+- **Logos for securities (optional, page *Logos*).** Wealthfolio's own logos are named by ticker and exchange, so securities booked under their ISIN show none. Turned on and with a (free) logo.dev key, the service asks logo.dev for each security by ISIN after every run and sets the logo as the security's custom logo in Wealthfolio (version 3.8.0 or later) - stored in Wealthfolio's database, so it survives updates and is part of its backups. Only ISINs go to logo.dev. A logo you set yourself is never replaced; one you remove isn't set again; a security logo.dev has no logo for is asked again after 30 days. At most 50 questions per run.
+
 ## 0.11.5
 
 - **Fix: an opening position entered from the old parser's ISIN still stayed unmatched.** Its Wealthfolio asset counted as taken by that spelling (`<ISIN>|/DE/<WKN>`) - which is the same ISIN. It isn't taken from the real ISIN any more.

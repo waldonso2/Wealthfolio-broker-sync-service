@@ -6,13 +6,16 @@ duplicate rejection by fingerprint (account, type, date, asset, quantity, unit
 price, amount, fee, currency, comment), update (``asset: {}`` removes the
 asset), search by account and date, and holdings: a TRANSFER_IN/TRANSFER_OUT
 *with* an asset is a securities transfer of that asset (moves no money, even
-for a ``$CASH-EUR`` placeholder), one without an asset moves money.
+for a ``$CASH-EUR`` placeholder), one without an asset moves money. Assets and their
+custom logos (``logos = None``: a Wealthfolio before 3.8.0).
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import uuid
+from urllib.parse import unquote
 
 import httpx
 
@@ -36,6 +39,8 @@ class FakeWealthfolio:
         self.fail_types: set[str] = set()
         self.logins = 0
         self.expire_next = False
+        self.assets: list[dict] = []  # GET /assets
+        self.logos: dict[str, str] | None = {}  # asset id -> base64 PNG; None: Wealthfolio before 3.8.0
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -133,6 +138,20 @@ class FakeWealthfolio:
                 self.activities.remove(a)
                 self.deleted.append(a["id"])
             return httpx.Response(200, json=gone[0])
+        if path == "/api/v1/assets" and request.method == "GET":
+            return httpx.Response(200, json=self.assets)
+        if self.logos is not None and path == "/api/v1/assets/logos" and request.method == "GET":
+            return httpx.Response(200, json=[{"assetId": i, "displayCode": None, "sha256": "x", "updatedAt": "t"}
+                                             for i in self.logos])
+        if self.logos is not None and path.startswith("/api/v1/assets/logo/") and request.method == "PUT":
+            asset_id = unquote(path.rsplit("/", 1)[1])
+            if not any(a["id"] == asset_id for a in self.assets):
+                return httpx.Response(404, json={"code": 404, "message": "Asset not found"})
+            data = json.loads(request.content)["dataBase64"]
+            if not base64.b64decode(data).startswith(b"\x89PNG"):
+                return httpx.Response(400, json={"code": 400, "message": "Logo image must be a PNG"})
+            self.logos[asset_id] = data
+            return httpx.Response(200, json={"assetId": asset_id})
         if path == "/api/v1/holdings":
             return httpx.Response(200, json=self.holdings(request.url.params["accountId"]))
         if path == "/api/v1/activities/search":

@@ -33,6 +33,7 @@ from . import assets as assets_mod
 from . import audit as audit_mod
 from . import config as config_mod
 from . import coverage, crypto, retired
+from . import logos as logos_mod
 from . import repair as repair_mod
 from .adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from .adapters.fints import NO_TAN_DAYS
@@ -117,7 +118,8 @@ def is_running(data_dir: Path) -> bool:
 
 class Syncer:
     def __init__(self, data_dir: Path, *, wealthfolio: Callable[[str, str | None], WealthfolioClient] | None = None,
-                 notifier: Notifier | None = None, adapters: dict[str, type[BrokerAdapter]] | None = None):
+                 notifier: Notifier | None = None, adapters: dict[str, type[BrokerAdapter]] | None = None,
+                 logo_source: Callable[[str], logos_mod.LogoDev] | None = None):
         self.data_dir = Path(data_dir)
         self.vault = Vault(self.data_dir)
         self.state = State(self.data_dir)
@@ -127,6 +129,7 @@ class Syncer:
         # Seconds to give Wealthfolio to recalculate holdings before the check.
         self.recalc_wait = float(os.environ.get("BROKERSYNC_RECALC_WAIT", "5"))
         self._notifier = notifier
+        self._logo_source = logo_source or logos_mod.LogoDev
 
     def notifier(self, cfg: config_mod.Config) -> Notifier:
         if self._notifier:
@@ -152,7 +155,30 @@ class Syncer:
                 if not bcfg.enabled and not (only and key in only):
                     continue
                 results.append(self._run_broker(cfg, key))
+            self._update_logos(cfg)
             return results
+
+    def update_logos(self) -> logos_mod.Result | None:
+        """The button on the page *Logos*: one pass now (under the sync lock)."""
+        with run_lock(self.data_dir, wait=5):
+            return self._update_logos(config_mod.load(self.data_dir))
+
+    def _update_logos(self, cfg: config_mod.Config) -> logos_mod.Result | None:
+        """Logos after a run, if turned on; whatever goes wrong here never touches the brokers' results."""
+        secrets = self.vault.load()
+        token = secrets.get("logo_dev_token")
+        if not cfg.logos_enabled or not token:
+            return None
+        learned = {a["asset_id"]: isin for key in cfg.brokers for isin, a in self.state.assets(key).items()}
+        source = self._logo_source(token)
+        try:
+            with self._wealthfolio(cfg.wealthfolio_url, secrets.get("wealthfolio_password")) as wf:
+                return logos_mod.update(self.state, wf, source, learned)
+        except Exception:
+            log.exception("logos not updated")
+            return None
+        finally:
+            source.close()
 
     def cleanup(self) -> None:
         """Close runs a dead process left at 'running', unless a sync is in progress."""

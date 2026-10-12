@@ -54,6 +54,7 @@ flowchart TB
   sync --> repair["repair.py<br/>$CASH-Asset entfernen (einmalig)"]
   sync --> retired["retired.py<br/>entfernte Broker aufräumen"]
   sync --> notify["notify.py<br/>ntfy"]
+  sync --> logos["logos.py<br/>Logos von logo.dev (wahlweise)"]
   sync --> state["state.py"] & vault["vault.py"] & config["config.py"]
   web --> duplicates["duplicates.py<br/>Bereinigung"]
   subgraph adapters["adapters/"]
@@ -213,8 +214,8 @@ Mit Passphrase hält `keyring.json` Salz, argon2id-Parameter und einen Prüfwert
 
 | Datei | Inhalt | Format |
 |---|---|---|
-| `secrets.enc` | Wealthfolio-Passwort, Zugangsdaten und Sessions der Broker, argon2id-Hash des UI-Passworts, Signierschlüssel der UI-Session | AES-256-GCM, `vault.py`, atomar und mit Lock |
-| `config.enc` | Wealthfolio-URL, je Broker Konten, `enabled`, `start_date`, Wertpapier-Zuordnungen, Übertrags-Muster | AES-256-GCM, `config.py` |
+| `secrets.enc` | Wealthfolio-Passwort, logo.dev-Schlüssel, Zugangsdaten und Sessions der Broker, argon2id-Hash des UI-Passworts, Signierschlüssel der UI-Session | AES-256-GCM, `vault.py`, atomar und mit Lock |
+| `config.enc` | Wealthfolio-URL, je Broker Konten, `enabled`, `start_date`, Wertpapier-Zuordnungen, Übertrags-Muster, Logos an/aus | AES-256-GCM, `config.py` |
 | `notify.enc` | ntfy-Server, -Topic, -Token, Details an/aus, öffentliche URL | AES-256-GCM, Host-Stufe |
 | `state.db` | siehe unten | SQLCipher (AES-256); nur ohne SQLCipher-Wheel (nicht x86-64) unverschlüsselt, die Seite *Sicherheit* sagt es |
 | `keyring.json` | Parameter der Master-Passphrase | Klartext, nichts Geheimes |
@@ -233,7 +234,7 @@ Jede verschlüsselte Datei ist `BSE1 | Nonce | Chiffrat`; ihr Zweck (`secrets`, 
 | `unknown_events` | unbekannte Buchungen und offene Wertpapier-Gegenbuchungen, mit einer Nutzlast ohne persönliche Daten |
 | `balances`, `reconcile` | letzter Kontostand des Brokers und Abweichungen, samt dem, was schon gemeldet wurde |
 | `assets` | ISIN → Wealthfolio-Asset je Broker |
-| `meta` | Flags, z. B. `assets-learned:<broker>`, `cash-assets-repaired:<broker>`, `refetch:<broker>`, und der Hinweis `retired-notice:<broker>` zu einem entfernten Broker |
+| `meta` | Flags, z. B. `assets-learned:<broker>`, `cash-assets-repaired:<broker>`, `refetch:<broker>`, der Hinweis `retired-notice:<broker>` zu einem entfernten Broker, `logo:<asset id>` (Logo gesetzt oder bei logo.dev keins, mit Zeitpunkt) und `logos:last` (letzter Logo-Durchlauf) |
 
 Geheimnisse stehen nur im Vault. In Logs, Fehlermeldungen auf dem Bildschirm und ntfy-Nachrichten schwärzt `redact.py` alles, was der Vault an Zugangsdaten und Tokens hält, sowie IBANs und lange Nummern; ntfy-Nachrichten tragen ohne *Details* nur Titel und Link.
 
@@ -254,6 +255,7 @@ FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login
 | `/transfers` | Muster für Überträge auf eigene Konten |
 | `/notifications` | ntfy-Server, -Topic, -Token, öffentliche URL |
 | `/securities` | Zuordnung ISIN → Tickersymbol und Börse |
+| `/logos` | Logos von logo.dev an/aus, Schlüssel, Durchlauf jetzt (`logos.py`, auch nach jedem Abruf) |
 | `/unknown` | unbekannte Buchungen und offene Wertpapier-Gegenbuchungen |
 | `/duplicates` | Duplikate finden und die Kopien des Syncs nach Bestätigung löschen |
 | `/check` | Prüfung: Abgleich Broker ↔ Wealthfolio aus dem letzten Lauf (`coverage.py`), dazu nur lesend, wo im Depotkonto Bargeld stehen bleibt und welche Überträge kein Gegenstück haben (`audit.py`) |
