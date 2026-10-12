@@ -71,3 +71,5 @@ td { overflow-wrap: anywhere; }
   .wrap { padding: 10px 12px; }
   .card { padding: 14px; }
 }
+details summary { cursor: pointer; font-size: 13px; }
+details pre { max-width: 100%; overflow-x: auto; }

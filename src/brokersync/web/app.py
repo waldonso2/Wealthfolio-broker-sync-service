@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import secrets
 import subprocess
@@ -18,7 +17,6 @@ from collections import Counter
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -41,15 +39,13 @@ from ..state import State
 from ..sync import UNMATCHED_SECURITIES, AlreadyRunning, Syncer, is_running, opening_id, refetch_flag, run_lock
 from ..vault import Vault, hash_password, needs_rehash, verify_password
 from ..wealthfolio import WealthfolioClient, WealthfolioError
-from . import inputs
+from . import inputs, views
 from .gate import Gate, Throttle
 
 log = logging.getLogger(__name__)
 HERE = Path(__file__).parent
 TIMER = "wealthfolio-broker-sync-run.timer"
 PUBLIC = {"/login", "/setup-password", "/healthz", "/ca.crt"}
-# Times are shown in German time; the container usually runs in UTC.
-TZ = ZoneInfo(os.environ.get("BROKERSYNC_TZ", "Europe/Berlin"))
 STATUS_LABEL = {"ok": "OK", "needs_auth": "Anmeldung nötig", "error": "Fehler", "running": "läuft",
                 "aborted": "abgebrochen"}
 
@@ -97,8 +93,12 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
     make_wf = wealthfolio or (lambda url, pw: WealthfolioClient(url, pw))
     syncer = Syncer(data_dir, wealthfolio=make_wf, notifier=notifier, adapters=adapters, logo_source=logo_source)
     templates = Jinja2Templates(directory=HERE / "templates")
-    templates.env.filters["local"] = _local_time
-    templates.env.filters["money"] = _money
+    # One format for every date and time, German time (#73).
+    templates.env.filters["local"] = views.local_time
+    templates.env.filters["day"] = views.local_day
+    templates.env.filters["utc"] = views.utc_iso
+    templates.env.filters["money"] = views.money
+    templates.env.globals["describe_unknown"] = views.describe_unknown
     # Foreign error texts (banks, brokers, Wealthfolio) on a page: never a secret or an account number.
     templates.env.filters["redact"] = lambda text: redact.redact(str(text)) if text else text
     templates.env.globals["STATUS"] = STATUS_LABEL
@@ -820,15 +820,6 @@ def _is_local(url: str) -> bool:
     return host in ("localhost", "127.0.0.1", "::1")
 
 
-def _money(value) -> str:
-    """German number format: 1.234,56."""
-    return f"{Decimal(str(value)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-
-def _local_time(iso: str | None) -> str:
-    if not iso:
-        return ""
-    return datetime.fromisoformat(iso).astimezone(TZ).strftime("%d.%m.%Y %H:%M")
 
 
 def _next_timer_run() -> str | None:

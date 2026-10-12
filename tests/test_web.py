@@ -245,4 +245,4 @@ def test_navigation_groups_the_settings(tmp_path):
     State(tmp_path).add_unknown("fake", "x1", "ODD", "2026-01-02", {"eventType": "ODD"})
     page = client.get("/unknown").text
     assert '<span class="count" aria-label="1 offen">1</span>' in page
-    assert '<td data-label="Typ">' in page  # stacked on narrow screens
+    assert '<td data-label="Art">' in page  # stacked on narrow screens

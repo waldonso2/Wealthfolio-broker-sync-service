@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.1
+
+Readable dates and unknown bookings (waldonso2/wealthfolio-importer-addon#73):
+
+- **One date format everywhere, in German time.** Days read `03.03.2026`, moments `03.03.2026 11:00` on every page. *Prüfung* showed Wealthfolio's activity times in UTC (one or two hours off); it now shows German time like the rest, to the second, with UTC in the tooltip. *Unbekannte Buchungen* and *Duplikate* showed ISO dates.
+- **Unknown bookings without JSON.** *Unbekannte Buchungen* lists amount, security (with share count) and text in their own columns, so you can enter a booking by hand. The raw data is still there, folded, for a bug report.
+
 ## 0.13.0
 
 Clearer web UI and stricter checks (waldonso2/wealthfolio-importer-addon#69, #70, #71, #72):
