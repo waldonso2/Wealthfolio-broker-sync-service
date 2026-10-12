@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import crypto, redact
+from . import crypto, meta_keys, redact
 
 try:  # SQLCipher: wheels for x86-64; elsewhere the database stays plain SQLite (shown on the page Sicherheit)
     import sqlcipher3 as sqlcipher
@@ -27,6 +27,7 @@ except ImportError:  # pragma: no cover - depends on the platform
 ENCRYPTED = sqlcipher is not None
 PLAIN_HEADER = b"SQLite format 3\x00"
 
+# The schema of 0.13.x (version 0); every change since is a step in MIGRATIONS below.
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS synced (
   broker TEXT NOT NULL,
@@ -123,6 +124,59 @@ CREATE TABLE IF NOT EXISTS unknown_events (
 """
 
 
+def _balances_account_column(db) -> None:
+    """1: a savings account's balance in its own column instead of ``<currency>:savings`` (0.13.x and before)."""
+    db.execute("""CREATE TABLE balances_new (
+      broker TEXT NOT NULL,
+      currency TEXT NOT NULL,
+      account TEXT NOT NULL DEFAULT '',
+      amount TEXT NOT NULL,
+      at TEXT NOT NULL,
+      PRIMARY KEY (broker, currency, account))""")
+    db.execute("""INSERT INTO balances_new
+      SELECT broker,
+             CASE WHEN instr(currency, ':') > 0 THEN substr(currency, 1, instr(currency, ':') - 1) ELSE currency END,
+             CASE WHEN instr(currency, ':') > 0 THEN substr(currency, instr(currency, ':') + 1) ELSE '' END,
+             amount, at
+      FROM balances""")
+    db.execute("DROP TABLE balances")
+    db.execute("ALTER TABLE balances_new RENAME TO balances")
+
+
+# Schema changes after SCHEMA (the state of 0.13.x), in order: MIGRATIONS[n] brings a database from
+# version n to n + 1 (``PRAGMA user_version``). Never edit or reorder one that shipped - append.
+MIGRATIONS = [_balances_account_column]
+SCHEMA_VERSION = len(MIGRATIONS)
+
+
+class NewerSchema(RuntimeError):
+    """state.db was written by a newer version of the service."""
+
+
+def migrate(db) -> int:
+    """Bring the database to SCHEMA_VERSION; returns the version it had. One transaction, so a
+    second process opening the database at the same time waits and then finds nothing to do."""
+    level = db.isolation_level
+    db.isolation_level = None
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            version = db.execute("PRAGMA user_version").fetchone()[0]
+            if version > SCHEMA_VERSION:
+                raise NewerSchema(f"state.db hat Schema {version}, diese Version kennt nur {SCHEMA_VERSION}")
+            for step in MIGRATIONS[version:]:
+                step(db)
+            if version != SCHEMA_VERSION:
+                db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            db.execute("COMMIT")
+        except BaseException:
+            db.execute("ROLLBACK")
+            raise
+    finally:
+        db.isolation_level = level
+    return version
+
+
 def now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
@@ -206,6 +260,7 @@ class State:
                     encrypt_plain(path, k)
         self.db = _connect(path, k)
         self.db.executescript(SCHEMA)
+        migrate(self.db)
         if path.exists():
             os.chmod(path, 0o600)
 
@@ -333,7 +388,7 @@ class State:
             for table in ("synced", "runs", "reconcile", "balances", "assets", "unknown_events", "gaps", "openings",
                           "statements"):
                 self.db.execute(f"DELETE FROM {table} WHERE broker = ?", (broker,))
-            self.db.execute("DELETE FROM meta WHERE key LIKE ?", (f"%:{broker}",))
+            self._delete_broker_meta(broker)
         return created
 
     def reset_broker(self, broker: str) -> None:
@@ -344,7 +399,10 @@ class State:
         with self.db:
             for table in ("synced", "runs", "reconcile", "balances", "unknown_events", "gaps"):
                 self.db.execute(f"DELETE FROM {table} WHERE broker = ?", (broker,))
-            self.db.execute("DELETE FROM meta WHERE key LIKE ?", (f"%:{broker}",))
+            self._delete_broker_meta(broker)
+
+    def _delete_broker_meta(self, broker: str) -> None:
+        self.db.executemany("DELETE FROM meta WHERE key = ?", [(k(broker),) for k in meta_keys.BROKER_KEYS])
 
     # ── unknown events ──────────────────────────────────────────────────────
     def add_unknown(self, broker: str, tx_id: str, raw_type: str, occurred_at: str, payload: dict) -> bool:
@@ -377,12 +435,13 @@ class State:
 
     # ── balances ────────────────────────────────────────────────────────────
     def set_balances(self, broker: str, balances: list[tuple]) -> None:
-        """(currency, amount) or (currency, amount, account) - a savings account's balance is kept as
-        ``<currency>:<account>``, next to the cash account's of the same currency."""
-        rows = [(broker, f"{b[0]}:{b[2]}" if len(b) > 2 and b[2] else b[0], b[1], now()) for b in balances]
+        """(currency, amount) or (currency, amount, account) - ``account`` names a savings account
+        (empty: the cash account)."""
+        rows = [(broker, b[0], (b[2] if len(b) > 2 else "") or "", b[1], now()) for b in balances]
         with self.db:
             self.db.execute("DELETE FROM balances WHERE broker = ?", (broker,))
-            self.db.executemany("INSERT INTO balances VALUES (?, ?, ?, ?)", rows)
+            self.db.executemany("INSERT INTO balances (broker, currency, account, amount, at) VALUES (?, ?, ?, ?, ?)",
+                                rows)
 
     def set_reconcile(self, broker: str, deviations: list[dict], notified: list[dict] | None = None) -> None:
         old = self.reconcile(broker)
@@ -403,13 +462,9 @@ class State:
         return {"deviations": json.loads(row[0]), "notified": json.loads(row[1]), "at": row[2]}
 
     def balances(self, broker: str) -> list[dict]:
-        rows = self.db.execute("SELECT currency, amount, at FROM balances WHERE broker = ? ORDER BY currency",
-                               (broker,))
-        out = []
-        for c, a, t in rows:
-            currency, _, account = c.partition(":")
-            out.append({"currency": currency, "account": account, "amount": a, "at": t})
-        return out
+        rows = self.db.execute("SELECT currency, account, amount, at FROM balances WHERE broker = ? "
+                               "ORDER BY currency, account", (broker,))
+        return [{"currency": c, "account": acc, "amount": a, "at": t} for c, acc, a, t in rows]
 
     def unknown_count(self) -> int:
         return int(self.db.execute("SELECT COUNT(*) FROM unknown_events").fetchone()[0])

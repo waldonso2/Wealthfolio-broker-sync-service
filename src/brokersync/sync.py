@@ -32,7 +32,7 @@ from zoneinfo import ZoneInfo
 from . import assets as assets_mod
 from . import audit as audit_mod
 from . import config as config_mod
-from . import coverage, crypto, retired
+from . import coverage, crypto, meta_keys, retired
 from . import logos as logos_mod
 from . import repair as repair_mod
 from .adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
@@ -57,7 +57,7 @@ UNMATCHED_SECURITIES = "WERTPAPIER_OHNE_GEGENSTUECK"
 
 
 def tax_flag(key: str) -> str:
-    return f"dividend-tax:{key}"
+    return meta_keys.DIVIDEND_TAX(key)
 
 
 def opening_id(isin: str, day: str) -> str:
@@ -65,12 +65,12 @@ def opening_id(isin: str, day: str) -> str:
 
 
 def refetch_flag(key: str) -> str:
-    return f"refetch:{key}"
+    return meta_keys.REFETCH(key)
 
 
 def savings_flag(key: str) -> str:
     """Meta: the savings account (Wealthfolio id) a run read without failures - another one is read anew."""
-    return f"savings-account:{key}"
+    return meta_keys.SAVINGS_ACCOUNT(key)
 
 
 class AlreadyRunning(Exception):
@@ -236,7 +236,7 @@ class Syncer:
             f"{label}: Bestätigung nötig", message, link=self.link(cfg, "/"), priority="high", tags="key")
         # Once, for brokers with positions: the whole history, to learn the
         # Wealthfolio asset of every ISIN (brokersync.assets) for the check.
-        backfill = adapter_cls.reports_positions and not self.state.flag(f"assets-learned:{key}")
+        backfill = adapter_cls.reports_positions and not self.state.flag(meta_keys.ASSETS_LEARNED(key))
         full = adapter_cls.full_history
         # "Ab Startdatum neu abrufen" in the broker settings: once from the start date again.
         refetch = not full and self.state.flag(refetch_flag(key))
@@ -338,7 +338,7 @@ class Syncer:
                         log.info("%s: learned the Wealthfolio asset of %d position(s) from imported trades", key,
                                  learned)
                 if backfill:
-                    self.state.set_flag(f"assets-learned:{key}")
+                    self.state.set_flag(meta_keys.ASSETS_LEARNED(key))
             except WealthfolioError as e:
                 log.info("%s: assets not learned: %s", key, e)
             if cash is not None and not result.failed:
@@ -435,7 +435,7 @@ class Syncer:
         transaction of theirs without the asset, which Wealthfolio doesn't
         recognise as the same activity.
         """
-        flag = f"cash-assets-repaired:{key}"
+        flag = meta_keys.CASH_ASSETS_REPAIRED(key)
         if self.state.flag(flag):
             return 0
         updated, errors = repair_mod.repair(wf, key, accounts)
@@ -464,7 +464,7 @@ class Syncer:
             log.info("%s: no positions: %s", key, e)
             return None
         # For the page Prüfung: what a position missing in Wealthfolio is pre-filled with.
-        self.state.set_meta(f"positions:{key}", json.dumps(
+        self.state.set_meta(meta_keys.POSITIONS(key), json.dumps(
             [{"isin": p.isin, "name": p.name, "shares": str(p.shares), "currency": p.currency,
               "cost": str(p.cost) if p.cost is not None else ""} for p in positions]))
         return positions
@@ -475,7 +475,7 @@ class Syncer:
         successful run tells - it read from the start date, else NO_TAN_DAYS back."""
         if adapter.history_start is None:
             return None
-        stored = self.state.meta(f"history-start:{key}")
+        stored = self.state.meta(meta_keys.HISTORY_START(key))
         earliest = date.fromisoformat(stored) if stored else None
         if earliest is None:
             first = self.state.first_success(key)
@@ -485,7 +485,7 @@ class Syncer:
                 earliest = first.astimezone(BERLIN).date() - timedelta(days=NO_TAN_DAYS)
         earliest = min(d for d in (earliest, adapter.history_start) if d)
         if earliest.isoformat() != stored:
-            self.state.set_meta(f"history-start:{key}", earliest.isoformat())
+            self.state.set_meta(meta_keys.HISTORY_START(key), earliest.isoformat())
         return earliest
 
     def _statements(self, key: str, adapter: BrokerAdapter, history: date | None) -> list[Transaction]:
