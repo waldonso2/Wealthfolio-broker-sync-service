@@ -34,17 +34,29 @@ class CredentialField:
     label: str
     secret: bool = False
     help: str = ""
+    # May stay empty: the login then asks for it each time and it is never stored (#85).
+    ask: bool = False
 
 
 @dataclass(frozen=True)
 class Challenge:
     # "code": the user types a code; "confirm": the user confirms in an app
-    # or, when ``url`` is set, on that page in the browser.
+    # or, when ``url`` is set, on that page in the browser; "pin": the user types
+    # a PIN that isn't stored (#85).
     kind: str
     message: str
     url: str = ""
     # A picture to show with it (a data: URL), e.g. comdirect's photoTAN graphic.
     image: str = ""
+
+
+# What stays of a session when the safe mode ends it after a run (#85): the lock-out guards, so a
+# rejected PIN or unanswered TAN challenges are never retried blindly.
+SAFETY_KEYS = ("pin_rejected", "open_challenges", "wrong_tans")
+
+
+def safety_state(session: dict | None) -> dict:
+    return {k: v for k, v in (session or {}).items() if k in SAFETY_KEYS}
 
 
 class AuthRequired(Exception):

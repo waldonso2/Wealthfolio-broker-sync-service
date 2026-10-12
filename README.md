@@ -275,6 +275,15 @@ Was der Dienst speichert, ist verschlüsselt; die Seite **Sicherheit** zeigt jed
 
 **Sicherungen:** `update` sichert `data/` vorher nach `/opt/wealthfolio-broker-sync/backup-*.tar.gz` – nur verschlüsselte Daten, ohne Schlüssel. Ältere Sicherungen, die noch den Schlüssel enthielten, ersetzt das Update durch eine verschlüsselte. Proxmox-Backups des Containers enthalten auch den Schlüssel: Sie gehören auf ein verschlüsseltes Ziel, oder du setzt die Master-Passphrase.
 
+**Abrufmodus (Seite *Sicherheit*):**
+- **Automatisch** (Standard): Die Anmeldungen bei Brokern und Banken bleiben gespeichert, der Abruf läuft jeden Morgen von selbst.
+- **Sicher:** Jeder Abruf beginnt mit deiner Anmeldung – App-Freigabe, TAN oder Gerätecode. Direkt danach meldet sich der Dienst wieder ab und löscht die Sitzung. Es bleibt also keine Anmeldung gespeichert, mit der jemand ohne dich abrufen könnte.
+  - Der tägliche Lauf ruft dann nicht ab, sondern erinnert dich per ntfy.
+  - **Alle abrufen** führt nacheinander durch die Anmeldungen (einzelne Broker kannst du überspringen) und ruft danach alle zusammen ab.
+  - Der Modus gilt für alle Broker.
+
+**PIN nicht speichern (DKB, Deutsche Bank):** Lässt du das PIN-Feld in den Broker-Einstellungen leer, fragt die Anmeldung jedes Mal nach der PIN. Sie bleibt nur bis zum Ende des Abrufs im Arbeitsspeicher und wird nie gespeichert. Ein Abruf startet dann immer mit der Anmeldung, auch im automatischen Modus; der tägliche Lauf kann diese Bank nicht abrufen. Eine schon gespeicherte PIN löschst du mit dem Häkchen unter dem PIN-Feld.
+
 **Wealthfolio:** Den Dienst mit Wealthfolio möglichst per HTTPS verbinden; sonst geht das Wealthfolio-Passwort unverschlüsselt durchs Netz (die Seite *Sicherheit* weist darauf hin).
 
 ## Wie gebucht wird

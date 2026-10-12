@@ -45,6 +45,7 @@ from decimal import Decimal
 from typing import ClassVar
 from zoneinfo import ZoneInfo
 
+from .. import redact
 from ..model import SAVINGS, BrokerAccount, CashBalance, Kind, Position, Transaction
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
 
@@ -76,7 +77,8 @@ def credential_fields(bank: str, banking: str, *, blz: bool = False, username_he
     """The usual FinTS credentials; ``blz`` for banks whose bank code differs per branch."""
     fields = [
         CredentialField("username", "Anmeldename", help=username_help or f"Wie beim {banking} im Browser."),
-        CredentialField("pin", "PIN / Passwort", secret=True),
+        CredentialField("pin", "PIN / Passwort", secret=True, ask=True,
+                        help="Leer lassen: Du gibst die PIN bei jeder Anmeldung ein, gespeichert wird sie nicht."),
     ]
     if blz:
         fields.append(CredentialField("blz", "Bankleitzahl", help="Die Bankleitzahl deines Kontos (8 Ziffern)."))
@@ -120,6 +122,8 @@ class FintsAdapter(BrokerAdapter):
         self._open = False
         self._logged_account = False
         self._logged_savings = False
+        # No stored PIN (#85): the login asks for it; it lives only in this object's credentials.
+        self._awaiting_pin = False
 
     # ── login ───────────────────────────────────────────────────────────────
     def _make_client(self):
@@ -128,8 +132,8 @@ class FintsAdapter(BrokerAdapter):
             raise AdapterError(
                 f"Für {self.bank} fehlt die FinTS-Produkt-ID. Trage sie in den Broker-Einstellungen ein."
             )
-        if not self.credentials.get("username") or not self.credentials.get("pin"):
-            raise AdapterError("Anmeldename und PIN fehlen - bitte in den Broker-Einstellungen eintragen.")
+        if not self.credentials.get("username"):
+            raise AdapterError("Der Anmeldename fehlt - bitte in den Broker-Einstellungen eintragen.")
         blz = self.blz or (self.credentials.get("blz") or "").replace(" ", "")
         if not blz:
             raise AdapterError("Die Bankleitzahl fehlt - bitte in den Broker-Einstellungen eintragen.")
@@ -144,6 +148,10 @@ class FintsAdapter(BrokerAdapter):
                 "eintragen - bis dahin versucht der Dienst es nicht noch einmal, damit das Online-Banking nicht "
                 "gesperrt wird."
             )
+        if not self.credentials.get("pin"):
+            self._awaiting_pin = True
+            raise AuthRequired(Challenge("pin", f"Bitte gib deine PIN für das {self.banking} ein. Sie wird nicht "
+                                                "gespeichert und nur für diesen Abruf verwendet."))
         self._client = self._make_client()
         try:
             if not self._client.get_current_tan_mechanism():
@@ -162,6 +170,14 @@ class FintsAdapter(BrokerAdapter):
         self._log_capabilities()
 
     def complete_login(self, code: str) -> None:
+        if self._awaiting_pin:
+            if not code:
+                raise AuthRequired(Challenge("pin", "Bitte gib deine PIN ein."))
+            redact.register(code)  # never in a log line or a message on screen
+            self.credentials = {**self.credentials, "pin": code}
+            self._awaiting_pin = False
+            self.login()
+            return
         if self._pending is None:
             return
         try:

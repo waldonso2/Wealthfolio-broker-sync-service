@@ -58,6 +58,13 @@ class Config:
     transfer_patterns: list[dict] = field(default_factory=list)
     # Logos from logo.dev by ISIN after every run (brokersync.logos); the key lives in the vault.
     logos_enabled: bool = False
+    # "auto": sessions are kept, the timer fetches. "safe": every fetch needs a fresh login in the UI, the
+    # session is ended after it, the timer only reminds (#85). For all brokers.
+    sync_mode: str = "auto"
+
+    @property
+    def safe_mode(self) -> bool:
+        return self.sync_mode == "safe"
 
     def broker(self, key: str) -> BrokerConfig:
         return self.brokers.setdefault(key, BrokerConfig())

@@ -13,6 +13,7 @@
     <input type="text" id="c_{{ f.name }}" name="cred_{{ f.name }}" value="{{ plain.get(f.name, '') }}" autocomplete="off">
     {% endif %}
     {% if f.help %}<div class="muted">{{ f.help }}</div>{% endif %}
+    {% if f.ask and stored.get(f.name) %}<label class="check"><input type="checkbox" name="forget_{{ f.name }}" value="1"> {{ f.label }} nicht mehr speichern – bei jeder Anmeldung eingeben</label>{% endif %}
     {% endfor %}
 
     <h2 style="margin-top:22px">Wealthfolio-Konten</h2>

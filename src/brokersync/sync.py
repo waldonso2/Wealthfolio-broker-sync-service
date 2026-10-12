@@ -36,6 +36,7 @@ from . import coverage, crypto, meta_keys, retired
 from . import logos as logos_mod
 from . import repair as repair_mod
 from .adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
+from .adapters.base import safety_state
 from .adapters.fints import NO_TAN_DAYS
 from .dedup import ExistingIndex
 from .mapping import Accounts, MappingError, SecurityMapping, TransferPattern, to_activities, tx_ref
@@ -164,6 +165,7 @@ class Syncer:
         # Seconds to give Wealthfolio to recalculate holdings before the check.
         self.recalc_wait = float(os.environ.get("BROKERSYNC_RECALC_WAIT", "5"))
         self._notifier = notifier
+        self._pins: dict[str, str] = {}  # PINs typed at the login, for the current run only (#85)
         self._logo_source = logo_source or logos_mod.LogoDev
 
     def notifier(self, cfg: config_mod.Config) -> Notifier:
@@ -174,11 +176,18 @@ class Syncer:
     def link(self, cfg: config_mod.Config, path: str) -> str | None:
         return f"{cfg.public_url.rstrip('/')}{path}" if cfg.public_url else None
 
-    def run(self, only: list[str] | None = None) -> list[BrokerResult]:
+    def run(self, only: list[str] | None = None, *, manual: bool = False,
+            pins: dict[str, str] | None = None) -> list[BrokerResult]:
+        """``manual``: started in the UI after the user's login (the safe mode fetches only then).
+        ``pins``: PINs typed at the login, used for this run only and never stored (#85)."""
         # Waits a moment: the status page holds the lock briefly for its checks.
         with run_lock(self.data_dir, wait=5):
             self.state.abort_stale_runs()
             cfg = config_mod.load(self.data_dir)
+            if cfg.safe_mode and not manual:
+                self._remind(cfg)
+                return []
+            self._pins = dict(pins or {})
             results = []
             for key, bcfg in cfg.brokers.items():
                 if only and key not in only:
@@ -190,8 +199,26 @@ class Syncer:
                 if not bcfg.enabled and not (only and key in only):
                     continue
                 results.append(self._run_broker(cfg, key))
+            self._pins = {}
             self._update_logos(cfg)
             return results
+
+    def _remind(self, cfg: config_mod.Config) -> None:
+        """Safe mode: the timer contacts no broker - it reminds the user to fetch in the UI."""
+        due = [self.adapters[k].label for k, b in cfg.brokers.items()
+               if k in self.adapters and b.enabled and self.vault.broker(k).get("credentials")]
+        log.info("safe mode: scheduled run skipped (%d broker(s) to fetch in the UI)", len(due))
+        if due:
+            self.notifier(cfg).send("Abruf fällig", f"Sicherer Modus: {', '.join(due)} in der Oberfläche abrufen - "
+                                    "jeder Abruf braucht deine Anmeldung.", link=self.link(cfg, "/"), tags="key")
+
+    def end_sessions(self, keys: list[str] | None = None) -> None:
+        """Safe mode: forget the brokers' sessions, keeping only the lock-out guards (``SAFETY_KEYS``)."""
+        brokers = self.vault.load().get("brokers", {})
+        for key in keys if keys is not None else list(brokers):
+            session = brokers.get(key, {}).get("session")
+            if session and session != safety_state(session):
+                self.vault.set_broker_session(key, safety_state(session))
 
     def update_logos(self) -> logos_mod.Result | None:
         """The button on the page *Logos*: one pass now (under the sync lock)."""
@@ -246,6 +273,9 @@ class Syncer:
             result.messages.append(f"Unexpected error: {e}")
             notifier.send(f"{label}: Abruf fehlgeschlagen", f"Unerwarteter Fehler: {e}", link=self.link(cfg, "/"),
                           priority="high", tags="warning")
+        if cfg.safe_mode:
+            # Safe mode (#85): the login ends with the run, whatever happened - the next one needs the user.
+            self.end_sessions([key])
         if result.status == "ok" and result.failed:
             result.status = "error"
             notifier.send(f"{label}: {result.failed} Buchungen nicht übernommen", "\n".join(result.messages[:5]),
@@ -285,7 +315,10 @@ class Syncer:
         secrets = self.vault.load()
         stored = secrets.get("brokers", {}).get(key, {})
         adapter_cls = self.adapters[key]
-        adapter = adapter_cls(stored.get("credentials", {}), stored.get("session"))
+        credentials = dict(stored.get("credentials", {}))
+        if self._pins.get(key):
+            credentials["pin"] = self._pins[key]  # typed at the login, not stored (#85)
+        adapter = adapter_cls(credentials, stored.get("session"))
         label = adapter_cls.label
         adapter.on_user_action = lambda message: self.notifier(cfg).send(
             f"{label}: Bestätigung nötig", message, link=self.link(cfg, "/"), priority="high", tags="key")

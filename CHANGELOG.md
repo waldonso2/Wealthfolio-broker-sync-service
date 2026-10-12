@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.16.0
+
+Abrufmodus "Sicher" and PINs that are never stored (waldonso2/wealthfolio-importer-addon#85):
+
+- **Einstellungen → Sicherheit → Abrufmodus** - for all brokers:
+  - **Automatisch**: as before; logins stay saved, the service fetches every morning.
+  - **Sicher**: every fetch starts with your login (app confirmation, TAN or device code). Right after it the service logs out and deletes the session, whatever happened, so no saved login can fetch without you.
+    - The daily run fetches nothing and only reminds you via ntfy.
+    - Switching to *Sicher* ends all saved logins at once.
+    - The lock-out guards (rejected PIN, unanswered or wrong TANs) are kept.
+- **Jetzt abrufen** leads to the login first and fetches right after it.
+- **Alle abrufen** leads through the logins one after the other ("Anmeldung 1 von 3", each broker can be skipped) and then fetches all together.
+- **DKB and Deutsche Bank: PIN not stored.** Leave the PIN field empty and the login asks for it every time.
+  - It stays in memory only until the fetch is done, never in the vault, the database or the log.
+  - A saved PIN can be dropped with the new tick box below the field.
+
 ## 0.15.1
 
 Tidier settings and overview (waldonso2/wealthfolio-importer-addon#84):

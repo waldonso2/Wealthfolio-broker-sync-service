@@ -77,6 +77,8 @@ So kommt ein neuer Broker ohne Änderungen an Mapping und Sync aus.
 
 `Syncer.run()` holt sich die Sperre, schließt Läufe, die ein abgestürzter Prozess offen gelassen hat (`aborted`), und arbeitet die Broker nacheinander ab. Jeder Broker läuft in `_run_broker` in einem eigenen `try`. Ein Fehler wird gemeldet und protokolliert, die übrigen Broker laufen weiter.
 
+**Abrufmodus (#85):** Im Modus `safe` (`Config.sync_mode`, Seite *Sicherheit*) ruft `Syncer.run` nur mit `manual=True` ab, also nach einer Anmeldung in der Oberfläche; Timer und CLI erinnern nur per ntfy. Nach jedem Broker-Lauf (auch nach Fehlern) löscht `end_sessions` die Sitzung bis auf den Sperrschutz (`adapters.base.SAFETY_KEYS`). „Jetzt abrufen“ führt im sicheren Modus (und bei einer FinTS-Bank ohne gespeicherte PIN) über `/brokers/<key>/login?run=1`; „Alle abrufen“ legt die Reihenfolge in `session["run_queue"]` ab, führt durch die Anmeldungen (überspringbar) und startet dann einen Lauf für alle. Eine nicht gespeicherte PIN (`CredentialField.ask`) fragt die Anmeldung ab; sie liegt nur in `AppContext.pins` und geht als `pins` an den Lauf.
+
 `_sync_broker` ist eine Folge benannter Schritte; was sie einander weitergeben, steht in `RunContext` (#75). Die Reihenfolge ist fachlich wichtig:
 
 1. `_plan_window`: Adapter mit gespeicherter Session, Abrufzeitraum (ganze Historie, einmaliger Backfill, *Ab Startdatum neu abrufen*, Sparkonto ab Startdatum), schon Synchronisiertes.

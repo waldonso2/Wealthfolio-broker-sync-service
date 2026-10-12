@@ -9,7 +9,7 @@ from dataclasses import asdict
 from datetime import datetime
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ... import config as config_mod
 from ... import retired
@@ -37,7 +37,7 @@ def dashboard(request: Request, ctx: Ctx):
     return ctx.render(request, "dashboard.html", brokers=brokers,
                       wf_missing=not (c.wealthfolio_url and _wf_done(secrets_, c)), running=busy,
                       next_run=_next_timer_run(), runs=ctx.state.runs(limit=20),
-                      retired_notices=retired.notices(ctx.state))
+                      retired_notices=retired.notices(ctx.state), safe_mode=c.safe_mode)
 
 
 def _brokers(ctx: AppContext, c: config_mod.Config, secrets_: dict) -> list[dict]:
@@ -80,16 +80,39 @@ def retired_dismiss(request: Request, ctx: Ctx, broker: str = Form(...)):
 def run_now(request: Request, ctx: Ctx, broker: str = Form("")):
     if ctx.running.is_set():
         return redirect(request, "/", "Ein Abruf läuft bereits.", "warn")
-    only = [broker] if broker else None
+    c = ctx.cfg()
+    if broker:
+        if broker not in ctx.adapters:
+            return redirect(request, "/", "Unbekannter Broker.", "error")
+        if ctx.needs_login(broker, c):
+            return RedirectResponse(f"/brokers/{broker}/login?run=1", 303)
+        return start_run(request, ctx, [broker])
+    # "Alle abrufen": the brokers that need a login first are logged in one after the other (#85), then all
+    # are fetched in one run.
+    keys = [k for k, b in c.brokers.items()
+            if k in ctx.adapters and b.enabled and ctx.vault.broker(k).get("credentials")]
+    login = [k for k in keys if ctx.needs_login(k, c)]
+    if login:
+        request.session["run_queue"] = {"todo": login, "run": keys, "login": list(login)}
+        return RedirectResponse(f"/brokers/{login[0]}/login?run=1", 303)
+    return start_run(request, ctx, None)
+
+
+def start_run(request: Request, ctx: AppContext, only: list[str] | None) -> RedirectResponse:
+    """Start a run from the UI (``manual``: the safe mode fetches only so), with the PINs typed at the logins."""
+    if ctx.running.is_set():
+        return redirect(request, "/", "Ein Abruf läuft bereits.", "warn")
+    pins = {k: ctx.pins.pop(k) for k in list(ctx.pins) if only is None or k in only}
 
     def work():
         try:
-            ctx.syncer.run(only)
+            ctx.syncer.run(only, manual=True, pins=pins)
         except AlreadyRunning:
             log.info("sync skipped: already running (timer)")
         except Exception:
             log.exception("sync failed")
         finally:
+            pins.clear()
             ctx.running.clear()
 
     ctx.running.set()  # before the thread starts, so the next page view already shows it
