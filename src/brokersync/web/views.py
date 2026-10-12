@@ -103,3 +103,40 @@ def describe_unknown(payload: dict | None) -> dict[str, str]:
         "shares": shares[0] if shares else "",
         "text": " · ".join(texts),
     }
+
+
+# How old the last run may be before the overview turns yellow: the timer runs daily.
+STALE_DAYS = 2
+
+
+def broker_light(last: dict | None, reconcile: dict | None, unknown: int, gaps: int, enabled: bool,
+                 now: datetime | None = None) -> tuple[str, list[str]]:
+    """The overview's traffic light for a broker and the reasons behind it (#83).
+
+    red: the last run failed or needs a login; yellow: something to look at (deviations, unknown or missing
+    bookings, failed activities, no run for a while); green: nothing to do; grey: never fetched.
+    """
+    if not last:
+        return "grey", ["Noch nie abgerufen"]
+    status = last.get("status")
+    if status == "needs_auth":
+        return "red", ["Anmeldung nötig"]
+    if status == "error":
+        failed = f" ({last['failed']} Buchungen)" if last.get("failed") else ""
+        return "red", [f"Letzter Abruf fehlgeschlagen{failed}"]
+    reasons = []
+    deviations = (reconcile or {}).get("deviations") or []
+    if deviations:
+        reasons.append(f"{len(deviations)} Abweichung{'en' if len(deviations) != 1 else ''} zu Wealthfolio")
+    if unknown:
+        reasons.append(f"{unknown} unbekannte Buchung{'en' if unknown != 1 else ''}")
+    if gaps:
+        reasons.append(f"{gaps} fehlt in Wealthfolio")
+    if status == "aborted":
+        reasons.append("Letzter Abruf abgebrochen")
+    started = _parse(last.get("started_at"))
+    if enabled and isinstance(started, datetime) and status != "running":
+        age = (now or datetime.now(UTC)) - (started if started.tzinfo else started.replace(tzinfo=UTC))
+        if age.days >= STALE_DAYS:
+            reasons.append(f"Seit {age.days} Tagen kein Abruf")
+    return ("yellow" if reasons else "green"), reasons

@@ -1,10 +1,11 @@
-"""The daily pages: overview with the setup steps, "Jetzt abrufen", settings index, unknown bookings."""
+"""The daily pages: overview (a traffic light per broker), "Jetzt abrufen", settings index, unknown bookings."""
 
 from __future__ import annotations
 
 import logging
 import subprocess
 import threading
+from dataclasses import asdict
 from datetime import datetime
 
 from fastapi import APIRouter, Form, Request
@@ -13,6 +14,7 @@ from fastapi.responses import HTMLResponse
 from ... import config as config_mod
 from ... import retired
 from ...sync import AlreadyRunning, is_running
+from .. import views
 from ..context import AppContext, Ctx, redirect
 
 log = logging.getLogger(__name__)
@@ -31,31 +33,35 @@ def dashboard(request: Request, ctx: Ctx):
     c = ctx.cfg()
     secrets_ = ctx.vault.load()
     brokers = _brokers(ctx, c, secrets_)
-    steps = [
-        ("Wealthfolio verbinden", "/setup/wealthfolio", bool(c.wealthfolio_url and _wf_done(secrets_, c))),
-        ("Broker einrichten und Konten zuordnen", "/brokers", any(b["config"].enabled for b in brokers)),
-        ("Benachrichtigungen (ntfy)", "/notifications", bool(c.ntfy_topic)),
-        ("Erster Abruf", "#run", any(b["last"] for b in brokers)),
-    ]
-    return ctx.render(request, "dashboard.html", brokers=brokers, steps=steps, all_done=all(s[2] for s in steps),
-                      running=busy,
-                      next_run=_next_timer_run(), unknown=len(ctx.state.unknown_events()),
-                      runs=ctx.state.runs(limit=10), retired_notices=retired.notices(ctx.state))
+    # No setup steps any more (#83): only a hint while Wealthfolio isn't connected.
+    return ctx.render(request, "dashboard.html", brokers=brokers,
+                      wf_missing=not (c.wealthfolio_url and _wf_done(secrets_, c)), running=busy,
+                      next_run=_next_timer_run(), runs=ctx.state.runs(limit=20),
+                      retired_notices=retired.notices(ctx.state))
 
 
 def _brokers(ctx: AppContext, c: config_mod.Config, secrets_: dict) -> list[dict]:
     brokers = []
     for key, adapter in ctx.adapters.items():
         b = c.brokers.get(key, config_mod.BrokerConfig())
+        last = ctx.state.last_run(key)
+        reconcile = ctx.state.reconcile(key)
+        unknown = len(ctx.state.unknown_events(key))
+        gaps = sum(1 for g in ctx.state.gaps(key) if g["kind"] in ("missing", "partial", "orphan"))
+        light, reasons = views.broker_light(asdict(last) if last else None, reconcile, unknown, gaps, b.enabled)
         brokers.append({
             "key": key,
             "label": adapter.label,
             "savings_label": adapter.savings_label,
             "config": b,
             "has_credentials": bool(secrets_.get("brokers", {}).get(key, {}).get("credentials")),
-            "last": ctx.state.last_run(key),
+            "last": last,
             "balances": ctx.state.balances(key),
-            "reconcile": ctx.state.reconcile(key),
+            "reconcile": reconcile,
+            "unknown": unknown,
+            "gaps": gaps,
+            "light": light,
+            "reasons": reasons,
         })
     return brokers
 

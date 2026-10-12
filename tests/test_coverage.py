@@ -140,12 +140,12 @@ def test_the_check_page_lets_the_user_rebook_or_ignore(tmp_path):
     client = TestClient(app, base_url="http://sync.local:8090")
     client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     page = client.get("/check").text
-    assert "Schon übernommen, fehlt aber in Wealthfolio: 1" in page and f'value="{DIVIDEND}"' in page
+    assert "Fehlt in Wealthfolio: 1" in page and f'value="{DIVIDEND}"' in page
     token = csrf(client, "/check")
     r = client.post("/check/fake", data={"csrf": token, "action": "ignore", "tx": "not-a-gap"})
     assert "Keine Buchung ausgewählt" in r.text
     r = client.post("/check/fake", data={"csrf": token, "action": "ignore", "tx": DIVIDEND})
-    assert "werden nicht mehr gebucht" in r.text and "Ignoriert: 1" in r.text
+    assert "werden nicht mehr gebucht" in r.text and "Ignoriert (1)" in r.text
     assert State(tmp_path).synced("fake")[DIVIDEND][0] == "ignored"
     r = client.post("/check/fake", data={"csrf": token, "action": "rebook", "tx": DIVIDEND})
     assert "legt der nächste Abruf wieder an" in r.text

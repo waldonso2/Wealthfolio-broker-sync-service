@@ -1,96 +1,95 @@
 {% extends "base.html" %}{% block title %}Übersicht{% endblock %}
 {% block head %}{% if running %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
 {% block content %}
+{% set LIGHT = {"green": "alles in Ordnung", "yellow": "bitte ansehen", "red": "Handlungsbedarf", "grey": "noch kein Abruf"} %}
 {% for n in retired_notices %}
 <div class="card">
   <h2>{{ n.label }} entfernt</h2>
-  <p>Den Test-Broker „{{ n.label }}“ gibt es nicht mehr; seine Einstellungen, Läufe und unbekannten Buchungen sind gelöscht.
-  Er hat {{ n.activities }} Buchungen in Wealthfolio angelegt – die bleiben, bis du sie selbst löschst.
-  Du findest sie unter <em>Activities</em> mit dem Suchbegriff <code>{{ n.search }}</code> im Kommentar.</p>
+  <p>Den Test-Broker „{{ n.label }}“ gibt es nicht mehr. Seine {{ n.activities }} Buchungen in Wealthfolio bleiben, bis du sie löschst – Suchbegriff <code>{{ n.search }}</code> im Kommentar.</p>
   <form method="post" action="/retired/dismiss" class="actions">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <input type="hidden" name="broker" value="{{ n.key }}">
-    <button class="secondary">Erledigt, ausblenden</button>
+    <button class="secondary">Ausblenden</button>
   </form>
 </div>
 {% endfor %}
-{% if not all_done %}
-<div class="card">
-  <h2>Einrichtung</h2>
-  <ol class="steps">
-  {% for label, href, done in steps %}
-    <li class="{{ 'done' if done }}"><a href="{{ href }}">{{ label }}</a>{% if done %} ✓{% endif %}</li>
-  {% endfor %}
-  </ol>
-</div>
-{% endif %}
 
-<div class="card" id="run">
-  <h2>Broker</h2>
-  {% for b in brokers if b.config.enabled or b.has_credentials %}
-  <div class="broker">
-    <div>
-      <strong>{{ b.label }}</strong>
-      {% if b.last %}<span class="status {{ b.last.status }}">{{ STATUS[b.last.status] }}</span>
-      {% else %}<span class="status off">noch nie abgerufen</span>{% endif %}
-      {% if not b.config.enabled %}<span class="status off">automatischer Abruf aus</span>{% endif %}
-      {% if b.last %}
-      <div class="muted">Letzter Abruf: {{ b.last.started_at | local }} ·
-        {{ b.last.created }} neu, {{ b.last.existing }} schon vorhanden{% if b.last.failed %}, {{ b.last.failed }} fehlgeschlagen{% endif %}{% if b.last.unknown %}, <a href="/unknown">{{ b.last.unknown }} unbekannt</a>{% endif %}</div>
-      {% if b.last.message and b.last.status != "ok" %}<pre class="muted">{{ b.last.message | redact }}</pre>{% endif %}
-      {% endif %}
-      {% if b.reconcile %}
-        {% if b.reconcile.deviations %}
-        <div class="muted"><strong>Abgleich mit Wealthfolio</strong> ({{ b.reconcile.at | local }}) – weicht ab:</div>
-        <div class="table"><table>
-          <tr><th>Wert</th><th>{{ b.label }}</th><th>Wealthfolio</th></tr>
-          {% for d in b.reconcile.deviations %}<tr><td data-label="Wert">{{ d.name }}</td><td data-label="{{ b.label }}">{{ d.broker }}</td><td data-label="Wealthfolio">{{ d.wealthfolio }}</td></tr>{% endfor %}
-        </table></div>
-        <div class="muted">Direkt nach neuen Buchungen kann Wealthfolio noch rechnen; gemeldet wird erst, was beim nächsten Abruf noch abweicht. Fehlende Buchungen (z.&nbsp;B. Kapitalmaßnahmen) von Hand nachholen; Bestände von vor dem Startdatum unter <a href="/check">Prüfung</a> als Anfangsbestand anlegen.</div>
-        {% else %}
-        <div class="muted">Abgleich mit Wealthfolio: Bestand und Cash stimmen ({{ b.reconcile.at | local }}).</div>
-        {% endif %}
-      {% endif %}
-      {% if b.balances %}
-      <div class="muted">Saldo laut {{ b.label }}: {% for x in b.balances %}{{ x.amount | money }} {{ x.currency }}{% if x.account %} ({{ b.savings_label }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %} (Stand {{ b.balances[0].at | local }}) – zum Vergleich mit {{ 'den Konten' if b.balances | length > 1 else 'dem Verrechnungskonto' }} in Wealthfolio</div>
-      {% endif %}
-    </div>
-    <div class="actions" style="margin:0">
-      {% if b.last and b.last.status == "needs_auth" %}<a class="button" href="/brokers/{{ b.key }}/login">Jetzt anmelden</a>{% endif %}
-      {% if b.has_credentials %}
-      <form method="post" action="/run" style="margin:0">
-        <input type="hidden" name="csrf" value="{{ csrf }}">
-        <input type="hidden" name="broker" value="{{ b.key }}">
-        <button class="secondary" {% if running %}disabled{% endif %}>Jetzt abrufen</button>
-      </form>
-      {% endif %}
-      <a class="button secondary" href="/brokers/{{ b.key }}">Einstellungen</a>
-    </div>
-  </div>
-  {% else %}
-  <p>Noch kein Broker eingerichtet. <a href="/brokers">Broker einrichten</a></p>
-  {% endfor %}
-  <form method="post" action="/run" class="actions">
+<div class="card-head" style="margin-top:8px">
+  <h1>Übersicht</h1>
+  <form method="post" action="/run" class="spacer" style="margin-left:auto">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <button {% if running %}disabled{% endif %}>{% if running %}Abruf läuft …{% else %}Alle abrufen{% endif %}</button>
   </form>
-  {% if brokers | selectattr("has_credentials") | rejectattr("config.enabled") | list %}
-  <p class="muted">„Alle abrufen“ und der tägliche Lauf überspringen Broker mit ausgeschaltetem automatischem Abruf – die rufst du mit ihrem eigenen „Jetzt abrufen“ ab.</p>
-  {% endif %}
-  <p class="muted">Automatischer Abruf: {% if next_run %}nächster Lauf {{ next_run }}{% else %}täglich{% endif %}.
-  {% if unknown %} · <a href="/unknown">{{ unknown }} unbekannte Buchungen</a>{% endif %}</p>
 </div>
+<p class="muted">Automatischer Abruf: {% if next_run %}nächster Lauf {{ next_run }}{% else %}täglich{% endif %}{% if brokers | selectattr("has_credentials") | rejectattr("config.enabled") | list %} · Broker ohne automatischen Abruf nur einzeln{% endif %}.</p>
+
+{% if wf_missing %}
+<div class="card"><div class="card-head"><span class="light red" role="img" aria-label="Status: Handlungsbedarf"></span><h2>Wealthfolio nicht verbunden</h2></div>
+  <div class="actions"><a class="button" href="/setup/wealthfolio">Wealthfolio verbinden</a></div></div>
+{% endif %}
+
+{% for b in brokers if b.config.enabled or b.has_credentials %}
+<div class="card" id="broker-{{ b.key }}">
+  <div class="card-head">
+    <span class="light {{ b.light }}" role="img" aria-label="Status: {{ LIGHT[b.light] }}" title="{{ LIGHT[b.light] }}"></span>
+    <h2>{{ b.label }}</h2>
+    {% if not b.config.enabled %}<span class="status off">nur manuell</span>{% endif %}
+  </div>
+  <p class="summary-line">
+    {% if b.last %}Zuletzt {{ b.last.started_at | local }} · <strong>{{ b.last.created }}</strong> neu{% if b.last.existing %} · {{ b.last.existing }} vorhanden{% endif %}{% else %}Noch nie abgerufen{% endif %}
+    {% if b.balances %} · Saldo {% for x in b.balances %}<strong>{{ x.amount | money }} {{ x.currency }}</strong>{% if x.account %} ({{ b.savings_label }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+  </p>
+  {% if b.light in ("yellow", "red") %}
+  <ul class="reasons">{% for r in b.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if b.last and b.last.message and b.last.status != "ok" %}
+  <details><summary>Meldung des letzten Abrufs</summary><pre class="muted">{{ b.last.message | redact }}</pre></details>
+  {% endif %}
+  {% if b.reconcile and b.reconcile.deviations %}
+  <details><summary>Abweichungen zu Wealthfolio ({{ b.reconcile.deviations | length }})</summary>
+    <div class="table"><table>
+      <tr><th>Wert</th><th>{{ b.label }}</th><th>Wealthfolio</th></tr>
+      {% for d in b.reconcile.deviations %}<tr><td data-label="Wert">{{ d.name }}</td><td data-label="{{ b.label }}">{{ d.broker }}</td><td data-label="Wealthfolio">{{ d.wealthfolio }}</td></tr>{% endfor %}
+    </table></div>
+    <p class="muted">Stand {{ b.reconcile.at | local }}. Gemeldet wird erst, was beim nächsten Abruf noch abweicht. Bestände von vor dem Startdatum unter <a href="/check">Prüfung</a> anlegen.</p>
+  </details>
+  {% endif %}
+  <div class="actions">
+    {% if b.last and b.last.status == "needs_auth" %}<a class="button" href="/brokers/{{ b.key }}/login">Jetzt anmelden</a>{% endif %}
+    {% if b.has_credentials %}
+    <form method="post" action="/run">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="broker" value="{{ b.key }}">
+      <button class="secondary" {% if running %}disabled{% endif %}>Jetzt abrufen</button>
+    </form>
+    {% endif %}
+    {% if b.gaps or (b.reconcile and b.reconcile.deviations) %}<a class="button secondary" href="/check#broker-{{ b.key }}">Prüfen</a>{% endif %}
+    {% if b.unknown %}<a class="button secondary" href="/unknown">Unbekannte</a>{% endif %}
+    <a class="button secondary" href="/brokers/{{ b.key }}">Einstellungen</a>
+  </div>
+</div>
+{% else %}
+<div class="card"><div class="card-head"><span class="light grey" role="img" aria-label="Status: noch kein Abruf"></span><h2>Noch kein Broker</h2></div>
+  <div class="actions"><a class="button" href="/brokers">Broker einrichten</a></div></div>
+{% endfor %}
 
 {% if runs %}
 <div class="card">
   <h2>Letzte Läufe</h2>
-  <div class="table"><table>
-    <tr><th>Zeit</th><th>Broker</th><th>Ergebnis</th><th>Neu</th><th>Vorhanden</th><th>Fehler</th></tr>
-    {% for r in runs %}
-    <tr><td data-label="Zeit">{{ r.started_at | local }}</td><td data-label="Broker">{{ adapters[r.broker].label if r.broker in adapters else r.broker }}</td>
-      <td data-label="Ergebnis"><span class="status {{ r.status }}">{{ STATUS[r.status] }}</span></td><td data-label="Neu">{{ r.created }}</td><td data-label="Vorhanden">{{ r.existing }}</td><td data-label="Fehler">{{ r.failed }}</td></tr>
+  {% macro run_rows(items) %}
+  <ul class="rows">
+    {% for r in items %}
+    <li><span class="status {{ r.status }}">{{ STATUS[r.status] }}</span>
+      <span class="grow"><strong>{{ adapters[r.broker].label if r.broker in adapters else r.broker }}</strong>
+        <span class="muted">{{ r.started_at | local }}</span></span>
+      <span class="muted nowrap">{{ r.created }} neu{% if r.failed %} · <span class="error-text">{{ r.failed }} Fehler</span>{% endif %}</span></li>
     {% endfor %}
-  </table></div>
+  </ul>
+  {% endmacro %}
+  {{ run_rows(runs[:3]) }}
+  {% if runs | length > 3 %}
+  <details><summary>Ältere Läufe ({{ runs | length - 3 }})</summary>{{ run_rows(runs[3:]) }}</details>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}

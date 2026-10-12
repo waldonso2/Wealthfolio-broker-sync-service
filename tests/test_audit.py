@@ -107,8 +107,8 @@ def test_the_page(tmp_path):
     client = TestClient(app)
     client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     page = client.get("/check").text
-    assert "Test Depot <strong>-188,45 EUR</strong>" in page
-    assert "bleibt stehen: -188,45 EUR" in page and "Überträge ohne Gegenstück: 0" in page
+    assert "Bargeld im Depot <strong>-188,45 EUR</strong>" in page
+    assert "bleibt stehen: -188,45 EUR" in page and "Überträge ohne Gegenstück <strong>0</strong>" in page
     assert re.search(r"03.03.2026 11:00:01</time></td><td[^>]*>TRANSFER_OUT", page)
     count = len(wf.activities)
     assert len(wf.activities) == count and not wf.deleted and not wf.updated  # read only
