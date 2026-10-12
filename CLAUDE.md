@@ -7,9 +7,10 @@ Service that fetches broker transactions and writes them, deduplicated, into a s
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install --require-hashes --only-binary :all: -r requirements.txt   # the locked versions users get
-pip install --no-deps --no-build-isolation -e . && pip install pytest respx ruff
+pip install --no-deps --no-build-isolation -e . && pip install pytest pytest-cov respx ruff mypy
 pytest -q                 # all tests
-ruff check src tests      # lint
+ruff check src tests      # lint (incl. C901 complexity ≤ 15)
+mypy src                  # types
 shellcheck ct/*.sh install/*.sh deploy/setup.sh deploy/brokersync-reset-password deploy/brokersync-cli scripts/*.sh
 scripts/lock.sh           # after changing a dependency in pyproject.toml (needs uv); --upgrade: newest versions
 BROKERSYNC_DATA=./data brokersync serve --port 8090   # UI locally
@@ -47,6 +48,7 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 | `deploy/` | `setup.sh` (venv, units, key to `/etc` + drop-ins `10-key.conf`, TLS certificate, `migrate`; used by install and update), hardened systemd units, `brokersync-cli` (a command as the service user with the key), reset-password helper |
 | `ARCHITECTURE.md` | Overview for contributors: components, run sequence, dedup layers, data files, routes |
 | `src/brokersync/retired.py` | On start (`Syncer.__init__`): removes config, vault entries and sync state of brokers that no longer exist (`dummy` up to 0.3.6); their Wealthfolio activities stay, the overview shows once how many and how to find them |
+| `contract/dedup/` | `cases.json`: shared duplicate-detection cases (existing activities, incoming ones, expected match); `tests/test_dedup_contract.py` runs them against `ExistingIndex`, the addon runs the same file; CI job `contract` diffs it against the addon's `main` |
 | `tests/` | `fakes.py` (in-memory Wealthfolio), `fake_broker.py` (test-only broker with a TAN step; no test broker ships), `fake_fints.py` (fake python-fints client), unit/e2e tests, `contract/<adapter>/*.json` recorded cases, `fixtures/wealthfolio/` recorded API answers |
 
 ## Invariants (keep them)
@@ -80,6 +82,9 @@ BROKERSYNC_DATA=./data brokersync run                 # one sync
 - **Master passphrase loss = data loss**, by design: no recovery path, no backdoor key. Changing it re-encrypts everything under the sync lock; the web app is rebuilt afterwards (`gate.reset()`).
 - **Dependencies only at locked, hash-checked versions** (#58): `deploy/setup.sh` installs `requirements.txt` with `--require-hashes --only-binary :all:` (no sdist build code runs) and then the package with `--no-deps --no-build-isolation`. A new or changed dependency in `pyproject.toml` means running `scripts/lock.sh` in the same change; `test_packaging` fails otherwise. CI tests exactly these versions.
 - **The install engine is pinned** (#61): `ct/wealthfolio-broker-sync.sh` sets `COMMUNITY_SCRIPTS_CORE_URL` to a commit of community-scripts/core, unconditionally (an `update` command written earlier still exports its old URL) - it runs as root on the Proxmox host. Move the pin only after reviewing core's changes (`core-watch.yml` opens an issue when main moved on). Backups are created under `umask 077`.
+- **Dedup rules are shared with the addon** (#69): a change to `dedup.ExistingIndex`'s matching rules goes into `contract/dedup/cases.json` here and in the addon (`waldonso2/wealthfolio-importer-addon`, same path) in the same change; this copy is leading.
+- **CI gates** (#70): `ruff` (incl. C901, max complexity 15) and `mypy src` must pass. Functions above the limit carry `# noqa: C901 (#NN)` naming the issue that splits them - never add one without an issue.
+- **UI navigation** (#71): the header holds Übersicht, Prüfung, Unbekannt, Einstellungen; a new settings page goes into `SETTINGS_PAGES` (`web/app.py`), not into the header. Table cells get `data-label` (their column name) so the tables stack on phones (#72).
 - **Every form field is checked on the server** (#33): new fields go through `web/inputs.py` (or a check of their own) before they reach the config, the vault or the state - the HTML `pattern` is only a help. Request bodies are capped in `gate.py` (`MAX_BODY`), also for the pages without a session.
 - **Foreign error texts are masked where stored and shown** (#60): `State.finish_run` stores `redact.redact(message)`, templates show error texts through the `redact` filter; httpx/httpcore log only warnings (request URLs can carry tokens). GitHub Actions are pinned to commit SHAs.
 - `ct/wealthfolio-broker-sync.sh` exports `COMMUNITY_SCRIPTS_URL` (this repo's raw `main`) **before** sourcing `community-scripts/core`'s `core/build.func`: the engine resolves `install/<slug>-install.sh` and writes the container's `update` command from it. Without it both point to community-scripts/ProxmoxVE. `test_packaging.py` checks this, and that the install line in the README matches.

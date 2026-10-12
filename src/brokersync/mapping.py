@@ -88,7 +88,7 @@ def match_pattern(tx: Transaction, patterns: list[TransferPattern]) -> TransferP
 
 def is_cash_symbol(symbol: str | None) -> bool:
     """A cash placeholder instead of a security: ``$CASH-EUR``, ``CASH:USD``, ``$CASH``."""
-    return bool(symbol) and bool(CASH_SYMBOL.match(symbol.strip().upper()))
+    return bool(symbol) and bool(CASH_SYMBOL.match((symbol or "").strip().upper()))
 
 
 class MappingError(Exception):
@@ -149,7 +149,7 @@ def _check_amounts(tx: Transaction) -> None:
             )
 
 
-def to_activities(
+def to_activities(  # noqa: C901 (#80)
     tx: Transaction,
     broker: str,
     accounts: Accounts,
@@ -272,6 +272,8 @@ def to_activities(
         sweep_to_cash(f"{label} {tx.name}")
         return out
 
+    if not tx.shares or tx.gross is None:
+        raise MappingError(f"{tx.kind.value} {tx.id} has no share count or gross amount")
     quantity = fmt(tx.shares)
     unit_price = fmt(round6(tx.gross / tx.shares))
     fee = fmt(tx.fee)

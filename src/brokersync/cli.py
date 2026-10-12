@@ -11,16 +11,16 @@ from . import __version__, redact
 from .config import data_dir
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901 (#80)
     parser = argparse.ArgumentParser(prog="brokersync", description="Wealthfolio Broker Sync")
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="cmd", required=True)
-    serve = sub.add_parser("serve", help="run the web UI")
-    serve.add_argument("--host", default="0.0.0.0")
-    serve.add_argument("--port", type=int, default=8090)
-    serve.add_argument("--certfile", help="TLS certificate: serve HTTPS")
-    serve.add_argument("--keyfile", help="TLS key")
-    serve.add_argument("--redirect-port", type=int, help="also listen with plain HTTP here, redirecting to HTTPS")
+    serve_cmd = sub.add_parser("serve", help="run the web UI")
+    serve_cmd.add_argument("--host", default="0.0.0.0")
+    serve_cmd.add_argument("--port", type=int, default=8090)
+    serve_cmd.add_argument("--certfile", help="TLS certificate: serve HTTPS")
+    serve_cmd.add_argument("--keyfile", help="TLS key")
+    serve_cmd.add_argument("--redirect-port", type=int, help="also listen with plain HTTP here, redirecting to HTTPS")
     run = sub.add_parser("run", help="sync all enabled brokers once")
     run.add_argument("--broker", action="append", help="only this broker (repeatable)")
     sub.add_parser("reset-ui-password", help="forget the web UI password; the next visit sets a new one")

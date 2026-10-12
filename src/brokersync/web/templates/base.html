@@ -11,22 +11,23 @@
 <header><div class="wrap">
   <a class="brand" href="/">Wealthfolio Broker Sync <span class="version">v{{ version }}</span></a>
   {% if request.session.get("user") %}
-  <nav>
-    <a href="/">Übersicht</a>
-    <a href="/setup/wealthfolio">Wealthfolio</a>
-    <a href="/brokers">Broker</a>
-    <a href="/notifications">Benachrichtigungen</a>
-    <a href="/securities">Wertpapiere</a>
-    <a href="/logos">Logos</a>
-    <a href="/transfers">Überträge</a>
-    <a href="/duplicates">Duplikate</a>
-    <a href="/check">Prüfung</a>
-    <a href="/security">Sicherheit</a>
-    <form method="post" action="/logout" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">Abmelden</button></form>
+  {% set path = request.url.path %}
+  {% set in_settings = path == "/settings" or path.startswith("/brokers") or path in settings_pages | map(attribute=0) | list %}
+  <nav aria-label="Hauptmenü">
+    <a href="/"{% if path == "/" %} aria-current="page"{% endif %}>Übersicht</a>
+    <a href="/check"{% if path.startswith("/check") %} aria-current="page"{% endif %}>Prüfung</a>
+    <a href="/unknown"{% if path == "/unknown" %} aria-current="page"{% endif %}>Unbekannt{% if nav_unknown %} <span class="count" aria-label="{{ nav_unknown }} offen">{{ nav_unknown }}</span>{% endif %}</a>
+    <a href="/settings"{% if in_settings %} aria-current="page"{% endif %}>Einstellungen</a>
+    <form method="post" action="/logout" class="logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">Abmelden</button></form>
   </nav>
   {% endif %}
 </div></header>
 <main class="wrap">
+  {% if request.session.get("user") and in_settings and path != "/settings" %}
+  <nav class="subnav" aria-label="Einstellungen">
+    {% for href, title, hint in settings_pages %}<a href="{{ href }}"{% if path == href or (href == "/brokers" and path.startswith("/brokers")) %} aria-current="page"{% endif %}>{{ title }}</a>{% endfor %}
+  </nav>
+  {% endif %}
   {% if flash %}<div class="flash {{ flash.level }}">{{ flash.text }}</div>{% endif %}
   {% block content %}{% endblock %}
   <p class="muted">Version {{ version }} · alle Daten verschlüsselt gespeichert · nur lesender Zugriff auf die Broker</p>

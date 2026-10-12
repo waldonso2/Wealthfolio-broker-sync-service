@@ -411,6 +411,9 @@ class State:
             out.append({"currency": currency, "account": account, "amount": a, "at": t})
         return out
 
+    def unknown_count(self) -> int:
+        return int(self.db.execute("SELECT COUNT(*) FROM unknown_events").fetchone()[0])
+
     def unknown_events(self, broker: str | None = None) -> list[dict]:
         sql = "SELECT broker, tx_id, raw_type, occurred_at, payload, first_seen FROM unknown_events"
         args: tuple = ()

@@ -278,7 +278,7 @@ def test_dashboard_shows_the_holdings_check(tmp_path):
     client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     page = client.get("/").text
     assert "Abgleich mit Wealthfolio" in page and "weicht ab" in page
-    assert re.search(r"<td>Cash EUR</td><td>1234.56</td>", page)
+    assert re.search(r"<td[^>]*>Cash EUR</td><td[^>]*>1234.56</td>", page)
 
 
 def test_positions_in_the_current_and_the_older_format():

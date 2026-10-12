@@ -82,7 +82,8 @@ def to_transactions(events: list[dict]) -> list[Transaction]:
         value = _dec(ev.value) or Decimal(0)
         fees = abs(_dec(ev.fees) or Decimal(0))
         taxes = abs(_dec(ev.taxes) or Decimal(0))
-        shares = abs(_dec(ev.shares)) if ev.shares is not None else None
+        parsed_shares = _dec(ev.shares) if ev.shares is not None else None
+        shares = abs(parsed_shares) if parsed_shares is not None else None
         base = dict(id=raw["id"], datetime=ev.date.astimezone(UTC), currency=_currency(raw), label=_label(raw),
                     raw_type=event_type)
         security = dict(isin=ev.isin, name=ev.title or "", shares=shares)

@@ -55,7 +55,8 @@ def clauses(lines: list[str]) -> list[str]:
 
 
 def _blocks(fields: list[str]) -> list[list[str]]:
-    blocks, current = [], None
+    blocks: list[list[str]] = []
+    current: list[str] | None = None
     for f in fields:
         if f.startswith(":16R:FIN"):
             current = []

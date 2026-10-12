@@ -223,7 +223,7 @@ class Syncer:
             log.warning("%s: %s", key, " | ".join(result.messages[:5]))
         return result
 
-    def _sync_broker(self, cfg: config_mod.Config, key: str, result: BrokerResult) -> None:
+    def _sync_broker(self, cfg: config_mod.Config, key: str, result: BrokerResult) -> None:  # noqa: C901 (#75)
         bcfg = cfg.brokers[key]
         if not bcfg.cash_account_id or not bcfg.portfolio_account_id:
             raise AdapterError("No Wealthfolio accounts assigned - finish the setup for this broker.")

@@ -93,7 +93,7 @@ class Report:
         return sum((m.net for m in self.moments), Decimal(0))
 
 
-def check(activities: list[dict], accounts: Accounts) -> Report:
+def check(activities: list[dict], accounts: Accounts) -> Report:  # noqa: C901 (#80)
     depot = sorted((a for a in activities if a.get("accountId") == accounts.portfolio), key=_when)
     cash = [a for a in activities if a.get("accountId") == accounts.cash]
     report = Report(depot_cash=sum((cash_effect(a) for a in depot), Decimal(0)),

@@ -44,7 +44,7 @@
         <div class="muted"><strong>Abgleich mit Wealthfolio</strong> ({{ b.reconcile.at | local }}) – weicht ab:</div>
         <div class="table"><table>
           <tr><th>Wert</th><th>{{ b.label }}</th><th>Wealthfolio</th></tr>
-          {% for d in b.reconcile.deviations %}<tr><td>{{ d.name }}</td><td>{{ d.broker }}</td><td>{{ d.wealthfolio }}</td></tr>{% endfor %}
+          {% for d in b.reconcile.deviations %}<tr><td data-label="Wert">{{ d.name }}</td><td data-label="{{ b.label }}">{{ d.broker }}</td><td data-label="Wealthfolio">{{ d.wealthfolio }}</td></tr>{% endfor %}
         </table></div>
         <div class="muted">Direkt nach neuen Buchungen kann Wealthfolio noch rechnen; gemeldet wird erst, was beim nächsten Abruf noch abweicht. Fehlende Buchungen (z.&nbsp;B. Kapitalmaßnahmen) von Hand nachholen; Bestände von vor dem Startdatum unter <a href="/check">Prüfung</a> als Anfangsbestand anlegen.</div>
         {% else %}
@@ -87,8 +87,8 @@
   <div class="table"><table>
     <tr><th>Zeit</th><th>Broker</th><th>Ergebnis</th><th>Neu</th><th>Vorhanden</th><th>Fehler</th></tr>
     {% for r in runs %}
-    <tr><td>{{ r.started_at | local }}</td><td>{{ adapters[r.broker].label if r.broker in adapters else r.broker }}</td>
-      <td><span class="status {{ r.status }}">{{ STATUS[r.status] }}</span></td><td>{{ r.created }}</td><td>{{ r.existing }}</td><td>{{ r.failed }}</td></tr>
+    <tr><td data-label="Zeit">{{ r.started_at | local }}</td><td data-label="Broker">{{ adapters[r.broker].label if r.broker in adapters else r.broker }}</td>
+      <td data-label="Ergebnis"><span class="status {{ r.status }}">{{ STATUS[r.status] }}</span></td><td data-label="Neu">{{ r.created }}</td><td data-label="Vorhanden">{{ r.existing }}</td><td data-label="Fehler">{{ r.failed }}</td></tr>
     {% endfor %}
   </table></div>
 </div>

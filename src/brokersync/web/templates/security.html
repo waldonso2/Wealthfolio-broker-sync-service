@@ -3,15 +3,15 @@
 <div class="card">
   <h1>Sicherheit</h1>
   <p>Was der Dienst speichert, ist verschlüsselt: Zugangsdaten, Sitzungen und Einstellungen mit AES-256-GCM, die Sync-Datenbank mit SQLCipher. Der Schlüssel liegt nicht bei den Daten.</p>
-  <table>
+  <div class="table"><table>
     <tr><th>Prüfung</th><th>Ergebnis</th><th></th></tr>
     {% for c in checks %}
-    <tr><td>{{ c.label }}</td><td><span class="status {{ 'warn' if c.warn else ('ok' if c.ok else 'error') }}">{{ 'Hinweis' if c.warn else ('OK' if c.ok else 'Handlungsbedarf') }}</span></td><td>{{ c.detail }}</td></tr>
+    <tr><td data-label="Prüfung">{{ c.label }}</td><td data-label="Ergebnis"><span class="status {{ 'warn' if c.warn else ('ok' if c.ok else 'error') }}">{{ 'Hinweis' if c.warn else ('OK' if c.ok else 'Handlungsbedarf') }}</span></td><td>{{ c.detail }}</td></tr>
     {% endfor %}
     {% if wf_plain %}
-    <tr><td>Verbindung zu Wealthfolio</td><td><span class="status warn">Hinweis</span></td><td>Wealthfolio wird per HTTP angesprochen; das Wealthfolio-Passwort geht unverschlüsselt durchs Netz. Wenn möglich, Wealthfolio per HTTPS erreichbar machen.</td></tr>
+    <tr><td data-label="Prüfung">Verbindung zu Wealthfolio</td><td data-label="Ergebnis"><span class="status warn">Hinweis</span></td><td>Wealthfolio wird per HTTP angesprochen; das Wealthfolio-Passwort geht unverschlüsselt durchs Netz. Wenn möglich, Wealthfolio per HTTPS erreichbar machen.</td></tr>
     {% endif %}
-  </table>
+  </table></div>
 </div>
 
 {% if ca %}

@@ -388,9 +388,10 @@ class ComdirectAdapter(BrokerAdapter):
             # that - don't open a challenge nobody answers.
             raise AuthRequired(Challenge("code", "comdirect braucht eine TAN. Bitte in der Weboberfläche anmelden."))
         self._start()
-        typ = self._pending["typ"]
+        pending = self._require_pending()
+        typ = pending["typ"]
         if typ == "P_TAN_PUSH" and self.on_user_action:
-            if not self._pending.get("link"):
+            if not pending.get("link"):
                 self.session["push_without_link"] = True
                 raise AuthRequired(Challenge("confirm", "Bitte die comdirect-Anmeldung in der Weboberfläche "
                                                         "bestätigen."))
@@ -465,8 +466,14 @@ class ComdirectAdapter(BrokerAdapter):
                 return False
             time.sleep(PUSH_POLL)
 
+    def _require_pending(self) -> dict:
+        """The challenge opened by ``_start``."""
+        if self._pending is None:
+            raise AdapterError("comdirect: keine offene TAN-Abfrage - bitte die Anmeldung neu starten.")
+        return self._pending
+
     def _activate(self, code: str) -> None:
-        p = self._pending
+        p = self._require_pending()
         extra = {"x-once-authentication-info": json.dumps({"id": p["id"]})}
         if code:
             extra["x-once-authentication"] = code.strip()
@@ -585,10 +592,15 @@ class ComdirectAdapter(BrokerAdapter):
         for d in self._depots:
             depot_txs += self._dated_pages(f"/brokerage/v3/depots/{d['depotId']}/transactions", first_day,
                                            bookingStatus="BOOKED")
-        wkn_to_isin = {(p.get("instrument") or {}).get("wkn") or p.get("wkn"): (p.get("instrument") or {}).get("isin")
-                       for p in self._all_positions() if (p.get("instrument") or {}).get("isin")}
-        names = {(p.get("instrument") or {}).get("isin"): (p.get("instrument") or {}).get("name") or ""
-                 for p in self._all_positions()}
+        wkn_to_isin: dict[str, str] = {}
+        names: dict[str, str] = {}
+        for p in self._all_positions():
+            instrument = p.get("instrument") or {}
+            wkn, isin = instrument.get("wkn") or p.get("wkn"), instrument.get("isin")
+            if wkn and isin:
+                wkn_to_isin[wkn] = isin
+            if isin:
+                names[isin] = instrument.get("name") or ""
         for d in depot_txs:
             i = d.get("instrument") or {}
             if i.get("wkn") and i.get("isin"):

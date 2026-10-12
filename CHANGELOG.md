@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.0
+
+Clearer web UI and stricter checks (waldonso2/wealthfolio-importer-addon#69, #70, #71, #72):
+
+- **Shorter menu.** The header now holds four entries: Übersicht, Prüfung, Unbekannt (with the number of open entries) and Einstellungen. *Einstellungen* lists Wealthfolio, Broker, Benachrichtigungen, Wertpapiere, Überträge, Logos, Sicherheit and Duplikate with a short note each; on those pages a bar below the header switches between them. The current page is marked.
+- **Tables readable on phones.** On narrow screens every table row (runs, deviations, unknown bookings, the checks on *Prüfung*, duplicates, securities, transfers, security checks) is shown as a block with the column name above each value, instead of a table you have to scroll sideways.
+- **Shared rules for recognising duplicates.** The cases that decide whether a booking already exists in Wealthfolio are now kept in one file the service and the import addon both test against, so both recognise the same bookings in both directions. Nothing changes in how the service matches.
+- Stricter automatic checks of the code (type checks, a complexity limit, test coverage). Bookings with a missing date or share count are now reported as errors instead of failing later.
+
 ## 0.12.2
 
 Security hardening of the web UI (#33):

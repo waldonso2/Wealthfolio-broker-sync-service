@@ -26,10 +26,11 @@ jobs:
       # The versions the users get (requirements.txt, hash-checked), then the test tools.
       - run: "pip install --require-hashes --only-binary :all: -r requirements.txt"
       - run: pip install --no-deps --no-build-isolation -e .
-      - run: pip install "pytest>=8" "respx>=0.21" "ruff>=0.6"
+      - run: pip install "pytest>=8" "pytest-cov>=5" "respx>=0.21" "ruff>=0.6" "mypy>=1.11"
       - run: pip check
       - run: ruff check src tests
-      - run: pytest -q
+      - run: mypy src
+      - run: pytest -q --cov=brokersync --cov-report=term:skip-covered
 
   scripts:
     runs-on: ubuntu-latest
@@ -67,3 +68,15 @@ jobs:
           echo "${SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
           tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
           /tmp/gitleaks git . --config .gitleaks.toml --redact --no-banner
+
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: shared dedup cases match the addon's copy (contract/dedup/README.md)
+        run: |
+          url=https://raw.githubusercontent.com/waldonso2/wealthfolio-importer-addon/main/contract/dedup/cases.json
+          if ! curl -fsSL "$url" -o /tmp/other.json; then echo "The addon has no copy on main yet - skipped."; exit 0; fi
+          diff -u /tmp/other.json contract/dedup/cases.json || { echo "::error::contract/dedup/cases.json differs from the addon's copy - copy it over (this repository's is the leading one)."; exit 1; }

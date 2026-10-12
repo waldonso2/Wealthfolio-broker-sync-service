@@ -144,7 +144,7 @@ def _day(text: str) -> date | None:
         return None
 
 
-def parse(text: str) -> list[Movement]:
+def parse(text: str) -> list[Movement]:  # noqa: C901 (#80)
     out: list[Movement] = []
     isin, name = None, ""
     current: Movement | None = None
@@ -208,7 +208,8 @@ def structure(texts: list[str]) -> str:
                 continue
             tag = "".join(g for g in m.groups() if g)
             if f.startswith((":16R:", ":16S:")):
-                tag += re.match(r"[A-Z]*", f[5:]).group(0)
+                kind = re.match(r"[A-Z]*", f[5:])
+                tag += kind.group(0) if kind else ""
             elif f.startswith(CODED) and m.group(2):
                 code = re.match(r"[A-Z0-9]{4}", f[m.end():])
                 tag += code.group(0) if code else ""

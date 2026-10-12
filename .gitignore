@@ -19,3 +19,4 @@ secret.key
 keyring.json
 state.db*
 backup-*.tar.gz
+.coverage

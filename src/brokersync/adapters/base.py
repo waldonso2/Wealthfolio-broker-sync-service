@@ -83,7 +83,7 @@ class BrokerAdapter(ABC):
         # Set by the sync: tells the user to act now (e.g. confirm in the bank's
         # app) while the adapter waits. Unset in the web UI, which shows the
         # challenge itself.
-        self.on_user_action: Callable[[str], None] | None = None
+        self.on_user_action: Callable[[str], object] | None = None
         # Set by the sync: ids it already has, so an adapter can skip expensive
         # per-transaction queries for them (Scalable's details).
         self.known_ids: set[str] = set()
