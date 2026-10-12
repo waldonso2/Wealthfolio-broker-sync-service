@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -33,6 +33,9 @@ HEADERS = [
     (b"cache-control", b"no-store"),
 ]
 HSTS = (b"strict-transport-security", b"max-age=31536000")
+# Largest request body: the biggest upload (a 5 MB statement) plus the form around it. Checked before
+# anything is read - also for the login and the first password, which answer without a session.
+MAX_BODY = 6 * 1024 * 1024
 
 
 class Throttle:
@@ -100,6 +103,13 @@ class Gate:
                     await send({"type": "lifespan.shutdown.complete"})
                     return
         extra = HEADERS + ([HSTS] if self.secure else [])
+        if scope["type"] == "http":
+            length = dict(scope.get("headers") or []).get(b"content-length", b"")
+            if length and (not length.isdigit() or int(length) > MAX_BODY):
+                await PlainTextResponse("Anfrage zu groß.", status_code=413, headers={
+                    k.decode(): v.decode() for k, v in extra})(scope, receive, send)
+                return
+            receive = _capped(receive, MAX_BODY)
 
         async def send_with_headers(message):
             if message["type"] == "http.response.start":
@@ -109,6 +119,24 @@ class Gate:
             await send(message)
 
         await self.app()(scope, receive, send_with_headers)
+
+
+def _capped(receive, limit: int):
+    """``receive`` that ends the request (as a disconnect) once the body grows past ``limit`` bytes - for a
+    body sent without Content-Length (chunked)."""
+    seen = 0
+
+    async def wrapped():
+        nonlocal seen
+        message = await receive()
+        if message["type"] == "http.request":
+            seen += len(message.get("body", b""))
+            if seen > limit:
+                log.warning("web UI: request body over %d bytes, dropped", limit)
+                return {"type": "http.disconnect"}
+        return message
+
+    return wrapped
 
 
 def _locked_app(gate: Gate, templates_dir: Path, static_dir: Path) -> FastAPI:

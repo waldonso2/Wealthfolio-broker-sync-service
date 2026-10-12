@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12.2
+
+Security hardening of the web UI (#33):
+
+- **Every form field is checked on the server**, not only in the browser: addresses (Wealthfolio, ntfy, this UI) must be http:// or https:// without credentials in them, the start date a real date not in the future, ISINs and IBANs need a valid check digit, exchanges a 4-character MIC, symbols only the usual characters, and free text is limited in length. A wrong entry is reported on the page and nothing is saved - before, e.g. a start date like "01.01.2024" was stored and made every later run fail.
+- **Oversized requests are refused** (over 6 MB) before anything is read - also on the login page, which answers without a session.
+- Deleting a transfer pattern with a broken form no longer ends in an error page; a new session is started when the UI password is first set.
+- `SECURITY.md` lists the security libraries and measures the service uses, and why some common ones aren't needed.
+
 ## 0.12.1
 
 Security hardening from the audit (waldonso2/wealthfolio-importer-addon#55):
