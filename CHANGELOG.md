@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.15.0
+
+A new look for the web UI, made for phones (waldonso2/wealthfolio-importer-addon#83):
+
+- **Looks like Wealthfolio**: the same colours (light and dark, following the device), fonts and cards. On a phone the menu is a bar at the bottom, in reach of your thumb.
+- **Overview with a traffic light per broker**: green - nothing to do; yellow - something to look at (deviations, unknown or missing bookings, no fetch for two days); red - the last fetch failed or a login is needed; grey - never fetched. Below it, only the reasons; the error message and the deviation table can be opened. The setup checklist is gone; while Wealthfolio isn't connected, a single card says so.
+- **Last runs**: the last three, older ones folded away.
+- **Prüfung**: everything about a broker in one card - missing bookings, positions without a buy and the account check - with a one-line summary on top. The explanations moved into "Was wird geprüft?".
+- **Sicherheit**: master passphrase and certificate first; the checks as a summary ("7 von 9 in Ordnung") with only the open points shown, the rest folded. The import steps for the certificate are folded per device.
+
 ## 0.14.0
 
 Internal restructuring for safer changes later (waldonso2/wealthfolio-importer-addon#75, #76, #77). Nothing changes in what the service books or shows.

@@ -46,3 +46,40 @@ def test_unknown_page_shows_fields_and_raw_data_only_folded(tmp_path):
     assert '<td data-label="Betrag">-12,50 EUR</td>' in page
     assert re.search(r'<td data-label="Wertpapier">DE000TEST001', page)
     assert re.search(r"<details><summary[^>]*>Rohdaten für einen Fehlerbericht</summary><pre>", page)
+
+
+def test_traffic_light_per_broker():
+    now = datetime(2026, 10, 12, 12, tzinfo=UTC)
+    ok = {"status": "ok", "started_at": "2026-10-12T06:00:00+00:00", "failed": 0}
+    assert views.broker_light(None, None, 0, 0, True, now) == ("grey", ["Noch nie abgerufen"])
+    assert views.broker_light(ok, {"deviations": []}, 0, 0, True, now) == ("green", [])
+    assert views.broker_light({**ok, "status": "needs_auth"}, None, 0, 0, True, now) == ("red", ["Anmeldung nötig"])
+    assert views.broker_light({**ok, "status": "error", "failed": 2}, None, 0, 0, True, now)[0] == "red"
+    light, reasons = views.broker_light(ok, {"deviations": [{}, {}]}, 1, 3, True, now)
+    assert light == "yellow" and reasons == ["2 Abweichungen zu Wealthfolio", "1 unbekannte Buchung",
+                                             "3 fehlt in Wealthfolio"]
+    old = {**ok, "started_at": "2026-10-09T06:00:00+00:00"}
+    assert views.broker_light(old, None, 0, 0, True, now) == ("yellow", ["Seit 3 Tagen kein Abruf"])
+    assert views.broker_light(old, None, 0, 0, False, now) == ("green", [])  # manual only: no reminder
+
+
+def test_overview_shows_three_runs_and_folds_the_rest(tmp_path):
+    client, _, _ = make(tmp_path)
+    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    state = State(tmp_path)
+    for _ in range(5):
+        state.finish_run(state.start_run("fake"), "ok")
+    page = client.get("/").text
+    head, _, folded = page.partition("Ältere Läufe (2)")
+    row = '<li><span class="status ok">'
+    assert folded and head.count(row) == 3 and folded.count(row) == 2
+    assert "Einrichtung" not in page  # no setup steps any more
+
+
+def test_fonts_are_served_from_the_container(tmp_path):
+    client, _, _ = make(tmp_path)
+    for name in ("inter.woff2", "merriweather-700.woff2"):
+        r = client.get(f"/static/fonts/{name}")
+        assert r.status_code == 200 and r.content[:4] == b"wOF2"
+    css = client.get("/static/style.css").text
+    assert "/static/fonts/inter.woff2" in css and "http" not in css.split("*/", 1)[1]  # nothing from outside

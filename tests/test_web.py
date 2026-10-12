@@ -39,7 +39,7 @@ def test_assistant_from_first_visit_to_first_sync(tmp_path):
     r = client.post("/setup-password", data={"password": "short", "password2": "short"})
     assert "mindestens 12 Zeichen" in r.text
     r = client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
-    assert "Einrichtung" in r.text and "Wealthfolio verbinden" in r.text
+    assert "Wealthfolio nicht verbunden" in r.text and "Wealthfolio verbinden" in r.text
     assert config_mod.load(tmp_path).public_url == "http://sync.local:8090"
 
     # Step 1: Wealthfolio - a wrong password is reported, the right one connects.
@@ -76,7 +76,7 @@ def test_assistant_from_first_visit_to_first_sync(tmp_path):
     # Step 4: run now.
     r = client.post("/run", data={"csrf": token})
     assert "Abruf beendet" in r.text
-    assert "3 neu" in r.text
+    assert "<strong>3</strong> neu" in r.text
     assert len(wf.activities) == 7
     r = client.post("/run", data={"csrf": token})
     assert len(wf.activities) == 7  # no duplicates
@@ -86,7 +86,7 @@ def test_assistant_from_first_visit_to_first_sync(tmp_path):
     r = client.post("/brokers/fake", data={"csrf": token, "cred_username": "max", "cash_account_id": "acc-cash",
                                             "portfolio_account_id": "acc-depot"})
     page = client.get("/").text
-    assert "automatischer Abruf aus" in page and "überspringen Broker" in page and "OK" in page
+    assert "nur manuell" in page and "ohne automatischen Abruf nur einzeln" in page and "OK" in page
     assert 'name="broker" value="fake"' in page
 
 
@@ -98,7 +98,7 @@ def test_login_required_and_csrf_checked(tmp_path):
     r = client.get("/", follow_redirects=False)
     assert r.headers["location"] == "/login"
     assert "Falsches Passwort" in client.post("/login", data={"password": "wrong"}).text
-    assert "Einrichtung" in client.post("/login", data={"password": "geheim-123456"}).text
+    assert "Alle abrufen" in client.post("/login", data={"password": "geheim-123456"}).text
     # The password can only be chosen once.
     r = client.post("/setup-password", data={"password": "andere123", "password2": "andere123"},
                     follow_redirects=False)
@@ -228,7 +228,7 @@ def test_navigation_groups_the_settings(tmp_path):
     client, _, _ = make(tmp_path)
     client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     page = client.get("/").text
-    nav = re.search(r'<nav aria-label="Hauptmenü">(.*?)</nav>', page, re.S).group(1)
+    nav = re.search(r'<nav class="main" aria-label="Hauptmenü">(.*?)</nav>', page, re.S).group(1)
     assert re.findall(r'<a href="([^"]+)"', nav) == ["/", "/check", "/unknown", "/settings"]
     assert 'class="count"' not in nav and 'class="subnav"' not in page
 

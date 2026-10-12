@@ -75,7 +75,7 @@ def test_the_check_page_offers_missing_positions_and_takes_an_opening(tmp_path):
     client = TestClient(app, base_url="http://sync.local:8090")
     client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
     page = client.get("/check").text
-    assert "Bestand ohne Kauf in Wealthfolio: 1" in page and 'value="25.50"' in page and 'value="200"' in page
+    assert "Bestand ohne Kauf: 1" in page and 'value="25.50"' in page and 'value="200"' in page
     token = csrf(client, "/check")
     r = client.post("/check/fake/opening", data={"csrf": token, "isin": "DE000TEST009", "name": "TEST Alt AG",
                                                  "shares": "200", "day": "2099-01-01", "price": "25,50", "fee": "0"})
@@ -86,7 +86,7 @@ def test_the_check_page_offers_missing_positions_and_takes_an_opening(tmp_path):
     assert state.openings("fake") == [{"isin": "DE000TEST009", "day": "2024-05-02", "name": "TEST Alt AG",
                                        "shares": "200", "price": "25.50", "fee": "4.90", "currency": "EUR"}]
     # Entered: no longer offered; it can be removed until it is booked.
-    assert "Bestand ohne Kauf in Wealthfolio: 0" in r.text
+    assert "Bestand ohne Kauf: 0" in r.text
     client.post("/check/fake/opening", data={"csrf": token, "isin": "DE000TEST009", "day": "2024-05-02",
                                              "action": "delete"})
     assert state.openings("fake") == []

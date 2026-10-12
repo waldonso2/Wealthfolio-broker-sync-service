@@ -22,26 +22,35 @@ router = APIRouter()
 def check_page(request: Request, ctx: Ctx):
     c = ctx.cfg()
     adapters, state = ctx.adapters, ctx.state
-    report, error = [], None
+    audits, names, error = {}, {}, None
     try:
         with ctx.wf_client(c) as wf:
             names = {a.id: a.name for a in wf.list_accounts()}
             for key, b in c.brokers.items():
                 if key in adapters and b.cash_account_id and b.portfolio_account_id:
-                    accounts = accounts_of(b)
-                    report.append({"key": key, "label": adapters[key].label, "result": audit.run(wf, accounts),
-                                   "cash_name": names.get(b.cash_account_id, "Verrechnungskonto"),
-                                   "depot_name": names.get(b.portfolio_account_id, "Depotkonto"),
-                                   "depot_id": b.portfolio_account_id})
+                    audits[key] = audit.run(wf, accounts_of(b))
     except WealthfolioError as e:
         error = str(e)
-    brokers = [{"key": k, "label": adapters[k].label, "full": adapters[k].full_history, "gaps": state.gaps(k),
-                "checked": bool(state.last_run(k)), "missing": missing_positions(ctx, k),
-                "openings": [{**o, "booked": opening_id(o["isin"], o["day"]) in synced}
-                             for synced in [state.synced(k)] for o in state.openings(k)]}
-               for k, b in c.brokers.items() if k in adapters and b.cash_account_id and b.portfolio_account_id]
-    return ctx.render(request, "check.html", report=report, wf_error=error, source=audit.source,
-                      effect=audit.cash_effect, brokers=brokers)
+    # Everything about a broker in one card (#83): gaps, opening positions and the account check.
+    brokers = []
+    for k, b in c.brokers.items():
+        if k not in adapters or not b.cash_account_id or not b.portfolio_account_id:
+            continue
+        synced = state.synced(k)
+        gaps = state.gaps(k)
+        result = audits.get(k)
+        missing = missing_positions(ctx, k)
+        entry: dict = {"key": k, "label": adapters[k].label, "full": adapters[k].full_history, "gaps": gaps,
+                 "checked": bool(state.last_run(k)), "missing": missing,
+                 "openings": [{**o, "booked": opening_id(o["isin"], o["day"]) in synced} for o in state.openings(k)],
+                 "audit": result, "cash_name": names.get(b.cash_account_id, "Verrechnungskonto"),
+                 "depot_name": names.get(b.portfolio_account_id, "Depotkonto"), "depot_id": b.portfolio_account_id}
+        open_gaps = sum(1 for g in gaps if g["kind"] in ("missing", "partial", "orphan"))
+        audit_issues = (len(result.moments) + len(result.lonely)) if result else 0
+        entry["issues"] = open_gaps + len(missing) + audit_issues
+        brokers.append(entry)
+    return ctx.render(request, "check.html", wf_error=error, source=audit.source, effect=audit.cash_effect,
+                      brokers=brokers)
 
 
 def missing_positions(ctx: AppContext, key: str) -> list[dict]:

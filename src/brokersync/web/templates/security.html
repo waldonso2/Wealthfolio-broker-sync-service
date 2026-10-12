@@ -1,42 +1,12 @@
 {% extends "base.html" %}{% block title %}Sicherheit{% endblock %}
 {% block content %}
-<div class="card">
-  <h1>Sicherheit</h1>
-  <p>Was der Dienst speichert, ist verschlüsselt: Zugangsdaten, Sitzungen und Einstellungen mit AES-256-GCM, die Sync-Datenbank mit SQLCipher. Der Schlüssel liegt nicht bei den Daten.</p>
-  <div class="table"><table>
-    <tr><th>Prüfung</th><th>Ergebnis</th><th></th></tr>
-    {% for c in checks %}
-    <tr><td data-label="Prüfung">{{ c.label }}</td><td data-label="Ergebnis"><span class="status {{ 'warn' if c.warn else ('ok' if c.ok else 'error') }}">{{ 'Hinweis' if c.warn else ('OK' if c.ok else 'Handlungsbedarf') }}</span></td><td>{{ c.detail }}</td></tr>
-    {% endfor %}
-    {% if wf_plain %}
-    <tr><td data-label="Prüfung">Verbindung zu Wealthfolio</td><td data-label="Ergebnis"><span class="status warn">Hinweis</span></td><td>Wealthfolio wird per HTTP angesprochen; das Wealthfolio-Passwort geht unverschlüsselt durchs Netz. Wenn möglich, Wealthfolio per HTTPS erreichbar machen.</td></tr>
-    {% endif %}
-  </table></div>
-</div>
-
-{% if ca %}
-<div class="card">
-  <h2>Dem Zertifikat vertrauen</h2>
-  <p>Der Browser zeigt „Nicht sicher“, solange er die Zertifizierungsstelle dieses Containers nicht kennt – die Verbindung ist trotzdem verschlüsselt. Einmal importiert, ist die Oberfläche auf diesem Gerät vertrauenswürdig, auch nach jeder Erneuerung des Zertifikats. Die Zertifizierungsstelle darf nur Namen im lokalen Netz bestätigen, keine Seiten im Internet.</p>
-  <p><a class="button" href="/ca.crt">CA-Zertifikat herunterladen</a></p>
-  <p class="muted">Vor dem Import vergleichen – SHA-256: <code>{{ ca_fingerprint }}</code></p>
-  <ul>
-    <li><strong>Windows (Chrome, Edge):</strong> Datei öffnen → <em>Zertifikat installieren</em> → <em>Aktueller Benutzer</em> → <em>Alle Zertifikate in folgendem Speicher speichern</em> → <em>Vertrauenswürdige Stammzertifizierungsstellen</em> – nicht „automatisch auswählen“, sonst landet es unter den Zwischenzertifizierungsstellen und wirkt nicht. Prüfen lässt es sich mit <code>certmgr.msc</code>.</li>
-    <li><strong>macOS (Safari, Chrome):</strong> Datei öffnen (Schlüsselbundverwaltung) → Zertifikat doppelklicken → <em>Vertrauen</em> → <em>Immer vertrauen</em>.</li>
-    <li><strong>Firefox:</strong> Einstellungen → <em>Datenschutz &amp; Sicherheit</em> → <em>Zertifikate anzeigen</em> → <em>Zertifizierungsstellen</em> → <em>Importieren</em> → „Dieser CA vertrauen, um Websites zu identifizieren“.</li>
-    <li><strong>iPhone/iPad:</strong> Datei in Safari laden → <em>Einstellungen → Profil geladen → Installieren</em>, danach <em>Allgemein → Info → Zertifikatsvertrauenseinstellungen</em> einschalten.</li>
-    <li><strong>Android:</strong> <em>Einstellungen → Sicherheit → Verschlüsselung &amp; Anmeldedaten → Zertifikat installieren → CA-Zertifikat</em>.</li>
-  </ul>
-  <p class="muted">Danach den Browser ganz beenden und neu starten (Chrome/Edge: <code>chrome://restart</code>; Android: App „Beenden erzwingen“) – ein Browser, der vorher die Warnung übergangen hat, zeigt die Seite sonst weiter als „nicht sicher“. Aufrufen über die IP-Adresse oder den Namen des Containers, wie im Zertifikat eingetragen.</p>
-</div>
-{% endif %}
-
+<h1 style="margin-top:8px">Sicherheit</h1>
 <div class="card">
   <h2>Master-Passphrase</h2>
   {% if has_passphrase %}
-  <p>Gesetzt. Nach jedem Neustart des Containers musst du den Dienst in der Oberfläche entsperren; bis dahin ruft er nichts ab und meldet sich per ntfy.</p>
+  <p><span class="status ok">Gesetzt</span> Nach jedem Neustart hier entsperren; bis dahin ruft der Dienst nichts ab und meldet sich per ntfy.</p>
   {% else %}
-  <p>Mit einer Master-Passphrase sind Zugangsdaten, Einstellungen und Sync-Daten auch dann nicht lesbar, wenn jemand den ganzen Container oder eine Sicherung kopiert. Dafür musst du den Dienst nach jedem Neustart einmal entsperren. <strong>Ohne die Passphrase sind die Daten verloren</strong> – dann bleibt nur, den Dienst neu einzurichten.</p>
+  <p>Schützt Zugangsdaten und Sync-Daten auch, wenn jemand den Container oder eine Sicherung kopiert. Nach jedem Neustart einmal entsperren. <strong>Ohne die Passphrase sind die Daten verloren</strong> – dann bleibt nur, den Dienst neu einzurichten.</p>
   {% endif %}
   <form method="post" action="/security/passphrase">
     <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -56,6 +26,57 @@
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="actions"><button class="secondary">Jetzt sperren</button></div>
   </form>
+  {% endif %}
+</div>
+{% if ca %}
+<div class="card">
+  <h2>Dem Zertifikat vertrauen</h2>
+  <p>Einmal auf dem Gerät importiert, verschwindet „Nicht sicher“ – auch nach jeder Erneuerung. Gilt nur für Namen im lokalen Netz.</p>
+  <div class="actions"><a class="button" href="/ca.crt">CA-Zertifikat herunterladen</a></div>
+  <p class="muted">SHA-256 zum Vergleich: <code>{{ ca_fingerprint }}</code></p>
+  <details><summary>So importierst du es</summary>
+  <ul>
+    <li><strong>Windows (Chrome, Edge):</strong> Datei öffnen → <em>Zertifikat installieren</em> → <em>Aktueller Benutzer</em> → <em>Alle Zertifikate in folgendem Speicher speichern</em> → <em>Vertrauenswürdige Stammzertifizierungsstellen</em> – nicht „automatisch auswählen“, sonst landet es unter den Zwischenzertifizierungsstellen und wirkt nicht. Prüfen lässt es sich mit <code>certmgr.msc</code>.</li>
+    <li><strong>macOS (Safari, Chrome):</strong> Datei öffnen (Schlüsselbundverwaltung) → Zertifikat doppelklicken → <em>Vertrauen</em> → <em>Immer vertrauen</em>.</li>
+    <li><strong>Firefox:</strong> Einstellungen → <em>Datenschutz &amp; Sicherheit</em> → <em>Zertifikate anzeigen</em> → <em>Zertifizierungsstellen</em> → <em>Importieren</em> → „Dieser CA vertrauen, um Websites zu identifizieren“.</li>
+    <li><strong>iPhone/iPad:</strong> Datei in Safari laden → <em>Einstellungen → Profil geladen → Installieren</em>, danach <em>Allgemein → Info → Zertifikatsvertrauenseinstellungen</em> einschalten.</li>
+    <li><strong>Android:</strong> <em>Einstellungen → Sicherheit → Verschlüsselung &amp; Anmeldedaten → Zertifikat installieren → CA-Zertifikat</em>.</li>
+  </ul>
+  <p class="muted">Danach den Browser ganz beenden und neu starten (Chrome/Edge: <code>chrome://restart</code>; Android: App „Beenden erzwingen“) – ein Browser, der vorher die Warnung übergangen hat, zeigt die Seite sonst weiter als „nicht sicher“. Aufrufen über die IP-Adresse oder den Namen des Containers, wie im Zertifikat eingetragen.</p>
+  </details>
+</div>
+{% endif %}
+
+{% set all_checks = checks | list %}
+{% set open_checks = (all_checks | rejectattr("ok") | list) + (all_checks | selectattr("ok") | selectattr("warn") | list) %}
+{% set fine = all_checks | selectattr("ok") | rejectattr("warn") | list %}
+{% set issues = open_checks | length + (1 if wf_plain else 0) %}
+<div class="card">
+  <div class="card-head">
+    <span class="light {{ 'green' if not issues else ('red' if all_checks | rejectattr('ok') | list else 'yellow') }}" role="img" aria-label="{{ issues }} offene Punkte"></span>
+    <h2>Prüfungen</h2>
+  </div>
+  <p class="summary-line"><strong>{{ fine | length }} von {{ all_checks | length + (1 if wf_plain else 0) }}</strong> in Ordnung. Zugangsdaten, Sitzungen und Einstellungen mit AES-256-GCM, die Datenbank mit SQLCipher verschlüsselt, der Schlüssel liegt nicht bei den Daten.</p>
+  {% if issues %}
+  <ul class="rows">
+    {% for c in open_checks %}
+    <li><span class="status {{ 'warn' if c.warn else 'error' }}">{{ 'Hinweis' if c.warn else 'Handlungsbedarf' }}</span>
+      <span class="grow"><strong>{{ c.label }}</strong><span class="muted">{{ c.detail }}</span></span></li>
+    {% endfor %}
+    {% if wf_plain %}
+    <li><span class="status warn">Hinweis</span>
+      <span class="grow"><strong>Verbindung zu Wealthfolio</strong><span class="muted">Wealthfolio wird per HTTP angesprochen; das Wealthfolio-Passwort geht unverschlüsselt durchs Netz. Wenn möglich, Wealthfolio per HTTPS erreichbar machen.</span></span></li>
+    {% endif %}
+  </ul>
+  {% endif %}
+  {% if fine %}
+  <details><summary>In Ordnung ({{ fine | length }})</summary>
+    <ul class="rows">
+      {% for c in fine %}
+      <li><span class="status ok">OK</span><span class="grow"><strong>{{ c.label }}</strong><span class="muted">{{ c.detail }}</span></span></li>
+      {% endfor %}
+    </ul>
+  </details>
   {% endif %}
 </div>
 {% endblock %}
