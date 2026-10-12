@@ -14,13 +14,13 @@ import logging
 from pathlib import Path
 
 from . import config as config_mod
+from . import meta_keys
 from .state import State
 from .vault import Vault
 
 log = logging.getLogger(__name__)
 
 RETIRED = {"dummy": "Dummy (Test)"}
-NOTICE = "retired-notice:"
 
 
 def clean_up(data_dir: Path, state: State, vault: Vault) -> None:
@@ -41,7 +41,7 @@ def clean_up(data_dir: Path, state: State, vault: Vault) -> None:
         created = state.forget_broker(key)
         log.info("removed the retired broker %s (%d activities stay in Wealthfolio)", key, created)
         if created:
-            state.set_meta(NOTICE + key, json.dumps({"label": label, "activities": created,
+            state.set_meta(meta_keys.RETIRED_NOTICE(key), json.dumps({"label": label, "activities": created,
                                                      "search": f"[SYNC {key}:"}))
 
 
@@ -49,11 +49,11 @@ def notices(state: State) -> list[dict]:
     """One per retired broker that left activities in Wealthfolio, until dismissed."""
     out = []
     for key in RETIRED:
-        raw = state.meta(NOTICE + key)
+        raw = state.meta(meta_keys.RETIRED_NOTICE(key))
         if raw:
             out.append({"key": key, **json.loads(raw)})
     return out
 
 
 def dismiss(state: State, key: str) -> None:
-    state.delete_meta(NOTICE + key)
+    state.delete_meta(meta_keys.RETIRED_NOTICE(key))

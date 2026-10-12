@@ -44,7 +44,7 @@ Beide laufen als Systembenutzer `brokersync` mit systemd-Härtung (`ProtectSyste
 ```mermaid
 flowchart TB
   cli["cli.py"] --> sync
-  web["web/app.py"] --> sync
+  web["web/<br/>app.py + routes/"] --> sync
   sync["sync.py<br/>Ablauf eines Abrufs"] --> adapters
   sync --> mapping["mapping.py<br/>Transaction → NewActivity"]
   sync --> dedup["dedup.py<br/>ExistingIndex"]
@@ -76,6 +76,14 @@ So kommt ein neuer Broker ohne Änderungen an Mapping und Sync aus.
 ## Ablauf eines Abrufs
 
 `Syncer.run()` holt sich die Sperre, schließt Läufe, die ein abgestürzter Prozess offen gelassen hat (`aborted`), und arbeitet die Broker nacheinander ab. Jeder Broker läuft in `_run_broker` in einem eigenen `try`. Ein Fehler wird gemeldet und protokolliert, die übrigen Broker laufen weiter.
+
+`_sync_broker` ist eine Folge benannter Schritte; was sie einander weitergeben, steht in `RunContext` (#75). Die Reihenfolge ist fachlich wichtig:
+
+1. `_plan_window`: Adapter mit gespeicherter Session, Abrufzeitraum (ganze Historie, einmaliger Backfill, *Ab Startdatum neu abrufen*, Sparkonto ab Startdatum), schon Synchronisiertes.
+2. `_fetch`: Login, Transaktionen, Anfangsbestände, hochgeladene Kontoauszüge, Kontostand, Positionen; die Session wird auch nach einem Fehler gespeichert.
+3. `_prepare`: Neues bestimmen, Unbekanntes melden, Konten, Zuordnungen, Überträge-Muster, Sparkonto-Paare.
+4. Mit Wealthfolio: `_repair_cash_assets` (vor dem Abgleich, damit er reparierte Aktivitäten sieht), `_add_before_history` (Importe vor der Bankhistorie), Aktivitäten laden, `_book` (Bankseite von Wertpapierbuchungen zuletzt), `_compare` (coverage.py), `_backfill_tax` (einmalig), `_learn_assets`, `_check_holdings` (nur nach einem Lauf ohne Fehler).
+5. `_commit_flags`: offene Wertpapier-Gegenbuchungen melden, verschwundene Unbekannte auflösen, einmalige Flags nur nach einem Lauf ohne Fehler zurücksetzen.
 
 ```mermaid
 sequenceDiagram
@@ -223,7 +231,7 @@ Mit Passphrase hält `keyring.json` Salz, argon2id-Parameter und einen Prüfwert
 
 Jede verschlüsselte Datei ist `BSE1 | Nonce | Chiffrat`; ihr Zweck (`secrets`, `config`, …) ist als zusätzliche Daten authentifiziert, eine Datei lässt sich also nicht gegen eine andere tauschen. `brokersync migrate` (von `setup.sh` aufgerufen) bringt Daten von vor 0.9.0 – Fernet-`secrets.enc`, `config.json`, unverschlüsselte `state.db` – auf diesen Stand; danach löscht `setup.sh` `data/secret.key` und ersetzt Sicherungen, die ihn noch enthielten.
 
-**Tabellen in `state.db`:**
+**Tabellen in `state.db`** (Schema-Version in `PRAGMA user_version`: `SCHEMA` ist der Stand von 0.13.x, jede spätere Änderung ein Schritt in `state.MIGRATIONS`, der beim Öffnen in einer Transaktion läuft; eine Datenbank einer neueren Version wird nicht geöffnet):
 
 | Tabelle | Inhalt |
 |---|---|
@@ -232,15 +240,17 @@ Jede verschlüsselte Datei ist `BSE1 | Nonce | Chiffrat`; ihr Zweck (`secrets`, 
 | `openings` | Anfangsbestände, die der Nutzer auf *Prüfung* einträgt (ISIN, Kaufdatum, Stück, Kurs, Gebühr); jeder Lauf bucht sie als Kauf `start-<isin>-<tag>` mit Einzahlung |
 | `runs` | Verlauf der Abrufe: `running`, `ok`, `needs_auth`, `error`, `aborted` und die Zähler |
 | `unknown_events` | unbekannte Buchungen und offene Wertpapier-Gegenbuchungen, mit einer Nutzlast ohne persönliche Daten |
-| `balances`, `reconcile` | letzter Kontostand des Brokers und Abweichungen, samt dem, was schon gemeldet wurde |
+| `balances`, `reconcile` | letzter Kontostand des Brokers (je Währung und Konto: leer = Verrechnungskonto, `savings` = Sparkonto) und Abweichungen, samt dem, was schon gemeldet wurde |
 | `assets` | ISIN → Wealthfolio-Asset je Broker |
-| `meta` | Flags, z. B. `assets-learned:<broker>`, `cash-assets-repaired:<broker>`, `refetch:<broker>`, der Hinweis `retired-notice:<broker>` zu einem entfernten Broker, `logo:<asset id>` (Logo gesetzt oder bei logo.dev keins, mit Zeitpunkt) und `logos:last` (letzter Logo-Durchlauf) |
+| `meta` | Flags und Werte; jeder Schlüssel steht mit Art (`flag`/`text`/`json`) und Broker-Bezug in `meta_keys.py`, `forget_broker`/`reset_broker` löschen genau die broker-bezogenen |
 
 Geheimnisse stehen nur im Vault. In Logs, Fehlermeldungen auf dem Bildschirm und ntfy-Nachrichten schwärzt `redact.py` alles, was der Vault an Zugangsdaten und Tokens hält, sowie IBANs und lange Nummern; ntfy-Nachrichten tragen ohne *Details* nur Titel und Link.
 
 ## Weboberfläche
 
-FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login mit dem UI-Passwort (argon2id; nach fünf Fehlversuchen 15 Minuten Sperre je Client, `web/gate.Throttle`). `brokersync serve` (`web/serve.py`) spricht HTTPS mit dem Zertifikat aus `/etc/wealthfolio-broker-sync/tls` (`tls.py`: eine CA des Containers, 10 Jahre, mit Name Constraints auf private Adressen und lokale Namen; das Serverzertifikat samt Kette signiert sie, `setup.sh` erneuert es; `/ca.crt` liefert das CA-Zertifikat zum Import) und leitet Port 8090 dorthin um. Vor der App sitzt `web/gate.Gate`: Anfragen über 6 MB werden abgewiesen, bevor etwas gelesen wird (auch Login und Ersteinrichtung), Sicherheits-Header (CSP ohne Skripte, `frame-ancestors 'none'`, `no-store`, HSTS), die Entsperrseite und der Neuaufbau der App nach einem Schlüsselwechsel. Die Session liegt in einem signierten Cookie (`SameSite=strict`, `Secure`, 24 h). Jede POST-Anfrage prüft per Dependency ein CSRF-Token aus der Session. Das Hauptmenü hat vier Punkte: Übersicht, Prüfung, Unbekannt (mit Anzahl) und Einstellungen; die Einstellungsseiten (`SETTINGS_PAGES` in `web/app.py`) haben darunter eine eigene Leiste. Datum und Zeit zeigen alle Seiten gleich, in deutscher Zeit (`web/views.py`: Filter `day` → `TT.MM.JJJJ`, `local` → `TT.MM.JJJJ HH:MM`; Wealthfolio und `state.db` speichern UTC, das steht nur in `<time datetime>`). Unbekannte Buchungen zeigt `/unknown` als Art, Betrag, Wertpapier, Stück und Text (`views.describe_unknown` kennt die Payload-Schlüssel aller Adapter), die Rohdaten nur aufklappbar. Tabellen stehen in `.table`; auf schmalen Bildschirmen wird jede Zeile zu einem Block, jede Zelle mit ihrem Spaltennamen aus `data-label`. Jedes Formularfeld prüft der Server selbst (`web/inputs.py`: Adressen nur http/https, Datumsangaben, ISIN und IBAN mit Prüfziffer, MIC, Symbole, Längen); welche Sicherheitsbibliotheken der Dienst nutzt und warum, steht in `SECURITY.md`.
+FastAPI mit Jinja2-Vorlagen (`web/templates/`), Texte auf Deutsch, eigener Login mit dem UI-Passwort (argon2id; nach fünf Fehlversuchen 15 Minuten Sperre je Client, `web/gate.Throttle`). `brokersync serve` (`web/serve.py`) spricht HTTPS mit dem Zertifikat aus `/etc/wealthfolio-broker-sync/tls` (`tls.py`: eine CA des Containers, 10 Jahre, mit Name Constraints auf private Adressen und lokale Namen; das Serverzertifikat samt Kette signiert sie, `setup.sh` erneuert es; `/ca.crt` liefert das CA-Zertifikat zum Import) und leitet Port 8090 dorthin um. Vor der App sitzt `web/gate.Gate`: Anfragen über 6 MB werden abgewiesen, bevor etwas gelesen wird (auch Login und Ersteinrichtung), Sicherheits-Header (CSP ohne Skripte, `frame-ancestors 'none'`, `no-store`, HSTS), die Entsperrseite und der Neuaufbau der App nach einem Schlüsselwechsel. Die Session liegt in einem signierten Cookie (`SameSite=strict`, `Secure`, 24 h). Jede POST-Anfrage prüft per Dependency ein CSRF-Token aus der Session. Das Hauptmenü hat vier Punkte: Übersicht, Prüfung, Unbekannt (mit Anzahl) und Einstellungen; die Einstellungsseiten (`SETTINGS_PAGES` in `web/context.py`) haben darunter eine eigene Leiste. Datum und Zeit zeigen alle Seiten gleich, in deutscher Zeit (`web/views.py`: Filter `day` → `TT.MM.JJJJ`, `local` → `TT.MM.JJJJ HH:MM`; Wealthfolio und `state.db` speichern UTC, das steht nur in `<time datetime>`). Unbekannte Buchungen zeigt `/unknown` als Art, Betrag, Wertpapier, Stück und Text (`views.describe_unknown` kennt die Payload-Schlüssel aller Adapter), die Rohdaten nur aufklappbar. Tabellen stehen in `.table`; auf schmalen Bildschirmen wird jede Zeile zu einem Block, jede Zelle mit ihrem Spaltennamen aus `data-label`. Jedes Formularfeld prüft der Server selbst (`web/inputs.py`: Adressen nur http/https, Datumsangaben, ISIN und IBAN mit Prüfziffer, MIC, Symbole, Längen); welche Sicherheitsbibliotheken der Dienst nutzt und warum, steht in `SECURITY.md`.
+
+Aufbau (#76): `web/app.py` baut die App (`create_app` mit Gate, Vorlagen und Filtern, Session, Login-Prüfung als Middleware, CSRF-Dependency) und bindet die Router aus `web/routes/` ein, einen `APIRouter` je Bereich, in der Reihenfolge von `routes.ROUTERS`: `setup.py` (`/setup-password`, `/login`, `/logout`, `/healthz`, `/ca.crt`), `overview.py` (`/`, `/run`, `/settings`, `/unknown`, `/retired/dismiss`), `settings.py` (`/setup/wealthfolio`, `/notifications`, `/securities`, `/transfers`, `/logos`), `brokers.py` (`/brokers`, `/brokers/{key}`, `…/refetch`, `…/statement`, `…/reset`), `broker_login.py` (`/brokers/{key}/login`), `check.py` (`/check`, `/check/{key}`, `/check/{key}/opening`), `duplicates.py` (`/duplicates`) und `security.py` (`/security…`). Was die Seiten teilen, steht in einem `AppContext` (`web/context.py`: Vault, State, Syncer, Vorlagen, Gate, Login-Bremse, wartende Broker-Logins, laufender Abruf; Methoden `render`, `cfg`, `save`, `wf_client`, `wf_accounts`, `finish_login`), den `_create_app` einmal je Aufbau anlegt und in `app.state.ctx` ablegt; jede Route bekommt ihn per Dependency (`ctx: Ctx`). `redirect`, `csrf_guard` und `accounts_of` sind Funktionen dort. Keine Funktion unter `web/` liegt über der C901-Grenze.
 
 | Route | Zweck |
 |---|---|

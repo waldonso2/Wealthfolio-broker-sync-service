@@ -26,6 +26,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 
+from . import meta_keys
 from .assets import valid_isin
 from .state import State, now
 from .wealthfolio import LogosUnsupported, WealthfolioClient, WealthfolioError
@@ -41,11 +42,11 @@ PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 RETRY_DAYS = 30
 PER_RUN = 50
 ISIN = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}\d$")
-LAST = "logos:last"
+LAST = meta_keys.LOGOS_LAST()
 
 
 def status_key(asset_id: str) -> str:
-    return f"logo:{asset_id}"
+    return meta_keys.LOGO(asset_id)
 
 
 class LogoError(Exception):

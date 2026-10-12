@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14.0
+
+Internal restructuring for safer changes later (waldonso2/wealthfolio-importer-addon#75, #76, #77). Nothing changes in what the service books or shows.
+
+- **The database knows its version.** `state.db` now records a schema version and brings itself up to date when the service starts, step by step and in one transaction. The first step stores a savings account's balance in its own column (it was hidden in the currency field). A database written by a newer version is not opened, so an older version can't damage it.
+- **Clean-up per broker is exact.** Every stored flag and value is listed in one place, with whether it belongs to a broker. *Neu aufsetzen* and removing a broker delete exactly that broker's entries; before, a pattern could also catch e.g. the logo status of an asset whose id ended in the broker's name.
+- **A broker's run in named steps.** Plan the window, fetch, prepare, repair, book, compare, add tax, learn assets, check holdings, finish - in the order the documentation describes, instead of one long function.
+- **The web UI in modules.** Each area (setup, overview, brokers, settings, check, duplicates, security) has its own router; the pages and addresses are the same.
+
 ## 0.13.1
 
 Readable dates and unknown bookings (waldonso2/wealthfolio-importer-addon#73):
