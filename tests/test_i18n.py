@@ -139,9 +139,9 @@ def test_flash_messages_follow_the_language(tmp_path):
     assert "Fetch finished." in r.text
     r = client.post("/setup/wealthfolio", data={"csrf": token, "url": "ftp://wf.local"})
     assert "Wealthfolio address: please give an address with http:// or https://." in r.text
-    # Back to German: the confirmation is in the language the choice was made in, the pages German again.
+    # Back to German: the confirmation is already in the language just chosen.
     r = client.post("/appearance", data={"csrf": token, "theme": "system", "language": "de"})
-    assert "Saved." in r.text and ">Übersicht</span>" in r.text
+    assert "Gespeichert." in r.text and ">Übersicht</span>" in r.text
     assert "Gespeichert." in client.post("/securities", data={"csrf": token, "isin": "DE0007164600",
                                                                 "symbol": "SAP.DE"}).text
 

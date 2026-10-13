@@ -119,7 +119,7 @@ def test_colour_scheme_and_language_are_chosen_on_the_page_appearance(tmp_path):
     client, _, token = make_safe(tmp_path, safe=False)
     assert "data-theme" not in client.get("/").text  # default: as the device
     r = client.post("/appearance", data={"csrf": token, "theme": "light", "language": "en"})
-    assert "Gespeichert" in r.text and '<html lang="en" data-theme="light">' in r.text
+    assert "Saved." in r.text and '<html lang="en" data-theme="light">' in r.text  # in the new language
     assert (config_mod.load(tmp_path).ui_theme, config_mod.load(tmp_path).ui_language) == ("light", "en")
     assert 'data-theme="dark"' in client.post("/appearance", data={"csrf": token, "theme": "dark"}).text
     assert "Unbekannte Auswahl" in client.post("/appearance", data={"csrf": token, "theme": "pink"}).text

@@ -164,8 +164,7 @@ def appearance_page(request: Request, ctx: Ctx):
 def appearance_save(request: Request, ctx: Ctx, theme: str = Form("system"), language: str = Form("de")):
     if theme not in THEMES or language not in LANGUAGES:
         return redirect(request, "/appearance", tr(request, "Unbekannte Auswahl."), "error")
-    done = tr(request, "Gespeichert.")  # in the language the choice was made in
     c = ctx.cfg()
     c.ui_theme, c.ui_language = theme, language
     ctx.save(c)
-    return redirect(request, "/appearance", done)
+    return redirect(request, "/appearance", tr(request, "Gespeichert."))  # already in the language just chosen
