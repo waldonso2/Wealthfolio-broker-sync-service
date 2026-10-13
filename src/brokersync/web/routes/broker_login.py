@@ -7,7 +7,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ...adapters import AdapterError, AuthRequired, BrokerAdapter
-from ..context import AppContext, Ctx, redirect
+from ..context import AppContext, Ctx, redirect, tr
 from .overview import start_run
 
 router = APIRouter()
@@ -27,7 +27,7 @@ def _page(request: Request, ctx: AppContext, key: str, challenge, run: bool) -> 
 def broker_login_start(request: Request, ctx: Ctx, key: str):
     adapters = ctx.adapters
     if key not in adapters:
-        return redirect(request, "/brokers", "Unbekannter Broker.", "error")
+        return redirect(request, "/brokers", tr(request, "Unbekannter Broker."), "error")
     # In the safe mode a login is only good for the fetch that follows it.
     run = request.query_params.get("run") == "1" or ctx.cfg().safe_mode
     old = ctx.pending.pop(key, None)
@@ -53,7 +53,7 @@ def broker_login_finish(request: Request, ctx: Ctx, key: str, code: str = Form("
     adapter = ctx.pending.get(key)
     if adapter is None:
         return redirect(request, f"/brokers/{key}/login{'?run=1' if want_run else ''}",
-                        "Die Anmeldung ist abgelaufen, bitte neu starten.", "warn")
+                        tr(request, "Die Anmeldung ist abgelaufen, bitte neu starten."), "warn")
     try:
         adapter.complete_login(code)
     except AuthRequired as e:
@@ -74,7 +74,7 @@ def broker_login_skip(request: Request, ctx: Ctx, key: str):
         ctx.finish_login(key, old)
     ctx.pins.pop(key, None)
     label = ctx.adapters[key].label if key in ctx.adapters else key
-    return _next(request, ctx, key, dropped=True, note=f"{label} übersprungen.")
+    return _next(request, ctx, key, dropped=True, note=tr(request, "{label} übersprungen.", label=label))
 
 
 def _logged_in(request: Request, ctx: AppContext, key: str, adapter: BrokerAdapter, run: bool,
@@ -83,9 +83,10 @@ def _logged_in(request: Request, ctx: AppContext, key: str, adapter: BrokerAdapt
     label = ctx.adapters[key].label
     if not run:
         if confirmed:
-            return redirect(request, "/", f"{label}: angemeldet. Du kannst jetzt abrufen.")
-        return redirect(request, "/", f"{label}: angemeldet - die gespeicherte Sitzung ist noch gültig, eine "
-                                      "Bestätigung war nicht nötig. Du kannst jetzt abrufen.")
+            return redirect(request, "/", tr(request, "{label}: angemeldet. Du kannst jetzt abrufen.", label=label))
+        return redirect(request, "/", tr(request, "{label}: angemeldet - die gespeicherte Sitzung ist noch gültig, "
+                                                  "eine Bestätigung war nicht nötig. Du kannst jetzt abrufen.",
+                                         label=label))
     # A PIN typed at this login (not stored) is handed to the run in memory only.
     stored = ctx.vault.broker(key).get("credentials", {})
     for f in ctx.adapters[key].credential_fields:
@@ -98,8 +99,9 @@ def _failed(request: Request, ctx: AppContext, key: str, e: AdapterError, run: b
     label = ctx.adapters[key].label
     queue = request.session.get("run_queue") or {}
     if run and key in queue.get("todo", []):
-        return _next(request, ctx, key, dropped=True, note=f"{label}: Anmeldung fehlgeschlagen: {e}", level="error")
-    return redirect(request, f"/brokers/{key}", f"Anmeldung fehlgeschlagen: {e}", "error")
+        note = tr(request, "{label}: Anmeldung fehlgeschlagen: {error}", label=label, error=e)
+        return _next(request, ctx, key, dropped=True, note=note, level="error")
+    return redirect(request, f"/brokers/{key}", tr(request, "Anmeldung fehlgeschlagen: {error}", error=e), "error")
 
 
 def _next(request: Request, ctx: AppContext, key: str, dropped: bool = False, note: str = "",
@@ -115,8 +117,8 @@ def _next(request: Request, ctx: AppContext, key: str, dropped: bool = False, no
             return redirect(request, f"/brokers/{queue['todo'][0]}/login?run=1", note or None, level)
         request.session.pop("run_queue", None)
         if not queue["run"]:
-            return redirect(request, "/", note or "Nichts abzurufen.", level)
+            return redirect(request, "/", note or tr(request, "Nichts abzurufen."), level)
         return start_run(request, ctx, queue["run"])
     if dropped:
-        return redirect(request, "/", note or "Übersprungen.", level)
+        return redirect(request, "/", note or tr(request, "Übersprungen."), level)
     return start_run(request, ctx, [key])

@@ -15,7 +15,7 @@ from ... import config as config_mod
 from ... import retired
 from ...sync import AlreadyRunning, is_running
 from .. import views
-from ..context import AppContext, Ctx, redirect
+from ..context import AppContext, Ctx, redirect, tr
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -42,6 +42,7 @@ def dashboard(request: Request, ctx: Ctx):
 
 def _brokers(ctx: AppContext, c: config_mod.Config, secrets_: dict) -> list[dict]:
     brokers = []
+    lang = c.ui_language
     for key, adapter in ctx.adapters.items():
         b = c.brokers.get(key, config_mod.BrokerConfig())
         last = ctx.state.last_run(key)
@@ -52,7 +53,8 @@ def _brokers(ctx: AppContext, c: config_mod.Config, secrets_: dict) -> list[dict
         # The overview shows no amounts, only whether the broker's balance matches Wealthfolio (#83).
         cash_off = [d for d in (reconcile or {}).get("deviations", []) if d.get("kind") == "cash"]
         saldo = None if not balances or reconcile is None else ("off" if cash_off else "ok")
-        light, reasons = views.broker_light(asdict(last) if last else None, reconcile, unknown, gaps, b.enabled)
+        light, reasons = views.broker_light(asdict(last) if last else None, reconcile, unknown, gaps, b.enabled,
+                                            lang=lang)
         brokers.append({
             "key": key,
             "label": adapter.label,
@@ -79,11 +81,11 @@ def retired_dismiss(request: Request, ctx: Ctx, broker: str = Form(...)):
 @router.post("/run")
 def run_now(request: Request, ctx: Ctx, broker: str = Form("")):
     if ctx.running.is_set():
-        return redirect(request, "/", "Ein Abruf läuft bereits.", "warn")
+        return redirect(request, "/", tr(request, "Ein Abruf läuft bereits."), "warn")
     c = ctx.cfg()
     if broker:
         if broker not in ctx.adapters:
-            return redirect(request, "/", "Unbekannter Broker.", "error")
+            return redirect(request, "/", tr(request, "Unbekannter Broker."), "error")
         if ctx.needs_login(broker, c):
             return RedirectResponse(f"/brokers/{broker}/login?run=1", 303)
         return start_run(request, ctx, [broker])
@@ -101,7 +103,7 @@ def run_now(request: Request, ctx: Ctx, broker: str = Form("")):
 def start_run(request: Request, ctx: AppContext, only: list[str] | None) -> RedirectResponse:
     """Start a run from the UI (``manual``: the safe mode fetches only so), with the PINs typed at the logins."""
     if ctx.running.is_set():
-        return redirect(request, "/", "Ein Abruf läuft bereits.", "warn")
+        return redirect(request, "/", tr(request, "Ein Abruf läuft bereits."), "warn")
     pins = {k: ctx.pins.pop(k) for k in list(ctx.pins) if only is None or k in only}
 
     def work():
@@ -118,9 +120,9 @@ def start_run(request: Request, ctx: AppContext, only: list[str] | None) -> Redi
     ctx.running.set()  # before the thread starts, so the next page view already shows it
     if ctx.run_in_thread:
         threading.Thread(target=work, daemon=True).start()
-        return redirect(request, "/", "Abruf gestartet. Die Seite aktualisiert sich, bis er fertig ist.")
+        return redirect(request, "/", tr(request, "Abruf gestartet. Die Seite aktualisiert sich, bis er fertig ist."))
     work()
-    return redirect(request, "/", "Abruf beendet.")
+    return redirect(request, "/", tr(request, "Abruf beendet."))
 
 
 @router.get("/settings", response_class=HTMLResponse)

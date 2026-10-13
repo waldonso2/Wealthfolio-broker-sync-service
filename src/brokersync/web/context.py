@@ -27,25 +27,27 @@ from ..sync import Syncer
 from ..vault import Vault
 from ..wealthfolio import WealthfolioClient, WealthfolioError
 from .gate import Gate, Throttle
+from .i18n import N_, translate
 
 # Pages anyone can open, without a login and without a CSRF token.
 PUBLIC = {"/login", "/setup-password", "/healthz", "/ca.crt"}
-STATUS_LABEL = {"ok": "OK", "needs_auth": "Anmeldung nötig", "error": "Fehler", "running": "läuft",
-                "aborted": "abgebrochen"}
+# Keys of UI texts (#87), translated where they are shown (``_(label)`` in the templates).
+STATUS_LABEL = {"ok": N_("OK"), "needs_auth": N_("Anmeldung nötig"), "error": N_("Fehler"), "running": N_("läuft"),
+                "aborted": N_("abgebrochen")}
 
 # The pages under *Einstellungen*: (path, title, what it is for). The header shows the daily pages only (#71).
 SETTINGS_PAGES = [
-    ("/setup/wealthfolio", "Wealthfolio", "Adresse und Passwort deines Wealthfolio"),
-    ("/brokers", "Broker", "Zugangsdaten, Konten, Startdatum, Anmeldung"),
-    ("/notifications", "Benachrichtigungen", "ntfy für TAN-Anfragen und Fehler"),
-    ("/securities", "Wertpapiere", "ISIN unter eigenem Symbol führen"),
+    ("/setup/wealthfolio", N_("Wealthfolio"), N_("Adresse und Passwort deines Wealthfolio")),
+    ("/brokers", N_("Broker"), N_("Zugangsdaten, Konten, Startdatum, Anmeldung")),
+    ("/notifications", N_("Benachrichtigungen"), N_("ntfy für TAN-Anfragen und Fehler")),
+    ("/securities", N_("Wertpapiere"), N_("ISIN unter eigenem Symbol führen")),
     # Hidden for now (waldonso2/wealthfolio-importer-addon#84):
-    # ("/transfers", "Überträge", "Auszahlungen auf eigene Konten erkennen"),
-    ("/logos", "Logos", "Logos der Wertpapiere von logo.dev"),
-    ("/security", "Sicherheit", "Abrufmodus, Verschlüsselung, Master-Passphrase, Zertifikat"),
-    ("/appearance", "Darstellung", "Sprache, hell oder dunkel"),
+    # ("/transfers", N_("Überträge"), N_("Auszahlungen auf eigene Konten erkennen")),
+    ("/logos", N_("Logos"), N_("Logos der Wertpapiere von logo.dev")),
+    ("/security", N_("Sicherheit"), N_("Abrufmodus, Verschlüsselung, Master-Passphrase, Zertifikat")),
+    ("/appearance", N_("Darstellung"), N_("Sprache, hell oder dunkel")),
     # Hidden for now (waldonso2/wealthfolio-importer-addon#84):
-    # ("/duplicates", "Duplikate", "Doppelte Buchungen finden und entfernen"),
+    # ("/duplicates", N_("Duplikate"), N_("Doppelte Buchungen finden und entfernen")),
 ]
 
 
@@ -128,7 +130,20 @@ def get_ctx(request: Request) -> AppContext:
 Ctx = Annotated[AppContext, Depends(get_ctx)]
 
 
+def language(request: Request) -> str:
+    """The language of the pages (#87): ``Config.ui_language``, German while the config can't be read."""
+    ctx = getattr(request.app.state, "ctx", None)
+    return ctx.appearance()[1] if ctx is not None else "de"
+
+
+def tr(request: Request, text: str, **params) -> str:
+    """A UI text (a German key, ``web/i18n.py``) in the page's language, its placeholders filled with
+    ``params`` - for the flash messages of ``redirect``, which are stored translated."""
+    return translate(text, language(request), **params)
+
+
 def redirect(request: Request, url: str, flash: str | None = None, level: str = "ok") -> RedirectResponse:
+    """To ``url``, with a message already in the page's language (``tr``)."""
     if flash:
         # Messages can carry a broker's error text: never a secret or an account number on screen.
         request.session["flash"] = {"text": redact.redact(flash), "level": level}
@@ -140,7 +155,7 @@ async def csrf_guard(request: Request) -> None:
     if request.method == "POST" and request.url.path not in PUBLIC:
         form = await request.form()
         if not request.session.get("csrf") or form.get("csrf") != request.session.get("csrf"):
-            raise HTTPException(400, "Formular abgelaufen - bitte die Seite neu laden.")
+            raise HTTPException(400, tr(request, "Formular abgelaufen - bitte die Seite neu laden."))
 
 
 def accounts_of(b: config_mod.BrokerConfig) -> Accounts:

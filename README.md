@@ -252,6 +252,7 @@ Die Seite **Prüfung** zeigt außerdem, welche schon übernommenen Buchungen in 
 | Push-Nachricht „Abweichung zu Wealthfolio“ | Eine schon übernommene Buchung fehlt in Wealthfolio (gelöscht?), oder eine Buchung des Dienstes gibt es beim Broker nicht mehr (z. B. storniert). Seite *Prüfung* öffnen: Fehlende mit *Wieder anlegen* zurückholen oder *Ignorieren*, wenn sie zu Recht fehlen; Stornierte in Wealthfolio löschen |
 | Wertpapier soll in Wealthfolio unter seinem Ticker statt der ISIN laufen | Unter *Wertpapiere* die Zuordnung ISIN → Symbol eintragen |
 | Wertpapiere in Wealthfolio ohne Logo | Unter *Logos* einschalten und einen (kostenlosen) Schlüssel von logo.dev eintragen. Nach jedem Abruf holt der Dienst die Logos per ISIN und setzt sie in Wealthfolio (ab 3.8.0). Nur die ISINs gehen an logo.dev; eigene Logos bleiben, ein entferntes Logo kommt nicht wieder |
+| Oberfläche lieber auf Englisch oder immer hell/dunkel | *Einstellungen → Darstellung*: Sprache (Deutsch, English) und Farbschema (wie das Gerät, hell, dunkel) |
 | Passwort der Oberfläche vergessen | In Proxmox die Konsole des Containers öffnen und `brokersync-reset-password` eingeben. Beim nächsten Öffnen legst du ein neues fest |
 | Push-Nachricht „Broker Sync gesperrt“ (mit Master-Passphrase, nach einem Neustart) | Auf die Nachricht tippen und die Passphrase eingeben |
 

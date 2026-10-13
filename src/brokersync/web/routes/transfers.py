@@ -9,7 +9,8 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from .. import inputs
-from ..context import Ctx, redirect
+from ..context import Ctx, language, redirect, tr
+from ..i18n import N_
 
 router = APIRouter()
 
@@ -34,16 +35,16 @@ def transfers_save(request: Request, ctx: Ctx, label: str = Form(""), iban: str 
             c.transfer_patterns.pop(i)
     else:
         try:
-            label = inputs.text(label, "Name", max_len=100)
+            label = inputs.text(label, N_("Name"), max_len=100)
             iban = inputs.iban(iban)
-            keyword = inputs.text(keyword, "Stichwort", max_len=100)
-            destination = inputs.text(destination, "Zielkonto", max_len=100)
+            keyword = inputs.text(keyword, N_("Stichwort"), max_len=100)
+            destination = inputs.text(destination, N_("Zielkonto"), max_len=100)
         except inputs.Invalid as e:
-            return redirect(request, "/transfers", str(e), "error")
+            return redirect(request, "/transfers", e.text(language(request)), "error")
         if not label or not (iban or keyword):
-            return redirect(request, "/transfers", "Bitte einen Namen und eine IBAN oder ein Stichwort angeben.",
-                            "error")
+            return redirect(request, "/transfers",
+                            tr(request, "Bitte einen Namen und eine IBAN oder ein Stichwort angeben."), "error")
         c.transfer_patterns.append({"label": label, "iban": iban, "keyword": keyword,
                                     "destinationAccountId": destination})
     ctx.save(c)
-    return redirect(request, "/transfers", "Gespeichert.")
+    return redirect(request, "/transfers", tr(request, "Gespeichert."))

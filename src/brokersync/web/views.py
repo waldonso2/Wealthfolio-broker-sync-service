@@ -14,6 +14,8 @@ from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
+from .i18n import translate
+
 # Times are shown in German time; the container usually runs in UTC.
 TZ = ZoneInfo(os.environ.get("BROKERSYNC_TZ", "Europe/Berlin"))
 
@@ -112,37 +114,40 @@ STALE_DAYS = 2
 
 
 def broker_light(last: dict | None, reconcile: dict | None, unknown: int, gaps: int, enabled: bool,
-                 now: datetime | None = None) -> tuple[str, list[tuple[str, str]]]:
+                 now: datetime | None = None, lang: str = "de") -> tuple[str, list[tuple[str, str]]]:
     """The overview's traffic light for a broker and the reasons behind it (#83), each with where it leads:
-    "login", "unknown", "check" or "" (nothing to open).
+    "login", "unknown", "check" or "" (nothing to open). The reasons are in ``lang`` (#87).
 
     red: the last run failed or needs a login; yellow: something to look at (deviations, unknown or missing
     bookings, failed activities, no run for a while); green: nothing to do; grey: never fetched.
     """
     if not last:
-        return "grey", [("Noch nie abgerufen", "")]
+        return "grey", [(translate("Noch nie abgerufen", lang), "")]
     status = last.get("status")
     if status == "needs_auth":
-        return "red", [("Anmeldung nötig", "login")]
+        return "red", [(translate("Anmeldung nötig", lang), "login")]
     if status == "error":
-        failed = f" ({last['failed']} Buchungen)" if last.get("failed") else ""
-        return "red", [(f"Letzter Abruf fehlgeschlagen{failed}", "")]
+        if last.get("failed"):
+            return "red", [(translate("Letzter Abruf fehlgeschlagen ({n} Buchungen)", lang, n=last["failed"]), "")]
+        return "red", [(translate("Letzter Abruf fehlgeschlagen", lang), "")]
     reasons: list[tuple[str, str]] = []
     deviations = (reconcile or {}).get("deviations") or []
     if deviations:
-        reasons.append((f"{len(deviations)} Abweichung{'en' if len(deviations) != 1 else ''} zu Wealthfolio",
-                        "check"))
+        n = len(deviations)
+        reasons.append((translate("{n} Abweichung zu Wealthfolio" if n == 1 else "{n} Abweichungen zu Wealthfolio",
+                                  lang, n=n), "check"))
     if unknown:
-        reasons.append((f"{unknown} unbekannte Buchung{'en' if unknown != 1 else ''}", "unknown"))
+        reasons.append((translate("{n} unbekannte Buchung" if unknown == 1 else "{n} unbekannte Buchungen", lang,
+                                  n=unknown), "unknown"))
     if gaps:
-        reasons.append((f"{gaps} fehlt in Wealthfolio", "check"))
+        reasons.append((translate("{n} fehlt in Wealthfolio", lang, n=gaps), "check"))
     if status == "aborted":
-        reasons.append(("Letzter Abruf abgebrochen", ""))
+        reasons.append((translate("Letzter Abruf abgebrochen", lang), ""))
     started = _parse(last.get("started_at"))
     if enabled and isinstance(started, datetime) and status != "running":
         age = (now or datetime.now(UTC)) - (started if started.tzinfo else started.replace(tzinfo=UTC))
         if age.days >= STALE_DAYS:
-            reasons.append((f"Seit {age.days} Tagen kein Abruf", ""))
+            reasons.append((translate("Seit {n} Tagen kein Abruf", lang, n=age.days), ""))
     return ("yellow" if reasons else "green"), reasons
 
 

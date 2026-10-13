@@ -1,13 +1,13 @@
-{% extends "base.html" %}{% block title %}Broker{% endblock %}
+{% extends "base.html" %}{% block title %}{{ _("Broker") }}{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Broker</h1>
+  <h1>{{ _("Broker") }}</h1>
   {% for key, adapter in adapters.items() %}
   <div class="broker">
     <div><strong>{{ adapter.label }}</strong>
       {% set b = cfg.brokers.get(key) %}
-      {% if b and b.enabled %}<span class="status ok">aktiv</span>{% else %}<span class="status off">aus</span>{% endif %}</div>
-    <a class="button secondary" href="/brokers/{{ key }}">Einrichten</a>
+      {% if b and b.enabled %}<span class="status ok">{{ _("aktiv") }}</span>{% else %}<span class="status off">{{ _("aus") }}</span>{% endif %}</div>
+    <a class="button secondary" href="/brokers/{{ key }}">{{ _("Einrichten") }}</a>
   </div>
   {% endfor %}
 </div>

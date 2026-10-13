@@ -1,22 +1,22 @@
-{% extends "base.html" %}{% block title %}Wertpapiere{% endblock %}
+{% extends "base.html" %}{% block title %}{{ _("Wertpapiere") }}{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Wertpapiere</h1>
-  <p>Broker melden Wertpapiere per ISIN. Soll Wealthfolio ein Wertpapier unter einem anderen Symbol führen (z.&nbsp;B. dem Ticker, unter dem es schon in Wealthfolio steht), trage es hier ein. Ohne Eintrag wird die ISIN verwendet.</p>
+  <h1>{{ _("Wertpapiere") }}</h1>
+  <p>{{ _("Broker melden Wertpapiere per ISIN. Soll Wealthfolio ein Wertpapier unter einem anderen Symbol führen (z.&nbsp;B. dem Ticker, unter dem es schon in Wealthfolio steht), trage es hier ein. Ohne Eintrag wird die ISIN verwendet.") }}</p>
   {% if mappings %}
   <ul class="rows compact">
     {% for isin, m in mappings.items() %}
     <li><code>{{ isin }}</code><span class="grow-inline">→ <strong>{{ m.symbol }}</strong>{% if m.exchangeMic %} <span class="muted">{{ m.exchangeMic }}</span>{% endif %}</span>
-      <form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ isin }}"><button class="link" name="delete" value="1" title="Entfernen" aria-label="{{ isin }} entfernen">✕</button></form></li>
+      <form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ isin }}"><button class="link" name="delete" value="1" title="{{ _('Entfernen') }}" aria-label="{{ _('{isin} entfernen', isin=isin) }}">✕</button></form></li>
     {% endfor %}
   </ul>
   {% endif %}
   <form method="post">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label for="isin">ISIN</label><input type="text" id="isin" name="isin" required pattern="[A-Za-z]{2}[A-Za-z0-9]{9}[0-9]">
-    <label for="symbol">Symbol in Wealthfolio</label><input type="text" id="symbol" name="symbol" required>
-    <label for="mic">Börse (MIC, optional)</label><input type="text" id="mic" name="exchange_mic" placeholder="XETR">
-    <div class="actions"><button>Hinzufügen</button></div>
+    <label for="symbol">{{ _("Symbol in Wealthfolio") }}</label><input type="text" id="symbol" name="symbol" required>
+    <label for="mic">{{ _("Börse (MIC, optional)") }}</label><input type="text" id="mic" name="exchange_mic" placeholder="XETR">
+    <div class="actions"><button>{{ _("Hinzufügen") }}</button></div>
   </form>
 </div>
 {% endblock %}

@@ -1,32 +1,32 @@
-{% extends "base.html" %}{% block title %}Anmeldung {{ adapter.label }}{% endblock %}
+{% extends "base.html" %}{% block title %}{{ _("Anmeldung {label}", label=adapter.label) }}{% endblock %}
 {% block content %}
 <div class="card">
-  {% if position %}<p class="muted">Anmeldung {{ position[0] }} von {{ position[1] }}</p>{% endif %}
-  <h1>Anmeldung bei {{ adapter.label }}</h1>
+  {% if position %}<p class="muted">{{ _("Anmeldung {n} von {total}", n=position[0], total=position[1]) }}</p>{% endif %}
+  <h1>{{ _("Anmeldung bei {label}", label=adapter.label) }}</h1>
   <p>{{ challenge.message }}</p>
-  {% if challenge.image %}<p><img src="{{ challenge.image }}" alt="TAN-Grafik" style="max-width:260px"></p>{% endif %}
-  {% if challenge.url %}<p><a class="button" href="{{ challenge.url }}" target="_blank" rel="noopener noreferrer">Link öffnen</a></p>{% endif %}
+  {% if challenge.image %}<p><img src="{{ challenge.image }}" alt="{{ _('TAN-Grafik') }}" style="max-width:260px"></p>{% endif %}
+  {% if challenge.url %}<p><a class="button" href="{{ challenge.url }}" target="_blank" rel="noopener noreferrer">{{ _("Link öffnen") }}</a></p>{% endif %}
   <form method="post" action="/brokers/{{ key }}/login">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <input type="hidden" name="run" value="{{ '1' if run else '' }}">
     {% if challenge.kind == "code" %}
-    <label for="code">Code</label>
+    <label for="code">{{ _("Code") }}</label>
     <input type="text" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required autofocus>
-    <div class="actions"><button>Bestätigen</button></div>
+    <div class="actions"><button>{{ _("Bestätigen") }}</button></div>
     {% elif challenge.kind == "pin" %}
     <label for="code">PIN</label>
     <input type="password" id="code" name="code" autocomplete="off" required autofocus>
-    <div class="actions"><button>Anmelden</button></div>
+    <div class="actions"><button>{{ _("Anmelden") }}</button></div>
     {% else %}
     <input type="hidden" name="code" value="">
-    <div class="actions"><button>{{ "Ich habe bestätigt" if challenge.url else "Ich habe in der App bestätigt" }}</button></div>
+    <div class="actions"><button>{{ _("Ich habe bestätigt") if challenge.url else _("Ich habe in der App bestätigt") }}</button></div>
     {% endif %}
   </form>
-  {% if run %}<p class="muted">{% if position %}Nach der letzten Anmeldung werden alle zusammen abgerufen. {% else %}Danach ruft der Dienst gleich ab. {% endif %}{% if safe %}Sicherer Modus: Nach dem Abruf meldet er sich wieder ab.{% endif %}</p>{% endif %}
+  {% if run %}<p class="muted">{% if position %}{{ _("Nach der letzten Anmeldung werden alle zusammen abgerufen.") }} {% else %}{{ _("Danach ruft der Dienst gleich ab.") }} {% endif %}{% if safe %}{{ _("Sicherer Modus: Nach dem Abruf meldet er sich wieder ab.") }}{% endif %}</p>{% endif %}
   {% if position %}
   <form method="post" action="/brokers/{{ key }}/login/skip">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <div class="actions"><button class="secondary">{{ adapter.label }} überspringen</button></div>
+    <div class="actions"><button class="secondary">{{ _("{label} überspringen", label=adapter.label) }}</button></div>
   </form>
   {% endif %}
 </div>

@@ -1,8 +1,8 @@
-{% extends "base.html" %}{% block title %}Prüfung{% endblock %}
+{% extends "base.html" %}{% block title %}{{ _("Prüfung") }}{% endblock %}
 {% block content %}
-<h1 style="margin-top:8px">Prüfung</h1>
-<p class="muted">Broker und Wealthfolio im Vergleich. Der Dienst legt nichts von selbst wieder an und löscht nichts – du entscheidest.</p>
-{% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error | redact }}</div>{% endif %}
+<h1 style="margin-top:8px">{{ _("Prüfung") }}</h1>
+<p class="muted">{{ _("Broker und Wealthfolio im Vergleich. Der Dienst legt nichts von selbst wieder an und löscht nichts – du entscheidest.") }}</p>
+{% if wf_error %}<div class="flash error">{{ _("Wealthfolio nicht erreichbar: {error}", error=wf_error | redact) }}</div>{% endif %}
 
 {% for b in brokers %}
 {% set missing = b.gaps | selectattr("kind", "in", ["missing", "partial"]) | list %}
@@ -13,43 +13,43 @@
 <div class="card" id="broker-{{ b.key }}">
   <div class="card-head">
     <span class="light {{ 'yellow' if b.issues else ('green' if b.checked else 'grey') }}" role="img"
-          aria-label="{{ 'noch kein Abruf' if not b.checked else (b.issues ~ ' offene Punkte' if b.issues else 'alles in Ordnung') }}"></span>
+          aria-label="{{ _('noch kein Abruf') if not b.checked else (_('{n} offene Punkte', n=b.issues) if b.issues else _('alles in Ordnung')) }}"></span>
     <h2>{{ b.label }}</h2>
   </div>
   <p class="summary-line">
-    {% if b.checked %}Fehlt in Wealthfolio <strong>{{ missing | length }}</strong>
-    {% if b.full %} · Nicht mehr bei {{ b.label }} <strong>{{ orphans | length }}</strong>{% endif %}
-    {% if b.missing or pending %} · Bestand ohne Kauf <strong>{{ b.missing | length }}</strong>{% endif %}
-    {% else %}Noch kein Abruf{% endif %}
-    {% if x %} · Bargeld im Depot <strong>{{ x.depot_cash | money }} EUR</strong> · Überträge ohne Gegenstück <strong>{{ x.lonely | length }}</strong>{% endif %}
+    {% if b.checked %}{{ _("Fehlt in Wealthfolio <strong>{n}</strong>", n=missing | length) }}
+    {% if b.full %} · {{ _("Nicht mehr bei {label} <strong>{n}</strong>", label=b.label, n=orphans | length) }}{% endif %}
+    {% if b.missing or pending %} · {{ _("Bestand ohne Kauf <strong>{n}</strong>", n=b.missing | length) }}{% endif %}
+    {% else %}{{ _("Noch kein Abruf") }}{% endif %}
+    {% if x %} · {{ _("Bargeld im Depot <strong>{amount} EUR</strong>", amount=x.depot_cash | money) }} · {{ _("Überträge ohne Gegenstück <strong>{n}</strong>", n=x.lonely | length) }}{% endif %}
   </p>
 
   {% if b.checked %}
   {% if missing %}
   <div class="section">
-    <h3>Fehlt in Wealthfolio: {{ missing | length }}</h3>
-    <p class="muted">Schon übernommen, in Wealthfolio aber gelöscht. <em>Wieder anlegen</em> bucht sie beim nächsten Abruf neu.</p>
+    <h3>{{ _("Fehlt in Wealthfolio: {n}", n=missing | length) }}</h3>
+    <p class="muted">{{ _("Schon übernommen, in Wealthfolio aber gelöscht. <em>Wieder anlegen</em> bucht sie beim nächsten Abruf neu.") }}</p>
     <form method="post" action="/check/{{ b.key }}">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <div class="table"><table>
-        <tr><th></th><th>Datum</th><th>Art</th><th>Wertpapier</th><th>Betrag</th><th>Fehlt</th></tr>
+        <tr><th></th><th>{{ _("Datum") }}</th><th>{{ _("Art") }}</th><th>{{ _("Wertpapier") }}</th><th>{{ _("Betrag") }}</th><th>{{ _("Fehlt") }}</th></tr>
         {% for g in missing %}
-        <tr><td><input type="checkbox" name="tx" value="{{ g.ref }}" aria-label="auswählen"></td><td data-label="Datum">{{ g.occurred_at | local }}</td><td data-label="Art">{{ g.label }}</td><td data-label="Wertpapier">{{ g.name }}</td><td data-label="Betrag">{{ g.amount }} {{ g.currency }}</td><td data-label="Fehlt">{{ "ganz" if g.kind == "missing" else "teilweise" }}</td></tr>
+        <tr><td><input type="checkbox" name="tx" value="{{ g.ref }}" aria-label="{{ _('auswählen') }}"></td><td data-label="{{ _('Datum') }}">{{ g.occurred_at | local }}</td><td data-label="{{ _('Art') }}">{{ g.label }}</td><td data-label="{{ _('Wertpapier') }}">{{ g.name }}</td><td data-label="{{ _('Betrag') }}">{{ g.amount }} {{ g.currency }}</td><td data-label="{{ _('Fehlt') }}">{{ _("ganz") if g.kind == "missing" else _("teilweise") }}</td></tr>
         {% endfor %}
       </table></div>
-      <div class="actions"><button name="action" value="rebook">Wieder anlegen</button><button class="secondary" name="action" value="ignore">Ignorieren</button></div>
+      <div class="actions"><button name="action" value="rebook">{{ _("Wieder anlegen") }}</button><button class="secondary" name="action" value="ignore">{{ _("Ignorieren") }}</button></div>
     </form>
   </div>
   {% endif %}
 
   {% if orphans %}
   <div class="section">
-    <h3>Nicht mehr bei {{ b.label }}: {{ orphans | length }}</h3>
-    <p class="muted">Vom Broker storniert oder entfernt – in Wealthfolio prüfen und löschen (bei Überträgen beide Seiten).</p>
+    <h3>{{ _("Nicht mehr bei {label}: {n}", label=b.label, n=orphans | length) }}</h3>
+    <p class="muted">{{ _("Vom Broker storniert oder entfernt – in Wealthfolio prüfen und löschen (bei Überträgen beide Seiten).") }}</p>
     <div class="table"><table>
-      <tr><th>Datum</th><th>Art</th><th>Wertpapier</th><th>Betrag</th><th>Vorgang</th></tr>
+      <tr><th>{{ _("Datum") }}</th><th>{{ _("Art") }}</th><th>{{ _("Wertpapier") }}</th><th>{{ _("Betrag") }}</th><th>{{ _("Vorgang") }}</th></tr>
       {% for g in orphans %}
-      <tr><td data-label="Datum">{{ g.occurred_at | local }}</td><td data-label="Art">{{ g.label }}</td><td data-label="Wertpapier">{{ g.name }}</td><td data-label="Betrag">{{ g.amount }} {{ g.currency }}</td><td data-label="Vorgang">{{ g.tx_id }}</td></tr>
+      <tr><td data-label="{{ _('Datum') }}">{{ g.occurred_at | local }}</td><td data-label="{{ _('Art') }}">{{ g.label }}</td><td data-label="{{ _('Wertpapier') }}">{{ g.name }}</td><td data-label="{{ _('Betrag') }}">{{ g.amount }} {{ g.currency }}</td><td data-label="{{ _('Vorgang') }}">{{ g.tx_id }}</td></tr>
       {% endfor %}
     </table></div>
   </div>
@@ -57,28 +57,28 @@
 
   {% if b.missing or pending %}
   <div class="section">
-    <h3>Bestand ohne Kauf: {{ b.missing | length }}</h3>
-    {% if b.missing %}<p class="muted">Mehr Stück als Wealthfolio kennt (vor dem Startdatum gekauft oder übertragen). Der nächste Abruf bucht einen Kauf samt Einzahlung.</p>{% endif %}
+    <h3>{{ _("Bestand ohne Kauf: {n}", n=b.missing | length) }}</h3>
+    {% if b.missing %}<p class="muted">{{ _("Mehr Stück als Wealthfolio kennt (vor dem Startdatum gekauft oder übertragen). Der nächste Abruf bucht einen Kauf samt Einzahlung.") }}</p>{% endif %}
     {% for m in b.missing %}
     <form method="post" action="/check/{{ b.key }}/opening" class="inline-form">
       <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ m.isin }}"><input type="hidden" name="name" value="{{ m.name }}">
       <p><strong>{{ m.name }}</strong> <span class="muted">{{ m.isin }}</span></p>
       <div class="row">
-        <label>Stück <input type="text" name="shares" value="{{ m.shares }}" inputmode="decimal" required></label>
-        <label>Kaufdatum <input type="date" name="day" required></label>
-        <label>Kurs pro Stück ({{ m.currency }}) <input type="text" name="price" value="{{ m.price }}" inputmode="decimal" required></label>
-        <label>Gebühren <input type="text" name="fee" value="0" inputmode="decimal"></label>
+        <label>{{ _("Stück") }} <input type="text" name="shares" value="{{ m.shares }}" inputmode="decimal" required></label>
+        <label>{{ _("Kaufdatum") }} <input type="date" name="day" required></label>
+        <label>{{ _("Kurs pro Stück ({currency})", currency=m.currency) }} <input type="text" name="price" value="{{ m.price }}" inputmode="decimal" required></label>
+        <label>{{ _("Gebühren") }} <input type="text" name="fee" value="0" inputmode="decimal"></label>
       </div>
-      <div class="actions"><button>Als Kauf anlegen</button></div>
+      <div class="actions"><button>{{ _("Als Kauf anlegen") }}</button></div>
     </form>
     {% endfor %}
     {% if pending %}
     <div class="table"><table>
-      <tr><th>Wertpapier</th><th>Kaufdatum</th><th>Stück</th><th>Kurs</th><th>Gebühr</th><th>Status</th></tr>
+      <tr><th>{{ _("Wertpapier") }}</th><th>{{ _("Kaufdatum") }}</th><th>{{ _("Stück") }}</th><th>{{ _("Kurs") }}</th><th>{{ _("Gebühr") }}</th><th>{{ _("Status") }}</th></tr>
       {% for o in pending %}
-      <tr><td data-label="Wertpapier">{{ o.name }} <span class="muted">{{ o.isin }}</span></td><td data-label="Kaufdatum">{{ o.day | day }}</td><td data-label="Stück">{{ o.shares }}</td><td data-label="Kurs">{{ o.price }} {{ o.currency }}</td><td data-label="Gebühr">{{ o.fee }}</td>
-        <td data-label="Status">wird beim nächsten Abruf gebucht
-          <form method="post" action="/check/{{ b.key }}/opening" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ o.isin }}"><input type="hidden" name="day" value="{{ o.day }}"><button class="secondary" name="action" value="delete">Entfernen</button></form></td></tr>
+      <tr><td data-label="{{ _('Wertpapier') }}">{{ o.name }} <span class="muted">{{ o.isin }}</span></td><td data-label="{{ _('Kaufdatum') }}">{{ o.day | day }}</td><td data-label="{{ _('Stück') }}">{{ o.shares }}</td><td data-label="{{ _('Kurs') }}">{{ o.price }} {{ o.currency }}</td><td data-label="{{ _('Gebühr') }}">{{ o.fee }}</td>
+        <td data-label="{{ _('Status') }}">{{ _("wird beim nächsten Abruf gebucht") }}
+          <form method="post" action="/check/{{ b.key }}/opening" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ o.isin }}"><input type="hidden" name="day" value="{{ o.day }}"><button class="secondary" name="action" value="delete">{{ _("Entfernen") }}</button></form></td></tr>
       {% endfor %}
     </table></div>
     {% endif %}
@@ -89,32 +89,32 @@
 
   {% if x and x.moments %}
   <div class="section">
-    <h3>Bargeld bleibt im Depot: {{ x.moments | length }} Zeitpunkte, {{ x.moments_total | money }} EUR</h3>
-    <p class="muted">Jedem Block fehlt eine Seite – z. B. ein Kauf ohne Übertrag vom {{ b.cash_name }}, oder eine Buchung doppelt. Korrigieren in Wealthfolio.</p>
-    <details><summary>Buchungen zeigen</summary>
+    <h3>{{ _("Bargeld bleibt im Depot: {n} Zeitpunkte, {amount} EUR", n=x.moments | length, amount=x.moments_total | money) }}</h3>
+    <p class="muted">{{ _("Jedem Block fehlt eine Seite – z. B. ein Kauf ohne Übertrag vom {account}, oder eine Buchung doppelt. Korrigieren in Wealthfolio.", account=b.cash_name) }}</p>
+    <details><summary>{{ _("Buchungen zeigen") }}</summary>
     <div class="table"><table>
-      <tr><th>Zeitpunkt</th><th>Art</th><th>Betrag</th><th>Wirkung</th><th>Kommentar</th><th>Herkunft</th></tr>
+      <tr><th>{{ _("Zeitpunkt") }}</th><th>{{ _("Art") }}</th><th>{{ _("Betrag") }}</th><th>{{ _("Wirkung") }}</th><th>{{ _("Kommentar") }}</th><th>{{ _("Herkunft") }}</th></tr>
       {% for m in x.moments[:200] %}
         {% for a in m.activities %}
-        <tr><td data-label="Zeitpunkt"><time datetime="{{ a.date | utc }}" title="UTC: {{ a.date | utc }}">{{ a.date | local(seconds=True) }}</time></td><td data-label="Art">{{ a.activityType }}{% if a.subtype %}/{{ a.subtype }}{% endif %}</td><td data-label="Betrag">{{ a.amount }}</td><td data-label="Wirkung">{{ effect(a) | money }}</td><td data-label="Kommentar">{{ a.assetSymbol }} {{ a.comment }}</td><td data-label="Herkunft">{{ source(a) }}</td></tr>
+        <tr><td data-label="{{ _('Zeitpunkt') }}"><time datetime="{{ a.date | utc }}" title="UTC: {{ a.date | utc }}">{{ a.date | local(seconds=True) }}</time></td><td data-label="{{ _('Art') }}">{{ a.activityType }}{% if a.subtype %}/{{ a.subtype }}{% endif %}</td><td data-label="{{ _('Betrag') }}">{{ a.amount }}</td><td data-label="{{ _('Wirkung') }}">{{ effect(a) | money }}</td><td data-label="{{ _('Kommentar') }}">{{ a.assetSymbol }} {{ a.comment }}</td><td data-label="{{ _('Herkunft') }}">{{ _(source(a)) }}</td></tr>
         {% endfor %}
-        <tr><td colspan="6"><strong>bleibt stehen: {{ m.net | money }} EUR</strong></td></tr>
+        <tr><td colspan="6"><strong>{{ _("bleibt stehen: {amount} EUR", amount=m.net | money) }}</strong></td></tr>
       {% endfor %}
     </table></div>
-    {% if x.moments | length > 200 %}<p class="muted">… und {{ x.moments | length - 200 }} weitere.</p>{% endif %}
+    {% if x.moments | length > 200 %}<p class="muted">{{ _("… und {n} weitere.", n=x.moments | length - 200) }}</p>{% endif %}
     </details>
   </div>
   {% endif %}
 
   {% if x and x.lonely %}
   <div class="section">
-    <h3>Überträge ohne Gegenstück: {{ x.lonely | length }}</h3>
-    <p class="muted">Auf dem anderen Konto fehlt der passende Übertrag.</p>
-    <details><summary>Buchungen zeigen</summary>
+    <h3>{{ _("Überträge ohne Gegenstück: {n}", n=x.lonely | length) }}</h3>
+    <p class="muted">{{ _("Auf dem anderen Konto fehlt der passende Übertrag.") }}</p>
+    <details><summary>{{ _("Buchungen zeigen") }}</summary>
     <div class="table"><table>
-      <tr><th>Zeitpunkt</th><th>Konto</th><th>Art</th><th>Betrag</th><th>Kommentar</th><th>Herkunft</th></tr>
+      <tr><th>{{ _("Zeitpunkt") }}</th><th>{{ _("Konto") }}</th><th>{{ _("Art") }}</th><th>{{ _("Betrag") }}</th><th>{{ _("Kommentar") }}</th><th>{{ _("Herkunft") }}</th></tr>
       {% for a in x.lonely[:200] %}
-      <tr><td data-label="Zeitpunkt"><time datetime="{{ a.date | utc }}" title="UTC: {{ a.date | utc }}">{{ a.date | local(seconds=True) }}</time></td><td data-label="Konto">{{ b.depot_name if a.accountId == b.depot_id else b.cash_name }}</td><td data-label="Art">{{ a.activityType }}</td><td data-label="Betrag">{{ a.amount }}</td><td data-label="Kommentar">{{ a.comment }}</td><td data-label="Herkunft">{{ source(a) }}</td></tr>
+      <tr><td data-label="{{ _('Zeitpunkt') }}"><time datetime="{{ a.date | utc }}" title="UTC: {{ a.date | utc }}">{{ a.date | local(seconds=True) }}</time></td><td data-label="{{ _('Konto') }}">{{ b.depot_name if a.accountId == b.depot_id else b.cash_name }}</td><td data-label="{{ _('Art') }}">{{ a.activityType }}</td><td data-label="{{ _('Betrag') }}">{{ a.amount }}</td><td data-label="{{ _('Kommentar') }}">{{ a.comment }}</td><td data-label="{{ _('Herkunft') }}">{{ _(source(a)) }}</td></tr>
       {% endfor %}
     </table></div>
     </details>
@@ -122,30 +122,30 @@
   {% endif %}
 
   {% if ignored %}
-  <details><summary>Ignoriert ({{ ignored | length }})</summary>
+  <details><summary>{{ _("Ignoriert ({n})", n=ignored | length) }}</summary>
   <form method="post" action="/check/{{ b.key }}">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="table"><table>
-      <tr><th></th><th>Datum</th><th>Art</th><th>Wertpapier</th><th>Betrag</th></tr>
+      <tr><th></th><th>{{ _("Datum") }}</th><th>{{ _("Art") }}</th><th>{{ _("Wertpapier") }}</th><th>{{ _("Betrag") }}</th></tr>
       {% for g in ignored %}
-      <tr><td><input type="checkbox" name="tx" value="{{ g.ref }}" aria-label="auswählen"></td><td data-label="Datum">{{ g.occurred_at | local }}</td><td data-label="Art">{{ g.label }}</td><td data-label="Wertpapier">{{ g.name }}</td><td data-label="Betrag">{{ g.amount }} {{ g.currency }}</td></tr>
+      <tr><td><input type="checkbox" name="tx" value="{{ g.ref }}" aria-label="{{ _('auswählen') }}"></td><td data-label="{{ _('Datum') }}">{{ g.occurred_at | local }}</td><td data-label="{{ _('Art') }}">{{ g.label }}</td><td data-label="{{ _('Wertpapier') }}">{{ g.name }}</td><td data-label="{{ _('Betrag') }}">{{ g.amount }} {{ g.currency }}</td></tr>
       {% endfor %}
     </table></div>
-    <div class="actions"><button class="secondary" name="action" value="rebook">Doch anlegen</button></div>
+    <div class="actions"><button class="secondary" name="action" value="rebook">{{ _("Doch anlegen") }}</button></div>
   </form>
   </details>
   {% endif %}
 </div>
 {% else %}
-<div class="card"><p>Noch kein Broker mit zwei Wealthfolio-Konten eingerichtet.</p></div>
+<div class="card"><p>{{ _("Noch kein Broker mit zwei Wealthfolio-Konten eingerichtet.") }}</p></div>
 {% endfor %}
 
-<details class="card"><summary>Was wird geprüft?</summary>
+<details class="card"><summary>{{ _("Was wird geprüft?") }}</summary>
   <ul class="muted">
-    <li><strong>Fehlt in Wealthfolio:</strong> Vom Dienst gebucht, in Wealthfolio aber nicht mehr da – oder die Import-Buchung, der er sie zugeordnet hatte, ist weg. <em>Ignorieren</em>, wenn sie zu Recht fehlt.</li>
-    <li><strong>Nicht mehr beim Broker:</strong> nur für Broker, die jedes Mal die ganze Historie liefern.</li>
-    <li><strong>Bargeld im Depot:</strong> Das Depotkonto hält kein Bargeld – jeder Kauf kommt vom Verrechnungskonto, jeder Verkauf und jede Ausschüttung geht dorthin. Buchungen wenige Sekunden auseinander bilden einen Block; zwei Blöcke, die sich binnen 36 Stunden ausgleichen, gelten als zusammengehörig.</li>
-    <li><strong>Überträge ohne Gegenstück:</strong> gleicher Betrag, gleiche Gruppe oder höchstens eine Minute auseinander.</li>
+    <li>{{ _("<strong>Fehlt in Wealthfolio:</strong> Vom Dienst gebucht, in Wealthfolio aber nicht mehr da – oder die Import-Buchung, der er sie zugeordnet hatte, ist weg. <em>Ignorieren</em>, wenn sie zu Recht fehlt.") }}</li>
+    <li>{{ _("<strong>Nicht mehr beim Broker:</strong> nur für Broker, die jedes Mal die ganze Historie liefern.") }}</li>
+    <li>{{ _("<strong>Bargeld im Depot:</strong> Das Depotkonto hält kein Bargeld – jeder Kauf kommt vom Verrechnungskonto, jeder Verkauf und jede Ausschüttung geht dorthin. Buchungen wenige Sekunden auseinander bilden einen Block; zwei Blöcke, die sich binnen 36 Stunden ausgleichen, gelten als zusammengehörig.") }}</li>
+    <li>{{ _("<strong>Überträge ohne Gegenstück:</strong> gleicher Betrag, gleiche Gruppe oder höchstens eine Minute auseinander.") }}</li>
   </ul>
 </details>
 {% endblock %}

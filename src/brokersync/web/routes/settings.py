@@ -12,7 +12,8 @@ from ... import logos as logos_mod
 from ...notify import Notifier
 from ...sync import AlreadyRunning
 from .. import inputs
-from ..context import Ctx, redirect
+from ..context import Ctx, language, redirect, tr
+from ..i18n import N_
 
 router = APIRouter()
 
@@ -30,9 +31,9 @@ def wealthfolio_save(request: Request, ctx: Ctx, url: str = Form(...), password:
                      no_password: str = Form("")):
     c = ctx.cfg()
     try:
-        c.wealthfolio_url = inputs.http_url(url, "Wealthfolio-Adresse")
+        c.wealthfolio_url = inputs.http_url(url, N_("Wealthfolio-Adresse"))
     except inputs.Invalid as e:
-        return redirect(request, "/setup/wealthfolio", str(e), "error")
+        return redirect(request, "/setup/wealthfolio", e.text(language(request)), "error")
     ctx.save(c)
     if no_password:
         ctx.vault.update(lambda d: d.pop("wealthfolio_password", None))
@@ -41,9 +42,11 @@ def wealthfolio_save(request: Request, ctx: Ctx, url: str = Form(...), password:
     ctx.vault.update(lambda d: d.__setitem__("wealthfolio_checked", False))
     accounts, error = ctx.wf_accounts(c)
     if error:
-        return redirect(request, "/setup/wealthfolio", f"Verbindung fehlgeschlagen: {error}", "error")
+        return redirect(request, "/setup/wealthfolio", tr(request, "Verbindung fehlgeschlagen: {error}", error=error),
+                        "error")
     ctx.vault.update(lambda d: d.__setitem__("wealthfolio_checked", True))
-    return redirect(request, "/brokers", f"Verbunden - {len(accounts)} Konten in Wealthfolio gefunden.")
+    return redirect(request, "/brokers", tr(request, "Verbunden - {n} Konten in Wealthfolio gefunden.",
+                                            n=len(accounts)))
 
 
 # ── notifications ───────────────────────────────────────────────────────────
@@ -61,14 +64,14 @@ def notifications_save(request: Request, ctx: Ctx, server: str = Form(...), topi
                        test: str = Form("")):
     c = ctx.cfg()
     try:
-        c.ntfy_server = inputs.http_url(server, "ntfy-Server")
-        c.ntfy_topic = inputs.text(topic, "Thema", max_len=64)
-        c.public_url = inputs.http_url(public_url, "Adresse dieser Oberfläche", required=False)
-        token = inputs.text(token, "Zugangstoken")
+        c.ntfy_server = inputs.http_url(server, N_("ntfy-Server"))
+        c.ntfy_topic = inputs.text(topic, N_("Thema"), max_len=64)
+        c.public_url = inputs.http_url(public_url, N_("Adresse dieser Oberfläche"), required=False)
+        token = inputs.text(token, N_("Zugangstoken"))
     except inputs.Invalid as e:
-        return redirect(request, "/notifications", str(e), "error")
+        return redirect(request, "/notifications", e.text(language(request)), "error")
     if c.ntfy_topic and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", c.ntfy_topic):
-        return redirect(request, "/notifications", "Thema: nur Buchstaben, Ziffern, - und _.", "error")
+        return redirect(request, "/notifications", tr(request, "Thema: nur Buchstaben, Ziffern, - und _."), "error")
     c.ntfy_details = bool(details)
     if token:
         c.ntfy_token = token
@@ -78,9 +81,10 @@ def notifications_save(request: Request, ctx: Ctx, server: str = Form(...), topi
         ok = n.send("Wealthfolio Broker Sync", "Testnachricht - Benachrichtigungen funktionieren.",
                     link=c.public_url or None, tags="white_check_mark")
         if not ok:
-            return redirect(request, "/notifications", "Testnachricht konnte nicht gesendet werden.", "error")
-        return redirect(request, "/notifications", "Testnachricht gesendet.")
-    return redirect(request, "/", "Benachrichtigungen gespeichert.")
+            return redirect(request, "/notifications", tr(request, "Testnachricht konnte nicht gesendet werden."),
+                            "error")
+        return redirect(request, "/notifications", tr(request, "Testnachricht gesendet."))
+    return redirect(request, "/", tr(request, "Benachrichtigungen gespeichert."))
 
 
 # ── securities ──────────────────────────────────────────────────────────────
@@ -101,9 +105,9 @@ def securities_save(request: Request, ctx: Ctx, isin: str = Form(...), symbol: s
             isin = inputs.isin(isin)
             c.security_mappings[isin] = {"symbol": inputs.symbol(symbol), "exchangeMic": inputs.mic(exchange_mic)}
         except inputs.Invalid as e:
-            return redirect(request, "/securities", str(e), "error")
+            return redirect(request, "/securities", e.text(language(request)), "error")
     ctx.save(c)
-    return redirect(request, "/securities", "Gespeichert.")
+    return redirect(request, "/securities", tr(request, "Gespeichert."))
 
 
 # ── logos ───────────────────────────────────────────────────────────────────
@@ -123,26 +127,31 @@ def logos_save(request: Request, ctx: Ctx, enabled: str = Form(""), token: str =
         ctx.vault.update(lambda d: d.pop("logo_dev_token", None))
     elif token.strip():
         if len(token.strip()) > 200 or not re.fullmatch(r"[A-Za-z0-9_-]+", token.strip()):
-            return redirect(request, "/logos", "Der Schlüssel sieht nicht wie ein logo.dev-Schlüssel aus.", "error")
+            return redirect(request, "/logos", tr(request, "Der Schlüssel sieht nicht wie ein logo.dev-Schlüssel aus."),
+                            "error")
         ctx.vault.update(lambda d: d.__setitem__("logo_dev_token", token.strip()))
     if not fetch:
-        return redirect(request, "/logos", "Gespeichert.")
+        return redirect(request, "/logos", tr(request, "Gespeichert."))
     if not c.logos_enabled or not ctx.vault.load().get("logo_dev_token"):
-        return redirect(request, "/logos", "Erst einschalten und einen logo.dev-Schlüssel eintragen.", "warn")
+        return redirect(request, "/logos", tr(request, "Erst einschalten und einen logo.dev-Schlüssel eintragen."),
+                        "warn")
     try:
         result = ctx.syncer.update_logos()
     except AlreadyRunning:
-        return redirect(request, "/logos", "Ein Abruf läuft gerade - bitte gleich noch einmal.", "warn")
+        return redirect(request, "/logos", tr(request, "Ein Abruf läuft gerade - bitte gleich noch einmal."), "warn")
     if result is None:
-        return redirect(request, "/logos", "Logos konnten nicht geholt werden - siehe Protokoll.", "error")
-    text = f"{result.set} Logos gesetzt, {result.none} ohne Logo bei logo.dev, {result.failed} fehlgeschlagen."
+        return redirect(request, "/logos", tr(request, "Logos konnten nicht geholt werden - siehe Protokoll."),
+                        "error")
+    text = tr(request, "{set} Logos gesetzt, {none} ohne Logo bei logo.dev, {failed} fehlgeschlagen.",
+              set=result.set, none=result.none, failed=result.failed)
     if result.message:
         text += f" {result.message}"
     return redirect(request, "/logos", text, "warn" if result.message or result.failed else "ok")
 
 
 # ── appearance ─────────────────────────────────────────────────────────────
-THEMES = {"system": "Wie das Gerät", "light": "Hell", "dark": "Dunkel"}
+THEMES = {"system": N_("Wie das Gerät"), "light": N_("Hell"), "dark": N_("Dunkel")}
+# Each language under its own name, in every language.
 LANGUAGES = {"de": "Deutsch", "en": "English"}
 
 
@@ -154,8 +163,9 @@ def appearance_page(request: Request, ctx: Ctx):
 @router.post("/appearance")
 def appearance_save(request: Request, ctx: Ctx, theme: str = Form("system"), language: str = Form("de")):
     if theme not in THEMES or language not in LANGUAGES:
-        return redirect(request, "/appearance", "Unbekannte Auswahl.", "error")
+        return redirect(request, "/appearance", tr(request, "Unbekannte Auswahl."), "error")
+    done = tr(request, "Gespeichert.")  # in the language the choice was made in
     c = ctx.cfg()
     c.ui_theme, c.ui_language = theme, language
     ctx.save(c)
-    return redirect(request, "/appearance", "Gespeichert.")
+    return redirect(request, "/appearance", done)

@@ -1,10 +1,10 @@
-{% extends "base.html" %}{% block title %}Einstellungen{% endblock %}
+{% extends "base.html" %}{% block title %}{{ _("Einstellungen") }}{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Einstellungen</h1>
+  <h1>{{ _("Einstellungen") }}</h1>
   <ul class="settings-index">
     {% for href, title, hint in settings_pages %}
-    <li><a href="{{ href }}">{{ title }}</a><span class="muted">{{ hint }}</span></li>
+    <li><a href="{{ href }}">{{ _(title) }}</a><span class="muted">{{ _(hint) }}</span></li>
     {% endfor %}
   </ul>
 </div>
