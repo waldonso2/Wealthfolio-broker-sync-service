@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% block title %}Prüfung{% endblock %}
 {% block content %}
 <h1 style="margin-top:8px">Prüfung</h1>
-<p class="muted">Broker und Wealthfolio im Vergleich. Der Dienst legt nichts von selbst wieder an und löscht nichts – du entscheidest. Zeiten in deutscher Zeit.</p>
+<p class="muted">Broker und Wealthfolio im Vergleich. Der Dienst legt nichts von selbst wieder an und löscht nichts – du entscheidest.</p>
 {% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error | redact }}</div>{% endif %}
 
 {% for b in brokers %}
@@ -9,6 +9,7 @@
 {% set orphans = b.gaps | selectattr("kind", "equalto", "orphan") | list %}
 {% set ignored = b.gaps | selectattr("kind", "equalto", "ignored") | list %}
 {% set x = b.audit %}
+{% set pending = b.openings | rejectattr("booked") | list %}
 <div class="card" id="broker-{{ b.key }}">
   <div class="card-head">
     <span class="light {{ 'yellow' if b.issues else ('green' if b.checked else 'grey') }}" role="img"
@@ -18,7 +19,7 @@
   <p class="summary-line">
     {% if b.checked %}Fehlt in Wealthfolio <strong>{{ missing | length }}</strong>
     {% if b.full %} · Nicht mehr bei {{ b.label }} <strong>{{ orphans | length }}</strong>{% endif %}
-    {% if b.missing or b.openings %} · Bestand ohne Kauf <strong>{{ b.missing | length }}</strong>{% endif %}
+    {% if b.missing or pending %} · Bestand ohne Kauf <strong>{{ b.missing | length }}</strong>{% endif %}
     {% else %}Noch kein Abruf{% endif %}
     {% if x %} · Bargeld im Depot <strong>{{ x.depot_cash | money }} EUR</strong> · Überträge ohne Gegenstück <strong>{{ x.lonely | length }}</strong>{% endif %}
   </p>
@@ -54,7 +55,7 @@
   </div>
   {% endif %}
 
-  {% if b.missing or b.openings %}
+  {% if b.missing or pending %}
   <div class="section">
     <h3>Bestand ohne Kauf: {{ b.missing | length }}</h3>
     {% if b.missing %}<p class="muted">Mehr Stück als Wealthfolio kennt (vor dem Startdatum gekauft oder übertragen). Der nächste Abruf bucht einen Kauf samt Einzahlung.</p>{% endif %}
@@ -71,13 +72,13 @@
       <div class="actions"><button>Als Kauf anlegen</button></div>
     </form>
     {% endfor %}
-    {% if b.openings %}
+    {% if pending %}
     <div class="table"><table>
       <tr><th>Wertpapier</th><th>Kaufdatum</th><th>Stück</th><th>Kurs</th><th>Gebühr</th><th>Status</th></tr>
-      {% for o in b.openings %}
+      {% for o in pending %}
       <tr><td data-label="Wertpapier">{{ o.name }} <span class="muted">{{ o.isin }}</span></td><td data-label="Kaufdatum">{{ o.day | day }}</td><td data-label="Stück">{{ o.shares }}</td><td data-label="Kurs">{{ o.price }} {{ o.currency }}</td><td data-label="Gebühr">{{ o.fee }}</td>
-        <td data-label="Status">{% if o.booked %}gebucht{% else %}wird beim nächsten Abruf gebucht
-          <form method="post" action="/check/{{ b.key }}/opening" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ o.isin }}"><input type="hidden" name="day" value="{{ o.day }}"><button class="secondary" name="action" value="delete">Entfernen</button></form>{% endif %}</td></tr>
+        <td data-label="Status">wird beim nächsten Abruf gebucht
+          <form method="post" action="/check/{{ b.key }}/opening" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ o.isin }}"><input type="hidden" name="day" value="{{ o.day }}"><button class="secondary" name="action" value="delete">Entfernen</button></form></td></tr>
       {% endfor %}
     </table></div>
     {% endif %}

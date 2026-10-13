@@ -102,6 +102,7 @@ def _templates() -> Jinja2Templates:
     templates.env.filters["utc"] = views.utc_iso
     templates.env.filters["money"] = views.money
     templates.env.globals["describe_unknown"] = views.describe_unknown
+    templates.env.globals["report_url"] = views.report_url
     # Foreign error texts (banks, brokers, Wealthfolio) on a page: never a secret or an account number.
     templates.env.filters["redact"] = lambda text: redact.redact(str(text)) if text else text
     templates.env.globals["STATUS"] = STATUS_LABEL

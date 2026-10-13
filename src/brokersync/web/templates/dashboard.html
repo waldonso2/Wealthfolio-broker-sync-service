@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Übersicht{% endblock %}
+{% extends "base.html" %}{% from "_icons.html" import icon %}{% block title %}Übersicht{% endblock %}
 {% block head %}{% if running %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
 {% block content %}
 {% set LIGHT = {"green": "alles in Ordnung", "yellow": "bitte ansehen", "red": "Handlungsbedarf", "grey": "noch kein Abruf"} %}
@@ -41,7 +41,11 @@
     {% if b.saldo == "ok" %} · Saldo <strong class="ok-text">stimmt</strong>{% elif b.saldo == "off" %} · Saldo <strong class="warn-text">weicht ab</strong>{% endif %}
   </p>
   {% if b.light in ("yellow", "red") %}
-  <ul class="reasons">{% for r in b.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+  <ul class="reasons">{% for text, target in b.reasons %}<li>
+    {%- if target == "login" %}<a href="/brokers/{{ b.key }}/login?run=1">{{ text }}</a>
+    {%- elif target == "unknown" %}<a href="/unknown">{{ text }}</a>
+    {%- elif target == "check" %}<a href="/check#broker-{{ b.key }}">{{ text }}</a>
+    {%- else %}{{ text }}{% endif %}</li>{% endfor %}</ul>
   {% endif %}
   {% if b.last and b.last.message and b.last.status != "ok" %}
   <details><summary>Meldung des letzten Abrufs</summary><pre class="muted">{{ b.last.message | redact }}</pre></details>
@@ -56,7 +60,6 @@
   </details>
   {% endif %}
   <div class="actions">
-    {% if b.last and b.last.status == "needs_auth" %}<a class="button" href="/brokers/{{ b.key }}/login">Jetzt anmelden</a>{% endif %}
     {% if b.has_credentials %}
     <form method="post" action="/run">
       <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -64,9 +67,7 @@
       <button class="secondary" {% if running %}disabled{% endif %}>Jetzt abrufen</button>
     </form>
     {% endif %}
-    {% if b.gaps or (b.reconcile and b.reconcile.deviations) %}<a class="button secondary" href="/check#broker-{{ b.key }}">Prüfen</a>{% endif %}
-    {% if b.unknown %}<a class="button secondary" href="/unknown">Unbekannte</a>{% endif %}
-    <a class="button secondary" href="/brokers/{{ b.key }}">Einstellungen</a>
+    <a class="button secondary icon-button" href="/brokers/{{ b.key }}" title="Einstellungen" aria-label="Einstellungen {{ b.label }}">{{ icon("gear") }}</a>
   </div>
 </div>
 {% else %}

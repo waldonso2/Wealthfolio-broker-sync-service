@@ -96,8 +96,12 @@ class AppContext:
             return [], str(e)
 
     def needs_login(self, key: str, c: config_mod.Config) -> bool:
-        """A fetch starts with a login in the UI: in the safe mode, or when a credential is typed each time (#85)."""
+        """A fetch starts with a login in the UI: in the safe mode, when a credential is typed each time (#85),
+        or when the last fetch needed a login."""
         if c.safe_mode:
+            return True
+        last = self.state.last_run(key)
+        if last and last.status == "needs_auth":  # the last fetch stopped at the login: start there
             return True
         stored = self.vault.broker(key).get("credentials", {})
         return any(f.ask and not stored.get(f.name) for f in self.adapters[key].credential_fields)

@@ -1,7 +1,9 @@
 """One date/time format on every page, unknown bookings readable without JSON (#73)."""
 
+import html
 import re
 from datetime import UTC, datetime
+from urllib.parse import parse_qs, urlparse
 
 from brokersync.state import State
 from brokersync.web import views
@@ -45,21 +47,27 @@ def test_unknown_page_shows_fields_and_raw_data_only_folded(tmp_path):
     assert '<td data-label="Datum">04.03.2026</td>' in page  # German day
     assert '<td data-label="Betrag">-12,50 EUR</td>' in page
     assert re.search(r'<td data-label="Wertpapier">DE000TEST001', page)
-    assert re.search(r"<details><summary[^>]*>Rohdaten für einen Fehlerbericht</summary><pre>", page)
+    assert re.search(r"<details><summary[^>]*>Rohdaten</summary><pre>", page)
+    # A pre-filled GitHub issue, opened only on click (#86): type, day and the masked payload.
+    link = re.search(r'href="(https://github.com/[^"]+/issues/new\?[^"]+)"', page).group(1)
+    query = parse_qs(urlparse(html.unescape(link)).query)
+    assert query["title"] == ["Unbekannte Buchung: Testbroker SPINOFF"]
+    assert "04.03.2026" in query["body"][0] and "DE000TEST001" in query["body"][0]
 
 
 def test_traffic_light_per_broker():
     now = datetime(2026, 10, 12, 12, tzinfo=UTC)
     ok = {"status": "ok", "started_at": "2026-10-12T06:00:00+00:00", "failed": 0}
-    assert views.broker_light(None, None, 0, 0, True, now) == ("grey", ["Noch nie abgerufen"])
+    assert views.broker_light(None, None, 0, 0, True, now) == ("grey", [("Noch nie abgerufen", "")])
     assert views.broker_light(ok, {"deviations": []}, 0, 0, True, now) == ("green", [])
-    assert views.broker_light({**ok, "status": "needs_auth"}, None, 0, 0, True, now) == ("red", ["Anmeldung nötig"])
+    needs_auth = {**ok, "status": "needs_auth"}
+    assert views.broker_light(needs_auth, None, 0, 0, True, now) == ("red", [("Anmeldung nötig", "login")])
     assert views.broker_light({**ok, "status": "error", "failed": 2}, None, 0, 0, True, now)[0] == "red"
     light, reasons = views.broker_light(ok, {"deviations": [{}, {}]}, 1, 3, True, now)
-    assert light == "yellow" and reasons == ["2 Abweichungen zu Wealthfolio", "1 unbekannte Buchung",
-                                             "3 fehlt in Wealthfolio"]
+    assert light == "yellow" and reasons == [("2 Abweichungen zu Wealthfolio", "check"),
+                                             ("1 unbekannte Buchung", "unknown"), ("3 fehlt in Wealthfolio", "check")]
     old = {**ok, "started_at": "2026-10-09T06:00:00+00:00"}
-    assert views.broker_light(old, None, 0, 0, True, now) == ("yellow", ["Seit 3 Tagen kein Abruf"])
+    assert views.broker_light(old, None, 0, 0, True, now) == ("yellow", [("Seit 3 Tagen kein Abruf", "")])
     assert views.broker_light(old, None, 0, 0, False, now) == ("green", [])  # manual only: no reminder
 
 
@@ -83,3 +91,21 @@ def test_fonts_are_served_from_the_container(tmp_path):
         assert r.status_code == 200 and r.content[:4] == b"wOF2"
     css = client.get("/static/style.css").text
     assert "/static/fonts/inter.woff2" in css and "http" not in css.split("*/", 1)[1]  # nothing from outside
+
+
+def test_overview_card_has_two_buttons_and_the_reasons_link_to_their_page(tmp_path):
+    from .test_safe_mode import make as make_safe
+
+    client, _, _ = make_safe(tmp_path, safe=False)
+    state = State(tmp_path)
+    state.finish_run(state.start_run("fake"), "ok")
+    state.add_unknown("fake", "x1", "ODD", "2026-01-02", {"title": "Beispiel"})
+    state.set_reconcile("fake", [{"kind": "cash", "key": "EUR", "name": "Cash EUR", "broker": "1", "wealthfolio": "2"}])
+    page = client.get("/").text
+    card = page[page.index('id="broker-fake"'):]
+    assert '<a href="/unknown">1 unbekannte Buchung</a>' in card
+    assert '<a href="/check#broker-fake">1 Abweichung zu Wealthfolio</a>' in card
+    actions = card[card.index('<div class="actions">'):card.index("</div>", card.index('<div class="actions">'))]
+    assert actions.count("<button") == 1 and "Jetzt abrufen" in actions
+    assert 'aria-label="Einstellungen Testbroker"' in actions and "<svg" in actions
+    assert ">Unbekannte<" not in card and ">Prüfen<" not in card

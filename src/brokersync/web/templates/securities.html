@@ -4,13 +4,12 @@
   <h1>Wertpapiere</h1>
   <p>Broker melden Wertpapiere per ISIN. Soll Wealthfolio ein Wertpapier unter einem anderen Symbol führen (z.&nbsp;B. dem Ticker, unter dem es schon in Wealthfolio steht), trage es hier ein. Ohne Eintrag wird die ISIN verwendet.</p>
   {% if mappings %}
-  <div class="table"><table>
-    <tr><th>ISIN</th><th>Symbol</th><th>Börse (MIC)</th><th></th></tr>
+  <ul class="rows compact">
     {% for isin, m in mappings.items() %}
-    <tr><td data-label="ISIN"><code>{{ isin }}</code></td><td data-label="Symbol">{{ m.symbol }}</td><td data-label="Börse (MIC)">{{ m.exchangeMic or "" }}</td>
-      <td><form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ isin }}"><button class="link" name="delete" value="1">Entfernen</button></form></td></tr>
+    <li><code>{{ isin }}</code><span class="grow-inline">→ <strong>{{ m.symbol }}</strong>{% if m.exchangeMic %} <span class="muted">{{ m.exchangeMic }}</span>{% endif %}</span>
+      <form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ isin }}"><button class="link" name="delete" value="1" title="Entfernen" aria-label="{{ isin }} entfernen">✕</button></form></li>
     {% endfor %}
-  </table></div>
+  </ul>
   {% endif %}
   <form method="post">
     <input type="hidden" name="csrf" value="{{ csrf }}">
