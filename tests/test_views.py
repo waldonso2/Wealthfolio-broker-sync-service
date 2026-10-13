@@ -109,3 +109,17 @@ def test_overview_card_has_two_buttons_and_the_reasons_link_to_their_page(tmp_pa
     assert actions.count("<button") == 1 and "Jetzt abrufen" in actions
     assert 'aria-label="Einstellungen Testbroker"' in actions and "<svg" in actions
     assert ">Unbekannte<" not in card and ">Prüfen<" not in card
+
+
+def test_colour_scheme_and_language_are_chosen_on_the_page_appearance(tmp_path):
+    from brokersync import config as config_mod
+
+    from .test_safe_mode import make as make_safe
+
+    client, _, token = make_safe(tmp_path, safe=False)
+    assert "data-theme" not in client.get("/").text  # default: as the device
+    r = client.post("/appearance", data={"csrf": token, "theme": "light", "language": "en"})
+    assert "Gespeichert" in r.text and '<html lang="en" data-theme="light">' in r.text
+    assert (config_mod.load(tmp_path).ui_theme, config_mod.load(tmp_path).ui_language) == ("light", "en")
+    assert 'data-theme="dark"' in client.post("/appearance", data={"csrf": token, "theme": "dark"}).text
+    assert "Unbekannte Auswahl" in client.post("/appearance", data={"csrf": token, "theme": "pink"}).text

@@ -42,7 +42,8 @@ SETTINGS_PAGES = [
     # Hidden for now (waldonso2/wealthfolio-importer-addon#84):
     # ("/transfers", "Überträge", "Auszahlungen auf eigene Konten erkennen"),
     ("/logos", "Logos", "Logos der Wertpapiere von logo.dev"),
-    ("/security", "Sicherheit", "Verschlüsselung, Master-Passphrase, Zertifikat"),
+    ("/security", "Sicherheit", "Abrufmodus, Verschlüsselung, Master-Passphrase, Zertifikat"),
+    ("/appearance", "Darstellung", "Sprache, hell oder dunkel"),
     # Hidden for now (waldonso2/wealthfolio-importer-addon#84):
     # ("/duplicates", "Duplikate", "Doppelte Buchungen finden und entfernen"),
 ]
@@ -74,10 +75,19 @@ class AppContext:
             request.session["csrf"] = secrets.token_urlsafe(16)
         flash = request.session.pop("flash", None)
         nav_unknown = self.state.unknown_count() if request.session.get("user") else 0
+        theme, language = self.appearance()
         return self.templates.TemplateResponse(request, name, {
             "csrf": request.session["csrf"], "flash": flash, "version": __version__, "adapters": self.adapters,
-            "nav_unknown": nav_unknown, "settings_pages": SETTINGS_PAGES, **ctx,
+            "nav_unknown": nav_unknown, "settings_pages": SETTINGS_PAGES, "theme": theme, "lang": language, **ctx,
         })
+
+    def appearance(self) -> tuple[str, str]:
+        """Colour scheme and language of the pages; the defaults while the config can't be read (locked)."""
+        try:
+            c = self.cfg()
+        except Exception:
+            return "system", "de"
+        return c.ui_theme, c.ui_language
 
     def cfg(self) -> config_mod.Config:
         return config_mod.load(self.data_dir)

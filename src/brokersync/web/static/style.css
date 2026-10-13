@@ -14,13 +14,20 @@
   --serif: "Merriweather", ui-serif, Georgia, serif;
   color-scheme: light;
 }
+/* Colour scheme (page Darstellung): the device's setting, or always light / always dark (data-theme). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #100f0f; --card: #1c1b1a; --line: #282726; --line-2: #343331; --text: #cecdc3; --muted: #878580;
     --primary: #cecdc3; --on-primary: #100f0f; --accent: #4385be;
     --ok: #879a39; --warn: #d0a215; --error: #d14d41; --grey: #575653;
     color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+    --bg: #100f0f; --card: #1c1b1a; --line: #282726; --line-2: #343331; --text: #cecdc3; --muted: #878580;
+    --primary: #cecdc3; --on-primary: #100f0f; --accent: #4385be;
+    --ok: #879a39; --warn: #d0a215; --error: #d14d41; --grey: #575653;
+    color-scheme: dark;
 }
 
 * { box-sizing: border-box; }

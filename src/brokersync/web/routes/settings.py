@@ -139,3 +139,23 @@ def logos_save(request: Request, ctx: Ctx, enabled: str = Form(""), token: str =
     if result.message:
         text += f" {result.message}"
     return redirect(request, "/logos", text, "warn" if result.message or result.failed else "ok")
+
+
+# ── appearance ─────────────────────────────────────────────────────────────
+THEMES = {"system": "Wie das Gerät", "light": "Hell", "dark": "Dunkel"}
+LANGUAGES = {"de": "Deutsch", "en": "English"}
+
+
+@router.get("/appearance", response_class=HTMLResponse)
+def appearance_page(request: Request, ctx: Ctx):
+    return ctx.render(request, "appearance.html", cfg=ctx.cfg(), themes=THEMES, languages=LANGUAGES)
+
+
+@router.post("/appearance")
+def appearance_save(request: Request, ctx: Ctx, theme: str = Form("system"), language: str = Form("de")):
+    if theme not in THEMES or language not in LANGUAGES:
+        return redirect(request, "/appearance", "Unbekannte Auswahl.", "error")
+    c = ctx.cfg()
+    c.ui_theme, c.ui_language = theme, language
+    ctx.save(c)
+    return redirect(request, "/appearance", "Gespeichert.")
