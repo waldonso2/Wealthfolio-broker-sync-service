@@ -4,72 +4,72 @@
   <h1>{{ adapter.label }}</h1>
   <form method="post">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <h2 style="margin-top:14px">Zugang</h2>
+    <h2 style="margin-top:14px">{{ _("Zugang") }}</h2>
     {% for f in adapter.credential_fields %}
     <label for="c_{{ f.name }}">{{ f.label }}</label>
     {% if f.secret %}
-    <input type="password" id="c_{{ f.name }}" name="cred_{{ f.name }}" autocomplete="off" placeholder="{{ '•••••••• (gespeichert – leer lassen zum Behalten)' if stored.get(f.name) else '' }}">
+    <input type="password" id="c_{{ f.name }}" name="cred_{{ f.name }}" autocomplete="off" placeholder="{{ _('•••••••• (gespeichert – leer lassen zum Behalten)') if stored.get(f.name) else '' }}">
     {% else %}
     <input type="text" id="c_{{ f.name }}" name="cred_{{ f.name }}" value="{{ plain.get(f.name, '') }}" autocomplete="off">
     {% endif %}
     {% if f.help %}<div class="muted">{{ f.help }}</div>{% endif %}
-    {% if f.ask and stored.get(f.name) %}<label class="check"><input type="checkbox" name="forget_{{ f.name }}" value="1"> {{ f.label }} nicht mehr speichern – bei jeder Anmeldung eingeben</label>{% endif %}
+    {% if f.ask and stored.get(f.name) %}<label class="check"><input type="checkbox" name="forget_{{ f.name }}" value="1"> {{ _("{label} nicht mehr speichern – bei jeder Anmeldung eingeben", label=f.label) }}</label>{% endif %}
     {% endfor %}
 
-    <h2 style="margin-top:22px">Wealthfolio-Konten</h2>
-    {% if wf_error %}<div class="flash error">Wealthfolio nicht erreichbar: {{ wf_error | redact }} – <a href="/setup/wealthfolio">Verbindung prüfen</a></div>{% endif %}
-    <p class="muted">Ein Verrechnungskonto für Ein- und Auszahlungen, ein Depotkonto für die Wertpapiere. Hast du schon per CSV/PDF importiert, nimm dieselben Konten, dann werden diese Buchungen erkannt.</p>
-    <label for="cash">Verrechnungskonto (Cash)</label>
-    <select id="cash" name="cash_account_id"><option value="">– wählen –</option>
+    <h2 style="margin-top:22px">{{ _("Wealthfolio-Konten") }}</h2>
+    {% if wf_error %}<div class="flash error">{{ _("Wealthfolio nicht erreichbar: {error}", error=wf_error | redact) }} – <a href="/setup/wealthfolio">{{ _("Verbindung prüfen") }}</a></div>{% endif %}
+    <p class="muted">{{ _("Ein Verrechnungskonto für Ein- und Auszahlungen, ein Depotkonto für die Wertpapiere. Hast du schon per CSV/PDF importiert, nimm dieselben Konten, dann werden diese Buchungen erkannt.") }}</p>
+    <label for="cash">{{ _("Verrechnungskonto (Cash)") }}</label>
+    <select id="cash" name="cash_account_id"><option value="">{{ _("– wählen –") }}</option>
       {% for a in accounts %}<option value="{{ a.id }}" {{ 'selected' if a.id == b.cash_account_id }}>{{ a.name }} ({{ a.currency }})</option>{% endfor %}
     </select>
-    <label for="portfolio">Depotkonto</label>
-    <select id="portfolio" name="portfolio_account_id"><option value="">– wählen –</option>
+    <label for="portfolio">{{ _("Depotkonto") }}</label>
+    <select id="portfolio" name="portfolio_account_id"><option value="">{{ _("– wählen –") }}</option>
       {% for a in accounts %}<option value="{{ a.id }}" {{ 'selected' if a.id == b.portfolio_account_id }}>{{ a.name }} ({{ a.currency }})</option>{% endfor %}
     </select>
     {% if adapter.savings_label %}
-    <label for="savings">{{ adapter.savings_label }}-Konto (optional)</label>
-    <select id="savings" name="savings_account_id"><option value="">– nicht abrufen –</option>
+    <label for="savings">{{ _("{label}-Konto (optional)", label=adapter.savings_label) }}</label>
+    <select id="savings" name="savings_account_id"><option value="">{{ _("– nicht abrufen –") }}</option>
       {% for a in accounts %}<option value="{{ a.id }}" {{ 'selected' if a.id == b.savings_account_id }}>{{ a.name }} ({{ a.currency }})</option>{% endfor %}
     </select>
-    <div class="muted">Ein eigenes Wealthfolio-Konto für das {{ adapter.savings_label }}: Der Dienst liest dann auch dessen Umsätze und Saldo. Umbuchungen zwischen Girokonto und {{ adapter.savings_label }} werden als ein Übertrag gebucht. Beim ersten Abruf holt er das {{ adapter.savings_label }} ab dem Startdatum.</div>
+    <div class="muted">{{ _("Ein eigenes Wealthfolio-Konto für das {label}: Der Dienst liest dann auch dessen Umsätze und Saldo. Umbuchungen zwischen Girokonto und {label} werden als ein Übertrag gebucht. Beim ersten Abruf holt er das {label} ab dem Startdatum.", label=adapter.savings_label) }}</div>
     {% endif %}
-    <label for="start">Buchungen übernehmen ab (beim ersten Abruf)</label>
+    <label for="start">{{ _("Buchungen übernehmen ab (beim ersten Abruf)") }}</label>
     <input type="date" id="start" name="start_date" value="{{ b.start_date }}">
-    <div class="muted">Leer = alles, was der Broker liefert. Gilt für den ersten Abruf; danach holt jeder Abruf ab dem letzten (minus 7 Tage) – für einen neuen Zeitraum unten „Ab Startdatum neu abrufen“.</div>
-    <label class="check"><input type="checkbox" name="enabled" {{ 'checked' if b.enabled }}> Automatisch abrufen</label>
+    <div class="muted">{{ _("Leer = alles, was der Broker liefert. Gilt für den ersten Abruf; danach holt jeder Abruf ab dem letzten (minus 7 Tage) – für einen neuen Zeitraum unten „Ab Startdatum neu abrufen“.") }}</div>
+    <label class="check"><input type="checkbox" name="enabled" {{ 'checked' if b.enabled }}> {{ _("Automatisch abrufen") }}</label>
     <div class="actions">
-      <button>Speichern</button>
-      <a class="button secondary" href="/brokers/{{ key }}/login">Beim Broker anmelden</a>
+      <button>{{ _("Speichern") }}</button>
+      <a class="button secondary" href="/brokers/{{ key }}/login">{{ _("Beim Broker anmelden") }}</a>
     </div>
   </form>
   {% if not adapter.full_history %}
   <form method="post" action="/brokers/{{ key }}/refetch">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <p class="muted">Fehlen Buchungen aus der Zeit vor dem letzten Abruf (etwa nach einem geänderten Startdatum)? Der nächste Abruf holt dann noch einmal alles ab dem Startdatum; schon übernommene Buchungen werden nicht doppelt angelegt.</p>
-    <div class="actions"><button class="secondary">Ab Startdatum neu abrufen</button></div>
+    <p class="muted">{{ _("Fehlen Buchungen aus der Zeit vor dem letzten Abruf (etwa nach einem geänderten Startdatum)? Der nächste Abruf holt dann noch einmal alles ab dem Startdatum; schon übernommene Buchungen werden nicht doppelt angelegt.") }}</p>
+    <div class="actions"><button class="secondary">{{ _("Ab Startdatum neu abrufen") }}</button></div>
   </form>
   {% endif %}
 </div>
 {% if adapter.statement_label %}
 <div class="card">
   <h2>{{ adapter.statement_label }}</h2>
-  <p>Depotumsätze liefert die Schnittstelle nicht. Exportiere sie im Online-Banking (Depot → Umsätze → Export als CSV) und lade die Datei hier hoch – gern auch wiederholt oder überlappend, nichts wird doppelt gebucht. Der Dienst bucht Dividenden, Käufe, Verkäufe und Einbuchungen (z. B. Mitarbeiteraktien); Kapitalmaßnahmen und Depotüberträge stehen danach unter „Unbekannte Buchungen“. Konto- und Depotnummern aus der Datei werden nicht gespeichert.</p>
-  {% if statement_rows %}<p class="muted">Bisher hochgeladen: {{ statement_rows }} Zeilen.</p>{% endif %}
+  <p>{{ _("Depotumsätze liefert die Schnittstelle nicht. Exportiere sie im Online-Banking (Depot → Umsätze → Export als CSV) und lade die Datei hier hoch – gern auch wiederholt oder überlappend, nichts wird doppelt gebucht. Der Dienst bucht Dividenden, Käufe, Verkäufe und Einbuchungen (z. B. Mitarbeiteraktien); Kapitalmaßnahmen und Depotüberträge stehen danach unter „Unbekannte Buchungen“. Konto- und Depotnummern aus der Datei werden nicht gespeichert.") }}</p>
+  {% if statement_rows %}<p class="muted">{{ _("Bisher hochgeladen: {n} Zeilen.", n=statement_rows) }}</p>{% endif %}
   <form method="post" action="/brokers/{{ key }}/statement" enctype="multipart/form-data">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <input type="file" name="file" accept=".csv,text/csv" required>
-    <div class="actions"><button>Hochladen</button></div>
+    <div class="actions"><button>{{ _("Hochladen") }}</button></div>
   </form>
 </div>
 {% endif %}
 <div class="card">
-  <h2>Neu aufsetzen</h2>
-  <p>Löscht alle Buchungen, die der Dienst für {{ adapter.label }} in Wealthfolio angelegt hat (Kommentar „[SYNC {{ key }}:…]“), und vergisst, was schon übernommen wurde. Der nächste Abruf holt dann alles ab dem Startdatum neu – nach den aktuellen Regeln. CSV-/PDF-Importe, von Hand angelegte Buchungen und eingetragene Anfangsbestände bleiben.</p>
+  <h2>{{ _("Neu aufsetzen") }}</h2>
+  <p>{{ _("Löscht alle Buchungen, die der Dienst für {label} in Wealthfolio angelegt hat (Kommentar „[SYNC {key}:…]“), und vergisst, was schon übernommen wurde. Der nächste Abruf holt dann alles ab dem Startdatum neu – nach den aktuellen Regeln. CSV-/PDF-Importe, von Hand angelegte Buchungen und eingetragene Anfangsbestände bleiben.", label=adapter.label, key=key) }}</p>
   <form method="post" action="/brokers/{{ key }}/reset">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label class="check"><input type="checkbox" name="confirm" value="1"> Ja, die Buchungen des Dienstes für {{ adapter.label }} löschen</label>
-    <div class="actions"><button class="secondary">Neu aufsetzen</button></div>
+    <label class="check"><input type="checkbox" name="confirm" value="1"> {{ _("Ja, die Buchungen des Dienstes für {label} löschen", label=adapter.label) }}</label>
+    <div class="actions"><button class="secondary">{{ _("Neu aufsetzen") }}</button></div>
   </form>
 </div>
 {% endblock %}

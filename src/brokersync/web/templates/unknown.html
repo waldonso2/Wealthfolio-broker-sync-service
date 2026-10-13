@@ -1,21 +1,22 @@
-{% extends "base.html" %}{% block title %}Unbekannte Buchungen{% endblock %}
+{% extends "base.html" %}{% block title %}{{ _("Unbekannte Buchungen") }}{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Unbekannte Buchungen</h1>
-  <p>Diese Buchungen kennt der Dienst noch nicht. Sie wurden <strong>nicht</strong> nach Wealthfolio übernommen – trage sie bei Bedarf von Hand ein. Ein Fehlerbericht mit dem Typ hilft, sie künftig zu unterstützen.</p>
+  <h1>{{ _("Unbekannte Buchungen") }}</h1>
+  <p>{{ _("Diese Buchungen kennt der Dienst noch nicht. Sie wurden <strong>nicht</strong> nach Wealthfolio übernommen – trage sie bei Bedarf von Hand ein. Mit <em>Fehlerbericht auf GitHub</em> meldest du einen Typ, damit er künftig unterstützt wird: GitHub öffnet sich mit vorausgefülltem Text (IBANs und lange Nummern geschwärzt). Der Bericht ist öffentlich – prüfe ihn vor dem Absenden.") }}</p>
   {% if events %}
   <div class="table"><table>
-    <tr><th>Datum</th><th>Broker</th><th>Art</th><th>Betrag</th><th>Wertpapier</th><th>Text</th></tr>
+    <tr><th>{{ _("Datum") }}</th><th>Broker</th><th>{{ _("Art") }}</th><th>{{ _("Betrag") }}</th><th>{{ _("Wertpapier") }}</th><th>{{ _("Text") }}</th></tr>
     {% for e in events %}{% set d = describe_unknown(e.payload) %}
-    <tr><td data-label="Datum">{{ e.occurred_at | day }}</td>
+    <tr><td data-label="{{ _('Datum') }}">{{ e.occurred_at | day }}</td>
       <td data-label="Broker">{{ adapters[e.broker].label if e.broker in adapters else e.broker }}</td>
-      <td data-label="Art">{% if e.raw_type == UNMATCHED_SECURITIES %}Wertpapier-Buchung ohne Gegenstück – die Wertpapierabrechnung (PDF) in Wealthfolio importieren, dann erkennt der nächste Abruf sie{% else %}<code>{{ e.raw_type }}</code>{% endif %}</td>
-      <td data-label="Betrag">{{ d.amount }}</td>
-      <td data-label="Wertpapier">{{ d.security }}{% if d.shares %} <span class="muted">({{ d.shares }} Stück)</span>{% endif %}</td>
-      <td data-label="Text">{{ d.text }}
-        <details><summary class="muted">Rohdaten für einen Fehlerbericht</summary><pre>{{ e.payload | tojson(indent=1) }}</pre></details></td></tr>
+      <td data-label="{{ _('Art') }}">{% if e.raw_type == UNMATCHED_SECURITIES %}{{ _("Wertpapier-Buchung ohne Gegenstück – die Wertpapierabrechnung (PDF) in Wealthfolio importieren, dann erkennt der nächste Abruf sie") }}{% else %}<code>{{ e.raw_type }}</code>{% endif %}</td>
+      <td data-label="{{ _('Betrag') }}">{{ d.amount }}</td>
+      <td data-label="{{ _('Wertpapier') }}">{{ d.security }}{% if d.shares %} <span class="muted">{{ _("({n} Stück)", n=d.shares) }}</span>{% endif %}</td>
+      <td data-label="{{ _('Text') }}">{{ d.text }}
+        <details><summary class="muted">{{ _("Rohdaten") }}</summary><pre>{{ e.payload | tojson(indent=1) }}</pre></details>
+        {% if e.raw_type != UNMATCHED_SECURITIES %}<a class="button secondary report" href="{{ report_url(e, adapters[e.broker].label if e.broker in adapters else e.broker, version) }}" target="_blank" rel="noopener noreferrer">{{ _("Fehlerbericht auf GitHub") }}</a>{% endif %}</td></tr>
     {% endfor %}
   </table></div>
-  {% else %}<p class="muted">Keine.</p>{% endif %}
+  {% else %}<p class="muted">{{ _("Keine.") }}</p>{% endif %}
 </div>
 {% endblock %}

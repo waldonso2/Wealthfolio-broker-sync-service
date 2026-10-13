@@ -10,7 +10,7 @@ import os
 import re
 import shutil
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import config as config_mod
@@ -18,65 +18,94 @@ from . import crypto
 from . import state as state_mod
 from .sync import run_lock
 from .vault import Vault
+from .web.i18n import N_
 
 PLAINTEXT_LEFTOVERS = ("config.json", "secret.key")
 
 
 @dataclass
 class Check:
+    """One line on the page *Sicherheit*. ``label`` and ``detail`` are UI text keys (German, ``web/i18n.py``,
+    translated on the page); ``detail``'s placeholders are filled from ``params``, ``text`` is the German line."""
     label: str
     ok: bool
     detail: str
     warn: bool = False  # not a problem, but worth knowing
+    params: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def text(self) -> str:
+        return self.detail.format(**self.params) if self.params else self.detail
+
+
+KEY_DETAILS = {
+    "systemd-creds": N_("Mit systemd-creds verschlüsselt außerhalb von data/; der Dienst bekommt ihn nur beim Start."),
+    "systemd": N_("Außerhalb von data/, nur für root lesbar; der Dienst bekommt ihn beim Start (systemd-creds "
+                  "konnte hier nicht verschlüsseln)."),
+    "file": N_("Aus BROKERSYNC_KEY_FILE."),
+    "data": N_("Liegt in data/ neben den verschlüsselten Daten - wer data/ kopiert, kann alles entschlüsseln. "
+               "Ein Update richtet das ein."),
+}
 
 
 def status(data_dir: Path, *, secure: bool) -> list[Check]:
     d = Path(data_dir)
     out: list[Check] = []
     source = crypto.host_key_source(d)
-    out.append(Check(
-        "Schlüssel des Dienstes",
-        source in ("systemd-creds", "systemd", "file"),
-        {"systemd-creds": "Mit systemd-creds verschlüsselt außerhalb von data/; der Dienst bekommt ihn nur beim Start.",
-         "systemd": "Außerhalb von data/, nur für root lesbar; der Dienst bekommt ihn beim Start (systemd-creds "
-                    "konnte hier nicht verschlüsseln).",
-         "file": "Aus BROKERSYNC_KEY_FILE.",
-         "data": "Liegt in data/ neben den verschlüsselten Daten - wer data/ kopiert, kann alles entschlüsseln. "
-                 "Ein Update richtet das ein."}[source],
-    ))
+    out.append(Check(N_("Schlüssel des Dienstes"), source in ("systemd-creds", "systemd", "file"),
+                     KEY_DETAILS[source]))
     if crypto.passphrase_enabled(d):
-        out.append(Check("Master-Passphrase", True, "Gesetzt: Ohne sie sind Zugangsdaten, Einstellungen und "
-                                                     "Sync-Daten nicht lesbar, auch nicht aus einer Sicherung."))
+        out.append(Check(N_("Master-Passphrase"), True, N_("Gesetzt: Ohne sie sind Zugangsdaten, Einstellungen und "
+                                                           "Sync-Daten nicht lesbar, auch nicht aus einer Sicherung.")))
     else:
-        out.append(Check("Master-Passphrase", True, "Nicht gesetzt: Abrufe laufen nach einem Neustart ohne Zutun "
-                                                     "weiter. Wer den ganzen Container samt Schlüssel kopiert, kann "
-                                                     "die Daten entschlüsseln.", warn=True))
+        out.append(Check(N_("Master-Passphrase"), True, N_("Nicht gesetzt: Abrufe laufen nach einem Neustart ohne "
+                                                           "Zutun weiter. Wer den ganzen Container samt Schlüssel "
+                                                           "kopiert, kann die Daten entschlüsseln."), warn=True))
     secrets_file = d / "secrets.enc"
     sealed = secrets_file.exists() and crypto.is_sealed(secrets_file.read_bytes())
-    out.append(Check("Zugangsdaten und Sitzungen", sealed or not secrets_file.exists(),
-                     "AES-256-GCM (secrets.enc)." if sealed else "Noch nichts gespeichert." if not secrets_file.exists()
-                     else "Altes Format - wird beim nächsten Lesen neu verschlüsselt."))
-    out.append(Check("Einstellungen", not (d / "config.json").exists(),
-                     "AES-256-GCM (config.enc, Benachrichtigungen in notify.enc)." if not (d / "config.json").exists()
-                     else "config.json liegt noch unverschlüsselt vor."))
+    out.append(Check(N_("Zugangsdaten und Sitzungen"), sealed or not secrets_file.exists(),
+                     N_("AES-256-GCM (secrets.enc).") if sealed
+                     else N_("Noch nichts gespeichert.") if not secrets_file.exists()
+                     else N_("Altes Format - wird beim nächsten Lesen neu verschlüsselt.")))
+    out.append(Check(N_("Einstellungen"), not (d / "config.json").exists(),
+                     N_("AES-256-GCM (config.enc, Benachrichtigungen in notify.enc).")
+                     if not (d / "config.json").exists() else N_("config.json liegt noch unverschlüsselt vor.")))
     db = d / "state.db"
     if not state_mod.ENCRYPTED:
-        out.append(Check("Sync-Datenbank", False, "Unverschlüsselt: SQLCipher gibt es für diese Plattform nicht "
-                                                  "(nur x86-64)."))
+        out.append(Check(N_("Sync-Datenbank"), False, N_("Unverschlüsselt: SQLCipher gibt es für diese Plattform "
+                                                         "nicht (nur x86-64).")))
     else:
         plain = state_mod.is_plain(db)
-        out.append(Check("Sync-Datenbank", not plain, "Mit SQLCipher verschlüsselt (AES-256)." if not plain
-                         else "Noch unverschlüsselt - wird beim nächsten Öffnen verschlüsselt."))
-    out.append(Check("Verbindung zur Oberfläche", secure, f"HTTPS.{_fingerprint()}" if secure
-                     else "Unverschlüsseltes HTTP - Passwörter gehen im Klartext durchs Netz."))
+        out.append(Check(N_("Sync-Datenbank"), not plain, N_("Mit SQLCipher verschlüsselt (AES-256).") if not plain
+                         else N_("Noch unverschlüsselt - wird beim nächsten Öffnen verschlüsselt.")))
+    out.append(_connection(secure))
     loose = _loose_permissions(d)
-    out.append(Check("Dateirechte", not loose, "Nur der Dienst-Benutzer kann data/ lesen." if not loose
-                     else "Für andere lesbar: " + ", ".join(loose)))
+    out.append(Check(N_("Dateirechte"), not loose, N_("Nur der Dienst-Benutzer kann data/ lesen.") if not loose
+                     else N_("Für andere lesbar: {files}"), params={"files": ", ".join(loose)} if loose else {}))
     leftovers = [f for f in PLAINTEXT_LEFTOVERS if (d / f).exists()]
     if source == "data":
         leftovers = [f for f in leftovers if f != "secret.key"]
-    out.append(Check("Klartext-Reste", not leftovers, "Keine." if not leftovers else ", ".join(leftovers)))
+    out.append(Check(N_("Klartext-Reste"), not leftovers, N_("Keine.") if not leftovers else "{files}",
+                     params={"files": ", ".join(leftovers)} if leftovers else {}))
     return out
+
+
+def _connection(secure: bool) -> Check:
+    """HTTPS with the certificate systemd handed over: its validity and the CA's fingerprint to compare on import."""
+    label = N_("Verbindung zur Oberfläche")
+    if not secure:
+        return Check(label, False, N_("Unverschlüsseltes HTTP - Passwörter gehen im Klartext durchs Netz."))
+    cred = os.environ.get("CREDENTIALS_DIRECTORY")
+    path = Path(cred) / "tls.crt" if cred else None
+    if not path or not path.is_file():
+        return Check(label, True, N_("HTTPS."))
+    from cryptography import x509
+
+    until = f"{x509.load_pem_x509_certificate(path.read_bytes()).not_valid_after_utc:%d.%m.%Y}"
+    ca = ca_fingerprint()
+    if not ca:
+        return Check(label, True, N_("HTTPS. Zertifikat bis {until}"), params={"until": until})
+    return Check(label, True, N_("HTTPS. Zertifikat bis {until}, CA SHA-256 {ca}"), params={"until": until, "ca": ca})
 
 
 def ca_file() -> Path | None:
@@ -95,19 +124,6 @@ def ca_fingerprint() -> str:
     from .tls import fingerprint
 
     return fingerprint(x509.load_pem_x509_certificate(path.read_bytes()))
-
-
-def _fingerprint() -> str:
-    """Validity of the certificate systemd handed over, and the CA's fingerprint to compare on import."""
-    cred = os.environ.get("CREDENTIALS_DIRECTORY")
-    path = Path(cred) / "tls.crt" if cred else None
-    if not path or not path.is_file():
-        return ""
-    from cryptography import x509
-
-    cert = x509.load_pem_x509_certificate(path.read_bytes())
-    ca = ca_fingerprint()
-    return f" Zertifikat bis {cert.not_valid_after_utc:%d.%m.%Y}" + (f", CA SHA-256 {ca}" if ca else "")
 
 
 def _loose_permissions(d: Path) -> list[str]:

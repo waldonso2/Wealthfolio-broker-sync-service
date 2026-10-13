@@ -2,7 +2,8 @@
 
 Everything a user configures happens here; nobody edits files. The UI is
 protected by its own password, chosen on the first visit. Texts are German,
-the audience are users of German brokers.
+the audience are users of German brokers; English is the second language
+(``web/i18n.py``, #87).
 
 This module builds the app: templates, session, login check and the routers
 of ``web/routes/`` (one per area, #76), which share an ``AppContext``
@@ -27,7 +28,7 @@ from ..state import State
 from ..sync import UNMATCHED_SECURITIES, Syncer
 from ..vault import Vault
 from ..wealthfolio import WealthfolioClient
-from . import views
+from . import i18n, views
 from .context import PUBLIC, SETTINGS_PAGES, STATUS_LABEL, AppContext, accounts_of, csrf_guard
 from .gate import Gate, Throttle
 from .routes import ROUTERS
@@ -101,7 +102,10 @@ def _templates() -> Jinja2Templates:
     templates.env.filters["day"] = views.local_day
     templates.env.filters["utc"] = views.utc_iso
     templates.env.filters["money"] = views.money
+    # The UI's texts in the page's language (#87): ``{{ _("Speichern") }}``, see ``web/i18n.py``.
+    templates.env.globals["_"] = i18n.template_gettext
     templates.env.globals["describe_unknown"] = views.describe_unknown
+    templates.env.globals["report_url"] = views.report_url
     # Foreign error texts (banks, brokers, Wealthfolio) on a page: never a secret or an account number.
     templates.env.filters["redact"] = lambda text: redact.redact(str(text)) if text else text
     templates.env.globals["STATUS"] = STATUS_LABEL

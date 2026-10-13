@@ -61,6 +61,9 @@ class Config:
     # "auto": sessions are kept, the timer fetches. "safe": every fetch needs a fresh login in the UI, the
     # session is ended after it, the timer only reminds (#85). For all brokers.
     sync_mode: str = "auto"
+    # Page Darstellung: "de" / "en"; "system" (the device's setting) / "light" / "dark".
+    ui_language: str = "de"
+    ui_theme: str = "system"
 
     @property
     def safe_mode(self) -> bool:

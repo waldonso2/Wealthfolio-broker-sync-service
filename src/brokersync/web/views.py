@@ -7,10 +7,14 @@ zone is UTC too.
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
+
+from .i18n import translate
 
 # Times are shown in German time; the container usually runs in UTC.
 TZ = ZoneInfo(os.environ.get("BROKERSYNC_TZ", "Europe/Berlin"))
@@ -110,33 +114,55 @@ STALE_DAYS = 2
 
 
 def broker_light(last: dict | None, reconcile: dict | None, unknown: int, gaps: int, enabled: bool,
-                 now: datetime | None = None) -> tuple[str, list[str]]:
-    """The overview's traffic light for a broker and the reasons behind it (#83).
+                 now: datetime | None = None, lang: str = "de") -> tuple[str, list[tuple[str, str]]]:
+    """The overview's traffic light for a broker and the reasons behind it (#83), each with where it leads:
+    "login", "unknown", "check" or "" (nothing to open). The reasons are in ``lang`` (#87).
 
     red: the last run failed or needs a login; yellow: something to look at (deviations, unknown or missing
     bookings, failed activities, no run for a while); green: nothing to do; grey: never fetched.
     """
     if not last:
-        return "grey", ["Noch nie abgerufen"]
+        return "grey", [(translate("Noch nie abgerufen", lang), "")]
     status = last.get("status")
     if status == "needs_auth":
-        return "red", ["Anmeldung nötig"]
+        return "red", [(translate("Anmeldung nötig", lang), "login")]
     if status == "error":
-        failed = f" ({last['failed']} Buchungen)" if last.get("failed") else ""
-        return "red", [f"Letzter Abruf fehlgeschlagen{failed}"]
-    reasons = []
+        if last.get("failed"):
+            return "red", [(translate("Letzter Abruf fehlgeschlagen ({n} Buchungen)", lang, n=last["failed"]), "")]
+        return "red", [(translate("Letzter Abruf fehlgeschlagen", lang), "")]
+    reasons: list[tuple[str, str]] = []
     deviations = (reconcile or {}).get("deviations") or []
     if deviations:
-        reasons.append(f"{len(deviations)} Abweichung{'en' if len(deviations) != 1 else ''} zu Wealthfolio")
+        n = len(deviations)
+        reasons.append((translate("{n} Abweichung zu Wealthfolio" if n == 1 else "{n} Abweichungen zu Wealthfolio",
+                                  lang, n=n), "check"))
     if unknown:
-        reasons.append(f"{unknown} unbekannte Buchung{'en' if unknown != 1 else ''}")
+        reasons.append((translate("{n} unbekannte Buchung" if unknown == 1 else "{n} unbekannte Buchungen", lang,
+                                  n=unknown), "unknown"))
     if gaps:
-        reasons.append(f"{gaps} fehlt in Wealthfolio")
+        reasons.append((translate("{n} fehlt in Wealthfolio", lang, n=gaps), "check"))
     if status == "aborted":
-        reasons.append("Letzter Abruf abgebrochen")
+        reasons.append((translate("Letzter Abruf abgebrochen", lang), ""))
     started = _parse(last.get("started_at"))
     if enabled and isinstance(started, datetime) and status != "running":
         age = (now or datetime.now(UTC)) - (started if started.tzinfo else started.replace(tzinfo=UTC))
         if age.days >= STALE_DAYS:
-            reasons.append(f"Seit {age.days} Tagen kein Abruf")
+            reasons.append((translate("Seit {n} Tagen kein Abruf", lang, n=age.days), ""))
     return ("yellow" if reasons else "green"), reasons
+
+
+# Where an unknown booking is reported (#86): a new issue, pre-filled; the user reviews and sends it.
+REPORT_URL = "https://github.com/waldonso2/Wealthfolio-broker-sync-service/issues/new"
+
+
+def report_url(event: dict, broker_label: str, version: str) -> str:
+    """A GitHub "new issue" link for an unknown booking: its type, day and masked payload (IBANs and long
+    numbers are masked when stored, ``State.add_unknown``). Nothing is sent before the user submits it."""
+    payload = json.dumps(event.get("payload") or {}, indent=1, ensure_ascii=False)[:3000]
+    body = (f"**Unbekannte Buchung**\n\n- Broker: {broker_label}\n- Typ: `{event.get('raw_type', '')}`\n"
+            f"- Datum: {local_day(event.get('occurred_at'))}\n- Version: {version}\n\n"
+            "Rohdaten (IBANs und lange Nummern sind geschwärzt - bitte vor dem Absenden prüfen):\n\n"
+            f"```json\n{payload}\n```\n")
+    query = urlencode({"title": f"Unbekannte Buchung: {broker_label} {event.get('raw_type', '')}",
+                       "body": body, "labels": "unknown-event"})
+    return f"{REPORT_URL}?{query}"

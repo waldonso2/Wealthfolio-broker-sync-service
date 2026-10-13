@@ -14,13 +14,20 @@
   --serif: "Merriweather", ui-serif, Georgia, serif;
   color-scheme: light;
 }
+/* Colour scheme (page Darstellung): the device's setting, or always light / always dark (data-theme). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #100f0f; --card: #1c1b1a; --line: #282726; --line-2: #343331; --text: #cecdc3; --muted: #878580;
     --primary: #cecdc3; --on-primary: #100f0f; --accent: #4385be;
     --ok: #879a39; --warn: #d0a215; --error: #d14d41; --grey: #575653;
     color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+    --bg: #100f0f; --card: #1c1b1a; --line: #282726; --line-2: #343331; --text: #cecdc3; --muted: #878580;
+    --primary: #cecdc3; --on-primary: #100f0f; --accent: #4385be;
+    --ok: #879a39; --warn: #d0a215; --error: #d14d41; --grey: #575653;
+    color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -175,3 +182,11 @@ ul.rows .grow .muted { font-size: 13px; }
 .error-text { color: var(--error); }
 .summary-line strong.ok-text { color: var(--ok); } .summary-line strong.warn-text { color: var(--warn); }
 input[type=radio], input[type=checkbox] { accent-color: var(--primary); width: 18px; height: 18px; }
+.icon-button { padding: 8px 10px; }
+.icon-button svg { width: 18px; height: 18px; }
+ul.reasons a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+ul.rows.compact li { align-items: center; flex-wrap: nowrap; padding: 6px 0; font-size: 14px; }
+ul.rows.compact .grow-inline { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ul.rows.compact form { margin: 0; }
+ul.rows.compact button.link { font-size: 16px; padding: 4px 8px; }
+.report { margin-top: 8px; font-size: 13px; min-height: 34px; padding: 6px 12px; }

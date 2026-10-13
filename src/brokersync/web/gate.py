@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import __version__, crypto
+from .i18n import template_gettext
 
 log = logging.getLogger(__name__)
 
@@ -142,6 +143,8 @@ def _capped(receive, limit: int):
 def _locked_app(gate: Gate, templates_dir: Path, static_dir: Path) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     templates = Jinja2Templates(directory=templates_dir)
+    # No language while locked - the config holding it can't be read: the unlock page is German.
+    templates.env.globals["_"] = template_gettext
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     def page(request: Request, error: str = "", status: int = 200) -> HTMLResponse:

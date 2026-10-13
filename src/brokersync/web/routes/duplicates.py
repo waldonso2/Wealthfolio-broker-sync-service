@@ -9,7 +9,7 @@ from ... import config as config_mod
 from ... import duplicates as duplicates_mod
 from ...sync import AlreadyRunning, run_lock
 from ...wealthfolio import WealthfolioError
-from ..context import AppContext, Ctx, accounts_of, redirect
+from ..context import AppContext, Ctx, accounts_of, redirect, tr
 
 router = APIRouter()
 
@@ -36,30 +36,32 @@ def duplicates_page(request: Request, ctx: Ctx):
 @router.post("/duplicates")
 def duplicates_remove(request: Request, ctx: Ctx, broker: str = Form(...), confirm: str = Form("")):
     if not confirm:
-        return redirect(request, "/duplicates", "Bitte bestätige das Löschen mit dem Häkchen.", "error")
+        return redirect(request, "/duplicates", tr(request, "Bitte bestätige das Löschen mit dem Häkchen."), "error")
     c = ctx.cfg()
     b = c.brokers.get(broker)
     if broker not in ctx.adapters or b is None:
-        return redirect(request, "/duplicates", "Unbekannter Broker.", "error")
+        return redirect(request, "/duplicates", tr(request, "Unbekannter Broker."), "error")
     try:
         # Not while a sync runs: it could create what is being removed.
         with run_lock(ctx.data_dir, wait=5), ctx.wf_client(c) as wf:
             found = duplicates_mod.find(wf, broker, accounts_of(b))
             deleted, done, errors = duplicates_mod.remove(wf, found)
     except AlreadyRunning:
-        return redirect(request, "/duplicates", "Gerade läuft ein Abruf - bitte gleich noch einmal.", "warn")
+        return redirect(request, "/duplicates", tr(request, "Gerade läuft ein Abruf - bitte gleich noch einmal."),
+                        "warn")
     except WealthfolioError as e:
-        return redirect(request, "/duplicates", f"Wealthfolio: {e}", "error")
+        return redirect(request, "/duplicates", tr(request, "Wealthfolio: {error}", error=e), "error")
     for d in found:
         if d.tx_id in done:
             ctx.state.mark(broker, d.tx_id, "existing", [d.original["id"]])
-    message = f"{len(done)} doppelte Vorgänge entfernt ({deleted} Buchungen). Die CSV-/PDF-Buchungen bleiben."
+    message = tr(request, "{n} doppelte Vorgänge entfernt ({deleted} Buchungen). Die CSV-/PDF-Buchungen bleiben.",
+                 n=len(done), deleted=deleted)
     if done:
         # The check on the status page was computed with the duplicates in it.
         ctx.state.clear_reconcile(broker)
-        message += (f" Der Abgleich wird beim nächsten Abruf neu berechnet - auf der Startseite bei "
-                    f"{ctx.adapters[broker].label} „Jetzt abrufen“ klicken.")
+        message += tr(request, " Der Abgleich wird beim nächsten Abruf neu berechnet - auf der Startseite bei "
+                               "{label} „Jetzt abrufen“ klicken.", label=ctx.adapters[broker].label)
     if errors:
-        message += f" {len(errors)} nicht entfernt: " + "; ".join(errors[:3])
+        message += tr(request, " {n} nicht entfernt: {errors}", n=len(errors), errors="; ".join(errors[:3]))
         return redirect(request, "/duplicates", message, "warn")
     return redirect(request, "/duplicates", message)

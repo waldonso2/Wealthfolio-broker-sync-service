@@ -1,47 +1,39 @@
 <!doctype html>
-<html lang="de">
+<html lang="{{ lang | default('de') }}"{% if theme in ("light", "dark") %} data-theme="{{ theme }}"{% endif %}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#fffcf0" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#100f0f" media="(prefers-color-scheme: dark)">
+{% if theme == "light" %}<meta name="theme-color" content="#fffcf0">{% elif theme == "dark" %}<meta name="theme-color" content="#100f0f">{% else %}<meta name="theme-color" content="#fffcf0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#100f0f" media="(prefers-color-scheme: dark)">{% endif %}
 <title>{% block title %}Broker Sync{% endblock %} · Wealthfolio Broker Sync</title>
 <link rel="stylesheet" href="/static/style.css">
 {% block head %}{% endblock %}
 </head>
-{% macro icon(name) -%}
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-{%- if name == "home" %}<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-{%- elif name == "check" %}<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>
-{%- elif name == "unknown" %}<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>
-{%- elif name == "settings" %}<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>
-{%- elif name == "logout" %}<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>
-{%- endif %}</svg>
-{%- endmacro %}
+{% from "_icons.html" import icon %}
 <body{% if request.session.get("user") %} class="has-tabs"{% endif %}>
 <header><div class="wrap">
   <a class="brand" href="/">Broker Sync <span class="version">v{{ version }}</span></a>
   {% if request.session.get("user") %}
   {% set path = request.url.path %}
   {% set in_settings = path == "/settings" or path.startswith("/brokers") or path in settings_pages | map(attribute=0) | list %}
-  <nav class="main" aria-label="Hauptmenü">
-    <a href="/"{% if path == "/" %} aria-current="page"{% endif %}>{{ icon("home") }}<span>Übersicht</span></a>
-    <a href="/check"{% if path.startswith("/check") %} aria-current="page"{% endif %}>{{ icon("check") }}<span>Prüfung</span></a>
-    <a href="/unknown"{% if path == "/unknown" %} aria-current="page"{% endif %}>{{ icon("unknown") }}<span>Unbekannt</span>{% if nav_unknown %} <span class="count" aria-label="{{ nav_unknown }} offen">{{ nav_unknown }}</span>{% endif %}</a>
-    <a href="/settings"{% if in_settings %} aria-current="page"{% endif %}>{{ icon("settings") }}<span>Einstellungen</span></a>
+  <nav class="main" aria-label="{{ _('Hauptmenü') }}">
+    <a href="/"{% if path == "/" %} aria-current="page"{% endif %}>{{ icon("home") }}<span>{{ _("Übersicht") }}</span></a>
+    <a href="/check"{% if path.startswith("/check") %} aria-current="page"{% endif %}>{{ icon("check") }}<span>{{ _("Prüfung") }}</span></a>
+    <a href="/unknown"{% if path == "/unknown" %} aria-current="page"{% endif %}>{{ icon("unknown") }}<span>{{ _("Unbekannt") }}</span>{% if nav_unknown %} <span class="count" aria-label="{{ _('{n} offen', n=nav_unknown) }}">{{ nav_unknown }}</span>{% endif %}</a>
+    <a href="/settings"{% if in_settings %} aria-current="page"{% endif %}>{{ icon("settings") }}<span>{{ _("Einstellungen") }}</span></a>
   </nav>
-  <form method="post" action="/logout" class="logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link" title="Abmelden" aria-label="Abmelden">{{ icon("logout") }}</button></form>
+  <form method="post" action="/logout" class="logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link" title="{{ _('Abmelden') }}" aria-label="{{ _('Abmelden') }}">{{ icon("logout") }}</button></form>
   {% endif %}
 </div></header>
 <main class="wrap">
   {% if request.session.get("user") and in_settings and path != "/settings" %}
-  <nav class="subnav" aria-label="Einstellungen">
-    {% for href, title, hint in settings_pages %}<a href="{{ href }}"{% if path == href or (href == "/brokers" and path.startswith("/brokers")) %} aria-current="page"{% endif %}>{{ title }}</a>{% endfor %}
+  <nav class="subnav" aria-label="{{ _('Einstellungen') }}">
+    {% for href, title, hint in settings_pages %}<a href="{{ href }}"{% if path == href or (href == "/brokers" and path.startswith("/brokers")) %} aria-current="page"{% endif %}>{{ _(title) }}</a>{% endfor %}
   </nav>
   {% endif %}
   {% if flash %}<div class="flash {{ flash.level }}">{{ flash.text }}</div>{% endif %}
   {% block content %}{% endblock %}
 </main>
-<footer class="wrap"><p class="muted">Version {{ version }} · alle Daten verschlüsselt · nur lesender Zugriff auf die Broker</p></footer>
+<footer class="wrap"><p class="muted">{{ _("Version {version} · alle Daten verschlüsselt · nur lesender Zugriff auf die Broker", version=version) }}</p></footer>
 </body>
 </html>

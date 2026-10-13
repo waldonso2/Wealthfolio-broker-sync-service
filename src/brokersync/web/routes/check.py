@@ -13,7 +13,7 @@ from ... import audit, meta_keys
 from ...sync import opening_id, refetch_flag
 from ...wealthfolio import WealthfolioError
 from .. import inputs
-from ..context import AppContext, Ctx, accounts_of, redirect
+from ..context import AppContext, Ctx, accounts_of, language, redirect, tr
 
 router = APIRouter()
 
@@ -33,6 +33,7 @@ def check_page(request: Request, ctx: Ctx):
         error = str(e)
     # Everything about a broker in one card (#83): gaps, opening positions and the account check.
     brokers = []
+    cash_name, depot_name = tr(request, "Verrechnungskonto"), tr(request, "Depotkonto")  # an account Wealthfolio lacks
     for k, b in c.brokers.items():
         if k not in adapters or not b.cash_account_id or not b.portfolio_account_id:
             continue
@@ -43,8 +44,8 @@ def check_page(request: Request, ctx: Ctx):
         entry: dict = {"key": k, "label": adapters[k].label, "full": adapters[k].full_history, "gaps": gaps,
                  "checked": bool(state.last_run(k)), "missing": missing,
                  "openings": [{**o, "booked": opening_id(o["isin"], o["day"]) in synced} for o in state.openings(k)],
-                 "audit": result, "cash_name": names.get(b.cash_account_id, "Verrechnungskonto"),
-                 "depot_name": names.get(b.portfolio_account_id, "Depotkonto"), "depot_id": b.portfolio_account_id}
+                 "audit": result, "cash_name": names.get(b.cash_account_id, cash_name),
+                 "depot_name": names.get(b.portfolio_account_id, depot_name), "depot_id": b.portfolio_account_id}
         open_gaps = sum(1 for g in gaps if g["kind"] in ("missing", "partial", "orphan"))
         audit_issues = (len(result.moments) + len(result.lonely)) if result else 0
         entry["issues"] = open_gaps + len(missing) + audit_issues
@@ -80,7 +81,7 @@ async def check_opening(request: Request, ctx: Ctx, key: str):
     """An opening position: bought on a day before the start date; the next run books it."""
     state = ctx.state
     if key not in ctx.adapters:
-        return redirect(request, "/check", "Unbekannter Broker.", "error")
+        return redirect(request, "/check", tr(request, "Unbekannter Broker."), "error")
     form = await request.form()
     isin = str(form.get("isin", "")).strip().upper()
     day = str(form.get("day", "")).strip()
@@ -88,29 +89,31 @@ async def check_opening(request: Request, ctx: Ctx, key: str):
         try:
             isin = inputs.security_id(isin)
         except inputs.Invalid as e:
-            return redirect(request, "/check", str(e), "error")
+            return redirect(request, "/check", e.text(language(request)), "error")
     if form.get("action") == "delete":
         if opening_id(isin, day) not in state.synced(key):
             state.delete_opening(key, isin, day)
-        return redirect(request, "/check", "Anfangsbestand entfernt.")
+        return redirect(request, "/check", tr(request, "Anfangsbestand entfernt."))
     try:
         shares = Decimal(str(form.get("shares", "")).replace(",", "."))
         price = Decimal(str(form.get("price", "")).replace(",", "."))
         fee = Decimal(str(form.get("fee") or "0").replace(",", "."))
         bought = date.fromisoformat(day)
     except (InvalidOperation, ValueError):
-        return redirect(request, "/check", "Bitte Kaufdatum, Stückzahl, Kurs und Gebühr als Zahlen angeben.",
-                        "error")
+        return redirect(request, "/check", tr(request, "Bitte Kaufdatum, Stückzahl, Kurs und Gebühr als Zahlen "
+                                                       "angeben."), "error")
     if shares <= 0 or price <= 0 or fee < 0 or bought > date.today() or not isin:
-        return redirect(request, "/check", "Stückzahl und Kurs müssen größer 0 sein, die Gebühr mindestens 0, "
-                                           "das Kaufdatum darf nicht in der Zukunft liegen.", "error")
+        return redirect(request, "/check", tr(request, "Stückzahl und Kurs müssen größer 0 sein, die Gebühr "
+                                                       "mindestens 0, das Kaufdatum darf nicht in der Zukunft liegen."),
+                        "error")
     known = {p["isin"]: p for p in json.loads(state.meta(meta_keys.POSITIONS(key)) or "[]")}
     p = known.get(isin, {})
     name = str(form.get("name") or p.get("name") or isin)[:200]
     state.add_opening(key, isin, bought.isoformat(), name,
                       str(shares), str(price), str(fee), p.get("currency") or "EUR")
-    return redirect(request, "/check", f"Anfangsbestand {isin} gespeichert - der nächste Abruf bucht ihn als Kauf "
-                                       f"am {bought:%d.%m.%Y} samt Einzahlung des Kaufbetrags.")
+    return redirect(request, "/check", tr(request, "Anfangsbestand {isin} gespeichert - der nächste Abruf bucht ihn "
+                                                   "als Kauf am {day} samt Einzahlung des Kaufbetrags.",
+                                          isin=isin, day=f"{bought:%d.%m.%Y}"))
 
 
 @router.post("/check/{key}")
@@ -118,20 +121,21 @@ async def check_decide(request: Request, ctx: Ctx, key: str):
     """The user's decision on transactions missing in Wealthfolio: book them again, or ignore them."""
     state = ctx.state
     if key not in ctx.adapters:
-        return redirect(request, "/check", "Unbekannter Broker.", "error")
+        return redirect(request, "/check", tr(request, "Unbekannter Broker."), "error")
     form = await request.form()
     action = str(form.get("action", ""))
     open_refs = {g["ref"] for g in state.gaps(key) if g["kind"] != "orphan"}
     tx_ids = [str(t) for t in form.getlist("tx") if str(t) in open_refs]
     if not tx_ids:
-        return redirect(request, "/check", "Keine Buchung ausgewählt.", "warn")
+        return redirect(request, "/check", tr(request, "Keine Buchung ausgewählt."), "warn")
     if action == "ignore":
         state.ignore(key, tx_ids)
-        return redirect(request, "/check", f"{len(tx_ids)} Buchung(en) werden nicht mehr gebucht.")
+        return redirect(request, "/check", tr(request, "{n} Buchung(en) werden nicht mehr gebucht.", n=len(tx_ids)))
     if action != "rebook":
-        return redirect(request, "/check", "Unbekannte Aktion.", "error")
+        return redirect(request, "/check", tr(request, "Unbekannte Aktion."), "error")
     state.forget(key, tx_ids)
     if not ctx.adapters[key].full_history:
         state.set_flag(refetch_flag(key))  # they may lie before the next run's window
-    return redirect(request, "/check", f"{len(tx_ids)} Buchung(en) legt der nächste Abruf wieder an – außer "
-                                       "sie sind inzwischen in Wealthfolio (z. B. aus einem Import).")
+    return redirect(request, "/check", tr(request, "{n} Buchung(en) legt der nächste Abruf wieder an – außer sie "
+                                                   "sind inzwischen in Wealthfolio (z. B. aus einem Import).",
+                                          n=len(tx_ids)))

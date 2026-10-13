@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from ... import __version__
 from ... import security as security_mod
 from ...vault import hash_password, needs_rehash, verify_password
-from ..context import Ctx, redirect
+from ..context import Ctx, redirect, tr
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -46,8 +46,8 @@ def setup_password(request: Request, ctx: Ctx, password: str = Form(...), passwo
         return RedirectResponse("/login", 303)
     if len(password) < MIN_PASSWORD or password != password2:
         return redirect(request, "/setup-password",
-                        f"Das Passwort braucht mindestens {MIN_PASSWORD} Zeichen, beide Eingaben müssen gleich "
-                        "sein.", "error")
+                        tr(request, "Das Passwort braucht mindestens {n} Zeichen, beide Eingaben müssen gleich sein.",
+                           n=MIN_PASSWORD), "error")
     ctx.vault.update(lambda d: d.__setitem__("ui_password_hash", hash_password(password)))
     request.session.clear()  # a fresh session, nothing carried over from before the password existed
     request.session["user"] = "admin"
@@ -55,7 +55,7 @@ def setup_password(request: Request, ctx: Ctx, password: str = Form(...), passwo
         c = ctx.cfg()
         c.public_url = str(request.base_url).rstrip("/")
         ctx.save(c)
-    return redirect(request, "/", "Passwort gespeichert. Jetzt Schritt für Schritt einrichten.")
+    return redirect(request, "/", tr(request, "Passwort gespeichert. Jetzt Schritt für Schritt einrichten."))
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -68,8 +68,8 @@ def login(request: Request, ctx: Ctx, password: str = Form(...)):
     client = request.client.host if request.client else "?"
     wait = ctx.throttle.blocked(client)
     if wait:
-        return redirect(request, "/login", f"Zu viele Fehlversuche. Bitte in {wait // 60 + 1} Minuten erneut "
-                        "versuchen.", "error")
+        return redirect(request, "/login", tr(request, "Zu viele Fehlversuche. Bitte in {n} Minuten erneut "
+                                                       "versuchen.", n=wait // 60 + 1), "error")
     stored = ctx.vault.load().get("ui_password_hash")
     if verify_password(password, stored):
         ctx.throttle.success(client)
@@ -80,7 +80,7 @@ def login(request: Request, ctx: Ctx, password: str = Form(...)):
         return redirect(request, "/")
     ctx.throttle.failure(client)
     log.warning("web UI: wrong password from %s", client)
-    return redirect(request, "/login", "Falsches Passwort.", "error")
+    return redirect(request, "/login", tr(request, "Falsches Passwort."), "error")
 
 
 @router.post("/logout")

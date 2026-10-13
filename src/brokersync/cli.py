@@ -77,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 (#80)
         from .security import status
 
         for c in status(data_dir(), secure=bool(os.environ.get("BROKERSYNC_TLS"))):
-            print(f"{'HINWEIS' if c.warn else 'OK' if c.ok else 'PROBLEM':8} {c.label}: {c.detail}")
+            print(f"{'HINWEIS' if c.warn else 'OK' if c.ok else 'PROBLEM':8} {c.label}: {c.text}")
         return 0
 
     if args.cmd == "run":

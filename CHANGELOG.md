@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.17.0
+
+English, a light mode and a tidier overview (waldonso2/wealthfolio-importer-addon#86, waldonso2/wealthfolio-importer-addon#87):
+
+- **Einstellungen → Darstellung** (new):
+  - **Sprache**: Deutsch or English. Notifications, bank texts and the comments in Wealthfolio stay as they are.
+  - **Farbschema**: like the device, always light or always dark.
+- **Overview**: per broker only two buttons, *Jetzt abrufen* and a gear for its settings. The reasons below the traffic light are links: "Anmeldung nötig" leads to the login, unknown bookings to *Unbekannt*, deviations to *Prüfung*.
+- **Unbekannte Buchungen**: each one can be reported as a GitHub issue with one button. The issue is prefilled with type, date, version and the masked data (no IBANs or account numbers); you see and can edit everything before sending it. The raw data is folded.
+- **Prüfung**: an opening position is no longer shown once its buy has been booked. The note about German time is gone.
+- **Wertpapiere**: saved mappings take one line each.
+
 ## 0.16.0
 
 Abrufmodus "Sicher" and PINs that are never stored (waldonso2/wealthfolio-importer-addon#85):

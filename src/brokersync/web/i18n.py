@@ -1,0 +1,694 @@
+"""The UI's languages (#87): German, and English as the second one.
+
+gettext style with the German text as the key: a template writes ``{{ _("Speichern") }}``, Python code
+``tr(request, "Gespeichert.")`` (``web/context.py``) or ``translate(text, lang)``. German needs no catalogue -
+the key is the text -, so the German pages stay exactly as they were. ``EN`` maps every key to its English
+text; a key without an entry shows the German text. Dynamic parts are ``str.format`` placeholders
+(``"{n} Buchungen gelöscht."``) filled after the lookup, so a value (a broker's name, an amount, a bank's
+error text) is never looked up or translated itself.
+
+Plurals: one key per form, the caller picks it - ``translate("{n} Buchung" if n == 1 else "{n} Buchungen",
+lang, n=n)``; the completeness test (``tests/test_i18n.py``) reads both branches.
+
+Texts the code holds before it knows the language (``STATUS_LABEL``, ``SETTINGS_PAGES``, the checks on
+*Sicherheit*) are marked with ``N_`` - it returns the text unchanged and only tells the completeness test
+that it is a key - and translated where they are shown (``_(label)`` in the template).
+
+Not translated, on purpose: ntfy notifications, texts from adapters (challenge messages, ``AdapterError`` -
+often the bank's own wording), foreign error texts (Wealthfolio, banks), log lines, comments of activities in
+Wealthfolio (part of the duplicate fingerprint) and the GitHub report of an unknown booking.
+"""
+
+from __future__ import annotations
+
+from jinja2 import pass_context
+from markupsafe import Markup
+
+LANGUAGES = ("de", "en")
+
+
+def N_(text: str) -> str:  # gettext's name for "a key, translated where it is shown"
+    return text
+
+
+def lookup(text: str, lang: str | None) -> str:
+    """The text in ``lang`` (the German key itself for German, an unknown language or a missing entry)."""
+    if lang == "en":
+        return EN.get(text, text)
+    return text
+
+
+def translate(text: str, lang: str | None, **params) -> str:
+    """``text`` (a German key) in ``lang``, its ``{placeholders}`` filled with ``params``."""
+    out = lookup(text, lang)
+    return out.format(**params) if params else out
+
+
+def markup(text: str, lang: str | None, **params) -> Markup:
+    """For templates: the key may hold our own inline HTML (``<strong>``, ``<a>``), the params are escaped."""
+    out = Markup(lookup(text, lang))  # keys and EN entries are our own source
+    return out.format(**params) if params else out
+
+
+@pass_context
+def template_gettext(context, text: str, **params) -> Markup:
+    """The templates' ``_``: in the language of the page (``lang`` in its context; German without one)."""
+    return markup(text, context.get("lang"), **params)
+
+
+# German key -> English text. Terms: Verrechnungskonto = cash account, Depotkonto = securities account,
+# Abruf = fetch, Buchung = booking, Anmeldung = login, Anfangsbestand = opening position, Tresor = vault.
+EN: dict[str, str] = {
+    # ── navigation, frame ──
+    "Übersicht": "Overview",
+    "Prüfung": "Check",
+    "Unbekannt": "Unknown",
+    "Einstellungen": "Settings",
+    "Hauptmenü": "Main menu",
+    "Abmelden": "Log out",
+    "{n} offen": "{n} open",
+    "Version {version} · alle Daten verschlüsselt · nur lesender Zugriff auf die Broker":
+        "Version {version} · all data encrypted · read-only access to the brokers",
+    "Einstellungen {label}": "Settings {label}",
+    # ── status labels, settings pages, appearance ──
+    "OK": "OK",
+    "Anmeldung nötig": "Login needed",
+    "Fehler": "Error",
+    "läuft": "running",
+    "abgebrochen": "aborted",
+    "Wealthfolio": "Wealthfolio",
+    "Adresse und Passwort deines Wealthfolio": "Address and password of your Wealthfolio",
+    "Broker": "Brokers",
+    "Zugangsdaten, Konten, Startdatum, Anmeldung": "Credentials, accounts, start date, login",
+    "Benachrichtigungen": "Notifications",
+    "ntfy für TAN-Anfragen und Fehler": "ntfy for TAN requests and errors",
+    "Wertpapiere": "Securities",
+    "ISIN unter eigenem Symbol führen": "Keep an ISIN under a symbol of your own",
+    "Überträge": "Transfers",
+    "Auszahlungen auf eigene Konten erkennen": "Recognise withdrawals to your own accounts",
+    "Logos": "Logos",
+    "Logos der Wertpapiere von logo.dev": "Logos of the securities from logo.dev",
+    "Sicherheit": "Security",
+    "Abrufmodus, Verschlüsselung, Master-Passphrase, Zertifikat":
+        "Fetch mode, encryption, master passphrase, certificate",
+    "Darstellung": "Appearance",
+    "Sprache, hell oder dunkel": "Language, light or dark",
+    "Duplikate": "Duplicates",
+    "Doppelte Buchungen finden und entfernen": "Find and remove duplicate bookings",
+    "Farbschema": "Colour scheme",
+    "Sprache": "Language",
+    "Wie das Gerät": "Like the device",
+    "Hell": "Light",
+    "Dunkel": "Dark",
+    # ── common words ──
+    "Speichern": "Save",
+    "Gespeichert.": "Saved.",
+    "Entfernen": "Remove",
+    "Hinzufügen": "Add",
+    "Keine.": "None.",
+    "Datum": "Date",
+    "Art": "Type",
+    "Betrag": "Amount",
+    "Wertpapier": "Security",
+    "Text": "Text",
+    "Name": "Name",
+    "Status": "Status",
+    "Status: {s}": "Status: {s}",
+    "Konto": "Account",
+    "Kommentar": "Comment",
+    "Herkunft": "Source",
+    "Dienst": "Service",
+    "Import / von Hand": "Import / by hand",
+    "Zeitpunkt": "Time",
+    "Wirkung": "Effect",
+    "Stück": "Shares",
+    "Kurs": "Price",
+    "Gebühr": "Fee",
+    "Gebühren": "Fees",
+    "Kaufdatum": "Purchase date",
+    "Vorgang": "Transaction",
+    "auswählen": "select",
+    "… und {n} weitere.": "… and {n} more.",
+    "Verrechnungskonto": "Cash account",
+    "Depotkonto": "Securities account",
+    "Unbekannter Broker.": "Unknown broker.",
+    "Wealthfolio nicht erreichbar: {error}": "Wealthfolio not reachable: {error}",
+    "Formular abgelaufen - bitte die Seite neu laden.": "Form expired - please reload the page.",
+    # ── overview ──
+    "alles in Ordnung": "all fine",
+    "bitte ansehen": "please have a look",
+    "Handlungsbedarf": "Action needed",
+    "noch kein Abruf": "not fetched yet",
+    "{label} entfernt": "{label} removed",
+    "Den Test-Broker „{label}“ gibt es nicht mehr. Seine {n} Buchungen in Wealthfolio bleiben, bis du sie löschst – "
+    "Suchbegriff <code>{search}</code> im Kommentar.":
+        "The test broker “{label}” no longer exists. Its {n} bookings stay in Wealthfolio until you delete them – "
+        "search for <code>{search}</code> in the comment.",
+    "Ausblenden": "Hide",
+    "Abruf läuft …": "Fetching …",
+    "Alle abrufen": "Fetch all",
+    "Sicherer Modus: Jeder Abruf beginnt mit deiner Anmeldung, danach meldet sich der Dienst ab.":
+        "Safe mode: every fetch starts with your login, afterwards the service logs out.",
+    "Ändern": "Change",
+    "Automatischer Abruf:": "Automatic fetch:",
+    "nächster Lauf {when}": "next run {when}",
+    "täglich": "daily",
+    "Broker ohne automatischen Abruf nur einzeln": "brokers without automatic fetch only one by one",
+    "Wealthfolio nicht verbunden": "Wealthfolio not connected",
+    "Wealthfolio verbinden": "Connect Wealthfolio",
+    "nur manuell": "manual only",
+    "Zuletzt {when} · <strong>{n}</strong> neu": "Last {when} · <strong>{n}</strong> new",
+    "{n} vorhanden": "{n} already there",
+    "Noch nie abgerufen": "Never fetched",
+    'Saldo <strong class="ok-text">stimmt</strong>': 'Balance <strong class="ok-text">matches</strong>',
+    'Saldo <strong class="warn-text">weicht ab</strong>': 'Balance <strong class="warn-text">differs</strong>',
+    "Meldung des letzten Abrufs": "Message of the last fetch",
+    "Abweichungen zu Wealthfolio ({n})": "Differences from Wealthfolio ({n})",
+    "Wert": "Value",
+    'Stand {when}. Gemeldet wird erst, was beim nächsten Abruf noch abweicht. Bestände von vor dem Startdatum unter '
+    '<a href="/check">Prüfung</a> anlegen.':
+        'As of {when}. Only what still differs at the next fetch is reported. Enter positions from before the start '
+        'date under <a href="/check">Check</a>.',
+    "Jetzt abrufen": "Fetch now",
+    "Noch kein Broker": "No broker yet",
+    "Broker einrichten": "Set up a broker",
+    "Letzte Läufe": "Last runs",
+    "{n} neu": "{n} new",
+    "{n} Fehler": "{n} errors",
+    "Ältere Läufe ({n})": "Older runs ({n})",
+    "Letzter Abruf fehlgeschlagen": "Last fetch failed",
+    "Letzter Abruf fehlgeschlagen ({n} Buchungen)": "Last fetch failed ({n} bookings)",
+    "{n} Abweichung zu Wealthfolio": "{n} difference from Wealthfolio",
+    "{n} Abweichungen zu Wealthfolio": "{n} differences from Wealthfolio",
+    "{n} unbekannte Buchung": "{n} unknown booking",
+    "{n} unbekannte Buchungen": "{n} unknown bookings",
+    "{n} fehlt in Wealthfolio": "{n} missing in Wealthfolio",
+    "Letzter Abruf abgebrochen": "Last fetch aborted",
+    "Seit {n} Tagen kein Abruf": "No fetch for {n} days",
+    "Ein Abruf läuft bereits.": "A fetch is already running.",
+    "Abruf gestartet. Die Seite aktualisiert sich, bis er fertig ist.":
+        "Fetch started. The page refreshes until it is done.",
+    "Abruf beendet.": "Fetch finished.",
+    # ── check ──
+    "Broker und Wealthfolio im Vergleich. Der Dienst legt nichts von selbst wieder an und löscht nichts – du "
+    "entscheidest.":
+        "Broker and Wealthfolio compared. The service neither re-creates nor deletes anything on its own – you decide.",
+    "{n} offene Punkte": "{n} open points",
+    "Fehlt in Wealthfolio <strong>{n}</strong>": "Missing in Wealthfolio <strong>{n}</strong>",
+    "Nicht mehr bei {label} <strong>{n}</strong>": "No longer at {label} <strong>{n}</strong>",
+    "Bestand ohne Kauf <strong>{n}</strong>": "Position without purchase <strong>{n}</strong>",
+    "Noch kein Abruf": "Not fetched yet",
+    "Bargeld im Depot <strong>{amount} EUR</strong>": "Cash in the securities account <strong>{amount} EUR</strong>",
+    "Überträge ohne Gegenstück <strong>{n}</strong>": "Transfers without counterpart <strong>{n}</strong>",
+    "Fehlt in Wealthfolio: {n}": "Missing in Wealthfolio: {n}",
+    "Schon übernommen, in Wealthfolio aber gelöscht. <em>Wieder anlegen</em> bucht sie beim nächsten Abruf neu.":
+        "Synced before, but deleted in Wealthfolio. <em>Book again</em> books them at the next fetch.",
+    "Fehlt": "Missing",
+    "ganz": "entirely",
+    "teilweise": "partly",
+    "Wieder anlegen": "Book again",
+    "Ignorieren": "Ignore",
+    "Nicht mehr bei {label}: {n}": "No longer at {label}: {n}",
+    "Vom Broker storniert oder entfernt – in Wealthfolio prüfen und löschen (bei Überträgen beide Seiten).":
+        "Cancelled or removed by the broker – check and delete them in Wealthfolio (both sides of a transfer).",
+    "Bestand ohne Kauf: {n}": "Position without purchase: {n}",
+    "Mehr Stück als Wealthfolio kennt (vor dem Startdatum gekauft oder übertragen). Der nächste Abruf bucht einen Kauf "
+    "samt Einzahlung.":
+        "More shares than Wealthfolio knows (bought or transferred before the start date). The next fetch books a "
+        "purchase with its deposit.",
+    "Kurs pro Stück ({currency})": "Price per share ({currency})",
+    "Als Kauf anlegen": "Book as purchase",
+    "wird beim nächsten Abruf gebucht": "booked at the next fetch",
+    "Bargeld bleibt im Depot: {n} Zeitpunkte, {amount} EUR":
+        "Cash left in the securities account: {n} moments, {amount} EUR",
+    "Jedem Block fehlt eine Seite – z. B. ein Kauf ohne Übertrag vom {account}, oder eine Buchung doppelt. Korrigieren "
+    "in Wealthfolio.":
+        "Each block lacks a side – e.g. a purchase without a transfer from {account}, or a booking twice. Correct it "
+        "in Wealthfolio.",
+    "Buchungen zeigen": "Show bookings",
+    "bleibt stehen: {amount} EUR": "left: {amount} EUR",
+    "Überträge ohne Gegenstück: {n}": "Transfers without counterpart: {n}",
+    "Auf dem anderen Konto fehlt der passende Übertrag.": "The matching transfer is missing on the other account.",
+    "Ignoriert ({n})": "Ignored ({n})",
+    "Doch anlegen": "Book after all",
+    "Noch kein Broker mit zwei Wealthfolio-Konten eingerichtet.": "No broker with two Wealthfolio accounts set up yet.",
+    "Was wird geprüft?": "What is checked?",
+    "<strong>Fehlt in Wealthfolio:</strong> Vom Dienst gebucht, in Wealthfolio aber nicht mehr da – oder die "
+    "Import-Buchung, der er sie zugeordnet hatte, ist weg. <em>Ignorieren</em>, wenn sie zu Recht fehlt.":
+        "<strong>Missing in Wealthfolio:</strong> booked by the service, but no longer in Wealthfolio – or the "
+        "imported booking it was matched to is gone. <em>Ignore</em> it if it is missing on purpose.",
+    "<strong>Nicht mehr beim Broker:</strong> nur für Broker, die jedes Mal die ganze Historie liefern.":
+        "<strong>No longer at the broker:</strong> only for brokers that deliver their whole history every time.",
+    "<strong>Bargeld im Depot:</strong> Das Depotkonto hält kein Bargeld – jeder Kauf kommt vom Verrechnungskonto, "
+    "jeder Verkauf und jede Ausschüttung geht dorthin. Buchungen wenige Sekunden auseinander bilden einen Block; zwei "
+    "Blöcke, die sich binnen 36 Stunden ausgleichen, gelten als zusammengehörig.":
+        "<strong>Cash in the securities account:</strong> the securities account holds no cash – every purchase "
+        "comes from the cash account, every sale and payout goes there. Bookings a few seconds apart form a block; "
+        "two blocks that cancel out within 36 hours count as a pair.",
+    "<strong>Überträge ohne Gegenstück:</strong> gleicher Betrag, gleiche Gruppe oder höchstens eine Minute "
+    "auseinander.":
+        "<strong>Transfers without counterpart:</strong> same amount, same group or at most one minute apart.",
+    "Anfangsbestand entfernt.": "Opening position removed.",
+    "Bitte Kaufdatum, Stückzahl, Kurs und Gebühr als Zahlen angeben.":
+        "Please give purchase date, shares, price and fee as numbers.",
+    "Stückzahl und Kurs müssen größer 0 sein, die Gebühr mindestens 0, das Kaufdatum darf nicht in der Zukunft "
+    "liegen.":
+        "Shares and price must be greater than 0, the fee at least 0, and the purchase date must not be in the future.",
+    "Anfangsbestand {isin} gespeichert - der nächste Abruf bucht ihn als Kauf am {day} samt Einzahlung des "
+    "Kaufbetrags.":
+        "Opening position {isin} saved - the next fetch books it as a purchase on {day}, with a deposit of the "
+        "purchase amount.",
+    "Keine Buchung ausgewählt.": "No booking selected.",
+    "{n} Buchung(en) werden nicht mehr gebucht.": "{n} booking(s) will no longer be booked.",
+    "Unbekannte Aktion.": "Unknown action.",
+    "{n} Buchung(en) legt der nächste Abruf wieder an – außer sie sind inzwischen in Wealthfolio (z. B. aus einem "
+    "Import).":
+        "The next fetch books {n} booking(s) again – unless they are in Wealthfolio by then (e.g. from an import).",
+    # ── unknown ──
+    "Unbekannte Buchungen": "Unknown bookings",
+    "Diese Buchungen kennt der Dienst noch nicht. Sie wurden <strong>nicht</strong> nach Wealthfolio übernommen – "
+    "trage sie bei Bedarf von Hand ein. Mit <em>Fehlerbericht auf GitHub</em> meldest du einen Typ, damit er künftig "
+    "unterstützt wird: GitHub öffnet sich mit vorausgefülltem Text (IBANs und lange Nummern geschwärzt). Der Bericht "
+    "ist öffentlich – prüfe ihn vor dem Absenden.":
+        "The service doesn't know these bookings yet. They were <strong>not</strong> transferred to Wealthfolio – "
+        "enter them by hand if needed. With <em>Report on GitHub</em> you report a type so it is supported in "
+        "future: GitHub opens with a pre-filled text (IBANs and long numbers blacked out, in German). The report is "
+        "public – check it before you send it.",
+    "Wertpapier-Buchung ohne Gegenstück – die Wertpapierabrechnung (PDF) in Wealthfolio importieren, dann erkennt der "
+    "nächste Abruf sie":
+        "Securities booking without counterpart – import the securities statement (PDF) into Wealthfolio, then the "
+        "next fetch recognises it",
+    "({n} Stück)": "({n} shares)",
+    "Rohdaten": "Raw data",
+    "Fehlerbericht auf GitHub": "Report on GitHub",
+    # ── brokers ──
+    "aktiv": "active",
+    "aus": "off",
+    "Einrichten": "Set up",
+    "Zugang": "Access",
+    "•••••••• (gespeichert – leer lassen zum Behalten)": "•••••••• (saved – leave empty to keep it)",
+    "•••••••• (gespeichert)": "•••••••• (saved)",
+    "{label} nicht mehr speichern – bei jeder Anmeldung eingeben":
+        "Don't store {label} any more – type it at every login",
+    "Wealthfolio-Konten": "Wealthfolio accounts",
+    "Verbindung prüfen": "Check the connection",
+    "Ein Verrechnungskonto für Ein- und Auszahlungen, ein Depotkonto für die Wertpapiere. Hast du schon per CSV/PDF "
+    "importiert, nimm dieselben Konten, dann werden diese Buchungen erkannt.":
+        "A cash account for deposits and withdrawals, a securities account for the securities. If you already "
+        "imported CSV/PDF files, choose the same accounts so those bookings are recognised.",
+    "Verrechnungskonto (Cash)": "Cash account",
+    "– wählen –": "– choose –",
+    "{label}-Konto (optional)": "{label} account (optional)",
+    "– nicht abrufen –": "– don't fetch –",
+    "Ein eigenes Wealthfolio-Konto für das {label}: Der Dienst liest dann auch dessen Umsätze und Saldo. Umbuchungen "
+    "zwischen Girokonto und {label} werden als ein Übertrag gebucht. Beim ersten Abruf holt er das {label} ab dem "
+    "Startdatum.":
+        "A Wealthfolio account of its own for the {label}: the service then also reads its transactions and balance. "
+        "Transfers between current account and {label} are booked as one transfer. The first fetch reads the "
+        "{label} from the start date.",
+    "Buchungen übernehmen ab (beim ersten Abruf)": "Take over bookings from (at the first fetch)",
+    "Leer = alles, was der Broker liefert. Gilt für den ersten Abruf; danach holt jeder Abruf ab dem letzten (minus 7 "
+    "Tage) – für einen neuen Zeitraum unten „Ab Startdatum neu abrufen“.":
+        "Empty = everything the broker delivers. Applies to the first fetch; after that every fetch reads from the "
+        "last one (minus 7 days) – for a new period use “Fetch again from the start date” below.",
+    "Automatisch abrufen": "Fetch automatically",
+    "Beim Broker anmelden": "Log in at the broker",
+    "Fehlen Buchungen aus der Zeit vor dem letzten Abruf (etwa nach einem geänderten Startdatum)? Der nächste Abruf "
+    "holt dann noch einmal alles ab dem Startdatum; schon übernommene Buchungen werden nicht doppelt angelegt.":
+        "Bookings from before the last fetch missing (e.g. after changing the start date)? The next fetch then reads "
+        "everything from the start date again; bookings synced before are not booked twice.",
+    "Ab Startdatum neu abrufen": "Fetch again from the start date",
+    "Depotumsätze liefert die Schnittstelle nicht. Exportiere sie im Online-Banking (Depot → Umsätze → Export als CSV) "
+    "und lade die Datei hier hoch – gern auch wiederholt oder überlappend, nichts wird doppelt gebucht. Der Dienst "
+    "bucht Dividenden, Käufe, Verkäufe und Einbuchungen (z. B. Mitarbeiteraktien); Kapitalmaßnahmen und "
+    "Depotüberträge stehen danach unter „Unbekannte Buchungen“. Konto- und Depotnummern aus der Datei werden nicht "
+    "gespeichert.":
+        "The interface doesn't deliver securities transactions. Export them in online banking (Depot → Umsätze → "
+        "Export als CSV) and upload the file here – repeated or overlapping uploads are fine, nothing is booked "
+        "twice. The service books dividends, purchases, sales and incoming deliveries (e.g. employee shares); "
+        "corporate actions and securities transfers end up under “Unknown bookings”. Account and depot numbers "
+        "from the file are not stored.",
+    "Bisher hochgeladen: {n} Zeilen.": "Uploaded so far: {n} rows.",
+    "Hochladen": "Upload",
+    "Neu aufsetzen": "Start over",
+    "Löscht alle Buchungen, die der Dienst für {label} in Wealthfolio angelegt hat (Kommentar „[SYNC {key}:…]“), und "
+    "vergisst, was schon übernommen wurde. Der nächste Abruf holt dann alles ab dem Startdatum neu – nach den "
+    "aktuellen Regeln. CSV-/PDF-Importe, von Hand angelegte Buchungen und eingetragene Anfangsbestände bleiben.":
+        "Deletes every booking the service created in Wealthfolio for {label} (comment “[SYNC {key}:…]”) and forgets "
+        "what was synced. The next fetch then reads everything from the start date again – under the current rules. "
+        "CSV/PDF imports, bookings entered by hand and opening positions stay.",
+    "Ja, die Buchungen des Dienstes für {label} löschen": "Yes, delete the service's bookings for {label}",
+    "Bitte ein Verrechnungs- und ein Depotkonto wählen.": "Please choose a cash account and a securities account.",
+    "Verrechnungs- und Depotkonto müssen verschiedene Konten sein.":
+        "The cash account and the securities account must be different accounts.",
+    "Das {label}-Konto muss ein eigenes Wealthfolio-Konto sein, nicht das Verrechnungs- oder Depotkonto.":
+        "The {label} account must be a Wealthfolio account of its own, not the cash or securities account.",
+    "Gespeichert. Jetzt beim Broker anmelden.": "Saved. Now log in at the broker.",
+    "Der nächste Abruf holt noch einmal alles ab {start}. Schon übernommene Buchungen werden nicht doppelt angelegt.":
+        "The next fetch reads everything from {start} again. Bookings synced before are not booked twice.",
+    "Der nächste Abruf holt noch einmal alles, was der Broker liefert. Schon übernommene Buchungen werden nicht "
+    "doppelt angelegt.":
+        "The next fetch reads everything the broker delivers again. Bookings synced before are not booked twice.",
+    "Für diesen Broker gibt es keinen Datei-Import.": "This broker has no file import.",
+    "Bitte eine Datei auswählen.": "Please choose a file.",
+    "Die Datei ist zu groß (höchstens 5 MB).": "The file is too large (at most 5 MB).",
+    "Dividenden": "dividends",
+    "Käufe/Einbuchungen": "purchases/incoming deliveries",
+    "Verkäufe": "sales",
+    "nicht automatisch buchbar": "not bookable automatically",
+    "{rows} Zeilen gelesen ({summary}), {new} davon neu. Der nächste Abruf bucht sie; nicht Buchbares steht dann unter "
+    "„Unbekannte Buchungen“.":
+        "{rows} rows read ({summary}), {new} of them new. The next fetch books them; what can't be booked ends up "
+        "under “Unknown bookings”.",
+    "Bitte bestätige das Neu-Aufsetzen mit dem Häkchen.": "Please confirm starting over with the tick.",
+    "Erst die beiden Wealthfolio-Konten wählen.": "Choose the two Wealthfolio accounts first.",
+    "Gerade läuft ein Abruf - bitte gleich noch einmal.": "A fetch is running - please try again in a moment.",
+    "{deleted} Buchungen gelöscht, {failed} nicht: {errors} - bitte noch einmal versuchen.":
+        "{deleted} bookings deleted, {failed} not: {errors} - please try again.",
+    "{deleted} Buchungen des Dienstes gelöscht. Der nächste Abruf holt alles ab dem Startdatum neu.":
+        "{deleted} bookings of the service deleted. The next fetch reads everything from the start date again.",
+    "Startdatum": "Start date",
+    # ── broker login ──
+    "Anmeldung {label}": "Login {label}",
+    "Anmeldung {n} von {total}": "Login {n} of {total}",
+    "Anmeldung bei {label}": "Login at {label}",
+    "TAN-Grafik": "TAN image",
+    "Link öffnen": "Open link",
+    "Code": "Code",
+    "Bestätigen": "Confirm",
+    "Anmelden": "Log in",
+    "Ich habe bestätigt": "I have confirmed",
+    "Ich habe in der App bestätigt": "I have confirmed in the app",
+    "Nach der letzten Anmeldung werden alle zusammen abgerufen.": "After the last login all are fetched together.",
+    "Danach ruft der Dienst gleich ab.": "The service fetches right after.",
+    "Sicherer Modus: Nach dem Abruf meldet er sich wieder ab.": "Safe mode: after the fetch it logs out again.",
+    "{label} überspringen": "Skip {label}",
+    "{label} übersprungen.": "{label} skipped.",
+    "Die Anmeldung ist abgelaufen, bitte neu starten.": "The login has expired, please start again.",
+    "{label}: angemeldet. Du kannst jetzt abrufen.": "{label}: logged in. You can fetch now.",
+    "{label}: angemeldet - die gespeicherte Sitzung ist noch gültig, eine Bestätigung war nicht nötig. Du kannst "
+    "jetzt abrufen.":
+        "{label}: logged in - the saved session is still valid, no confirmation was needed. You can fetch now.",
+    "{label}: Anmeldung fehlgeschlagen: {error}": "{label}: login failed: {error}",
+    "Anmeldung fehlgeschlagen: {error}": "Login failed: {error}",
+    "Nichts abzurufen.": "Nothing to fetch.",
+    "Übersprungen.": "Skipped.",
+    # ── duplicates, transfers ──
+    "Doppelte Buchungen": "Duplicate bookings",
+    "Hier stehen Buchungen, die der Dienst angelegt hat, obwohl es sie schon aus einem CSV- oder PDF-Import gab. Bis "
+    "Version 0.3.1 erkannte der Dienst Wertpapiere nur am Symbol; ein Import führt sie aber oft unter einem "
+    "zugeordneten Ticker, der Dienst unter der ISIN.":
+        "These are bookings the service created although they already existed from a CSV or PDF import. Up to "
+        "version 0.3.1 the service recognised securities by their symbol only; an import often keeps them under a "
+        "mapped ticker, the service under the ISIN.",
+    "Gelöscht wird nur die Kopie des Dienstes (Kommentar „[SYNC …]“) samt ihrer Übertragsbuchungen. Deine "
+    "CSV-/PDF-Buchung bleibt, und der Dienst legt den Vorgang nicht noch einmal an.":
+        "Only the service's copy (comment “[SYNC …]”) and its transfer bookings are deleted. Your CSV/PDF booking "
+        "stays, and the service doesn't book the transaction again.",
+    "{label}: {n} doppelt": "{label}: {n} duplicates",
+    "Vom Dienst": "By the service",
+    "Schon vorhanden (CSV/PDF)": "Already there (CSV/PDF)",
+    "Ich habe die Liste geprüft – die Kopien des Dienstes aus Wealthfolio löschen":
+        "I have checked the list – delete the service's copies from Wealthfolio",
+    "{n} Duplikate löschen": "Delete {n} duplicates",
+    "Bitte bestätige das Löschen mit dem Häkchen.": "Please confirm the deletion with the tick.",
+    "Wealthfolio: {error}": "Wealthfolio: {error}",
+    "{n} doppelte Vorgänge entfernt ({deleted} Buchungen). Die CSV-/PDF-Buchungen bleiben.":
+        "{n} duplicate transactions removed ({deleted} bookings). The CSV/PDF bookings stay.",
+    " Der Abgleich wird beim nächsten Abruf neu berechnet - auf der Startseite bei {label} „Jetzt abrufen“ klicken.":
+        " The comparison is recomputed at the next fetch - click “Fetch now” for {label} on the overview.",
+    " {n} nicht entfernt: {errors}": " {n} not removed: {errors}",
+    "Überträge auf eigene Konten": "Transfers to your own accounts",
+    "Eine ausgehende Überweisung zählt in Wealthfolio sonst als Ausgabe. Geht sie auf ein eigenes Konto (z.&nbsp;B. "
+    "dein Trade-Republic-Verrechnungskonto), trag es hier ein. Dann wird sie als Übertrag gebucht, mit dem Gegenstück "
+    "auf dem gewählten Wealthfolio-Konto.":
+        "An outgoing payment otherwise counts as spending in Wealthfolio. If it goes to an account of your own "
+        "(e.g. your Trade Republic cash account), enter it here. It is then booked as a transfer, with its "
+        "counterpart on the chosen Wealthfolio account.",
+    "Eingehende Überweisungen bleiben immer Einzahlungen.": "Incoming payments always stay deposits.",
+    "Stichwort": "Keyword",
+    "Gegenkonto in Wealthfolio": "Counter account in Wealthfolio",
+    "– nur als Übertrag markieren –": "– only mark as transfer –",
+    "IBAN des Empfängers": "IBAN of the recipient",
+    "oder Stichwort im Verwendungszweck": "or keyword in the payment reference",
+    "Zielkonto": "Target account",
+    "Bitte einen Namen und eine IBAN oder ein Stichwort angeben.": "Please give a name and an IBAN or a keyword.",
+    # ── settings pages ──
+    "Wealthfolio-Adresse": "Wealthfolio address",
+    "Die Adresse, unter der du Wealthfolio im Browser öffnest, und das Wealthfolio-Passwort.":
+        "The address you open Wealthfolio at in the browser, and the Wealthfolio password.",
+    "Adresse": "Address",
+    "Passwort": "Password",
+    "Wealthfolio läuft ohne Passwort": "Wealthfolio runs without a password",
+    "Speichern und Verbindung testen": "Save and test the connection",
+    "Das Passwort steht nach der Installation von Wealthfolio im Wealthfolio-Container in "
+    "<code>~/wealthfolio.creds</code>.":
+        "After installing Wealthfolio, the password is in <code>~/wealthfolio.creds</code> in the Wealthfolio "
+        "container.",
+    "Verbindung fehlgeschlagen: {error}": "Connection failed: {error}",
+    "Verbunden - {n} Konten in Wealthfolio gefunden.": "Connected - {n} accounts found in Wealthfolio.",
+    'Der Dienst meldet sich per <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy</a>, wenn eine TAN '
+    "fällig ist, eine Anmeldung abgelaufen ist oder ein Abruf fehlschlägt. Installiere die ntfy-App auf dem Handy und "
+    "abonniere dort das Thema unten.":
+        'The service notifies you via <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy</a> when a TAN '
+        "is due, a login has expired or a fetch fails. Install the ntfy app on your phone and subscribe to the topic "
+        "below there.",
+    "ntfy-Server": "ntfy server",
+    "Thema": "Topic",
+    "Auf ntfy.sh kann jeder ein Thema lesen, der den Namen kennt – der vorgeschlagene Name ist deshalb zufällig. "
+    "Leer = keine Benachrichtigungen.":
+        "On ntfy.sh anyone who knows a topic's name can read it – that's why the suggested name is random. "
+        "Empty = no notifications.",
+    "Zugangstoken": "Access token",
+    "Zugangstoken (nur bei eigenem ntfy-Server mit Anmeldung)":
+        "Access token (only for your own ntfy server with login)",
+    "Adresse dieser Oberfläche": "Address of this interface",
+    "Adresse dieser Oberfläche (für Links in den Nachrichten)": "Address of this interface (for links in the messages)",
+    "Details in den Nachrichten (Beträge, Bestände, Fehlertexte)":
+        "Details in the messages (amounts, positions, error texts)",
+    "Aus: Die Nachricht sagt nur, was passiert ist, und verlinkt auf die Oberfläche. Auf einem öffentlichen "
+    "ntfy-Server empfohlen.":
+        "Off: the message only says what happened and links to the interface. Recommended on a public ntfy server.",
+    "Speichern und Testnachricht senden": "Save and send a test message",
+    "Thema: nur Buchstaben, Ziffern, - und _.": "Topic: only letters, digits, - and _.",
+    "Testnachricht konnte nicht gesendet werden.": "The test message could not be sent.",
+    "Testnachricht gesendet.": "Test message sent.",
+    "Benachrichtigungen gespeichert.": "Notifications saved.",
+    "Broker melden Wertpapiere per ISIN. Soll Wealthfolio ein Wertpapier unter einem anderen Symbol führen "
+    "(z.&nbsp;B. dem Ticker, unter dem es schon in Wealthfolio steht), trage es hier ein. Ohne Eintrag wird die ISIN "
+    "verwendet.":
+        "Brokers report securities by ISIN. If Wealthfolio should keep a security under another symbol (e.g. the "
+        "ticker it already has in Wealthfolio), enter it here. Without an entry the ISIN is used.",
+    "{isin} entfernen": "Remove {isin}",
+    "Symbol in Wealthfolio": "Symbol in Wealthfolio",
+    "Börse (MIC, optional)": "Exchange (MIC, optional)",
+    'Wealthfolio zeigt für Wertpapiere, die unter ihrer ISIN geführt werden, meist kein Logo. Eingeschaltet holt der '
+    'Dienst nach jedem Abruf die Logos bei <a href="https://www.logo.dev" target="_blank" rel="noopener">logo.dev</a> '
+    "und setzt sie in Wealthfolio als eigenes Logo des Wertpapiers (ab Wealthfolio 3.8.0).":
+        "Wealthfolio mostly shows no logo for securities kept under their ISIN. Switched on, the service fetches the "
+        'logos from <a href="https://www.logo.dev" target="_blank" rel="noopener">logo.dev</a> after every fetch and '
+        "sets them in Wealthfolio as the security's custom logo (Wealthfolio 3.8.0 or later).",
+    "Nur die ISINs deiner Wertpapiere gehen an logo.dev – keine Bestände, Beträge oder Konten.":
+        "Only the ISINs of your securities go to logo.dev – no positions, amounts or accounts.",
+    "Ein Logo, das du in Wealthfolio selbst gesetzt hast, bleibt unangetastet.":
+        "A logo you set in Wealthfolio yourself is left alone.",
+    "Jedes Logo wird einmal gesetzt. Entfernst du es in Wealthfolio, setzt der Dienst es nicht wieder.":
+        "Every logo is set once. If you remove it in Wealthfolio, the service doesn't set it again.",
+    "Hat logo.dev für eine ISIN kein Logo, fragt der Dienst erst nach 30 Tagen wieder.":
+        "If logo.dev has no logo for an ISIN, the service only asks again after 30 days.",
+    "Logos von logo.dev holen": "Fetch logos from logo.dev",
+    "logo.dev-Schlüssel (Publishable Key, <code>pk_…</code>)": "logo.dev key (publishable key, <code>pk_…</code>)",
+    "Kostenlos nach Anmeldung bei logo.dev. Der Schlüssel liegt verschlüsselt im Tresor des Dienstes.":
+        "Free after signing up at logo.dev. The key is kept encrypted in the service's vault.",
+    "Schlüssel entfernen": "Remove the key",
+    "Speichern und Logos jetzt holen": "Save and fetch logos now",
+    "Letzter Durchlauf": "Last pass",
+    "{when}: {set} gesetzt, {none} ohne Logo bei logo.dev, {failed} fehlgeschlagen":
+        "{when}: {set} set, {none} without a logo at logo.dev, {failed} failed",
+    ", {n} beim nächsten Abruf": ", {n} at the next fetch",
+    'Logos von <a href="https://logo.dev" target="_blank" rel="noopener">Logo.dev</a>.':
+        'Logos provided by <a href="https://logo.dev" target="_blank" rel="noopener">Logo.dev</a>.',
+    "Der Schlüssel sieht nicht wie ein logo.dev-Schlüssel aus.": "The key doesn't look like a logo.dev key.",
+    "Erst einschalten und einen logo.dev-Schlüssel eintragen.": "Switch it on and enter a logo.dev key first.",
+    "Ein Abruf läuft gerade - bitte gleich noch einmal.": "A fetch is running - please try again in a moment.",
+    "Logos konnten nicht geholt werden - siehe Protokoll.": "Logos could not be fetched - see the log.",
+    "{set} Logos gesetzt, {none} ohne Logo bei logo.dev, {failed} fehlgeschlagen.":
+        "{set} logos set, {none} without a logo at logo.dev, {failed} failed.",
+    "Unbekannte Auswahl.": "Unknown choice.",
+    # ── form checks (web/inputs.py) ──
+    "{label}: höchstens {max_len} Zeichen.": "{label}: at most {max_len} characters.",
+    "{label}: enthält Steuerzeichen.": "{label}: contains control characters.",
+    "{label}: bitte eine Adresse mit http:// oder https:// angeben.":
+        "{label}: please give an address with http:// or https://.",
+    "{label}: ohne Zugangsdaten, ? oder # in der Adresse.": "{label}: no credentials, ? or # in the address.",
+    "{label}: ungültiger Port.": "{label}: invalid port.",
+    "{label}: bitte als Datum angeben (JJJJ-MM-TT).": "{label}: please give a date (YYYY-MM-DD).",
+    "{label}: darf nicht in der Zukunft liegen.": "{label}: must not be in the future.",
+    "ISIN": "ISIN",
+    "Keine gültige ISIN (12 Zeichen, Prüfziffer).": "Not a valid ISIN (12 characters, check digit).",
+    "Unbekanntes Wertpapier-Kennzeichen.": "Unknown security identifier.",
+    "IBAN": "IBAN",
+    "Keine gültige IBAN (Prüfsumme stimmt nicht).": "Not a valid IBAN (the checksum doesn't match).",
+    "Börse": "Exchange",
+    "Börse: ein MIC aus 4 Zeichen, z. B. XETR.": "Exchange: a MIC of 4 characters, e.g. XETR.",
+    "Symbol": "Symbol",
+    "Symbol: 1-32 Zeichen, nur Buchstaben, Ziffern und . ^ : _ -":
+        "Symbol: 1-32 characters, only letters, digits and . ^ : _ -",
+    # ── first visit, login, unlock ──
+    "Willkommen": "Welcome",
+    "Lege zuerst ein Passwort für diese Oberfläche fest. Damit schützt du deine Broker-Zugänge vor anderen im "
+    "Heimnetz.":
+        "First choose a password for this interface. It protects your broker access from others on your home "
+        "network.",
+    "Passwort (mindestens 12 Zeichen)": "Password (at least 12 characters)",
+    "Passwort wiederholen": "Repeat the password",
+    "Passwort speichern": "Save the password",
+    "Passwort vergessen? In der Konsole des Containers <code>brokersync-reset-password</code> ausführen.":
+        "Forgot the password? Run <code>brokersync-reset-password</code> in the container's console.",
+    "Das Passwort braucht mindestens {n} Zeichen, beide Eingaben müssen gleich sein.":
+        "The password needs at least {n} characters, and both entries must be the same.",
+    "Passwort gespeichert. Jetzt Schritt für Schritt einrichten.": "Password saved. Now set things up step by step.",
+    "Zu viele Fehlversuche. Bitte in {n} Minuten erneut versuchen.":
+        "Too many failed attempts. Please try again in {n} minutes.",
+    "Falsches Passwort.": "Wrong password.",
+    "Entsperren": "Unlock",
+    "Gesperrt": "Locked",
+    "Alle Daten des Dienstes sind mit deiner Master-Passphrase verschlüsselt. Nach einem Neustart muss sie einmal "
+    "eingegeben werden; bis dahin ruft der Dienst nichts ab.":
+        "All of the service's data is encrypted with your master passphrase. After a restart it has to be entered "
+        "once; until then the service fetches nothing.",
+    # ── security ──
+    "Master-Passphrase": "Master passphrase",
+    "Gesetzt": "Set",
+    "Nach jedem Neustart hier entsperren; bis dahin ruft der Dienst nichts ab und meldet sich per ntfy.":
+        "Unlock here after every restart; until then the service fetches nothing and notifies you via ntfy.",
+    "Schützt Zugangsdaten und Sync-Daten auch, wenn jemand den Container oder eine Sicherung kopiert. Nach jedem "
+    "Neustart einmal entsperren. <strong>Ohne die Passphrase sind die Daten verloren</strong> – dann bleibt nur, den "
+    "Dienst neu einzurichten.":
+        "Protects credentials and sync data even if someone copies the container or a backup. Unlock once after "
+        "every restart. <strong>Without the passphrase the data is lost</strong> – all that's left then is to set up "
+        "the service again.",
+    "Passwort der Oberfläche (zur Bestätigung)": "Password of this interface (to confirm)",
+    "Neue Passphrase": "New passphrase",
+    "Passphrase": "Passphrase",
+    "(mindestens {n} Zeichen)": "(at least {n} characters)",
+    "Wiederholen": "Repeat",
+    "Passphrase ändern": "Change the passphrase",
+    "Passphrase setzen": "Set the passphrase",
+    "Passphrase entfernen": "Remove the passphrase",
+    "Jetzt sperren": "Lock now",
+    "Dem Zertifikat vertrauen": "Trust the certificate",
+    "Einmal auf dem Gerät importiert, verschwindet „Nicht sicher“ – auch nach jeder Erneuerung. Gilt nur für Namen "
+    "im lokalen Netz.":
+        "Imported once on the device, “Not secure” disappears – also after every renewal. Only valid for names on "
+        "the local network.",
+    "CA-Zertifikat herunterladen": "Download the CA certificate",
+    "SHA-256 zum Vergleich:": "SHA-256 to compare:",
+    "So importierst du es": "How to import it",
+    "<strong>Windows (Chrome, Edge):</strong> Datei öffnen → <em>Zertifikat installieren</em> → <em>Aktueller "
+    "Benutzer</em> → <em>Alle Zertifikate in folgendem Speicher speichern</em> → <em>Vertrauenswürdige "
+    "Stammzertifizierungsstellen</em> – nicht „automatisch auswählen“, sonst landet es unter den "
+    "Zwischenzertifizierungsstellen und wirkt nicht. Prüfen lässt es sich mit <code>certmgr.msc</code>.":
+        "<strong>Windows (Chrome, Edge):</strong> open the file → <em>Install Certificate</em> → <em>Current "
+        "User</em> → <em>Place all certificates in the following store</em> → <em>Trusted Root Certification "
+        "Authorities</em> – not “automatically select”, or it ends up under the intermediate certification "
+        "authorities and has no effect. Check it with <code>certmgr.msc</code>.",
+    "<strong>macOS (Safari, Chrome):</strong> Datei öffnen (Schlüsselbundverwaltung) → Zertifikat doppelklicken → "
+    "<em>Vertrauen</em> → <em>Immer vertrauen</em>.":
+        "<strong>macOS (Safari, Chrome):</strong> open the file (Keychain Access) → double-click the certificate → "
+        "<em>Trust</em> → <em>Always Trust</em>.",
+    "<strong>Firefox:</strong> Einstellungen → <em>Datenschutz &amp; Sicherheit</em> → <em>Zertifikate anzeigen</em> "
+    "→ <em>Zertifizierungsstellen</em> → <em>Importieren</em> → „Dieser CA vertrauen, um Websites zu identifizieren“.":
+        "<strong>Firefox:</strong> Settings → <em>Privacy &amp; Security</em> → <em>View Certificates</em> → "
+        "<em>Authorities</em> → <em>Import</em> → “Trust this CA to identify websites”.",
+    "<strong>iPhone/iPad:</strong> Datei in Safari laden → <em>Einstellungen → Profil geladen → Installieren</em>, "
+    "danach <em>Allgemein → Info → Zertifikatsvertrauenseinstellungen</em> einschalten.":
+        "<strong>iPhone/iPad:</strong> download the file in Safari → <em>Settings → Profile Downloaded → "
+        "Install</em>, then switch it on under <em>General → About → Certificate Trust Settings</em>.",
+    "<strong>Android:</strong> <em>Einstellungen → Sicherheit → Verschlüsselung &amp; Anmeldedaten → Zertifikat "
+    "installieren → CA-Zertifikat</em>.":
+        "<strong>Android:</strong> <em>Settings → Security → Encryption &amp; credentials → Install a certificate → "
+        "CA certificate</em>.",
+    "Danach den Browser ganz beenden und neu starten (Chrome/Edge: <code>chrome://restart</code>; Android: App "
+    "„Beenden erzwingen“) – ein Browser, der vorher die Warnung übergangen hat, zeigt die Seite sonst weiter als "
+    "„nicht sicher“. Aufrufen über die IP-Adresse oder den Namen des Containers, wie im Zertifikat eingetragen.":
+        "Then quit the browser completely and start it again (Chrome/Edge: <code>chrome://restart</code>; Android: "
+        "“Force stop” the app) – a browser that skipped the warning before otherwise keeps showing the page as “not "
+        "secure”. Open it via the IP address or the container's name, as entered in the certificate.",
+    "Abrufmodus": "Fetch mode",
+    "Automatisch": "Automatic",
+    "Anmeldungen bei Brokern und Banken bleiben gespeichert, der Dienst ruft täglich von selbst ab.":
+        "Logins at brokers and banks stay saved, the service fetches daily on its own.",
+    "Sicher": "Safe",
+    "Jeder Abruf beginnt mit deiner Anmeldung (App-Freigabe, TAN, Gerätecode), direkt danach meldet sich der Dienst "
+    "wieder ab. Der tägliche Lauf ruft nicht ab, er erinnert dich per ntfy. Gilt für alle Broker.":
+        "Every fetch starts with your login (app approval, TAN, device code), right after it the service logs out "
+        "again. The daily run doesn't fetch, it reminds you via ntfy. Applies to all brokers.",
+    "Prüfungen": "Checks",
+    "<strong>{fine} von {total}</strong> in Ordnung. Zugangsdaten, Sitzungen und Einstellungen mit AES-256-GCM, die "
+    "Datenbank mit SQLCipher verschlüsselt, der Schlüssel liegt nicht bei den Daten.":
+        "<strong>{fine} of {total}</strong> fine. Credentials, sessions and settings encrypted with AES-256-GCM, the "
+        "database with SQLCipher, the key is not kept with the data.",
+    "Hinweis": "Note",
+    "Verbindung zu Wealthfolio": "Connection to Wealthfolio",
+    "Wealthfolio wird per HTTP angesprochen; das Wealthfolio-Passwort geht unverschlüsselt durchs Netz. Wenn möglich, "
+    "Wealthfolio per HTTPS erreichbar machen.":
+        "Wealthfolio is reached via HTTP; the Wealthfolio password crosses the network unencrypted. If possible, make "
+        "Wealthfolio reachable via HTTPS.",
+    "In Ordnung ({n})": "Fine ({n})",
+    "Schlüssel des Dienstes": "Key of the service",
+    "Mit systemd-creds verschlüsselt außerhalb von data/; der Dienst bekommt ihn nur beim Start.":
+        "Encrypted with systemd-creds outside data/; the service only gets it at start.",
+    "Außerhalb von data/, nur für root lesbar; der Dienst bekommt ihn beim Start (systemd-creds konnte hier nicht "
+    "verschlüsseln).":
+        "Outside data/, readable by root only; the service gets it at start (systemd-creds could not encrypt here).",
+    "Aus BROKERSYNC_KEY_FILE.": "From BROKERSYNC_KEY_FILE.",
+    "Liegt in data/ neben den verschlüsselten Daten - wer data/ kopiert, kann alles entschlüsseln. Ein Update richtet "
+    "das ein.":
+        "Kept in data/ next to the encrypted data - whoever copies data/ can decrypt everything. An update sets it "
+        "up.",
+    "Gesetzt: Ohne sie sind Zugangsdaten, Einstellungen und Sync-Daten nicht lesbar, auch nicht aus einer Sicherung.":
+        "Set: without it credentials, settings and sync data can't be read, not even from a backup.",
+    "Nicht gesetzt: Abrufe laufen nach einem Neustart ohne Zutun weiter. Wer den ganzen Container samt Schlüssel "
+    "kopiert, kann die Daten entschlüsseln.":
+        "Not set: fetches go on after a restart without you. Whoever copies the whole container with its key can "
+        "decrypt the data.",
+    "Zugangsdaten und Sitzungen": "Credentials and sessions",
+    "AES-256-GCM (secrets.enc).": "AES-256-GCM (secrets.enc).",
+    "Noch nichts gespeichert.": "Nothing stored yet.",
+    "Altes Format - wird beim nächsten Lesen neu verschlüsselt.": "Old format - re-encrypted the next time it is read.",
+    "AES-256-GCM (config.enc, Benachrichtigungen in notify.enc).":
+        "AES-256-GCM (config.enc, notifications in notify.enc).",
+    "config.json liegt noch unverschlüsselt vor.": "config.json is still there unencrypted.",
+    "Sync-Datenbank": "Sync database",
+    "Unverschlüsselt: SQLCipher gibt es für diese Plattform nicht (nur x86-64).":
+        "Unencrypted: SQLCipher isn't available for this platform (x86-64 only).",
+    "Mit SQLCipher verschlüsselt (AES-256).": "Encrypted with SQLCipher (AES-256).",
+    "Noch unverschlüsselt - wird beim nächsten Öffnen verschlüsselt.":
+        "Still unencrypted - encrypted the next time it is opened.",
+    "Verbindung zur Oberfläche": "Connection to this interface",
+    "Unverschlüsseltes HTTP - Passwörter gehen im Klartext durchs Netz.":
+        "Unencrypted HTTP - passwords cross the network in plain text.",
+    "HTTPS.": "HTTPS.",
+    "HTTPS. Zertifikat bis {until}": "HTTPS. Certificate valid until {until}",
+    "HTTPS. Zertifikat bis {until}, CA SHA-256 {ca}": "HTTPS. Certificate valid until {until}, CA SHA-256 {ca}",
+    "Dateirechte": "File permissions",
+    "Nur der Dienst-Benutzer kann data/ lesen.": "Only the service user can read data/.",
+    "Für andere lesbar: {files}": "Readable for others: {files}",
+    "Klartext-Reste": "Plain-text leftovers",
+    "Unbekannter Abrufmodus.": "Unknown fetch mode.",
+    "Sicherer Modus an: Alle gespeicherten Anmeldungen sind beendet. Jeder Abruf startet jetzt mit einer Anmeldung, "
+    "danach meldet sich der Dienst wieder ab.":
+        "Safe mode on: all saved logins have ended. Every fetch now starts with a login, afterwards the service logs "
+        "out again.",
+    "Automatischer Modus an: Anmeldungen bleiben gespeichert, der tägliche Abruf läuft ohne dich.":
+        "Automatic mode on: logins stay saved, the daily fetch runs without you.",
+    "Zu viele Fehlversuche. Bitte später erneut versuchen.": "Too many failed attempts. Please try again later.",
+    "Das Passwort der Oberfläche stimmt nicht.": "The password of this interface is wrong.",
+    "Die beiden Eingaben der Passphrase sind verschieden.": "The two passphrase entries differ.",
+    "Die Passphrase braucht mindestens {n} Zeichen.": "The passphrase needs at least {n} characters.",
+    "Gerade läuft ein Abruf. Bitte danach erneut versuchen.": "A fetch is running. Please try again afterwards.",
+    "Master-Passphrase entfernt.": "Master passphrase removed.",
+    "Master-Passphrase gesetzt. Merke sie dir gut: Ohne sie sind die Daten verloren.":
+        "Master passphrase set. Remember it well: without it the data is lost.",
+}

@@ -87,6 +87,11 @@ def test_the_check_page_offers_missing_positions_and_takes_an_opening(tmp_path):
                                        "shares": "200", "price": "25.50", "fee": "4.90", "currency": "EUR"}]
     # Entered: no longer offered; it can be removed until it is booked.
     assert "Bestand ohne Kauf: 0" in r.text
+    # Once booked it disappears from the page (#86).
+    syncer.run()
+    page = client.get("/check").text
+    assert "TEST Alt AG" not in page and "Bestand ohne Kauf" not in page
+    state.forget("fake", ["start-DE000TEST009-2024-05-02"])
     client.post("/check/fake/opening", data={"csrf": token, "isin": "DE000TEST009", "day": "2024-05-02",
                                              "action": "delete"})
     assert state.openings("fake") == []

@@ -1,11 +1,11 @@
-{% extends "base.html" %}{% block title %}Anmelden{% endblock %}
+{% extends "base.html" %}{% block title %}{{ _("Anmelden") }}{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Anmelden</h1>
+  <h1>{{ _("Anmelden") }}</h1>
   <form method="post">
-    <label for="pw">Passwort</label>
+    <label for="pw">{{ _("Passwort") }}</label>
     <input type="password" id="pw" name="password" autocomplete="current-password" required autofocus>
-    <div class="actions"><button>Anmelden</button></div>
+    <div class="actions"><button>{{ _("Anmelden") }}</button></div>
   </form>
 </div>
 {% endblock %}
