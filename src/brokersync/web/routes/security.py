@@ -54,13 +54,13 @@ def security_mode(request: Request, ctx: Ctx, mode: str = Form("")):
 def security_passphrase(request: Request, ctx: Ctx, password: str = Form(...), action: str = Form(...),
                         new: str = Form(""), new2: str = Form("")):
     client = request.client.host if request.client else "?"
-    if ctx.throttle.blocked(client):
-        return redirect(request, "/security", tr(request, "Zu viele Fehlversuche. Bitte später erneut versuchen."),
-                        "error")
-    if not verify_password(password, ctx.vault.load().get("ui_password_hash")):
-        ctx.throttle.failure(client)
+    with ctx.throttle.attempt(client) as a:
+        if a.refused:
+            text, params = ctx.throttle.message(a)
+            return redirect(request, "/security", tr(request, text, **params), "error")
+        a.ok = verify_password(password, ctx.vault.load().get("ui_password_hash"))
+    if not a.ok:
         return redirect(request, "/security", tr(request, "Das Passwort der Oberfläche stimmt nicht."), "error")
-    ctx.throttle.success(client)
     if action == "remove":
         target = None
     else:

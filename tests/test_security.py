@@ -5,6 +5,7 @@ readable."""
 import base64
 import json
 import logging
+import os
 import sqlite3
 import stat
 
@@ -21,6 +22,7 @@ from brokersync.wealthfolio import WealthfolioClient
 
 from .fake_broker import FakeBroker
 from .fakes import FakeWealthfolio
+from .helpers import first_password
 from .test_sync import RecordingNotifier, setup
 from .test_web import csrf
 
@@ -39,7 +41,7 @@ def client_for(tmp_path, *, secure=False):
 
 def logged_in(tmp_path, **kw):
     client = client_for(tmp_path, **kw)
-    client.post("/setup-password", data={"password": UI_PW, "password2": UI_PW})
+    first_password(client, UI_PW)
     return client
 
 
@@ -225,6 +227,71 @@ def test_wrong_passwords_are_braked(tmp_path):
     assert "Zu viele Fehlversuche" in r.text
 
 
+def test_parallel_attempts_count_before_the_check_and_are_capped():
+    import threading
+
+    from brokersync.web.gate import Throttle
+
+    th = Throttle(limit=5, slots=2)
+    release, inside = threading.Event(), []
+
+    def slow_wrong():
+        with th.attempt("10.0.0.9") as a:
+            if not a.refused:
+                inside.append(1)
+                release.wait(2)
+
+    threads = [threading.Thread(target=slow_wrong) for _ in range(8)]
+    for t in threads:
+        t.start()
+    while len(inside) < 2:
+        pass
+    with th.attempt("10.0.0.9") as a:
+        assert a.busy  # both check slots taken: no third argon2id run
+    release.set()
+    for t in threads:
+        t.join()
+    assert len(inside) <= 2
+    for _ in range(3):  # the two that ran are counted already
+        with th.attempt("10.0.0.9"):
+            pass
+    with th.attempt("10.0.0.9") as a:
+        assert a.wait > 0 and not a.busy
+
+
+def test_the_brake_keeps_ipv6_neighbours_together_has_a_global_limit_and_a_size_limit():
+    from brokersync.web.gate import Throttle
+
+    th = Throttle(limit=3, global_limit=6, max_clients=4)
+    for i in range(3):
+        with th.attempt(f"2001:db8::{i + 1}"):
+            pass
+    with th.attempt("2001:db8::ff") as a:  # the same /64
+        assert a.wait
+    for i in range(3):
+        with th.attempt(f"10.0.0.{i + 1}"):
+            pass
+    with th.attempt("10.0.0.99") as a:  # six wrong ones in all: nobody for a while
+        assert a.wait
+    th = Throttle(limit=3, global_limit=1000, max_clients=4)
+    for i in range(10):
+        with th.attempt(f"10.0.1.{i}"):
+            pass
+    assert len(th._fails) <= 4
+    with th.attempt("10.0.2.1") as a:
+        a.ok = True
+    assert "10.0.2.1" not in th._fails  # a right one leaves nothing behind
+
+
+def test_behind_a_named_proxy_its_forwarded_header_is_believed(monkeypatch):
+    from brokersync.web.serve import proxy_options
+
+    monkeypatch.delenv("BROKERSYNC_TRUST_PROXY", raising=False)
+    assert proxy_options() == {"proxy_headers": False}
+    monkeypatch.setenv("BROKERSYNC_TRUST_PROXY", "192.168.1.2")
+    assert proxy_options() == {"proxy_headers": True, "forwarded_allow_ips": "192.168.1.2"}
+
+
 def test_old_scrypt_hashes_still_work_and_are_upgraded(tmp_path):
     import hashlib
 
@@ -243,7 +310,7 @@ def test_security_headers_and_secure_cookies(tmp_path):
     assert "script-src 'none'" in r.headers["content-security-policy"]
     assert r.headers["x-frame-options"] == "DENY" and "strict-transport-security" not in r.headers
     secure = client_for(tmp_path, secure=True)
-    r = secure.post("/setup-password", data={"password": UI_PW, "password2": UI_PW}, follow_redirects=False)
+    r = first_password(secure, UI_PW, follow_redirects=False)
     assert "max-age=31536000" in r.headers["strict-transport-security"]
     assert "secure" in r.headers["set-cookie"].lower() and "samesite=strict" in r.headers["set-cookie"].lower()
 
@@ -417,7 +484,12 @@ def test_a_new_host_key_re_encrypts_everything_and_the_old_one_no_longer_opens_i
     if passphrase:
         security.change_passphrase(data, passphrase)
     security.rotate_host_key(data, new_key.read_bytes())
-    assert not list(data.glob("*.rotate"))
+    # Only staged: until setup.sh stores the new key, the old one opens everything (#91).
+    assert Vault(data).load()["wealthfolio_password"] and security.recover(data) == "undone"
+    security.rotate_host_key(data, new_key.read_bytes())
+    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(new_key))  # setup.sh stored it: the switch
+    assert security.recover(data) == "finished" and not list(data.glob("*.rekey"))
+    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(old_key))
     with pytest.raises(Exception):  # noqa: B017 - the old key opens nothing any more
         Vault(data).load()
     monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(new_key))
@@ -456,3 +528,95 @@ def test_unknown_events_keep_no_account_or_depot_numbers(tmp_path):
         assert text == "Depot *** Wertpapierertrag 19.08.2026 *** WKN A0TEST TEST FONDS ISIN LU0000000001 IBAN ***"
         assert event["payload"]["betrag"] == "17.95"
     st.close()
+
+
+# ── crash safety of the re-encryption (#91) ─────────────────────────────────
+def _filled(tmp_path, monkeypatch):
+    key = tmp_path / "host.key"
+    key.write_bytes(base64.urlsafe_b64encode(b"h" * 32))
+    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(key))
+    data = tmp_path / "data"
+    syncer, _ = setup(data, FakeWealthfolio())
+    syncer.run()
+    syncer.state.close()
+    return data
+
+
+def _all_readable(data) -> None:
+    assert Vault(data).load()["wealthfolio_password"]
+    assert config_mod.load(data).brokers["fake"].enabled and config_mod.load_notify(data).public_url
+    st = State(data)
+    assert st.runs("fake")
+    st.close()
+
+
+@pytest.mark.parametrize("crash_at", range(1, 13))  # staging, the journal and every swap
+@pytest.mark.parametrize("old,new", [(None, "eine sehr lange passphrase"), ("eine sehr lange passphrase", None)])
+def test_a_passphrase_change_survives_a_crash_at_any_point(tmp_path, monkeypatch, crash_at, old, new):
+    data = _filled(tmp_path, monkeypatch)
+    if old:
+        security.change_passphrase(data, old)
+    real = os.replace
+    calls = {"n": 0}
+
+    def crashing(src, dst):
+        calls["n"] += 1
+        if calls["n"] == crash_at:
+            raise OSError("power cut")
+        return real(src, dst)
+
+    monkeypatch.setattr(security.os, "replace", crashing)
+    monkeypatch.setattr(crypto.os, "replace", crashing)
+    try:
+        security.change_passphrase(data, new)
+    except OSError:
+        pass
+    monkeypatch.setattr(security.os, "replace", real)
+    monkeypatch.setattr(crypto.os, "replace", real)
+    security.recover(data)
+    assert not list(data.glob("*.rekey")) and not (data / security.JOURNAL).exists()
+    for passphrase in (new, old):  # one of the two opens all of it - never a mix
+        crypto.lock(data)
+        if passphrase and not crypto.unlock(data, passphrase):
+            continue
+        try:
+            _all_readable(data)
+            break
+        except Exception:
+            continue
+    else:
+        raise AssertionError("the data opens with neither passphrase")
+
+
+def test_state_db_is_never_re_encrypted_in_place(tmp_path, monkeypatch):
+    data = _filled(tmp_path, monkeypatch)
+    paths = []
+    real = state_mod.rekey
+    monkeypatch.setattr(state_mod, "rekey", lambda d, o, n, path=None: (paths.append(path), real(d, o, n, path))[1])
+    security.change_passphrase(data, "eine sehr lange passphrase")
+    assert paths and all(p is not None and p.name != "state.db" for p in paths)
+
+
+def test_a_new_host_key_that_was_never_stored_is_undone_on_the_next_start(tmp_path, monkeypatch):
+    from brokersync import cli
+
+    data = _filled(tmp_path, monkeypatch)
+    security.rotate_host_key(data, base64.urlsafe_b64encode(b"n" * 32))
+    monkeypatch.setenv("BROKERSYNC_DATA", str(data))
+    assert cli.main(["recover"]) == 0
+    assert not list(data.glob("*.rekey")) and not (data / security.JOURNAL).exists()
+    _all_readable(data)
+
+
+def test_old_sessions_do_not_pile_up_in_the_redaction(tmp_path):
+    """#114: every new session replaces the old one's strings; credentials stay registered for good."""
+    vault = Vault(tmp_path)
+    vault.set_broker_credentials("fake", {"username": "dauerhaft-geheim"})
+    for i in range(1000):
+        vault.set_broker_session("fake", {"token": f"session-token-{i:04d}-" + "x" * 20})
+        vault.load()
+    current = "session-token-0999-" + "x" * 20
+    assert redact.redact(f"a {current} b") == "a *** b"
+    assert redact.redact("user dauerhaft-geheim") == "user ***"
+    assert len(redact._scoped["session:fake"]) == 1
+    assert "session-token-0001-" + "x" * 20 not in redact._all()

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
+from decimal import Decimal, InvalidOperation
 from urllib.parse import urlparse
 
 from ..assets import valid_isin
@@ -72,6 +73,18 @@ def iso_date(value: str, label: str) -> str:
     if day > date.today():
         raise Invalid("{label}: darf nicht in der Zukunft liegen.", label=label)
     return day.isoformat()
+
+
+def decimal(value: str, label: str, *, minimum: Decimal | None = None, maximum: Decimal = Decimal("1e12")) -> Decimal:
+    """A number as typed (comma or point), finite and within bounds - ``Decimal`` alone takes ``Infinity``,
+    ``NaN`` and ``1e999999``."""
+    try:
+        number = Decimal(text(value, label, max_len=40).replace(",", "."))
+    except InvalidOperation as e:
+        raise Invalid("{label}: bitte als Zahl angeben.", label=label) from e
+    if not number.is_finite() or abs(number) > maximum or (minimum is not None and number < minimum):
+        raise Invalid("{label}: bitte als Zahl angeben.", label=label)
+    return number
 
 
 def isin(value: str) -> str:

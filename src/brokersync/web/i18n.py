@@ -74,6 +74,7 @@ EN: dict[str, str] = {
     "OK": "OK",
     "Anmeldung nötig": "Login needed",
     "Fehler": "Error",
+    "Stückzahl": "Shares",
     "läuft": "running",
     "abgebrochen": "aborted",
     "Wealthfolio": "Wealthfolio",
@@ -548,6 +549,26 @@ EN: dict[str, str] = {
     "Das Passwort braucht mindestens {n} Zeichen, beide Eingaben müssen gleich sein.":
         "The password needs at least {n} characters, and both entries must be the same.",
     "Passwort gespeichert. Jetzt Schritt für Schritt einrichten.": "Password saved. Now set things up step by step.",
+    "Gerade laufen zu viele Anmeldungen gleichzeitig. Bitte gleich noch einmal versuchen.":
+        "Too many sign-ins are running at the same time. Please try again in a moment.",
+    "Der Einrichtungscode stimmt nicht oder ist abgelaufen.": "The setup code is wrong or has expired.",
+    "Einrichtungscode": "Setup code",
+    "Er stand am Ende der Installation. Einen neuen zeigt die Konsole des Containers: "
+    "<code>brokersync-cli setup-code</code>":
+        "It was shown at the end of the installation. The container's console shows a new one: "
+        "<code>brokersync-cli setup-code</code>",
+    "Am besten ein Passwortmanager: ein langes, zufälliges Passwort, das du nirgends sonst benutzt.":
+        "Best use a password manager: a long, random password you use nowhere else.",
+    "{label}: bitte als Zahl angeben.": "{label}: please enter a number.",
+    "Zurück": "Back",
+    "Formular abgelaufen": "Form expired",
+    "Nicht erlaubt": "Not allowed",
+    "Seite nicht gefunden": "Page not found",
+    "Anfrage zu groß": "Request too large",
+    "Zu viele Anfragen": "Too many requests",
+    "Unerwarteter Fehler (Fehler-ID {id}). Die Einzelheiten stehen im Log des Dienstes.":
+        "Unexpected error (error id {id}). The details are in the service's log.",
+    "Zur Übersicht": "To the overview",
     "Zu viele Fehlversuche. Bitte in {n} Minuten erneut versuchen.":
         "Too many failed attempts. Please try again in {n} minutes.",
     "Falsches Passwort.": "Wrong password.",

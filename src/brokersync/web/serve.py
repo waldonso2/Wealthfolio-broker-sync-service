@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 
 import uvicorn
@@ -37,12 +38,21 @@ def redirect_app(https_port: int):
     return app
 
 
+def proxy_options() -> dict:
+    """Behind a reverse proxy every client has the proxy's address, so five wrong passwords anywhere would
+    lock everyone out. ``BROKERSYNC_TRUST_PROXY`` names the proxy (address, comma-separated for several):
+    only its ``X-Forwarded-For`` is believed, then the brake counts per real client (#90). Unset: no header
+    is believed - the default, direct access."""
+    trusted = os.environ.get("BROKERSYNC_TRUST_PROXY", "").strip()
+    return {"proxy_headers": True, "forwarded_allow_ips": trusted} if trusted else {"proxy_headers": False}
+
+
 def serve(data_dir: Path, *, host: str, port: int, certfile: str | None, keyfile: str | None,
           redirect_port: int | None) -> None:
     secure = bool(certfile and keyfile)
     app = create_app(data_dir, secure=secure)
     configs = [uvicorn.Config(app, host=host, port=port, log_config=None, ssl_certfile=certfile,
-                              ssl_keyfile=keyfile, server_header=False, proxy_headers=False)]
+                              ssl_keyfile=keyfile, server_header=False, **proxy_options())]
     if secure and redirect_port:
         configs.append(uvicorn.Config(redirect_app(port), host=host, port=redirect_port, log_config=None,
                                       server_header=False, access_log=False))

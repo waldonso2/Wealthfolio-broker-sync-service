@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from ... import __version__
 from ... import security as security_mod
-from ...vault import hash_password, needs_rehash, verify_password
+from ...vault import check_setup_code, hash_password, needs_rehash, verify_password
 from ..context import Ctx, redirect, tr
 
 log = logging.getLogger(__name__)
@@ -37,18 +38,35 @@ def healthz():
 def setup_password_page(request: Request, ctx: Ctx):
     if ctx.vault.load().get("ui_password_hash"):
         return RedirectResponse("/login", 303)
-    return ctx.render(request, "setup_password.html")
+    return ctx.render(request, "setup_password.html", code=request.query_params.get("code", "")[:64])
 
 
 @router.post("/setup-password")
-def setup_password(request: Request, ctx: Ctx, password: str = Form(...), password2: str = Form(...)):
+def setup_password(request: Request, ctx: Ctx, password: str = Form(...), password2: str = Form(...),
+                   code: str = Form("")):
     if ctx.vault.load().get("ui_password_hash"):
         return RedirectResponse("/login", 303)
-    if len(password) < MIN_PASSWORD or password != password2:
+    client = request.client.host if request.client else "?"
+    # The one-time code (#89): something only the console of the container shows.
+    with ctx.throttle.attempt(client) as a:
+        if a.refused:
+            text, params = ctx.throttle.message(a)
+            return redirect(request, "/setup-password", tr(request, text, **params), "error")
+        a.ok = check_setup_code(ctx.vault, code)
+    if not a.ok:
+        log.warning("web UI: wrong or expired setup code from %s", client)
         return redirect(request, "/setup-password",
+                        tr(request, "Der Einrichtungscode stimmt nicht oder ist abgelaufen."), "error")
+    if len(password) < MIN_PASSWORD or password != password2:
+        return redirect(request, f"/setup-password?code={quote(code.strip())}",
                         tr(request, "Das Passwort braucht mindestens {n} Zeichen, beide Eingaben müssen gleich sein.",
                            n=MIN_PASSWORD), "error")
-    ctx.vault.update(lambda d: d.__setitem__("ui_password_hash", hash_password(password)))
+
+    def set_password(d: dict) -> None:
+        d["ui_password_hash"] = hash_password(password)
+        d.pop("setup_code", None)  # used up
+
+    ctx.vault.update(set_password)
     request.session.clear()  # a fresh session, nothing carried over from before the password existed
     request.session["user"] = "admin"
     if not ctx.cfg().public_url:
@@ -66,19 +84,18 @@ def login_page(request: Request, ctx: Ctx):
 @router.post("/login")
 def login(request: Request, ctx: Ctx, password: str = Form(...)):
     client = request.client.host if request.client else "?"
-    wait = ctx.throttle.blocked(client)
-    if wait:
-        return redirect(request, "/login", tr(request, "Zu viele Fehlversuche. Bitte in {n} Minuten erneut "
-                                                       "versuchen.", n=wait // 60 + 1), "error")
-    stored = ctx.vault.load().get("ui_password_hash")
-    if verify_password(password, stored):
-        ctx.throttle.success(client)
+    with ctx.throttle.attempt(client) as a:
+        if a.refused:
+            text, params = ctx.throttle.message(a)
+            return redirect(request, "/login", tr(request, text, **params), "error")
+        stored = ctx.vault.load().get("ui_password_hash")
+        a.ok = verify_password(password, stored)
+    if a.ok:
         if stored and needs_rehash(stored):
             ctx.vault.update(lambda d: d.__setitem__("ui_password_hash", hash_password(password)))
         request.session.clear()
         request.session["user"] = "admin"
         return redirect(request, "/")
-    ctx.throttle.failure(client)
     log.warning("web UI: wrong password from %s", client)
     return redirect(request, "/login", tr(request, "Falsches Passwort."), "error")
 

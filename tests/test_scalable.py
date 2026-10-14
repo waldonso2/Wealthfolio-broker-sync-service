@@ -21,6 +21,7 @@ from brokersync.vault import Vault
 from brokersync.wealthfolio import WealthfolioClient
 
 from .fakes import PASSWORD, FakeWealthfolio
+from .helpers import first_password
 from .test_sync import RecordingNotifier
 
 FAKE_SC = Path(__file__).parent / "fixtures" / "scalable" / "fake_sc.py"
@@ -170,7 +171,7 @@ def test_login_in_the_web_ui(tmp_path, fake_sc):
     app = create_app(tmp_path, wealthfolio=lambda u, p: WealthfolioClient(u, p, transport=wf.transport()),
                      adapters={"scalable": ScalableAdapter}, notifier=RecordingNotifier(), run_in_thread=False)
     client = TestClient(app)
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     page = client.get("/brokers/scalable/login").text
     assert 'href="https://secure.scalable.example/device?user_code=ABCD-EFGH"' in page
     assert "ABCD-EFGH" in page and "Ich habe bestätigt" in page

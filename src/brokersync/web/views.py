@@ -67,8 +67,14 @@ def utc_iso(value) -> str:
 
 
 def money(value) -> str:
-    """German number format: 1.234,56."""
-    return f"{Decimal(str(value)):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    """German number format: 1.234,56 - anything that isn't a finite number is shown as it is (#106)."""
+    try:
+        number = Decimal(str(value))
+    except InvalidOperation:
+        return str(value)
+    if not number.is_finite():
+        return str(value)
+    return f"{number:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _amount(text) -> str:

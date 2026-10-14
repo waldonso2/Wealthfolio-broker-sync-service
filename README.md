@@ -38,7 +38,7 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 
 ### 1. Passwort für die Oberfläche festlegen
 
-Beim ersten Öffnen legst du ein Passwort fest. Es schützt deine Broker-Zugänge vor anderen im Heimnetz.
+Beim ersten Öffnen legst du ein Passwort fest. Es schützt deine Broker-Zugänge vor anderen im Heimnetz. Dazu gehört der **Einrichtungscode**, den die Installation am Ende anzeigt (der angezeigte Link füllt ihn schon aus). Er gilt 24 Stunden und nur einmal; so kann niemand sonst im Netz das Passwort vor dir festlegen. Einen neuen Code zeigt die Konsole des Containers: `brokersync-cli setup-code`.
 
 <img src="docs/screenshots/01-passwort.png" width="560" alt="Passwort festlegen">
 
@@ -253,7 +253,8 @@ Die Seite **Prüfung** zeigt außerdem, welche schon übernommenen Buchungen in 
 | Wertpapier soll in Wealthfolio unter seinem Ticker statt der ISIN laufen | Unter *Wertpapiere* die Zuordnung ISIN → Symbol eintragen |
 | Wertpapiere in Wealthfolio ohne Logo | Unter *Logos* einschalten und einen (kostenlosen) Schlüssel von logo.dev eintragen. Nach jedem Abruf holt der Dienst die Logos per ISIN und setzt sie in Wealthfolio (ab 3.8.0). Nur die ISINs gehen an logo.dev; eigene Logos bleiben, ein entferntes Logo kommt nicht wieder |
 | Oberfläche lieber auf Englisch oder immer hell/dunkel | *Einstellungen → Darstellung*: Sprache (Deutsch, English) und Farbschema (wie das Gerät, hell, dunkel) |
-| Passwort der Oberfläche vergessen | In Proxmox die Konsole des Containers öffnen und `brokersync-reset-password` eingeben. Beim nächsten Öffnen legst du ein neues fest |
+| Passwort der Oberfläche vergessen | In Proxmox die Konsole des Containers öffnen und `brokersync-reset-password` eingeben. Es zeigt einen neuen Einrichtungscode; mit ihm legst du beim nächsten Öffnen ein neues Passwort fest |
+| Oberfläche hinter einem Reverse Proxy | Sonst sieht der Dienst alle Anfragen von der Adresse des Proxys, und fünf falsche Passwörter von irgendwem sperren alle aus. Die Adresse des Proxys als `Environment=BROKERSYNC_TRUST_PROXY=<IP>` in einem Drop-in für `wealthfolio-broker-sync.service` eintragen (`systemctl edit wealthfolio-broker-sync`): Dann zählt die Sperre pro Nutzer |
 | Push-Nachricht „Broker Sync gesperrt“ (mit Master-Passphrase, nach einem Neustart) | Auf die Nachricht tippen und die Passphrase eingeben |
 
 ## Sicherheit
@@ -267,12 +268,12 @@ Was der Dienst speichert, ist verschlüsselt; die Seite **Sicherheit** zeigt jed
 | Sync-Datenbank (Buchungen, Bestände, Läufe) | SQLCipher, AES-256 (`data/state.db`) |
 | ntfy-Einstellungen | AES-256-GCM (`data/notify.enc`) – nur mit dem Schlüssel des Dienstes, damit ein gesperrter Dienst Bescheid sagen kann |
 | Schlüssel des Dienstes | **nicht** in `data/`: mit `systemd-creds` verschlüsselt in `/etc/wealthfolio-broker-sync/key.cred` (nur root), der Dienst bekommt ihn beim Start |
-| Passwort der Oberfläche | argon2id; nach fünf Fehlversuchen 15 Minuten Pause |
+| Passwort der Oberfläche | argon2id; nach fünf Fehlversuchen 15 Minuten Pause, nach 30 Fehlversuchen von allen zusammen ebenso; höchstens zwei Prüfungen gleichzeitig, damit viele Versuche auf einmal den Speicher nicht erschöpfen. Das erste Passwort nur mit dem Einrichtungscode von der Konsole |
 | Oberfläche | HTTPS (Port 8443) mit einem Zertifikat der Container-eigenen CA: einmal importieren (Seite *Sicherheit*), dann vertraut der Browser. Die CA darf nur Namen im lokalen Netz bestätigen (*Name Constraints*), ihr Schlüssel bleibt root-only in `/etc/wealthfolio-broker-sync/tls/`. Ein Zertifikat eines anderen Ausstellers dort (`cert.pem`/`key.pem`) bleibt erhalten. Dazu sichere Cookies und strenge Sicherheits-Header |
 | Log, Nachrichten und Fehlermeldungen | Zugangsdaten, Tokens, IBANs und Kontonummern werden geschwärzt – im Log, in ntfy-Nachrichten und in Fehlermeldungen der Oberfläche; Anfrage-Adressen werden nicht protokolliert; ntfy-Nachrichten enthalten ohne *Details* keine Beträge |
 | Dienst | eigener Benutzer, systemd-Härtung (kein Schreibzugriff außer `data/`, keine Rechteausweitung), Dateien nur für den Dienst lesbar |
 
-**Master-Passphrase (wahlweise, Seite *Sicherheit*):** Ohne sie kann jemand, der den ganzen Container samt Schlüssel kopiert (z. B. ein Proxmox-Backup), die Daten entschlüsseln. Mit ihr nicht: Der Schlüssel entsteht erst aus Schlüssel des Dienstes **und** Passphrase (argon2id). Dafür musst du den Dienst nach jedem Neustart des Containers in der Oberfläche entsperren; bis dahin ruft er nichts ab und schickt eine ntfy-Nachricht. **Ohne die Passphrase sind die Daten verloren** – dann bleibt nur, den Dienst neu einzurichten.
+**Master-Passphrase (wahlweise, Seite *Sicherheit*):** Ohne sie kann jemand, der den ganzen Container samt Schlüssel kopiert (z. B. ein Proxmox-Backup), die Daten entschlüsseln. Mit ihr nicht: Der Schlüssel entsteht erst aus Schlüssel des Dienstes **und** Passphrase (argon2id). Dafür musst du den Dienst nach jedem Neustart des Containers in der Oberfläche entsperren; bis dahin ruft er nichts ab und schickt eine ntfy-Nachricht. **Ohne die Passphrase sind die Daten verloren** – dann bleibt nur, den Dienst neu einzurichten. Setzen, Ändern und Entfernen der Passphrase (und der Schlüsseltausch beim Update) verschlüsseln alles neu: erst neben den alten Dateien, dann in einem Schritt umgeschaltet. Fällt dabei der Strom aus, bringt der nächste Start die Daten auf den alten oder den neuen Stand, nie auf eine Mischung.
 
 **Sicherungen:** `update` sichert `data/` vorher nach `/opt/wealthfolio-broker-sync/backup-*.tar.gz` – nur verschlüsselte Daten, ohne Schlüssel. Ältere Sicherungen, die noch den Schlüssel enthielten, ersetzt das Update durch eine verschlüsselte. Proxmox-Backups des Containers enthalten auch den Schlüssel: Sie gehören auf ein verschlüsseltes Ziel, oder du setzt die Master-Passphrase.
 

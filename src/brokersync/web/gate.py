@@ -6,10 +6,12 @@ be read, and dropped again when the service is locked.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
@@ -18,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import __version__, crypto
-from .i18n import template_gettext
+from .i18n import N_, template_gettext
 
 log = logging.getLogger(__name__)
 
@@ -39,35 +41,93 @@ HSTS = (b"strict-transport-security", b"max-age=31536000")
 MAX_BODY = 6 * 1024 * 1024
 
 
+class Attempt:
+    """One password check through the ``Throttle``: ``wait`` > 0 - not now (seconds), ``busy`` - too many
+    checks at once; else go ahead and set ``ok`` when the password was right."""
+
+    def __init__(self, wait: int = 0, busy: bool = False):
+        self.wait, self.busy, self.ok = wait, busy, False
+
+    @property
+    def refused(self) -> bool:
+        return bool(self.wait or self.busy)
+
+
 class Throttle:
-    """Wrong passwords per client: after ``limit`` within ``window`` seconds, no attempt for ``block`` seconds."""
+    """Wrong passwords (UI password, master passphrase, setup code), #90.
 
-    def __init__(self, limit: int = 5, window: int = 900, block: int = 900):
+    - per client (IPv6 by its /64): after ``limit`` within ``window`` seconds, no attempt for ``block``;
+    - all clients together: after ``global_limit`` within ``window`` (many addresses can't go on guessing);
+    - an attempt counts *before* the check (argon2id, 64 MiB each) and is only taken back when it was
+      right, and at most ``slots`` checks run at once - parallel requests can neither slip past the brake
+      nor exhaust the container's memory;
+    - at most ``max_clients`` addresses are remembered (oldest out first)."""
+
+    def __init__(self, limit: int = 5, window: int = 900, block: int = 900, global_limit: int = 30,
+                 slots: int = 2, max_clients: int = 10_000):
         self.limit, self.window, self.block = limit, window, block
+        self.global_limit, self.max_clients = global_limit, max_clients
         self._fails: dict[str, list[float]] = {}
+        self._all: list[float] = []
         self._lock = threading.Lock()
+        self._slots = threading.BoundedSemaphore(slots)
 
-    def blocked(self, client: str) -> int:
-        """Seconds the client still has to wait (0: may try)."""
-        now = time.monotonic()
-        with self._lock:
-            fails = [t for t in self._fails.get(client, []) if now - t < max(self.window, self.block)]
-            self._fails[client] = fails
-            if len(fails) < self.limit:
-                return 0
-            remaining = self.block - (now - fails[-1])
-            if remaining <= 0:
-                self._fails.pop(client, None)
-                return 0
-            return int(remaining) + 1
+    @staticmethod
+    def key(client: str) -> str:
+        try:
+            ip = ipaddress.ip_address(client)
+        except ValueError:
+            return client
+        return str(ipaddress.ip_network(f"{ip}/64", strict=False)) if ip.version == 6 else str(ip)
 
-    def failure(self, client: str) -> None:
-        with self._lock:
-            self._fails.setdefault(client, []).append(time.monotonic())
+    def _wait(self, key: str, now: float) -> int:
+        fails = [t for t in self._fails.get(key, []) if now - t < max(self.window, self.block)]
+        self._fails.pop(key, None)
+        if fails:
+            self._fails[key] = fails  # re-inserted: the most recent client last
+        self._all = [t for t in self._all if now - t < self.window]
+        waits = []
+        if len(fails) >= self.limit:
+            waits.append(self.block - (now - fails[-1]))
+        if len(self._all) >= self.global_limit:
+            waits.append(self.window - (now - self._all[0]))
+        remaining = max(waits, default=0)
+        return int(remaining) + 1 if remaining > 0 else 0
 
-    def success(self, client: str) -> None:
+    @contextmanager
+    def attempt(self, client: str) -> Iterator[Attempt]:
+        key, now = self.key(client), time.monotonic()
+        refused = None
         with self._lock:
-            self._fails.pop(client, None)
+            wait = self._wait(key, now)
+            if wait:
+                refused = Attempt(wait=wait)
+            elif not self._slots.acquire(blocking=False):
+                refused = Attempt(busy=True)
+            else:
+                self._fails.setdefault(key, []).append(now)
+                self._all.append(now)
+                while len(self._fails) > self.max_clients:
+                    self._fails.pop(next(iter(self._fails)))
+        if refused:
+            yield refused
+            return
+        a = Attempt()
+        try:
+            yield a
+        finally:
+            self._slots.release()
+            if a.ok:
+                with self._lock:
+                    self._fails.pop(key, None)
+                    if now in self._all:
+                        self._all.remove(now)
+
+    def message(self, a: Attempt) -> tuple[str, dict]:
+        """The text (a translation key) and its params for a refused attempt."""
+        if a.busy:
+            return N_("Gerade laufen zu viele Anmeldungen gleichzeitig. Bitte gleich noch einmal versuchen."), {}
+        return N_("Zu viele Fehlversuche. Bitte in {n} Minuten erneut versuchen."), {"n": a.wait // 60 + 1}
 
 
 class Gate:
@@ -162,14 +222,14 @@ def _locked_app(gate: Gate, templates_dir: Path, static_dir: Path) -> FastAPI:
     @app.post("/unlock")
     def unlock(request: Request, passphrase: str = Form(...)):
         client = request.client.host if request.client else "?"
-        wait = gate.throttle.blocked(client)
-        if wait:
-            return page(request, f"Zu viele Fehlversuche. Bitte in {wait // 60 + 1} Minuten erneut versuchen.", 429)
-        if crypto.unlock(gate.data_dir, passphrase):
-            gate.throttle.success(client)
+        with gate.throttle.attempt(client) as a:
+            if a.refused:
+                text, params = gate.throttle.message(a)
+                return page(request, text.format(**params), 429)
+            a.ok = crypto.unlock(gate.data_dir, passphrase)
+        if a.ok:
             log.info("web UI: service unlocked")
             return RedirectResponse("/login", 303)
-        gate.throttle.failure(client)
         log.warning("web UI: wrong master passphrase from %s", client)
         return page(request, "Die Passphrase stimmt nicht.", 403)
 

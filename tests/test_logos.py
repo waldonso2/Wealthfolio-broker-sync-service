@@ -14,6 +14,7 @@ from brokersync.vault import Vault
 from brokersync.wealthfolio import WealthfolioClient
 
 from .fakes import PASSWORD, FakeWealthfolio
+from .helpers import first_password
 from .test_sync import setup
 from .test_web import csrf
 
@@ -186,7 +187,7 @@ def test_page_saves_the_key_in_the_vault_and_fetches(tmp_path):
     app = create_app(tmp_path, wealthfolio=lambda url, pw: WealthfolioClient(url, pw, transport=wf.transport()),
                      adapters={}, run_in_thread=False, logo_source=dev.source)
     client = TestClient(app, base_url="http://sync.local:8090")
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     Vault(tmp_path).update(lambda d: d.__setitem__("wealthfolio_password", PASSWORD))
     token = csrf(client, "/logos")
     r = client.post("/logos", data={"csrf": token, "fetch": "1"})

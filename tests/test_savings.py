@@ -20,6 +20,7 @@ from brokersync.wealthfolio import WealthfolioClient
 
 from .fake_fints import FakeFinTS
 from .fakes import PASSWORD, FakeWealthfolio
+from .helpers import first_password
 from .test_sync import RecordingNotifier
 
 GIRO_IBAN = "DE02120300000000202051"
@@ -201,7 +202,7 @@ def test_the_broker_settings_offer_the_savings_account(tmp_path):
     app = create_app(tmp_path, wealthfolio=lambda url, pw: WealthfolioClient(url, pw, transport=wf.transport()),
                      adapters={"dkb": DkbAdapter}, notifier=RecordingNotifier(), run_in_thread=False)
     client = TestClient(app, base_url="http://sync.local:8090")
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     token = csrf(client, "/setup/wealthfolio")
     client.post("/setup/wealthfolio", data={"csrf": token, "url": "http://wf.local:8080/", "password": PASSWORD})
     assert "Tagesgeld-Konto (optional)" in client.get("/brokers/dkb").text

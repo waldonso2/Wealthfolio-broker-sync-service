@@ -29,8 +29,9 @@ from ..wealthfolio import WealthfolioClient, WealthfolioError
 from .gate import Gate, Throttle
 from .i18n import N_, translate
 
-# Pages anyone can open, without a login and without a CSRF token.
-PUBLIC = {"/login", "/setup-password", "/healthz", "/ca.crt"}
+# Pages anyone can open, without a login and without a CSRF token. Not /setup-password: its form carries a
+# CSRF token and the one-time setup code (#89) - else any web page could set the first password.
+PUBLIC = {"/login", "/healthz", "/ca.crt"}
 # Keys of UI texts (#87), translated where they are shown (``_(label)`` in the templates).
 STATUS_LABEL = {"ok": N_("OK"), "needs_auth": N_("Anmeldung nötig"), "error": N_("Fehler"), "running": N_("läuft"),
                 "aborted": N_("abgebrochen")}

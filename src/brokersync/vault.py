@@ -98,9 +98,9 @@ def _register(data: dict) -> None:
     for k, v in data.items():
         if k != "brokers":
             redact.register(v)
-    for b in data.get("brokers", {}).values():
+    for key, b in data.get("brokers", {}).items():
         redact.register(b.get("credentials", {}))
-        redact.register_long(b.get("session", {}))
+        redact.register_long(b.get("session", {}), scope=f"session:{key}")
 
 
 # ── web UI password ─────────────────────────────────────────────────────────
@@ -139,3 +139,36 @@ def verify_password(password: str, stored: str | None) -> bool:
 def needs_rehash(stored: str) -> bool:
     """True for hashes weaker than the current argon2id parameters (scrypt of older versions)."""
     return not stored.startswith("$argon2") or _hasher().check_needs_rehash(stored)
+
+
+# ── one-time setup code for the first password (#89) ────────────────────────
+# Without it anyone in the LAN - or any web page open in a browser there - could set the UI password
+# before its owner. The code is shown on the container's console only (install, ``brokersync-cli
+# setup-code``, ``brokersync-reset-password``), never logged; the vault keeps only its hash.
+SETUP_CODE_HOURS = 24
+
+
+def new_setup_code(vault: Vault) -> str:
+    import secrets
+    from datetime import UTC, datetime, timedelta
+
+    code = secrets.token_urlsafe(16)
+    expires = (datetime.now(UTC) + timedelta(hours=SETUP_CODE_HOURS)).isoformat()
+    vault.update(lambda d: d.__setitem__("setup_code", {"sha256": _code_hash(code), "expires": expires}))
+    return code
+
+
+def check_setup_code(vault: Vault, code: str) -> bool:
+    import hmac
+    from datetime import UTC, datetime
+
+    entry = vault.load().get("setup_code") or {}
+    if not entry or datetime.fromisoformat(entry["expires"]) < datetime.now(UTC):
+        return False
+    return hmac.compare_digest(_code_hash(code.strip()), entry["sha256"])
+
+
+def _code_hash(code: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(code.encode()).hexdigest()

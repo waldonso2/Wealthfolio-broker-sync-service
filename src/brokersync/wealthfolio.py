@@ -135,7 +135,7 @@ class WealthfolioClient:
         return r.json()
 
     def delete_activity(self, activity_id: str) -> None:
-        r = self._request("DELETE", f"/activities/{activity_id}")
+        r = self._request("DELETE", f"/activities/{quote(activity_id, safe='')}")
         _raise(r)
 
     def holdings(self, account_id: str) -> list[dict]:

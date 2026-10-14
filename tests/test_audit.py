@@ -10,6 +10,7 @@ from brokersync.model import Kind, Transaction
 from brokersync.wealthfolio import WealthfolioClient
 
 from .fakes import PASSWORD, FakeWealthfolio
+from .helpers import first_password
 
 ACC = Accounts("acc-cash", "acc-depot")
 WHEN = datetime(2026, 3, 2, 10, tzinfo=UTC)
@@ -105,7 +106,7 @@ def test_the_page(tmp_path):
     app = create_app(tmp_path, wealthfolio=lambda u, p: WealthfolioClient(u, p, transport=wf.transport()),
                      adapters={"fake": FakeBroker}, run_in_thread=False)
     client = TestClient(app)
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     page = client.get("/check").text
     assert "Bargeld im Depot <strong>-188,45 EUR</strong>" in page
     assert "bleibt stehen: -188,45 EUR" in page and "Überträge ohne Gegenstück <strong>0</strong>" in page

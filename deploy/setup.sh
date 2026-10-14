@@ -120,11 +120,15 @@ if timeout 900 /usr/local/bin/brokersync-cli migrate; then
     new_key >"$NEW_KEY"
     STAGED="$(store_key "$NEW_KEY" .new)"
     if timeout 900 /usr/local/bin/brokersync-cli rotate-key <"$NEW_KEY"; then
+      # Storing the key is the switch: rotate-key only staged the re-encrypted files, recover swaps them
+      # in (every start of the service does too, should anything stop in between).
       mv -f "$STAGED" "${STAGED%.new}"
+      timeout 900 /usr/local/bin/brokersync-cli recover
       touch "$ETC/key-rotated"
       echo "New key: everything re-encrypted; copies of the old key no longer open the data." >&2
     else
       remove "$STAGED"
+      timeout 900 /usr/local/bin/brokersync-cli recover || true # drops what a failed attempt staged
       echo "Warning: the key was not replaced (locked by the master passphrase? unlock and run update again)." >&2
     fi
     remove "$NEW_KEY"

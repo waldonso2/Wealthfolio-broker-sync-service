@@ -11,6 +11,7 @@ from brokersync.state import State
 
 from .fake_broker import FakeBroker
 from .fakes import FakeWealthfolio
+from .helpers import first_password
 from .test_sync import setup
 from .test_web import csrf
 
@@ -138,7 +139,7 @@ def test_the_check_page_lets_the_user_rebook_or_ignore(tmp_path):
     syncer.run()
     app = create_app(tmp_path, wealthfolio=syncer._wealthfolio, adapters={"fake": FullFake}, run_in_thread=False)
     client = TestClient(app, base_url="http://sync.local:8090")
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     page = client.get("/check").text
     assert "Fehlt in Wealthfolio: 1" in page and f'value="{DIVIDEND}"' in page
     token = csrf(client, "/check")

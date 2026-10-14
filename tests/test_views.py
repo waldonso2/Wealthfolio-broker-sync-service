@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 from brokersync.state import State
 from brokersync.web import views
 
+from .helpers import first_password
 from .test_web import make
 
 
@@ -40,7 +41,7 @@ def test_unknown_payloads_of_every_adapter_are_described():
 
 def test_unknown_page_shows_fields_and_raw_data_only_folded(tmp_path):
     client, _, _ = make(tmp_path)
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     State(tmp_path).add_unknown("fake", "x1", "SPINOFF", "2026-03-03T23:30:00+00:00",
                                 {"title": "Beispiel AG", "isin": "DE000TEST001", "betrag": "-12.5 EUR"})
     page = client.get("/unknown").text
@@ -73,7 +74,7 @@ def test_traffic_light_per_broker():
 
 def test_overview_shows_three_runs_and_folds_the_rest(tmp_path):
     client, _, _ = make(tmp_path)
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     state = State(tmp_path)
     for _ in range(5):
         state.finish_run(state.start_run("fake"), "ok")

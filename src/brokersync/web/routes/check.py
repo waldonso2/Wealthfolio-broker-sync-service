@@ -14,6 +14,7 @@ from ...sync import opening_id, refetch_flag
 from ...wealthfolio import WealthfolioError
 from .. import inputs
 from ..context import AppContext, Ctx, accounts_of, language, redirect, tr
+from ..i18n import N_
 
 router = APIRouter()
 
@@ -95,11 +96,12 @@ async def check_opening(request: Request, ctx: Ctx, key: str):
             state.delete_opening(key, isin, day)
         return redirect(request, "/check", tr(request, "Anfangsbestand entfernt."))
     try:
-        shares = Decimal(str(form.get("shares", "")).replace(",", "."))
-        price = Decimal(str(form.get("price", "")).replace(",", "."))
-        fee = Decimal(str(form.get("fee") or "0").replace(",", "."))
+        shares = inputs.decimal(str(form.get("shares", "")), N_("Stückzahl"))
+        price = inputs.decimal(str(form.get("price", "")), N_("Kurs"))
+        fee = inputs.decimal(str(form.get("fee") or "0"), N_("Gebühr"))
         bought = date.fromisoformat(day)
-    except (InvalidOperation, ValueError):
+        name = inputs.text(str(form.get("name") or ""), N_("Name"), max_len=200)
+    except ValueError:  # inputs.Invalid too
         return redirect(request, "/check", tr(request, "Bitte Kaufdatum, Stückzahl, Kurs und Gebühr als Zahlen "
                                                        "angeben."), "error")
     if shares <= 0 or price <= 0 or fee < 0 or bought > date.today() or not isin:
@@ -108,7 +110,7 @@ async def check_opening(request: Request, ctx: Ctx, key: str):
                         "error")
     known = {p["isin"]: p for p in json.loads(state.meta(meta_keys.POSITIONS(key)) or "[]")}
     p = known.get(isin, {})
-    name = str(form.get("name") or p.get("name") or isin)[:200]
+    name = name or p.get("name") or isin
     state.add_opening(key, isin, bought.isoformat(), name,
                       str(shares), str(price), str(fee), p.get("currency") or "EUR")
     return redirect(request, "/check", tr(request, "Anfangsbestand {isin} gespeichert - der nächste Abruf bucht ihn "

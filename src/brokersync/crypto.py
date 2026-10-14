@@ -267,6 +267,11 @@ def unseal(key: bytes, blob: bytes, purpose: str) -> bytes:
         raise DecryptError(f"{purpose} can't be decrypted with this key") from e
 
 
+def cache_pkey(data_dir: Path, pkey: bytes | None) -> None:
+    """Remember the unlocked passphrase key (``None``: forget it) - after a passphrase change."""
+    _cache_pkey(data_dir, pkey)
+
+
 def is_sealed(blob: bytes) -> bool:
     return blob.startswith(MAGIC)
 
@@ -280,6 +285,19 @@ def write_atomic(path: Path, content: bytes) -> None:
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)
+
+
+def fsync_file(path: Path) -> None:
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def fsync_dir(path: Path) -> None:
+    """Make renames inside ``path`` durable (a crash right after keeps them)."""
+    fsync_file(path)
 
 
 @contextmanager

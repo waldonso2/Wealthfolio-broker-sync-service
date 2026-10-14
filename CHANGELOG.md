@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.18.0
+
+Access and data safety (waldonso2/wealthfolio-importer-addon#89, #90, #91, #106, #114), from the audits of 13.10.2026:
+
+- **First password only with a setup code** (#89):
+  - Until now anyone in the home network, and even any web page open in a browser there, could choose the UI password of a fresh installation before you.
+  - The page now needs a one-time code shown only on the container's console: at the end of the installation (as a ready link), with `brokersync-cli setup-code`, and after `brokersync-reset-password`. It is valid 24 h and once; only its hash is stored, it is never logged.
+  - The form carries a CSRF token like every other one.
+  - *Passwort vergessen?* moved to the login page.
+- **Login brake** (#90):
+  - Every password check (UI password, master passphrase, setup code) is counted before the check and at most two run at once. Many parallel wrong passwords can no longer exhaust the container's memory or slip past the brake.
+  - Also braked: 30 wrong attempts from all addresses together, IPv6 neighbours (same /64) count as one.
+  - Behind a reverse proxy: `BROKERSYNC_TRUST_PROXY=<its address>` makes the brake count per user instead of locking everyone out.
+- **Re-encryption that survives a crash** (#91):
+  - Setting, changing or removing the master passphrase and the key change of an update write everything next to the old files first and then switch in one step; the database is never re-encrypted in place.
+  - After a power cut in between, the next start brings the data to the old or the new state, never a mix (`brokersync-cli recover` does the same by hand).
+- **Errors as pages** (#106): an expired form, an unknown page or an unexpected error show a page of the UI instead of JSON or "Internal Server Error"; an unexpected error shows only an id that is also in the log. Numbers like `Infinity` or `NaN` in a form, an unreadable CSV and odd amounts give a message instead of an error.
+- **Log redaction** (#114): every new broker session replaces the old one's strings instead of piling up for as long as the service runs.
+
 ## 0.17.0
 
 English, a light mode and a tidier overview (waldonso2/wealthfolio-importer-addon#86, waldonso2/wealthfolio-importer-addon#87):
