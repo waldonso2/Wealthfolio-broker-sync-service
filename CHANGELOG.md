@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.19.0
+
+Supply chain and hardening (waldonso2/wealthfolio-importer-addon#88, #97, #107), from the audits of 13.10.2026:
+
+- **Releases only after the whole CI, checked on install and update** (#88):
+  - The release workflow runs every CI job on the same commit first; only its publishing step may write.
+  - Each release carries the source archive, `SHA256SUMS` of every file and GitHub's build provenance (`gh attestation verify`). Published releases can't be changed any more.
+  - Install and `update` check every downloaded file against the release's `SHA256SUMS`. A changed or an added file stops them, and the previous version keeps running.
+  - `VERSION=0.19.0 update` installs that version, also an older one. Without it, `update` never goes back to an older version.
+- **CI** (#97):
+  - The test tools are locked with hashes like the runtime.
+  - `pip-audit` checks the locked versions for known vulnerabilities on every change and weekly; pull requests get a dependency review.
+  - Dependabot runs weekly, and also offers security updates of pytr.
+  - Test coverage may not fall below 90 %.
+- **Hardening** (#107):
+  - The web UI answers only to its IP addresses and known names: the container's name, also with `.fritz.box`, `.lan` or `.local`, the certificate's names, the address of the notifications, and `BROKERSYNC_ALLOWED_HOSTS`. Port 8090 redirects only there. This blocks DNS rebinding and open redirects.
+  - Pages allow no inline styles any more (CSP without `unsafe-inline`). `/healthz` shows the version only after login.
+  - comdirect: the token goes only to comdirect's own API, never to a status link on another host.
+  - logo.dev: answers are read only up to the size of a logo, redirects only within logo.dev.
+  - The services may only use the system calls of an ordinary service (`systemd-analyze security` 3.0 → 1.5); the daily run stops after 45 minutes at the latest.
+
 ## 0.18.0
 
 Access and data safety (waldonso2/wealthfolio-importer-addon#89, #90, #91, #106, #114), from the audits of 13.10.2026:

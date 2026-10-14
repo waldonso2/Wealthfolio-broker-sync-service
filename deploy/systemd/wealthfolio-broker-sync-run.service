@@ -11,6 +11,9 @@ Environment=BROKERSYNC_DATA=/opt/wealthfolio-broker-sync/data
 Environment=BROKERSYNC_RUNTIME=/run/wealthfolio-broker-sync
 # The service's key: drop-in 10-key.conf from deploy/setup.sh.
 ExecStart=/opt/wealthfolio-broker-sync/venv/bin/brokersync run
+# A broker that hangs must not block every later run (#107): stopped after 45 minutes, the run is
+# marked as aborted when the next one starts (State.abort_stale_runs).
+TimeoutStartSec=45min
 RuntimeDirectory=wealthfolio-broker-sync
 RuntimeDirectoryMode=0700
 RuntimeDirectoryPreserve=yes
@@ -31,6 +34,14 @@ RestrictRealtime=true
 RestrictNamespaces=true
 LockPersonality=true
 SystemCallArchitectures=native
+# #107: only the system calls of an ordinary service (no mount, reboot, module, swap, clock ...); a
+# refused one fails with EPERM instead of killing the process. Hidden: other users' processes, and no
+# System V IPC left behind.
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+ProtectProc=invisible
+RemoveIPC=true
+DevicePolicy=closed
 CapabilityBoundingSet=
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 ReadWritePaths=/opt/wealthfolio-broker-sync/data

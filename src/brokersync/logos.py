@@ -60,27 +60,41 @@ class StopPass(LogoError):
 class LogoDev:
     def __init__(self, token: str, *, transport: httpx.BaseTransport | None = None, timeout: float = 20.0):
         self.token = token
-        self._http = httpx.Client(timeout=timeout, transport=transport, follow_redirects=True)
+        # Redirects only within logo.dev: the key travels in the URL (logo.dev takes it nowhere else).
+        self._http = httpx.Client(timeout=timeout, transport=transport, follow_redirects=True,
+                                  event_hooks={"request": [_only_logo_dev]})
 
     def close(self) -> None:
         self._http.close()
 
     def fetch(self, isin: str) -> bytes | None:
         """The PNG logo of ``isin``, None when logo.dev has none."""
+        params: dict[str, str | int] = {"token": self.token, "format": "png", "size": SIZE, "fallback": "404"}
         try:
-            r = self._http.get(URL.format(isin=isin),
-                               params={"token": self.token, "format": "png", "size": SIZE, "fallback": "404"})
+            with self._http.stream("GET", URL.format(isin=isin), params=params) as r:
+                if r.status_code == 404:
+                    return None
+                if r.status_code in (401, 403):
+                    raise StopPass("logo.dev hat den Schlüssel abgelehnt.")
+                if r.status_code == 429:
+                    raise StopPass("logo.dev: Abruflimit erreicht, weiter beim nächsten Abruf.")
+                if r.status_code >= 400:
+                    raise LogoError(f"logo.dev: HTTP {r.status_code}")
+                # Read no more than a logo may have (#107): an endless answer is cut off, not loaded.
+                data = b""
+                for chunk in r.iter_bytes():
+                    data += chunk
+                    if len(data) > MAX_BYTES:
+                        raise LogoError(f"Logo größer als {MAX_BYTES // 1024} KB")
+                return data
         except httpx.HTTPError as e:
             raise StopPass(f"logo.dev ist nicht erreichbar ({type(e).__name__}).") from e
-        if r.status_code == 404:
-            return None
-        if r.status_code in (401, 403):
-            raise StopPass("logo.dev hat den Schlüssel abgelehnt.")
-        if r.status_code == 429:
-            raise StopPass("logo.dev: Abruflimit erreicht, weiter beim nächsten Abruf.")
-        if r.status_code >= 400:
-            raise LogoError(f"logo.dev: HTTP {r.status_code}")
-        return r.content
+
+
+def _only_logo_dev(request: httpx.Request) -> None:
+    host = request.url.host
+    if host != "logo.dev" and not host.endswith(".logo.dev"):
+        raise httpx.UnsupportedProtocol(f"Weiterleitung zu {host} abgelehnt")
 
 
 def check_png(data: bytes) -> None:

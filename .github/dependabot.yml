@@ -1,13 +1,16 @@
 version: 2
 updates:
-  # requirements.txt: the locked runtime dependencies (scripts/lock.sh). Security updates and a
-  # monthly round of version updates; pytr stays pinned in pyproject.toml and is updated by hand.
+  # requirements.txt / requirements-dev.txt: the locked runtime and CI versions (scripts/lock.sh).
+  # Security updates and a weekly round of version updates. pytr is updated by hand (its diff is
+  # reviewed, the contract case re-run): only its version updates are ignored, a security update
+  # still comes as a pull request (#97).
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
     ignore:
       - dependency-name: "pytr"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

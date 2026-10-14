@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}{{ _("Sicherheit") }}{% endblock %}
 {% block content %}
-<h1 style="margin-top:8px">{{ _("Sicherheit") }}</h1>
+<h1 class="mt-s">{{ _("Sicherheit") }}</h1>
 <div class="card">
   <h2>{{ _("Master-Passphrase") }}</h2>
   {% if has_passphrase %}
@@ -52,9 +52,9 @@
   <form method="post" action="/security/mode">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label class="check"><input type="radio" name="mode" value="auto" {{ 'checked' if sync_mode != 'safe' }}> {{ _("Automatisch") }}</label>
-    <p class="muted" style="margin-top:-8px">{{ _("Anmeldungen bei Brokern und Banken bleiben gespeichert, der Dienst ruft täglich von selbst ab.") }}</p>
+    <p class="muted mt-tight">{{ _("Anmeldungen bei Brokern und Banken bleiben gespeichert, der Dienst ruft täglich von selbst ab.") }}</p>
     <label class="check"><input type="radio" name="mode" value="safe" {{ 'checked' if sync_mode == 'safe' }}> {{ _("Sicher") }}</label>
-    <p class="muted" style="margin-top:-8px">{{ _("Jeder Abruf beginnt mit deiner Anmeldung (App-Freigabe, TAN, Gerätecode), direkt danach meldet sich der Dienst wieder ab. Der tägliche Lauf ruft nicht ab, er erinnert dich per ntfy. Gilt für alle Broker.") }}</p>
+    <p class="muted mt-tight">{{ _("Jeder Abruf beginnt mit deiner Anmeldung (App-Freigabe, TAN, Gerätecode), direkt danach meldet sich der Dienst wieder ab. Der tägliche Lauf ruft nicht ab, er erinnert dich per ntfy. Gilt für alle Broker.") }}</p>
     <div class="actions"><button>{{ _("Speichern") }}</button></div>
   </form>
 </div>
