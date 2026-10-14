@@ -124,7 +124,7 @@ def _error_pages(app: FastAPI, ctx: AppContext) -> None:
 
     @app.exception_handler(Exception)
     async def unexpected(request: Request, exc: Exception):
-        error_id = secrets.token_hex(4)
+        error_id = secrets.token_hex(3)  # 6 characters: 8 digits would be masked as an account number
         log.error("web UI: unexpected error %s on %s", error_id, request.url.path, exc_info=exc)
         lang = ctx.appearance()[1]
         text = i18n.translate("Unerwarteter Fehler (Fehler-ID {id}). Die Einzelheiten stehen im Log des Dienstes.",

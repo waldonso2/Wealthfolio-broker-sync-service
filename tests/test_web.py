@@ -298,5 +298,5 @@ def test_an_unexpected_error_shows_only_an_id(tmp_path, monkeypatch, caplog):
     quiet.cookies = client.cookies
     r = quiet.get("/")
     assert r.status_code == 500 and "secret detail" not in r.text
-    error_id = re.search(r"Fehler-ID ([0-9a-f]{8})", r.text).group(1)
+    error_id = re.search(r"Fehler-ID ([0-9a-f]{6})", r.text).group(1)
     assert error_id in caplog.text  # the details are in the log, found by the id
