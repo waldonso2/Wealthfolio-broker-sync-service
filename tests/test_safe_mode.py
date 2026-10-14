@@ -16,6 +16,7 @@ from brokersync.wealthfolio import WealthfolioClient
 from .fake_broker import CODE, FakeBroker
 from .fake_fints import FakeFinTS
 from .fakes import PASSWORD, FakeWealthfolio
+from .helpers import first_password
 from .test_dkb import CREDS, RECORDING
 from .test_dkb import fake as fake  # noqa: F401 - the fake python-fints client
 from .test_sync import RecordingNotifier, setup
@@ -45,7 +46,7 @@ def make(tmp_path, adapters=None, safe=True):
     app = create_app(tmp_path, wealthfolio=lambda u, p: WealthfolioClient(u, p, transport=wf.transport()),
                      adapters=adapters, notifier=RecordingNotifier(), run_in_thread=False)
     client = TestClient(app, base_url="http://sync.local:8090")
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     token = re.search(r'name="csrf" value="([^"]+)"', client.get("/").text).group(1)
     return client, wf, token
 

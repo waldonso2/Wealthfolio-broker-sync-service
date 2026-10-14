@@ -77,5 +77,9 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW}Open the web UI and follow the assistant (self-signed certificate: confirm the browser warning once):${CL}"
-echo -e "${GATEWAY}${BGN}https://${IP}:8443${CL}"
+# The one-time code for the first password (only this console shows it): without it nobody else in the
+# network can choose the password before you do.
+SETUP_CODE="$(pct exec "$CTID" -- /usr/local/bin/brokersync-cli setup-code 2>/dev/null | sed -n 's/^Setup code.*: //p')"
+echo -e "${INFO}${YW}Open the web UI and choose its password (the certificate comes from the container's own CA: confirm the browser warning once, or import /ca.crt):${CL}"
+echo -e "${GATEWAY}${BGN}https://${IP}:8443/setup-password?code=${SETUP_CODE}${CL}"
+echo -e "${INFO}${YW}Setup code: ${SETUP_CODE:-run brokersync-cli setup-code in the container} (valid 24 h)${CL}"

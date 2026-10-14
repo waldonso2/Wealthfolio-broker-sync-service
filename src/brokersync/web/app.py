@@ -12,13 +12,16 @@ of ``web/routes/`` (one per area, #76), which share an ``AppContext``
 
 from __future__ import annotations
 
+import html
+import logging
 import secrets
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from .. import crypto, redact
@@ -31,7 +34,10 @@ from ..wealthfolio import WealthfolioClient
 from . import i18n, views
 from .context import PUBLIC, SETTINGS_PAGES, STATUS_LABEL, AppContext, accounts_of, csrf_guard
 from .gate import Gate, Throttle
+from .i18n import N_
 from .routes import ROUTERS
+
+log = logging.getLogger(__name__)
 
 __all__ = ["PUBLIC", "SETTINGS_PAGES", "STATUS_LABEL", "accounts_of", "create_app"]
 
@@ -78,7 +84,9 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
     @app.middleware("http")
     async def require_login(request: Request, call_next):
         path = request.url.path
-        if path in PUBLIC or path.startswith("/static/"):
+        # The first-password page opens without a login, but its POST carries a CSRF token and the one-time
+        # code (#89), so it isn't in PUBLIC.
+        if path in PUBLIC or path == "/setup-password" or path.startswith("/static/"):
             return await call_next(request)
         if not vault.load().get("ui_password_hash"):
             return RedirectResponse("/setup-password", 303)
@@ -92,7 +100,41 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
     for router in ROUTERS:
         app.include_router(router)
+    _error_pages(app, ctx)
     return app
+
+
+ERROR_TITLES = {400: N_("Formular abgelaufen"), 403: N_("Nicht erlaubt"), 404: N_("Seite nicht gefunden"),
+                413: N_("Anfrage zu groß"), 429: N_("Zu viele Anfragen")}
+
+
+def _error_pages(app: FastAPI, ctx: AppContext) -> None:
+    """Errors as a page of the UI (#106), not JSON or bare text; an unexpected one shows only an id that
+    is also in the log - never its text, which can come from a bank or Wealthfolio (#60)."""
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(request: Request, exc: StarletteHTTPException):
+        title = ERROR_TITLES.get(exc.status_code, N_("Fehler"))
+        message = exc.detail if isinstance(exc.detail, str) and exc.status_code != 404 else ""
+        back = "/" if request.method == "GET" else request.headers.get("referer", "/")
+        response = ctx.render(request, "error.html", title=title, message=message,
+                              back=back if back.startswith(("/", str(request.base_url))) else "/")
+        response.status_code = exc.status_code
+        return response
+
+    @app.exception_handler(Exception)
+    async def unexpected(request: Request, exc: Exception):
+        error_id = secrets.token_hex(3)  # 6 characters: 8 digits would be masked as an account number
+        log.error("web UI: unexpected error %s on %s", error_id, request.url.path, exc_info=exc)
+        lang = ctx.appearance()[1]
+        text = i18n.translate("Unerwarteter Fehler (Fehler-ID {id}). Die Einzelheiten stehen im Log des Dienstes.",
+                              lang, id=error_id)
+        back = i18n.translate("Zur Übersicht", lang)
+        return HTMLResponse(f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" '
+                            f'content="width=device-width, initial-scale=1"><title>Broker Sync</title>'
+                            f'<link rel="stylesheet" href="/static/style.css"></head><body><main class="wrap">'
+                            f'<div class="card"><p>{html.escape(text)}</p><p><a href="/">{html.escape(back)}</a>'
+                            f'</p></div></main></body></html>', status_code=500)
 
 
 def _templates() -> Jinja2Templates:

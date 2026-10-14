@@ -22,32 +22,52 @@ PATTERNS = [
 MIN_SECRET = 6
 
 _secrets: set[str] = set()
+# Secrets that are replaced as a whole, e.g. a broker's session (``scope`` "session:dkb"): a new session's
+# strings replace the old ones instead of piling up for as long as the process runs (#114).
+_scoped: dict[str, frozenset[str]] = {}
+_ordered: list[str] | None = None  # every secret, longest first; rebuilt only after a change
+
+
+def _strings(data, min_length: int):
+    if isinstance(data, str):
+        if len(data) >= min_length:
+            yield data
+    elif isinstance(data, dict):
+        for v in data.values():
+            yield from _strings(v, min_length)
+    elif isinstance(data, list | tuple):
+        for v in data:
+            yield from _strings(v, min_length)
 
 
 def register(data) -> None:
     """Remember every string in ``data`` (nested dicts/lists) as a secret."""
-    if isinstance(data, str):
-        if len(data) >= MIN_SECRET:
-            _secrets.add(data)
-    elif isinstance(data, dict):
-        for v in data.values():
-            register(v)
-    elif isinstance(data, list | tuple):
-        for v in data:
-            register(v)
+    global _ordered
+    new = set(_strings(data, MIN_SECRET)) - _secrets
+    if new:
+        _secrets.update(new)
+        _ordered = None
 
 
-def register_long(data, min_length: int = 20) -> None:
-    """Like ``register``, for strings of at least ``min_length`` characters only."""
-    if isinstance(data, str):
-        if len(data) >= min_length:
-            _secrets.add(data)
-    elif isinstance(data, dict):
-        for v in data.values():
-            register_long(v, min_length)
-    elif isinstance(data, list | tuple):
-        for v in data:
-            register_long(v, min_length)
+def register_long(data, min_length: int = 20, scope: str | None = None) -> None:
+    """Like ``register``, for strings of at least ``min_length`` characters only. With ``scope`` they replace
+    what was registered under the same scope before (an old session's tokens are dead anyway)."""
+    global _ordered
+    strings = frozenset(_strings(data, min_length))
+    if scope is None:
+        if strings - _secrets:
+            _secrets.update(strings)
+            _ordered = None
+    elif _scoped.get(scope) != strings:
+        _scoped[scope] = strings
+        _ordered = None
+
+
+def _all() -> list[str]:
+    global _ordered
+    if _ordered is None:
+        _ordered = sorted(_secrets.union(*_scoped.values()), key=len, reverse=True)
+    return _ordered
 
 
 # For stored texts, stricter than PATTERNS so an ISIN (LU0629459743) and the words after it stay: an IBAN
@@ -71,7 +91,7 @@ def mask_numbers(data):
 
 
 def redact(text: str) -> str:
-    for s in sorted(_secrets, key=len, reverse=True):
+    for s in _all():
         if s in text:
             text = text.replace(s, MASK)
     for p in PATTERNS:

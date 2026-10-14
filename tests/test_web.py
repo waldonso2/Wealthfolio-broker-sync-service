@@ -2,14 +2,16 @@
 
 import re
 
+import pytest
 from fastapi.testclient import TestClient
 
 from brokersync import config as config_mod
-from brokersync.vault import Vault
+from brokersync.vault import Vault, new_setup_code
 from brokersync.wealthfolio import WealthfolioClient
 
 from .fake_broker import CODE, FakeBroker
 from .fakes import PASSWORD, FakeWealthfolio
+from .helpers import first_password
 from .test_sync import RecordingNotifier
 
 
@@ -36,9 +38,18 @@ def test_assistant_from_first_visit_to_first_sync(tmp_path):
     # First visit: choose the UI password.
     r = client.get("/", follow_redirects=False)
     assert r.headers["location"] == "/setup-password"
-    r = client.post("/setup-password", data={"password": "short", "password2": "short"})
-    assert "mindestens 12 Zeichen" in r.text
-    r = client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    # Not without the one-time code from the console, and never from another page (#89).
+    assert client.post("/setup-password", data={"password": "geheim-123456",
+                                                "password2": "geheim-123456"}).status_code == 400
+    token = csrf(client, "/setup-password")
+    r = client.post("/setup-password", data={"csrf": token, "code": "guessed", "password": "geheim-123456",
+                                             "password2": "geheim-123456"})
+    assert "Einrichtungscode stimmt nicht" in r.text
+    code = new_setup_code(Vault(tmp_path))
+    r = client.post("/setup-password", data={"csrf": token, "code": code, "password": "short", "password2": "short"})
+    assert "mindestens 12 Zeichen" in r.text and f'value="{code}"' in r.text  # the code stays filled in
+    r = first_password(client)
+    assert "setup_code" not in Vault(tmp_path).load()  # used up
     assert "Wealthfolio nicht verbunden" in r.text and "Wealthfolio verbinden" in r.text
     assert config_mod.load(tmp_path).public_url == "http://sync.local:8090"
 
@@ -93,7 +104,7 @@ def test_assistant_from_first_visit_to_first_sync(tmp_path):
 
 def test_login_required_and_csrf_checked(tmp_path):
     client, _, _ = make(tmp_path)
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     assert client.post("/run", data={"csrf": "forged"}).status_code == 400
     client.post("/logout", data={"csrf": csrf(client, "/")})
     r = client.get("/", follow_redirects=False)
@@ -101,14 +112,13 @@ def test_login_required_and_csrf_checked(tmp_path):
     assert "Falsches Passwort" in client.post("/login", data={"password": "wrong"}).text
     assert "Alle abrufen" in client.post("/login", data={"password": "geheim-123456"}).text
     # The password can only be chosen once.
-    r = client.post("/setup-password", data={"password": "andere123", "password2": "andere123"},
-                    follow_redirects=False)
+    r = first_password(client, "andere-123456", follow_redirects=False)
     assert r.headers["location"] == "/login"
 
 
 def test_notifications_and_securities(tmp_path):
     client, _, notifier = make(tmp_path)
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     page = client.get("/notifications").text
     topic = re.search(r'name="topic" value="(wealthfolio-sync-[0-9a-f]{12})"', page).group(1)
     token = csrf(client, "/notifications")
@@ -135,7 +145,7 @@ def test_status_follows_the_real_state_of_the_sync(tmp_path):
     from brokersync.sync import run_lock
 
     client, _, _ = make(tmp_path)
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     # A run the process died in the middle of (restart, update, crash).
     stale = State(tmp_path)
     stale.start_run("fake")
@@ -196,7 +206,7 @@ def test_an_installation_with_the_old_dummy_broker_is_cleaned_up(tmp_path):
     assert not state.flag("assets-learned:dummy")
     assert state.known("fake") == {"f-1"} and len(state.runs("fake")) == 1
 
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     page = client.get("/").text
     # Its activities stay in Wealthfolio: shown once, with the count and how to find them.
     assert "Dummy (Test) entfernt" in page and "4 Buchungen" in page and "[SYNC dummy:" in page
@@ -215,7 +225,7 @@ def test_refetch_button(tmp_path):
     from brokersync.sync import refetch_flag
 
     client, _, _ = make(tmp_path)
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     page = client.get("/brokers/fake").text
     assert "Ab Startdatum neu abrufen" in page
     r = client.post("/brokers/fake/refetch", data={"csrf": csrf(client, "/brokers/fake")})
@@ -227,7 +237,7 @@ def test_navigation_groups_the_settings(tmp_path):
     from brokersync.state import State
 
     client, _, _ = make(tmp_path)
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     page = client.get("/").text
     nav = re.search(r'<nav class="main" aria-label="Hauptmenü">(.*?)</nav>', page, re.S).group(1)
     assert re.findall(r'<a href="([^"]+)"', nav) == ["/", "/check", "/unknown", "/settings"]
@@ -249,3 +259,44 @@ def test_navigation_groups_the_settings(tmp_path):
     page = client.get("/unknown").text
     assert '<span class="count" aria-label="1 offen">1</span>' in page
     assert '<td data-label="Art">' in page  # stacked on narrow screens
+
+
+def test_errors_are_pages_of_the_ui_and_odd_numbers_no_crash(tmp_path):
+    """#106: an expired form and an unknown page are pages in the layout; Infinity/NaN in a form, a broken
+    CSV and an odd amount in a template give a message, no 500."""
+    from brokersync.adapters import deutschebank_csv
+    from brokersync.web import views
+
+    client, _, _ = make(tmp_path)
+    first_password(client)
+    r = client.post("/run", data={"csrf": "forged"})
+    assert r.status_code == 400 and "Formular abgelaufen" in r.text and "<html" in r.text and "detail" not in r.text
+    r = client.get("/no-such-page")
+    assert r.status_code == 404 and "Seite nicht gefunden" in r.text
+    token = csrf(client, "/check")
+    for bad in ("Infinity", "NaN", "1e999999", "-0"):
+        r = client.post("/check/fake/opening", data={"csrf": token, "isin": "DE0007164600", "day": "2026-01-02",
+                                                     "shares": bad, "price": "10", "fee": "0"})
+        assert r.status_code == 200 and "Zahlen" in r.text or "größer 0" in r.text
+    for blob in (b"\x00;\x00\n\x00", b"\x81\x8d\x8f\x90\x9d"):
+        with pytest.raises(ValueError):
+            deutschebank_csv.parse(blob)
+    assert views.money("n/a") == "n/a" and views.money("NaN") == "NaN" and views.money("1234.5") == "1.234,50"
+
+
+def test_an_unexpected_error_shows_only_an_id(tmp_path, monkeypatch, caplog):
+    from brokersync.web.routes import overview
+
+    client, _, _ = make(tmp_path)
+    first_password(client)
+
+    def broken(*_args):
+        raise RuntimeError("secret detail from a bank")
+
+    monkeypatch.setattr(overview, "_brokers", broken)
+    quiet = TestClient(client.app, base_url="http://sync.local:8090", raise_server_exceptions=False)
+    quiet.cookies = client.cookies
+    r = quiet.get("/")
+    assert r.status_code == 500 and "secret detail" not in r.text
+    error_id = re.search(r"Fehler-ID ([0-9a-f]{6})", r.text).group(1)
+    assert error_id in caplog.text  # the details are in the log, found by the id

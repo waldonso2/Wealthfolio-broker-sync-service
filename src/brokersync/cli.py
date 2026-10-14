@@ -23,7 +23,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 (#80)
     serve_cmd.add_argument("--redirect-port", type=int, help="also listen with plain HTTP here, redirecting to HTTPS")
     run = sub.add_parser("run", help="sync all enabled brokers once")
     run.add_argument("--broker", action="append", help="only this broker (repeatable)")
-    sub.add_parser("reset-ui-password", help="forget the web UI password; the next visit sets a new one")
+    sub.add_parser("reset-ui-password", help="forget the web UI password; prints the code to set a new one")
+    sub.add_parser("setup-code", help="a new one-time code for setting the first web UI password")
     sc = sub.add_parser("install-sc", help="install or update Scalable's official CLI (sc), signature-checked")
     sc.add_argument("--dir", default="/opt/wealthfolio-broker-sync/bin")
     cert = sub.add_parser("make-cert", help="create or renew the self-signed TLS certificate of the web UI")
@@ -32,10 +33,20 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 (#80)
     cert.add_argument("--ip", action="append", default=[], help="IP address for the certificate (repeatable)")
     sub.add_parser("migrate", help="bring the data of an older version up to date (encryption)")
     sub.add_parser("rotate-key", help="re-encrypt everything for a new host key, read from stdin (deploy/setup.sh)")
+    sub.add_parser("recover", help="finish or undo a re-encryption that was interrupted (also on every start)")
     sub.add_parser("security-status", help="what is protected how (the page Sicherheit)")
     args = parser.parse_args(argv)
 
     setup_logging()
+    if args.cmd in ("serve", "run", "migrate", "recover"):
+        from .security import recover
+
+        done = recover(data_dir())
+        if done:
+            logging.getLogger("brokersync").warning("an interrupted re-encryption was %s", done)
+        if args.cmd == "recover":
+            print(f"Re-encryption {done}." if done else "Nothing to recover.")
+            return 0
 
     if args.cmd == "serve":
         from .web.serve import serve
@@ -97,15 +108,23 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 (#80)
                   f" {r.unknown} unbekannt")
         return 1 if any(r.status == "error" for r in results) else 0
 
-    if args.cmd == "reset-ui-password":
-        from .vault import Vault
+    if args.cmd in ("reset-ui-password", "setup-code"):
+        from .vault import SETUP_CODE_HOURS, Vault, new_setup_code
 
-        def forget(d: dict) -> None:
-            d.pop("ui_password_hash", None)
-            d.pop("ui_session_key", None)  # signs everyone out
+        vault = Vault(data_dir())
+        if args.cmd == "reset-ui-password":
+            def forget(d: dict) -> None:
+                d.pop("ui_password_hash", None)
+                d.pop("ui_session_key", None)  # signs everyone out
 
-        Vault(data_dir()).update(forget)
-        print("Web UI password removed. Open the web UI to set a new one.")
+            vault.update(forget)
+            print("Web UI password removed.")
+        elif vault.load().get("ui_password_hash"):
+            print("The web UI password is set already; to choose a new one: brokersync-reset-password",
+                  file=sys.stderr)
+            return 1
+        # Printed here, on the console only - never logged.
+        print(f"Setup code (valid {SETUP_CODE_HOURS} h, enter it with the new password): {new_setup_code(vault)}")
         return 0
     if args.cmd == "install-sc":
         from pathlib import Path

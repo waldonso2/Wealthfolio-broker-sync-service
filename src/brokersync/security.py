@@ -5,6 +5,7 @@ versions before 0.9.0 (``brokersync migrate``, run by ``deploy/setup.sh``).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -143,17 +144,90 @@ def change_passphrase(data_dir: Path, new: str | None) -> None:
     if new is not None and len(new) < crypto.MIN_PASSPHRASE:
         raise ValueError(f"Die Passphrase braucht mindestens {crypto.MIN_PASSPHRASE} Zeichen.")
     with run_lock(d, wait=30), crypto.file_lock(d, "secrets.lock"):
-        old_key = crypto.data_key(d)
-        vault = Vault(d)
-        secrets_data = vault.load()
-        cfg = config_mod.load(d)
+        recover(d, locked=True)
         new_key, ring = crypto.new_passphrase_key(d, new)
-        # Written next to the old files first: a failure before the switch leaves everything as it was.
-        sealed_secrets = crypto.seal(new_key, json.dumps(secrets_data).encode(), "secrets")
-        state_mod.rekey(d, old_key, new_key)
-        crypto.write_atomic(vault.file, sealed_secrets)
-        config_mod.save(d, cfg, new_key)
-        crypto.write_keyring(d, ring)
+        pkey = ring.pop("_pkey", None)
+        _stage_data_tier(d, new_key, crypto.host_key(d), ring)
+        # The journal is the switch: from here on the new files win, even after a crash.
+        _write_journal(d, "passphrase", b"")
+        _swap_staged(d)
+        crypto.cache_pkey(d, bytes.fromhex(pkey) if pkey else None)
+
+
+# ── re-encryption: staged next to the old files, one switch, recovery (#91) ──
+JOURNAL = "rekey.json"
+STAGED = ".rekey"
+DATA_TIER = ("secrets.enc", "config.enc", "notify.enc", "keyring.json")
+
+
+def _stage_data_tier(d: Path, new_data: bytes, new_host: bytes, ring: dict) -> None:
+    """Write every file of the data tier, re-encrypted, as ``<name>.rekey`` - the old ones stay untouched;
+    ``state.db`` is re-encrypted as a copy, never in place."""
+    old_data = crypto.data_key(d)
+    if (d / "secrets.enc").exists():
+        crypto.write_atomic(d / f"secrets.enc{STAGED}",
+                            crypto.seal(new_data, json.dumps(Vault(d).load()).encode(), "secrets"))
+    config_blob, notify_blob = config_mod.sealed(config_mod.load(d), new_data, new_host)
+    crypto.write_atomic(d / f"config.enc{STAGED}", config_blob)
+    crypto.write_atomic(d / f"notify.enc{STAGED}", notify_blob)
+    db = d / "state.db"
+    if db.exists() and state_mod.ENCRYPTED:
+        tmp = d / f"state.db{STAGED}"
+        shutil.copy2(db, tmp)
+        os.chmod(tmp, 0o600)
+        state_mod.rekey(d, old_data, new_data, path=tmp)
+        crypto.fsync_file(tmp)
+    crypto.write_atomic(d / f"keyring.json{STAGED}", json.dumps(ring, indent=2).encode())
+
+
+def _write_journal(d: Path, kind: str, check: bytes) -> None:
+    crypto.write_atomic(d / JOURNAL, json.dumps({"kind": kind, "check": check.hex()}).encode())
+
+
+def _swap_staged(d: Path) -> None:
+    for tmp in sorted(d.glob(f"*{STAGED}")):
+        target = d / tmp.name[: -len(STAGED)]
+        os.replace(tmp, target)
+        if target.name == "state.db":
+            for suffix in ("-journal", "-wal", "-shm"):
+                target.with_name(target.name + suffix).unlink(missing_ok=True)
+    crypto.fsync_dir(d)
+    (d / JOURNAL).unlink(missing_ok=True)
+
+
+def recover(data_dir: Path, *, locked: bool = False) -> str:
+    """Finish or undo a re-encryption a crash interrupted; run before anything reads the data tier.
+
+    Without a journal, staged files are leftovers of an attempt that never reached its switch: removed.
+    A passphrase change switched when it wrote its journal: finished. A new host key switches when
+    ``deploy/setup.sh`` stores the key - the journal's check value tells whether the key in use is the new
+    one (finished) or still the old one (undone). Returns what was done ("" for nothing)."""
+    d = Path(data_dir)
+    staged = list(d.glob(f"*{STAGED}"))
+    journal = d / JOURNAL
+    if not staged and not journal.exists():
+        return ""
+    with contextlib.nullcontext() if locked else crypto.file_lock(d, "secrets.lock"):
+        if not journal.exists():
+            for f in d.glob(f"*{STAGED}"):
+                f.unlink()
+            return "undone"
+        entry = json.loads(journal.read_text())
+        if entry["kind"] == "host" and not _opens(crypto.host_key(d), bytes.fromhex(entry["check"])):
+            for f in d.glob(f"*{STAGED}"):
+                f.unlink()
+            journal.unlink()
+            return "undone"
+        _swap_staged(d)
+        return "finished"
+
+
+def _opens(key: bytes, check: bytes) -> bool:
+    try:
+        crypto.unseal(key, check, "rekey check")
+        return True
+    except Exception:
+        return False
 
 
 def migrate(data_dir: Path) -> list[str]:
@@ -186,37 +260,17 @@ def migrate(data_dir: Path) -> list[str]:
 
 
 def rotate_host_key(data_dir: Path, material: bytes) -> None:
-    """Re-encrypt everything for a new host key (``deploy/setup.sh`` hands it over, then stores it).
+    """Re-encrypt everything for a new host key (``deploy/setup.sh`` hands it over).
 
-    Everything is written next to the old files first and only then swapped in, so a failure before the swap
-    leaves the data readable with the old key."""
+    The new files are only staged next to the old ones: the switch is the key itself. ``setup.sh``
+    stores it after this returned, then ``brokersync recover`` swaps the files in - and so does every
+    start of the service if anything stopped in between (``recover``). Until the key is stored the old
+    one keeps opening everything."""
     d = Path(data_dir)
     if len(material) < 32:
         raise ValueError("Der neue Schlüssel ist zu kurz.")
     with run_lock(d, wait=30), crypto.file_lock(d, "secrets.lock"):
-        old_data = crypto.data_key(d)
-        secrets_data = Vault(d).load() if (d / "secrets.enc").exists() else None
-        cfg = config_mod.load(d)
+        recover(d, locked=True)
         new_host, new_data, ring = crypto.keys_for_new_host_key(d, material)
-        staged: list[tuple[Path, Path]] = []
-
-        def stage(name: str, blob: bytes) -> None:
-            tmp = d / f"{name}.rotate"
-            crypto.write_atomic(tmp, blob)
-            staged.append((tmp, d / name))
-
-        if secrets_data is not None:
-            stage("secrets.enc", crypto.seal(new_data, json.dumps(secrets_data).encode(), "secrets"))
-        config_blob, notify_blob = config_mod.sealed(cfg, new_data, new_host)
-        stage("config.enc", config_blob)
-        stage("notify.enc", notify_blob)
-        db = d / "state.db"
-        if db.exists() and state_mod.ENCRYPTED:
-            tmp = d / "state.db.rotate"
-            shutil.copy2(db, tmp)
-            os.chmod(tmp, 0o600)
-            state_mod.rekey(d, old_data, new_data, path=tmp)
-            staged.append((tmp, db))
-        stage("keyring.json", json.dumps(ring, indent=2).encode())
-        for tmp, target in staged:
-            os.replace(tmp, target)
+        _stage_data_tier(d, new_data, new_host, ring)
+        _write_journal(d, "host", crypto.seal(new_host, b"rekey", "rekey check"))

@@ -49,14 +49,19 @@ def parse(data: bytes) -> list[dict]:
             break
         except UnicodeDecodeError:
             continue
-    reader = csv.DictReader(io.StringIO(text), delimiter=";")
-    if not reader.fieldnames or any(c not in reader.fieldnames for c in REQUIRED):
-        raise ValueError("Das ist kein Depotumsatz-Export der Deutschen Bank (Spalten fehlen).")
-    rows = []
-    for row in reader:
-        if not (row.get("Buchungsdatum") or "").strip():
-            continue
-        rows.append({k: (row.get(k) or "").strip() for k in KEEP})
+    else:
+        raise ValueError("Das ist kein Depotumsatz-Export der Deutschen Bank (unbekannte Zeichenkodierung).")
+    try:
+        reader = csv.DictReader(io.StringIO(text), delimiter=";")
+        if not reader.fieldnames or any(c not in reader.fieldnames for c in REQUIRED):
+            raise ValueError("Das ist kein Depotumsatz-Export der Deutschen Bank (Spalten fehlen).")
+        rows = []
+        for row in reader:
+            if not (row.get("Buchungsdatum") or "").strip():
+                continue
+            rows.append({k: (row.get(k) or "").strip() for k in KEEP})
+    except csv.Error as e:  # e.g. NUL bytes: not a CSV export
+        raise ValueError("Das ist kein Depotumsatz-Export der Deutschen Bank (keine lesbare CSV-Datei).") from e
     return rows
 
 
@@ -65,9 +70,12 @@ def _num(value: str) -> Decimal:
     if not value:
         return Decimal(0)
     try:
-        return Decimal(value)
+        number = Decimal(value)
     except InvalidOperation as e:
         raise ValueError(f"Keine Zahl: {value!r}") from e
+    if not number.is_finite():
+        raise ValueError(f"Keine Zahl: {value!r}")
+    return number
 
 
 def row_id(row: dict, seen: Counter) -> str:

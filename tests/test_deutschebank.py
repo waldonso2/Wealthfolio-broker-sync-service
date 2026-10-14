@@ -19,6 +19,7 @@ from brokersync.wealthfolio import WealthfolioClient
 
 from .fake_fints import FakeFinTS
 from .fakes import PASSWORD, FakeWealthfolio
+from .helpers import first_password
 from .test_sync import RecordingNotifier
 
 HEADER = ("Buchungsdatum;Schlusstag / Zahltag;Valuta;Depot-Nr.;Konto-Nr.;Umsatzart;Nominal / Stück;Bezeichnung;WKN;"
@@ -122,7 +123,7 @@ def test_upload_and_run_book_the_depot_and_match_the_giro_in_one_run(tmp_path, m
     app = create_app(tmp_path, wealthfolio=make_wf, adapters={"deutschebank": DeutscheBankAdapter},
                      notifier=RecordingNotifier(), run_in_thread=False)
     client = TestClient(app, base_url="https://sync.local")
-    client.post("/setup-password", data={"password": "geheim-123456", "password2": "geheim-123456"})
+    first_password(client)
     page = client.get("/brokers/deutschebank").text
     assert "Depotumsätze (CSV-Export aus dem Online-Banking)" in page
     token = re.search(r'name="csrf" value="([^"]+)"', page).group(1)

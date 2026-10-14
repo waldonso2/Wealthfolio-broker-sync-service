@@ -5,7 +5,7 @@ import pytest
 from brokersync import __version__, cli
 from brokersync import sync as sync_mod
 from brokersync.sync import AlreadyRunning, BrokerResult
-from brokersync.vault import Vault, hash_password
+from brokersync.vault import Vault, check_setup_code, hash_password, new_setup_code
 
 
 @pytest.fixture
@@ -63,8 +63,28 @@ def test_reset_ui_password_keeps_everything_else(data, capsys):
     vault = Vault(data)
     vault.update(lambda d: d.update(ui_password_hash=hash_password("geheim-123456"), wealthfolio_password="wf"))
     assert cli.main(["reset-ui-password"]) == 0
-    assert vault.load() == {"wealthfolio_password": "wf"}
-    assert "set a new one" in capsys.readouterr().out
+    stored = vault.load()
+    assert stored.pop("setup_code")["sha256"] and stored == {"wealthfolio_password": "wf"}
+    out = capsys.readouterr().out
+    code = out.strip().rsplit(" ", 1)[-1]
+    assert "Setup code" in out and check_setup_code(vault, code) and not check_setup_code(vault, "guessed")
+    assert code not in str(vault.load())  # only its hash is kept
+
+
+def test_setup_code_only_while_no_password_is_set(data, capsys):
+    vault = Vault(data)
+    assert cli.main(["setup-code"]) == 0
+    assert check_setup_code(vault, capsys.readouterr().out.strip().rsplit(" ", 1)[-1])
+    vault.update(lambda d: d.update(ui_password_hash=hash_password("geheim-123456")))
+    assert cli.main(["setup-code"]) == 1 and "brokersync-reset-password" in capsys.readouterr().err
+
+
+def test_a_setup_code_expires(data, monkeypatch):
+    from brokersync import vault as vault_mod
+
+    vault = Vault(data)
+    monkeypatch.setattr(vault_mod, "SETUP_CODE_HOURS", -1)
+    assert not check_setup_code(vault, new_setup_code(vault))
 
 
 def test_serve_starts_the_ui_on_the_given_port(data, monkeypatch):
