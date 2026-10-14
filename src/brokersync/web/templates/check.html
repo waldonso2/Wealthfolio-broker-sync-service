@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}{{ _("Prüfung") }}{% endblock %}
 {% block content %}
-<h1 style="margin-top:8px">{{ _("Prüfung") }}</h1>
+<h1 class="mt-s">{{ _("Prüfung") }}</h1>
 <p class="muted">{{ _("Broker und Wealthfolio im Vergleich. Der Dienst legt nichts von selbst wieder an und löscht nichts – du entscheidest.") }}</p>
 {% if wf_error %}<div class="flash error">{{ _("Wealthfolio nicht erreichbar: {error}", error=wf_error | redact) }}</div>{% endif %}
 
@@ -78,7 +78,7 @@
       {% for o in pending %}
       <tr><td data-label="{{ _('Wertpapier') }}">{{ o.name }} <span class="muted">{{ o.isin }}</span></td><td data-label="{{ _('Kaufdatum') }}">{{ o.day | day }}</td><td data-label="{{ _('Stück') }}">{{ o.shares }}</td><td data-label="{{ _('Kurs') }}">{{ o.price }} {{ o.currency }}</td><td data-label="{{ _('Gebühr') }}">{{ o.fee }}</td>
         <td data-label="{{ _('Status') }}">{{ _("wird beim nächsten Abruf gebucht") }}
-          <form method="post" action="/check/{{ b.key }}/opening" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ o.isin }}"><input type="hidden" name="day" value="{{ o.day }}"><button class="secondary" name="action" value="delete">{{ _("Entfernen") }}</button></form></td></tr>
+          <form method="post" action="/check/{{ b.key }}/opening" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ o.isin }}"><input type="hidden" name="day" value="{{ o.day }}"><button class="secondary" name="action" value="delete">{{ _("Entfernen") }}</button></form></td></tr>
       {% endfor %}
     </table></div>
     {% endif %}

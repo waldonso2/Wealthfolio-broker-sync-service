@@ -248,3 +248,17 @@ def test_without_a_start_date_comdirect_is_asked_for_ten_years_and_without_if_it
     depot = [c for c in seen if "/brokerage/v3/depots/D/transactions" in c["path"]]
     assert giro[0]["min-bookingDate"] == "2016-10-10"
     assert depot[0]["min-bookingDate"] == "2016-10-10" and "min-bookingDate" not in depot[1]
+
+
+def test_the_token_never_goes_to_a_status_link_of_another_host(api, monkeypatch):
+    """#107: the challenge's status link gets the bearer token - only comdirect's API, relative or absolute."""
+    a = ComdirectAdapter(CREDS)
+    with pytest.raises(AuthRequired):
+        a.login()
+    a._pending["link"] = "https://evil.example/collect"
+    with pytest.raises(AdapterError, match="Status-Link"):
+        a._wait_push(0)
+    assert not any("evil.example" in c for c in api.calls)
+    a._pending["link"] = "https://api.comdirect.de/api/session/v1/authentications/CH-1"
+    api.approved = True
+    assert a._wait_push(0)

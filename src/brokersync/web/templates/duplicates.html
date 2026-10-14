@@ -6,7 +6,7 @@
   <p class="muted">{{ _("Gelöscht wird nur die Kopie des Dienstes (Kommentar „[SYNC …]“) samt ihrer Übertragsbuchungen. Deine CSV-/PDF-Buchung bleibt, und der Dienst legt den Vorgang nicht noch einmal an.") }}</p>
   {% if wf_error %}<div class="flash error">{{ _("Wealthfolio nicht erreichbar: {error}", error=wf_error | redact) }}</div>{% endif %}
   {% for r in report %}
-  <h2 style="margin-top:20px">{{ _("{label}: {n} doppelt", label=r.label, n=r.found | length) }}</h2>
+  <h2 class="mt-l">{{ _("{label}: {n} doppelt", label=r.label, n=r.found | length) }}</h2>
   {% if r.found %}
   <div class="table"><table>
     <tr><th>{{ _("Datum") }}</th><th>{{ _("Art") }}</th><th>{{ _("Betrag") }}</th><th>{{ _("Vom Dienst") }}</th><th>{{ _("Schon vorhanden (CSV/PDF)") }}</th></tr>

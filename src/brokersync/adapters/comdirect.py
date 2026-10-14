@@ -453,7 +453,13 @@ class ComdirectAdapter(BrokerAdapter):
         p = self._pending or {}
         if not p.get("link"):
             return True  # nothing to poll: the user says they approved
-        url = p["link"] if p["link"].startswith("http") else f"{API}{p['link']}"
+        # The bearer token goes along: only comdirect's own API, never a host the answer names (#107).
+        if p["link"].startswith("/"):
+            url = f"{API}{p['link']}"
+        elif p["link"].startswith(f"{API}/"):
+            url = p["link"]
+        else:
+            raise AdapterError("comdirect: unerwarteter Status-Link der TAN-Anforderung - abgebrochen.")
         deadline = time.monotonic() + seconds
         while True:
             try:

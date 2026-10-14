@@ -30,6 +30,25 @@ variables
 color
 catch_errors
 
+# verify_release <dir>: the source archive just deployed must match the SHA256SUMS the release workflow
+# published (and attested) with this release - no file changed, none added (#88). Defined in
+# install/wealthfolio-broker-sync-install.sh too; keep both the same (test_packaging checks).
+verify_release() {
+  local dir="$1" version sums ok
+  version="$(<"$HOME/.wealthfolio-broker-sync")"
+  sums="$(mktemp)"
+  if ! curl -fsSL "https://github.com/waldonso2/wealthfolio-broker-sync-service/releases/download/v${version}/SHA256SUMS" -o "$sums"; then
+    rm -f "$sums"
+    return 1
+  fi
+  ok=0
+  (cd "$dir" && sha256sum --quiet --strict -c "$sums") || ok=1
+  diff <(cd "$dir" && find . -type f ! -path './build/*' ! -path '*.egg-info/*' | LC_ALL=C sort) \
+    <(cut -c67- "$sums" | LC_ALL=C sort) >/dev/null || ok=1
+  rm -f "$sums"
+  return "$ok"
+}
+
 function update_script() {
   header_info
   check_container_storage
@@ -40,7 +59,12 @@ function update_script() {
     exit
   fi
 
-  if check_for_gh_release "wealthfolio-broker-sync" "waldonso2/wealthfolio-broker-sync-service"; then
+  # VERSION=0.19.0 update: that version on purpose, also an older one (setup.sh refuses a downgrade
+  # otherwise). Without it: the latest release, if it is newer.
+  if [[ -n "${VERSION:-}" ]]; then
+    export BROKERSYNC_ALLOW_DOWNGRADE=1
+  fi
+  if [[ -n "${VERSION:-}" ]] || check_for_gh_release "wealthfolio-broker-sync" "waldonso2/wealthfolio-broker-sync-service"; then
     msg_info "Stopping Service"
     systemctl stop wealthfolio-broker-sync-run.timer wealthfolio-broker-sync
     msg_ok "Stopped Service"
@@ -52,7 +76,13 @@ function update_script() {
     find /opt/wealthfolio-broker-sync -maxdepth 1 -name 'backup-*.tar.gz' | sort -r | tail -n +4 | xargs -r rm -f
     msg_ok "Backed up to ${BACKUP}"
 
-    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "wealthfolio-broker-sync" "waldonso2/wealthfolio-broker-sync-service" "tarball" "latest" "/opt/wealthfolio-broker-sync/app"
+    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "wealthfolio-broker-sync" "waldonso2/wealthfolio-broker-sync-service" "tarball" "${VERSION:-latest}" "/opt/wealthfolio-broker-sync/app"
+    if ! verify_release /opt/wealthfolio-broker-sync/app; then
+      # Nothing of the new files ran: the previous version (its venv) is still installed.
+      systemctl start wealthfolio-broker-sync wealthfolio-broker-sync-run.timer
+      msg_error "Update stopped: the downloaded files don't match the release's SHA256SUMS. The previous version keeps running."
+      exit 1
+    fi
 
     msg_info "Updating ${APP}"
     if ! bash /opt/wealthfolio-broker-sync/app/deploy/setup.sh; then

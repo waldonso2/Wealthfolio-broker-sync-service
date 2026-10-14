@@ -6,16 +6,43 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import socket
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import uvicorn
 
+from .. import config as config_mod
 from .app import create_app
+from .gate import Hosts
 
 log = logging.getLogger(__name__)
 
 
-def redirect_app(https_port: int):
+def known_hosts(data_dir: Path, certfile: str | None) -> set[str]:
+    """The names the UI answers to besides IP addresses (#107): this machine's, the certificate's, the public
+    URL's (read when asked: it can change) and ``BROKERSYNC_ALLOWED_HOSTS`` (comma-separated)."""
+    names = {socket.gethostname(), "localhost"}
+    names |= {n.strip() for n in os.environ.get("BROKERSYNC_ALLOWED_HOSTS", "").split(",") if n.strip()}
+    if certfile and Path(certfile).exists():
+        from cryptography import x509
+
+        try:
+            cert = x509.load_pem_x509_certificate(Path(certfile).read_bytes())
+            san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+            names |= set(san.get_values_for_type(x509.DNSName))
+        except (ValueError, x509.ExtensionNotFound):
+            pass
+    try:
+        url = config_mod.load_notify(data_dir).public_url
+    except Exception:  # unreadable for now (e.g. no data yet): the other names still count
+        url = ""
+    if url:
+        names.add(urlsplit(url).hostname or "")
+    return {n.lower() for n in names if n}
+
+
+def redirect_app(https_port: int, hosts: Hosts | None = None):
     async def app(scope, receive, send):
         if scope["type"] == "lifespan":
             while True:
@@ -26,6 +53,10 @@ def redirect_app(https_port: int):
                     await send({"type": "lifespan.shutdown.complete"})
                     return
         raw = dict(scope.get("headers") or []).get(b"host", b"").decode("latin-1")
+        if hosts and not hosts.allows(raw):  # never a redirect to a host someone else named (#107)
+            await send({"type": "http.response.start", "status": 400, "headers": [(b"content-length", b"0")]})
+            await send({"type": "http.response.body", "body": b""})
+            return
         host = raw[:raw.index("]") + 1] if raw.startswith("[") and "]" in raw else raw.split(":")[0]
         host = host or (scope.get("server") or ("localhost",))[0]
         path = scope.get("raw_path", scope.get("path", "/").encode()).decode("latin-1")
@@ -50,11 +81,12 @@ def proxy_options() -> dict:
 def serve(data_dir: Path, *, host: str, port: int, certfile: str | None, keyfile: str | None,
           redirect_port: int | None) -> None:
     secure = bool(certfile and keyfile)
-    app = create_app(data_dir, secure=secure)
+    hosts = Hosts(lambda: known_hosts(data_dir, certfile))
+    app = create_app(data_dir, secure=secure, hosts=hosts)
     configs = [uvicorn.Config(app, host=host, port=port, log_config=None, ssl_certfile=certfile,
                               ssl_keyfile=keyfile, server_header=False, **proxy_options())]
     if secure and redirect_port:
-        configs.append(uvicorn.Config(redirect_app(port), host=host, port=redirect_port, log_config=None,
+        configs.append(uvicorn.Config(redirect_app(port, hosts), host=host, port=redirect_port, log_config=None,
                                       server_header=False, access_log=False))
     if not secure:
         log.warning("web UI without TLS: passwords cross the network in plain text")

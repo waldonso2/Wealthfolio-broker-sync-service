@@ -155,7 +155,8 @@ async def csrf_guard(request: Request) -> None:
     # Starlette caches the parsed form, so the endpoints can still read it.
     if request.method == "POST" and request.url.path not in PUBLIC:
         form = await request.form()
-        if not request.session.get("csrf") or form.get("csrf") != request.session.get("csrf"):
+        expected, given = request.session.get("csrf") or "", str(form.get("csrf") or "")
+        if not expected or not secrets.compare_digest(given.encode(), expected.encode()):
             raise HTTPException(400, tr(request, "Formular abgelaufen - bitte die Seite neu laden."))
 
 

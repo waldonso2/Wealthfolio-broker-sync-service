@@ -190,3 +190,12 @@ ul.rows.compact .grow-inline { flex: 1 1 auto; min-width: 0; overflow: hidden; t
 ul.rows.compact form { margin: 0; }
 ul.rows.compact button.link { font-size: 16px; padding: 4px 8px; }
 .report { margin-top: 8px; font-size: 13px; min-height: 34px; padding: 6px 12px; }
+
+/* Spacing helpers: the CSP allows no inline style attributes (#107). */
+.mt-s { margin-top: 8px; }
+.mt-m { margin-top: 14px; }
+.mt-l { margin-top: 20px; }
+.mt-tight { margin-top: -8px; }
+.inline { display: inline; }
+.push-right { margin-left: auto; }
+.tan-image { max-width: 260px; }

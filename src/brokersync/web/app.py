@@ -33,7 +33,7 @@ from ..vault import Vault
 from ..wealthfolio import WealthfolioClient
 from . import i18n, views
 from .context import PUBLIC, SETTINGS_PAGES, STATUS_LABEL, AppContext, accounts_of, csrf_guard
-from .gate import Gate, Throttle
+from .gate import Gate, Hosts, Throttle
 from .i18n import N_
 from .routes import ROUTERS
 
@@ -46,13 +46,13 @@ HERE = Path(__file__).parent
 
 def create_app(data_dir: Path, *, wealthfolio=None, adapters: dict[str, type[BrokerAdapter]] | None = None,
                notifier: Notifier | None = None, run_in_thread: bool = True, secure: bool = False,
-               logo_source=None) -> Gate:
+               logo_source=None, hosts: Hosts | None = None) -> Gate:
     """The web UI behind its gate: security headers, and the unlock page while a master passphrase is set
     and not entered (the app itself is built once the data can be read)."""
     data_dir = Path(data_dir)
     throttle = Throttle()
     gate = Gate(data_dir, secure=secure, throttle=throttle, templates_dir=HERE / "templates",
-                static_dir=HERE / "static")
+                static_dir=HERE / "static", hosts=hosts)
     gate.build = lambda: _create_app(data_dir, wealthfolio=wealthfolio, adapters=adapters, notifier=notifier,
                                      run_in_thread=run_in_thread, secure=secure, gate=gate, throttle=throttle,
                                      logo_source=logo_source)

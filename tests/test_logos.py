@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 import httpx
+import pytest
 
 from brokersync import config as config_mod
 from brokersync import logos
@@ -200,3 +201,22 @@ def test_page_saves_the_key_in_the_vault_and_fetches(tmp_path):
     assert TOKEN not in page and "(gespeichert)" in page and "Letzter Durchlauf" in page
     client.post("/logos", data={"csrf": token, "enabled": "1", "remove_token": "1"})
     assert "logo_dev_token" not in Vault(tmp_path).load()
+
+
+def test_only_logo_dev_and_no_more_than_a_logo_is_read():
+    """#107: a redirect away from logo.dev is not followed (the key is in the URL); an endless answer is cut
+    off at MAX_BYTES instead of being loaded whole."""
+    sent = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        sent.append(request.url.host)
+        if request.url.path.endswith(APPLE):
+            return httpx.Response(302, headers={"location": "https://evil.example/steal"})
+        return httpx.Response(200, content=iter([b"\x89PNG" + b"0" * 8192] * 1000))
+
+    dev = logos.LogoDev(TOKEN, transport=httpx.MockTransport(handle))
+    with pytest.raises(logos.StopPass):
+        dev.fetch(APPLE)
+    assert "evil.example" not in sent
+    with pytest.raises(logos.LogoError, match="größer"):
+        dev.fetch(SAP)

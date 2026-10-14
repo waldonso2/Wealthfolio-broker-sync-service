@@ -30,8 +30,9 @@ def ca_certificate():
 
 
 @router.get("/healthz")
-def healthz():
-    return {"ok": True, "version": __version__}
+def healthz(request: Request):
+    # The version only after the login (#107): it tells a scanner which fixes are missing.
+    return {"ok": True, "version": __version__} if request.session.get("user") else {"ok": True}
 
 
 @router.get("/setup-password", response_class=HTMLResponse)

@@ -14,6 +14,17 @@ id -u "$USER_NAME" >/dev/null 2>&1 || useradd --system --home-dir "$BASE" --shel
 install -d -m 700 -o "$USER_NAME" -g "$USER_NAME" "$BASE/data"
 chown -R "$USER_NAME:$USER_NAME" "$BASE/data"
 
+# No way back to an older version unless asked for (VERSION=... update sets BROKERSYNC_ALLOW_DOWNGRADE):
+# an older release may lack a fix, and data a newer version wrote may not open in it (#88).
+NEW_VERSION="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$APP/pyproject.toml")"
+if [[ -x "$BASE/venv/bin/brokersync" && "${BROKERSYNC_ALLOW_DOWNGRADE:-}" != 1 ]]; then
+  OLD_VERSION="$("$BASE/venv/bin/brokersync" --version 2>/dev/null || true)"
+  if [[ -n "$OLD_VERSION" && "$(printf '%s\n%s\n' "$OLD_VERSION" "$NEW_VERSION" | sort -V | tail -n 1)" != "$NEW_VERSION" ]]; then
+    echo "Not going back from $OLD_VERSION to $NEW_VERSION - to do that on purpose: VERSION=$NEW_VERSION update" >&2
+    exit 1
+  fi
+fi
+
 # Keep the old environment until the new one is complete: a failed install
 # (network, disk, a broken package) puts the previous version back instead of
 # leaving a service that can't start. The service is stopped meanwhile.

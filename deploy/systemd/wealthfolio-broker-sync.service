@@ -40,6 +40,14 @@ RestrictRealtime=true
 RestrictNamespaces=true
 LockPersonality=true
 SystemCallArchitectures=native
+# #107: only the system calls of an ordinary service (no mount, reboot, module, swap, clock ...); a
+# refused one fails with EPERM instead of killing the process. Hidden: other users' processes, and no
+# System V IPC left behind.
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+ProtectProc=invisible
+RemoveIPC=true
+DevicePolicy=closed
 CapabilityBoundingSet=
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 ReadWritePaths=/opt/wealthfolio-broker-sync/data

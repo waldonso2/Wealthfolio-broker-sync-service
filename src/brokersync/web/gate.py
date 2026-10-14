@@ -24,7 +24,7 @@ from .i18n import N_, template_gettext
 
 log = logging.getLogger(__name__)
 
-CSP = ("default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+CSP = ("default-src 'self'; script-src 'none'; style-src 'self'; img-src 'self' data:; "
        "form-action 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'")
 HEADERS = [
     (b"content-security-policy", CSP.encode()),
@@ -33,12 +33,58 @@ HEADERS = [
     (b"referrer-policy", b"no-referrer"),
     (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
     (b"cross-origin-opener-policy", b"same-origin"),
+    (b"cross-origin-resource-policy", b"same-origin"),
     (b"cache-control", b"no-store"),
 ]
 HSTS = (b"strict-transport-security", b"max-age=31536000")
+UNKNOWN_HOST = ("Unbekannter Name für diese Oberfläche. Über die IP-Adresse geht es weiter; einen eigenen Namen "
+                "erlaubt BROKERSYNC_ALLOWED_HOSTS (siehe README).")
 # Largest request body: the biggest upload (a 5 MB statement) plus the form around it. Checked before
 # anything is read - also for the login and the first password, which answer without a session.
 MAX_BODY = 6 * 1024 * 1024
+
+
+# The local name suffixes a container's name gets in a home network (the same as the CA's, tls.LOCAL_DOMAINS).
+LOCAL_SUFFIXES = ("local", "lan", "home.arpa", "fritz.box", "internal", "localdomain")
+
+
+def host_of(raw: str) -> str:
+    """The host of a Host header, without port and brackets, lower case."""
+    raw = raw.strip().lower()
+    if raw.startswith("["):
+        return raw[1:raw.index("]")] if "]" in raw else raw
+    return raw.rsplit(":", 1)[0] if raw.count(":") == 1 else raw
+
+
+class Hosts:
+    """The names the UI answers to (#107). An IP address always - DNS rebinding needs a name the attacker
+    controls -, a name only when it is known: the container's (also with a local suffix like ``.fritz.box``),
+    the certificate's, the public URL's, or one in ``BROKERSYNC_ALLOWED_HOSTS``. ``known`` is asked again
+    when a name isn't found (the public URL can change while the service runs)."""
+
+    def __init__(self, known: Callable[[], set[str]]):
+        self.known = known
+        self._names = {n.lower() for n in known()}
+
+    def allows(self, raw: str) -> bool:
+        host = host_of(raw)
+        if not host:
+            return False
+        try:
+            ipaddress.ip_address(host)
+            return True
+        except ValueError:
+            pass
+        if self._match(host):
+            return True
+        self._names = {n.lower() for n in self.known()}
+        return self._match(host)
+
+    def _match(self, host: str) -> bool:
+        if host in self._names:
+            return True
+        first, _, rest = host.partition(".")
+        return first in self._names and rest in LOCAL_SUFFIXES
 
 
 class Attempt:
@@ -131,8 +177,10 @@ class Throttle:
 
 
 class Gate:
-    def __init__(self, data_dir: Path, *, secure: bool, throttle: Throttle, templates_dir: Path, static_dir: Path):
+    def __init__(self, data_dir: Path, *, secure: bool, throttle: Throttle, templates_dir: Path, static_dir: Path,
+                 hosts: Hosts | None = None):
         self.data_dir = Path(data_dir)
+        self.hosts = hosts  # None: every Host header (development, tests)
         self.secure = secure
         self.throttle = throttle
         self.build: Callable[[], FastAPI] | None = None
@@ -165,7 +213,12 @@ class Gate:
                     return
         extra = HEADERS + ([HSTS] if self.secure else [])
         if scope["type"] == "http":
-            length = dict(scope.get("headers") or []).get(b"content-length", b"")
+            headers = dict(scope.get("headers") or [])
+            if self.hosts and not self.hosts.allows(headers.get(b"host", b"").decode("latin-1")):
+                await PlainTextResponse(UNKNOWN_HOST, status_code=400, headers={
+                    k.decode(): v.decode() for k, v in extra})(scope, receive, send)
+                return
+            length = headers.get(b"content-length", b"")
             if length and (not length.isdigit() or int(length) > MAX_BODY):
                 await PlainTextResponse("Anfrage zu groß.", status_code=413, headers={
                     k.decode(): v.decode() for k, v in extra})(scope, receive, send)
@@ -213,7 +266,7 @@ def _locked_app(gate: Gate, templates_dir: Path, static_dir: Path) -> FastAPI:
 
     @app.get("/healthz")
     def healthz():
-        return {"ok": True, "version": __version__, "locked": True}
+        return {"ok": True, "locked": True}
 
     @app.get("/unlock", response_class=HTMLResponse)
     def unlock_page(request: Request):
