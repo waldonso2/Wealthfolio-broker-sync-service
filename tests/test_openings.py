@@ -115,11 +115,15 @@ def test_starting_over_deletes_only_the_syncs_activities(tmp_path):
     page = client.get("/brokers/fake").text
     # In the page, not in its <title>.
     assert "Neu aufsetzen" not in page.split("</title>")[0]
-    assert 'action="/brokers/fake/reset"' in page.split("<body")[1] and 'name="confirm"' in page
-    token = csrf(client, "/brokers/fake")
-    r = client.post("/brokers/fake/reset", data={"csrf": token})
-    assert "Häkchen" in r.text and len(wf.activities) == 8
-    r = client.post("/brokers/fake/reset", data={"csrf": token, "confirm": "1"})
+    assert 'href="/brokers/fake/reset"' in page.split("<body")[1]
+    # First step (#110): how many bookings it deletes; deleting needs the broker's name.
+    page = client.get("/brokers/fake/reset").text
+    assert "<strong>7 Buchungen</strong>" in page and 'name="name"' in page
+    token = csrf(client, "/brokers/fake/reset")
+    r = client.post("/brokers/fake/reset", data={"csrf": token, "name": "Falsch"})
+    assert r.status_code == 422 and "Bitte genau" in r.text and 'aria-invalid="true"' in r.text
+    assert len(wf.activities) == 8
+    r = client.post("/brokers/fake/reset", data={"csrf": token, "name": FakeBroker.label.upper()})
     assert "7 Buchungen des Dienstes gelöscht" in r.text
     assert wf.activities == [own]
     state = State(tmp_path)

@@ -27,7 +27,7 @@ from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime
 
-from .model import Kind, Transaction
+from .model import Kind, Transaction, when
 
 SYNC_REF = re.compile(r"\[SYNC ([^:\]\s]+):([^\]]+)\]")
 MISSING, PARTIAL, IGNORED, ORPHAN = "missing", "partial", "ignored", "orphan"
@@ -90,10 +90,10 @@ def check(broker: str, transactions: list[Transaction], synced: dict[str, tuple[
             if tx_id in listed:
                 continue
             for a in acts:
-                when = datetime.fromisoformat(str(a.get("date")).replace("Z", "+00:00"))
-                if since and when < since:
+                at = when(a.get("date") or "")
+                if since and at < since:
                     continue  # before the start date: not fetched, so not comparable
                 amount = a.get("amount") or ""
-                gaps.append(Gap(ORPHAN, a["id"], when.isoformat(), a.get("activityType") or "",
+                gaps.append(Gap(ORPHAN, a["id"], at.isoformat(), a.get("activityType") or "",
                                 a.get("assetSymbol") or "", str(amount), a.get("currency") or "", tx_id))
     return sorted(gaps, key=lambda g: g.occurred_at)

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import subprocess
 import threading
+import time
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
 
@@ -12,10 +15,11 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ... import config as config_mod
-from ... import retired
+from ... import crypto, meta_keys, redact, retired
 from ...sync import AlreadyRunning, is_running
 from .. import views
-from ..context import AppContext, Ctx, redirect, tr
+from ..context import AppContext, Ctx, language, redirect, tr
+from ..i18n import N_, translate
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -33,11 +37,37 @@ def dashboard(request: Request, ctx: Ctx):
     c = ctx.cfg()
     secrets_ = ctx.vault.load()
     brokers = _brokers(ctx, c, secrets_)
-    # No setup steps any more (#83): only a hint while Wealthfolio isn't connected.
+    progress = json.loads(ctx.state.meta(meta_keys.PROGRESS()) or "{}") if busy else {}
     return ctx.render(request, "dashboard.html", brokers=brokers,
                       wf_missing=not (c.wealthfolio_url and _wf_done(secrets_)), running=busy,
+                      job=ctx.job if ctx.running.is_set() else N_("Abruf"), progress=progress,
+                      refresh=busy and not request.query_params.get("still"),
                       next_run=_next_timer_run(), runs=ctx.state.runs(limit=20),
-                      retired_notices=retired.notices(ctx.state), safe_mode=c.safe_mode)
+                      retired_notices=retired.notices(ctx.state), safe_mode=c.safe_mode,
+                      checklist=_checklist(ctx, c, secrets_, brokers))
+
+
+def _checklist(ctx: AppContext, c: config_mod.Config, secrets_: dict, brokers: list[dict]) -> list[dict] | None:
+    """What a new setup still lacks (#110), until all of it is done and the list hidden; None then."""
+    if ctx.state.flag(meta_keys.CHECKLIST_HIDDEN()):
+        return None
+    return [
+        {"text": N_("Wealthfolio verbinden"), "href": "/setup/wealthfolio", "done": _wf_done(secrets_)},
+        {"text": N_("Ersten Broker einrichten"), "href": "/brokers",
+         "done": any(b["has_credentials"] for b in brokers)},
+        {"text": N_("Benachrichtigungen einrichten (für TAN-Anfragen und Fehler)"), "href": "/notifications",
+         "done": bool(c.ntfy_topic)},
+        {"text": N_("Optional: Master-Passphrase setzen"), "href": "/security", "optional": True,
+         "done": crypto.passphrase_enabled(ctx.data_dir)},
+        {"text": N_("Optional: dem Zertifikat der Oberfläche vertrauen"), "href": "/security", "optional": True,
+         "done": False},
+    ]
+
+
+@router.post("/checklist/hide")
+def checklist_hide(request: Request, ctx: Ctx):
+    ctx.state.set_flag(meta_keys.CHECKLIST_HIDDEN())
+    return redirect(request, "/")
 
 
 def _brokers(ctx: AppContext, c: config_mod.Config, secrets_: dict) -> list[dict]:
@@ -106,28 +136,62 @@ def run_now(request: Request, ctx: Ctx, broker: str = Form("")):
 
 def start_run(request: Request, ctx: AppContext, only: list[str] | None) -> RedirectResponse:
     """Start a run from the UI (``manual``: the safe mode fetches only so), with the PINs typed at the logins."""
-    with ctx.start_lock:  # check and set as one: two quick clicks start one run
-        if ctx.running.is_set():
-            return redirect(request, "/", tr(request, "Ein Abruf läuft bereits."), "warn")
-        ctx.running.set()  # before the thread starts, so the next page view already shows it
     pins = {k: ctx.pins.pop(k) for k in list(ctx.pins) if only is None or k in only}
 
-    def work():
+    def work(lang: str) -> None:
         try:
             ctx.syncer.run(only, manual=True, pins=pins)
         except AlreadyRunning:
             log.info("sync skipped: already running (timer)")
-        except Exception:
-            log.exception("sync failed")
         finally:
             pins.clear()
-            ctx.running.clear()
+
+    return start_job(request, ctx, N_("Abruf"), work, "/",
+                     started=N_("Abruf gestartet. Die Seite aktualisiert sich, bis er fertig ist."),
+                     done=N_("Abruf beendet."))
+
+
+def start_job(request: Request, ctx: AppContext, name: str, work: Callable[[str], tuple[str, str] | None], url: str,
+              *, started: str = N_("{job} läuft im Hintergrund. Das Ergebnis erscheint hier, sobald es fertig ist."),
+              done: str = "") -> RedirectResponse:
+    """A long action in the background (#104): a fetch, *Neu aufsetzen*, logos, the account check - one at a time.
+    ``work(lang)`` returns its message (text, level), which the next page shows."""
+    busy = launch(ctx, name, work, language(request))
+    if busy:
+        text = (tr(request, "Ein Abruf läuft bereits.") if busy == N_("Abruf") else
+                tr(request, "Gerade läuft noch: {job}. Bitte danach noch einmal.", job=tr(request, busy)))
+        return redirect(request, url, text, "warn")
+    if ctx.run_in_thread:
+        return redirect(request, url, tr(request, started, job=tr(request, name)))
+    if ctx.job_result is None and done:
+        return redirect(request, url, tr(request, done))
+    return redirect(request, url)
+
+
+def launch(ctx: AppContext, name: str, work: Callable[[str], tuple[str, str] | None], lang: str) -> str:
+    """Start ``work`` (in a thread, unless the app runs jobs inline - tests); the job going on instead, if any."""
+    with ctx.start_lock:  # check and set as one: two quick clicks start one job
+        if ctx.running.is_set():
+            return ctx.job
+        ctx.running.set()  # before the thread starts, so the next page view already shows it
+        ctx.job = name
+
+    def body() -> None:
+        try:
+            result = work(lang)
+        except Exception:
+            log.exception("%s failed", name)
+            result = (translate("{job} ist fehlgeschlagen - siehe Protokoll.", lang, job=translate(name, lang)),
+                      "error")
+        if result:
+            ctx.job_result = {"text": redact.redact(result[0]), "level": result[1]}
+        ctx.running.clear()
 
     if ctx.run_in_thread:
-        threading.Thread(target=work, daemon=True).start()
-        return redirect(request, "/", tr(request, "Abruf gestartet. Die Seite aktualisiert sich, bis er fertig ist."))
-    work()
-    return redirect(request, "/", tr(request, "Abruf beendet."))
+        threading.Thread(target=body, daemon=True).start()
+    else:
+        body()
+    return ""
 
 
 @router.get("/settings", response_class=HTMLResponse)
@@ -144,8 +208,17 @@ def _wf_done(secrets_: dict) -> bool:
     return bool(secrets_.get("wealthfolio_checked"))
 
 
+_TIMER_CACHE: list = [0.0, None]
+
+
 def _next_timer_run() -> str | None:
-    """Next run of the systemd timer, if it is installed."""
+    """Next run of the systemd timer, if it is installed; asked at most once a minute (#104)."""
+    if time.monotonic() - _TIMER_CACHE[0] > 60:
+        _TIMER_CACHE[:] = [time.monotonic(), _ask_timer()]
+    return _TIMER_CACHE[1]
+
+
+def _ask_timer() -> str | None:
     try:
         out = subprocess.run(["systemctl", "show", TIMER, "-p", "NextElapseUSecRealtime", "--value"],
                              capture_output=True, text=True, timeout=5).stdout.strip()

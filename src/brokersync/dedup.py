@@ -23,6 +23,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from .mapping import is_cash_symbol
+from .model import when
 
 MATCH_WINDOW_SECONDS = 36 * 60 * 60
 AMOUNT_TOLERANCE = Decimal("0.02")
@@ -39,7 +40,7 @@ def _dec(v) -> Decimal | None:
 
 
 def _when(s: str) -> datetime:
-    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    return when(s)
 
 
 def main_activity(payloads: list[dict]) -> dict:

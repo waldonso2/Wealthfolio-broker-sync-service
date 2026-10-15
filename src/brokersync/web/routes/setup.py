@@ -10,8 +10,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from ... import __version__
 from ... import security as security_mod
-from ...vault import check_setup_code, hash_password, needs_rehash, password_tag, verify_password
-from ..context import Ctx, redirect, tr
+from ...vault import check_setup_code, end_ui_sessions, hash_password, needs_rehash, verify_password, weak_password
+from ..context import Ctx, redirect, sign_in, tr
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -58,10 +58,8 @@ def setup_password(request: Request, ctx: Ctx, password: str = Form(...), passwo
         log.warning("web UI: wrong or expired setup code from %s", client)
         return redirect(request, "/setup-password",
                         tr(request, "Der Einrichtungscode stimmt nicht oder ist abgelaufen."), "error")
-    if len(password) < MIN_PASSWORD or password != password2:
-        return redirect(request, f"/setup-password?code={quote(code.strip())}",
-                        tr(request, "Das Passwort braucht mindestens {n} Zeichen, beide Eingaben müssen gleich sein.",
-                           n=MIN_PASSWORD), "error")
+    if error := password_problem(request, password, password2):
+        return redirect(request, f"/setup-password?code={quote(code.strip())}", error, "error")
 
     hashed = hash_password(password)
 
@@ -69,14 +67,21 @@ def setup_password(request: Request, ctx: Ctx, password: str = Form(...), passwo
         d["ui_password_hash"] = hashed
         d.pop("setup_code", None)  # used up
 
-    ctx.vault.update(set_password)
-    request.session.clear()  # a fresh session, nothing carried over from before the password existed
-    request.session.update(user="admin", pw=password_tag(hashed))
-    if not ctx.cfg().public_url:
-        c = ctx.cfg()
-        c.public_url = str(request.base_url).rstrip("/")
-        ctx.save(c)
-    return redirect(request, "/", tr(request, "Passwort gespeichert. Jetzt Schritt für Schritt einrichten."))
+    sign_in(request, ctx.vault.update(set_password))
+    url = str(request.base_url).rstrip("/")
+    ctx.update(lambda c: setattr(c, "public_url", c.public_url or url))
+    return redirect(request, "/", tr(request, "Passwort gespeichert. Die Übersicht zeigt, was noch einzurichten ist."))
+
+
+def password_problem(request: Request, password: str, password2: str) -> str | None:
+    """Why a new UI password can't be taken, or None (#96)."""
+    if len(password) < MIN_PASSWORD or password != password2:
+        return tr(request, "Das Passwort braucht mindestens {n} Zeichen, beide Eingaben müssen gleich sein.",
+                  n=MIN_PASSWORD)
+    if weak_password(password):
+        return tr(request, "Dieses Passwort ist zu verbreitet und schnell erraten. Am besten eines aus einem "
+                           "Passwortmanager.")
+    return None
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -94,17 +99,19 @@ def login(request: Request, ctx: Ctx, password: str = Form(...)):
         stored = ctx.vault.load().get("ui_password_hash")
         a.ok = verify_password(password, stored)
     if a.ok:
+        secrets_ = ctx.vault.load()
         if stored and needs_rehash(stored):
-            stored = hash_password(password)
-            ctx.vault.update(lambda d: d.__setitem__("ui_password_hash", stored))
-        request.session.clear()
-        request.session.update(user="admin", pw=password_tag(stored))
+            rehashed = hash_password(password)
+            secrets_ = ctx.vault.update(lambda d: d.__setitem__("ui_password_hash", rehashed))
+        sign_in(request, secrets_)
         return redirect(request, "/")
     log.warning("web UI: wrong password from %s", client)
     return redirect(request, "/login", tr(request, "Falsches Passwort."), "error")
 
 
 @router.post("/logout")
-def logout(request: Request):
+def logout(request: Request, ctx: Ctx):
+    # A copied cookie signs in nobody afterwards (#96); one user, so every session ends.
+    ctx.vault.update(end_ui_sessions)
     request.session.clear()
-    return RedirectResponse("/login", 303)
+    return RedirectResponse("/login", 303, headers={"Clear-Site-Data": '"cookies"'})

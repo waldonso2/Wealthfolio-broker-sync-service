@@ -4,7 +4,7 @@ import re
 
 from brokersync.vault import Vault, new_setup_code
 
-PASSWORD = "geheim-123456"
+PASSWORD = "Kiefer-Ozelot-9182"
 
 
 def first_password(client, password: str = PASSWORD, **kwargs):

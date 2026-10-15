@@ -40,7 +40,7 @@ from .adapters.base import safety_state
 from .adapters.fints import NO_TAN_DAYS
 from .dedup import ExistingIndex
 from .mapping import Accounts, MappingError, SecurityMapping, TransferPattern, to_activities, tx_ref
-from .model import CashBalance, Kind, Position, Transaction
+from .model import CashBalance, Kind, Position, Transaction, when
 from .notify import Notifier
 from .reconcile import compare
 from .state import State
@@ -166,6 +166,7 @@ class Syncer:
         self.recalc_wait = float(os.environ.get("BROKERSYNC_RECALC_WAIT", "5"))
         self._notifier = notifier
         self._pins: dict[str, str] = {}  # PINs typed at the login, for the current run only (#85)
+        self._progress: dict = {}  # the broker being fetched, for the overview (#104)
         self._logo_source = logo_source or logos_mod.LogoDev
 
     def notifier(self, cfg: config_mod.Config) -> Notifier:
@@ -188,20 +189,27 @@ class Syncer:
                 self._remind(cfg)
                 return []
             self._pins = dict(pins or {})
+            # "Automatisch abrufen" off: the timer and the general button skip
+            # the broker, a request for exactly this broker still runs it.
+            keys = [key for key, bcfg in cfg.brokers.items()
+                    if key in self.adapters and (not only or key in only) and (bcfg.enabled or (only and key in only))]
             results = []
-            for key, bcfg in cfg.brokers.items():
-                if only and key not in only:
-                    continue
-                if key not in self.adapters:
-                    continue
-                # "Automatisch abrufen" off: the timer and the general button skip
-                # the broker, a request for exactly this broker still runs it.
-                if not bcfg.enabled and not (only and key in only):
-                    continue
-                results.append(self._run_broker(cfg, key))
-            self._pins = {}
-            self._update_logos(cfg)
+            try:
+                for n, key in enumerate(keys, 1):
+                    self._progress = {"broker": key, "label": self.adapters[key].label, "n": n, "m": len(keys)}
+                    results.append(self._run_broker(cfg, key))
+                self._progress = {}
+                self._update_logos(cfg)
+            finally:
+                self._pins = {}
+                self.state.delete_meta(meta_keys.PROGRESS())
             return results
+
+    def _phase(self, phase: str) -> None:
+        """Where the run is, for the overview (#104): login, fetch, book, check or approval (waiting for the app)."""
+        if self._progress:
+            self._progress.update(phase=phase, since=datetime.now(UTC).isoformat())
+            self.state.set_meta(meta_keys.PROGRESS(), json.dumps(self._progress))
 
     def _remind(self, cfg: config_mod.Config) -> None:
         """Safe mode: the timer contacts no broker - it reminds the user to fetch in the UI."""
@@ -300,8 +308,10 @@ class Syncer:
     def _sync_broker(self, cfg: config_mod.Config, key: str, result: BrokerResult) -> None:
         """One broker's run, as named steps in this order (ARCHITECTURE.md, *Ablauf eines Laufs*)."""
         run = self._plan_window(cfg, key, result)
+        self._phase("login")
         self._fetch(run)
         self._prepare(run)
+        self._phase("book")
         with self._wealthfolio(cfg.wealthfolio_url, run.secrets.get("wealthfolio_password")) as wf:
             # Before the check against existing activities: it then sees them repaired.
             run.repaired = self._repair_cash_assets(key, wf, run.accounts)
@@ -309,6 +319,7 @@ class Syncer:
             run.activities = self._activities(wf, run.accounts, run.transactions, run.since if run.full else None,
                                               run.full)
             self._book(run, wf)
+            self._phase("check")
             self._compare(cfg, key, run.transactions, run.synced, run.activities, run.full, run.since)
             if run.tax_backfill:
                 self._backfill_tax(run, wf)
@@ -329,8 +340,13 @@ class Syncer:
             credentials["pin"] = self._pins[key]  # typed at the login, not stored (#85)
         adapter = adapter_cls(credentials, stored.get("session"))
         label = adapter_cls.label
-        adapter.on_user_action = lambda message: self.notifier(cfg).send(
-            f"{label}: Bestätigung nötig", message, link=self.link(cfg, "/"), priority="high", tags="key")
+
+        def user_action(message: str) -> None:
+            self._phase("approval")
+            self.notifier(cfg).send(f"{label}: Bestätigung nötig", message, link=self.link(cfg, "/"), priority="high",
+                                    tags="key")
+
+        adapter.on_user_action = user_action
         run = RunContext(cfg=cfg, key=key, bcfg=bcfg, result=result, secrets=secrets, adapter=adapter)
         # Once, for brokers with positions: the whole history, to learn the
         # Wealthfolio asset of every ISIN (brokersync.assets) for the check.
@@ -354,6 +370,7 @@ class Syncer:
         adapter, key = run.adapter, run.key
         try:
             adapter.login()
+            self._phase("fetch")
             # Once per broker: details also for transactions found in an import, for the tax of their
             # dividends (Scalable's CSV export has none) - see _add_dividend_tax.
             run.tax_backfill = not self.state.flag(tax_flag(key))
@@ -522,7 +539,7 @@ class Syncer:
         for e in self.state.unknown_events(key):
             if e["raw_type"] == UNMATCHED_SECURITIES or e["tx_id"] in still:
                 continue
-            if since and datetime.fromisoformat(e["occurred_at"]) < since:
+            if since and when(e["occurred_at"]) < since:
                 continue
             self.state.resolve_unknown(key, e["tx_id"])
 
@@ -640,17 +657,17 @@ class Syncer:
             if a.get("accountId") != accounts.cash or not audit_mod.is_cash_transfer(a) or a.get("id") in matched \
                     or coverage.SYNC_REF.search(a.get("comment") or ""):
                 continue
-            when = audit_mod._when(a)
-            if when >= first:
+            at = audit_mod._when(a)
+            if at >= first:
                 continue
             buy = a.get("activityType") == "TRANSFER_OUT"
             if not any(t.get("activityType") == ("BUY" if buy else "SELL")
-                       and abs((audit_mod._when(t) - when).total_seconds()) <= audit_mod.MOMENT_SECONDS
+                       and abs((audit_mod._when(t) - at).total_seconds()) <= audit_mod.MOMENT_SECONDS
                        for t in trades):
                 continue
             out.append(Transaction(
                 id=f"pre-{a['id']}", kind=Kind.DEPOSIT if buy else Kind.WITHDRAWAL,
-                datetime=when + timedelta(seconds=-3 if buy else 3), currency=a.get("currency") or "EUR",
+                datetime=at + timedelta(seconds=-3 if buy else 3), currency=a.get("currency") or "EUR",
                 net=abs(audit_mod._dec(a.get("amount"))),
                 label=("Deposit for a buy before the bank history read" if buy
                        else "Withdrawal after a sale before the bank history read")))

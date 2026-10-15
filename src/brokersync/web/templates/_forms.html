@@ -1,0 +1,9 @@
+{# Errors at their field (#103): import "with context" - ``errors`` is a dict field name -> text. #}
+{% macro invalid(name) %}{% if errors and errors.get(name) %} aria-invalid="true" aria-describedby="err-{{ name }}"{% if name == (errors | list | first) %} autofocus{% endif %}{% endif %}{% endmacro %}
+{% macro error(name) %}{% if errors and errors.get(name) %}<div class="field-error" id="err-{{ name }}">{{ errors[name] }}</div>{% endif %}{% endmacro %}
+{# The UI password again for a sensitive action, when it was entered longer ago than 15 min (#96). #}
+{% macro reauth_field(id, required=True, label="") %}{% if reauth %}
+<label for="{{ id }}">{{ label or _("Passwort der Oberfläche (zur Bestätigung)") }}</label>
+<input type="password" id="{{ id }}" name="ui_password" autocomplete="current-password"{% if required %} required{% endif %}{{ invalid("ui_password") }}>
+{{ error("ui_password") }}
+{% endif %}{% endmacro %}

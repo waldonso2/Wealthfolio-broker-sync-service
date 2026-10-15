@@ -1,6 +1,7 @@
 """The page *Überträge*: patterns that make an outbound payment to an own account a transfer.
 
-Hidden for now (waldonso2/wealthfolio-importer-addon#84): not in ``ROUTERS``. Patterns saved before still apply.
+Listed under *Einstellungen* only while patterns are saved (waldonso2/wealthfolio-importer-addon#84), so a saved
+pattern - it applies to every run - can always be seen and deleted.
 """
 
 from __future__ import annotations
@@ -28,11 +29,14 @@ def transfers_page(request: Request, ctx: Ctx):
 @router.post("/transfers")
 def transfers_save(request: Request, ctx: Ctx, label: str = Form(""), iban: str = Form(""),
                    keyword: str = Form(""), destination: str = Form(""), delete: str = Form("")):
-    c = ctx.cfg()
     if delete:
         i = int(delete) if delete.isdigit() else -1
-        if 0 <= i < len(c.transfer_patterns):
-            c.transfer_patterns.pop(i)
+
+        def drop(c) -> None:
+            if 0 <= i < len(c.transfer_patterns):
+                c.transfer_patterns.pop(i)
+
+        ctx.update(drop)
     else:
         try:
             label = inputs.text(label, N_("Name"), max_len=100)
@@ -44,7 +48,6 @@ def transfers_save(request: Request, ctx: Ctx, label: str = Form(""), iban: str 
         if not label or not (iban or keyword):
             return redirect(request, "/transfers",
                             tr(request, "Bitte einen Namen und eine IBAN oder ein Stichwort angeben."), "error")
-        c.transfer_patterns.append({"label": label, "iban": iban, "keyword": keyword,
-                                    "destinationAccountId": destination})
-    ctx.save(c)
+        pattern = {"label": label, "iban": iban, "keyword": keyword, "destinationAccountId": destination}
+        ctx.update(lambda c: c.transfer_patterns.append(pattern))
     return redirect(request, "/transfers", tr(request, "Gespeichert."))

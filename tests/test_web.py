@@ -39,18 +39,19 @@ def test_assistant_from_first_visit_to_first_sync(tmp_path):
     r = client.get("/", follow_redirects=False)
     assert r.headers["location"] == "/setup-password"
     # Not without the one-time code from the console, and never from another page (#89).
-    assert client.post("/setup-password", data={"password": "geheim-123456",
-                                                "password2": "geheim-123456"}).status_code == 400
+    assert client.post("/setup-password", data={"password": "Kiefer-Ozelot-9182",
+                                                "password2": "Kiefer-Ozelot-9182"}).status_code == 400
     token = csrf(client, "/setup-password")
-    r = client.post("/setup-password", data={"csrf": token, "code": "guessed", "password": "geheim-123456",
-                                             "password2": "geheim-123456"})
+    r = client.post("/setup-password", data={"csrf": token, "code": "guessed", "password": "Kiefer-Ozelot-9182",
+                                             "password2": "Kiefer-Ozelot-9182"})
     assert "Einrichtungscode stimmt nicht" in r.text
     code = new_setup_code(Vault(tmp_path))
     r = client.post("/setup-password", data={"csrf": token, "code": code, "password": "short", "password2": "short"})
     assert "mindestens 12 Zeichen" in r.text and f'value="{code}"' in r.text  # the code stays filled in
     r = first_password(client)
     assert "setup_code" not in Vault(tmp_path).load()  # used up
-    assert "Wealthfolio nicht verbunden" in r.text and "Wealthfolio verbinden" in r.text
+    # A checklist of what is left to set up (#110).
+    assert "Einrichtung: 0 von 3 erledigt" in r.text and 'href="/setup/wealthfolio">Wealthfolio verbinden' in r.text
     assert config_mod.load(tmp_path).public_url == "http://sync.local:8090"
 
     # Step 1: Wealthfolio - a wrong password is reported, the right one connects.
@@ -110,7 +111,7 @@ def test_login_required_and_csrf_checked(tmp_path):
     r = client.get("/", follow_redirects=False)
     assert r.headers["location"] == "/login"
     assert "Falsches Passwort" in client.post("/login", data={"password": "wrong"}).text
-    assert "Alle abrufen" in client.post("/login", data={"password": "geheim-123456"}).text
+    assert "Alle abrufen" in client.post("/login", data={"password": "Kiefer-Ozelot-9182"}).text
     # The password can only be chosen once.
     r = first_password(client, "andere-123456", follow_redirects=False)
     assert r.headers["location"] == "/login"
@@ -226,7 +227,7 @@ def test_an_installation_with_the_old_dummy_broker_is_cleaned_up(tmp_path):
     assert "Dummy (Test) entfernt" not in r.text
     # A restart finds nothing left to clean up and doesn't show it again.
     client, _, _ = make(tmp_path)
-    client.post("/login", data={"password": "geheim-123456"})
+    client.post("/login", data={"password": "Kiefer-Ozelot-9182"})
     assert "Dummy (Test) entfernt" not in client.get("/").text
     assert "Unbekannter Broker" in client.get("/brokers/dummy").text
 
@@ -258,9 +259,10 @@ def test_navigation_groups_the_settings(tmp_path):
     for href in ("/setup/wealthfolio", "/brokers", "/notifications", "/securities", "/logos", "/security"):
         assert f'href="{href}"' in index
     assert 'href="/settings" aria-current="page"' in index
-    # Hidden for now (waldonso2/wealthfolio-importer-addon#84): not listed, not served.
-    for href in ("/transfers", "/duplicates"):
-        assert f'href="{href}"' not in index and client.get(href).status_code == 404
+    # Hidden for now (waldonso2/wealthfolio-importer-addon#84): not listed, not served; *Überträge* is listed
+    # only while patterns are saved (test_ui_sessions).
+    assert 'href="/duplicates"' not in index and client.get("/duplicates").status_code == 404
+    assert 'href="/transfers"' not in index
 
     page = client.get("/logos").text
     assert 'class="subnav"' in page and 'href="/logos" aria-current="page"' in page

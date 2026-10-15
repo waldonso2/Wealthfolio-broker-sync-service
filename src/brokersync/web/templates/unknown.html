@@ -5,7 +5,9 @@
   <p>{{ _("Diese Buchungen kennt der Dienst noch nicht. Sie wurden <strong>nicht</strong> nach Wealthfolio übernommen – trage sie bei Bedarf von Hand ein. Mit <em>Fehlerbericht auf GitHub</em> meldest du einen Typ, damit er künftig unterstützt wird: GitHub öffnet sich mit vorausgefülltem Text (IBANs und lange Nummern geschwärzt). Der Bericht ist öffentlich – prüfe ihn vor dem Absenden.") }}</p>
   {% if events %}
   <div class="table"><table>
-    <tr><th>{{ _("Datum") }}</th><th>Broker</th><th>{{ _("Art") }}</th><th>{{ _("Betrag") }}</th><th>{{ _("Wertpapier") }}</th><th>{{ _("Text") }}</th></tr>
+    <caption class="sr-only">{{ _("Unbekannte Buchungen") }}</caption>
+    <thead><tr><th scope="col">{{ _("Datum") }}</th><th scope="col">Broker</th><th scope="col">{{ _("Art") }}</th><th scope="col">{{ _("Betrag") }}</th><th scope="col">{{ _("Wertpapier") }}</th><th scope="col">{{ _("Text") }}</th></tr></thead>
+    <tbody>
     {% for e in events %}{% set d = describe_unknown(e.payload) %}
     <tr><td data-label="{{ _('Datum') }}">{{ e.occurred_at | day }}</td>
       <td data-label="Broker">{{ adapters[e.broker].label if e.broker in adapters else e.broker }}</td>
@@ -16,7 +18,7 @@
         <details><summary class="muted">{{ _("Rohdaten") }}</summary><pre>{{ e.payload | tojson(indent=1) }}</pre></details>
         {% if e.raw_type != UNMATCHED_SECURITIES %}<a class="button secondary report" href="{{ report_url(e, adapters[e.broker].label if e.broker in adapters else e.broker, version) }}" target="_blank" rel="noopener noreferrer">{{ _("Fehlerbericht auf GitHub") }}</a>{% endif %}</td></tr>
     {% endfor %}
-  </table></div>
+  </tbody></table></div>
   {% else %}<p class="muted">{{ _("Keine.") }}</p>{% endif %}
 </div>
 {% endblock %}

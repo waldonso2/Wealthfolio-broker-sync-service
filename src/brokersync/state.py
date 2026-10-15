@@ -14,6 +14,8 @@ import json
 import os
 import sqlite3
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -249,6 +251,15 @@ def rekey(data_dir: Path, old: bytes, new: bytes, path: Path) -> None:
         db.close()
 
 
+# Every write of this process waits while a passphrase change copies the database (#120); the timer can't write
+# then (the change holds the sync lock).
+WRITES = threading.RLock()
+
+
+class StateReplaced(Exception):
+    """The database file was replaced (re-encrypted) since this ``State`` opened it: a write would be lost."""
+
+
 class State:
     def __init__(self, data_dir: Path, key: bytes | None = None):
         Path(data_dir).mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -268,6 +279,16 @@ class State:
         migrate(self.db)
         if path.exists():
             os.chmod(path, 0o600)
+        self._inode = path.stat().st_ino
+
+    @contextmanager
+    def _writing(self) -> Iterator[None]:
+        """A write transaction - refused once the file was re-encrypted under it, never written into the old one."""
+        with WRITES:
+            if self._path.stat().st_ino != self._inode:
+                raise StateReplaced("state.db was re-encrypted meanwhile - please try again")
+            with self.db:
+                yield
 
     @property
     def db(self):
@@ -291,7 +312,7 @@ class State:
         return {r[0] for r in rows}
 
     def mark(self, broker: str, tx_id: str, status: str, activity_ids: list[str]) -> None:
-        with self.db:
+        with self._writing():
             self.db.execute(
                 "INSERT OR REPLACE INTO synced VALUES (?, ?, ?, ?, ?)",
                 (broker, tx_id, status, json.dumps(activity_ids), now()),
@@ -303,13 +324,13 @@ class State:
 
     def forget(self, broker: str, tx_ids: list[str]) -> None:
         """The next run treats these transactions as new: books them unless they are in Wealthfolio."""
-        with self.db:
+        with self._writing():
             self.db.executemany("DELETE FROM synced WHERE broker = ? AND tx_id = ?", [(broker, t) for t in tx_ids])
             self.db.executemany("DELETE FROM gaps WHERE broker = ? AND ref = ? AND kind != 'orphan'",
                                 [(broker, t) for t in tx_ids])
 
     def ignore(self, broker: str, tx_ids: list[str]) -> None:
-        with self.db:
+        with self._writing():
             for t in tx_ids:
                 self.db.execute("INSERT OR REPLACE INTO synced VALUES (?, ?, 'ignored', '[]', ?)", (broker, t, now()))
                 self.db.execute("UPDATE gaps SET kind = 'ignored' WHERE broker = ? AND ref = ? AND kind != 'orphan'",
@@ -318,12 +339,12 @@ class State:
     # ── opening positions ───────────────────────────────────────────────────
     def add_opening(self, broker: str, isin: str, day: str, name: str, shares: str, price: str, fee: str,
                     currency: str = "EUR") -> None:
-        with self.db:
+        with self._writing():
             self.db.execute("INSERT OR REPLACE INTO openings VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                             (broker, isin, day, name, shares, price, fee, currency))
 
     def delete_opening(self, broker: str, isin: str, day: str) -> None:
-        with self.db:
+        with self._writing():
             self.db.execute("DELETE FROM openings WHERE broker = ? AND isin = ? AND day = ?", (broker, isin, day))
 
     def openings(self, broker: str) -> list[dict]:
@@ -336,7 +357,7 @@ class State:
         """Keep uploaded statement rows; returns how many were new. A row twice in one file stays twice."""
         seen: dict[str, int] = {}
         new = 0
-        with self.db:
+        with self._writing():
             start = self.db.execute("SELECT COALESCE(MAX(position), 0) FROM statements WHERE broker = ?",
                                     (broker,)).fetchone()[0]
             for row in rows:
@@ -353,7 +374,7 @@ class State:
         return [json.loads(p) for (p,) in rows]
 
     def set_gaps(self, broker: str, gaps: list[dict]) -> None:
-        with self.db:
+        with self._writing():
             self.db.execute("DELETE FROM gaps WHERE broker = ?", (broker,))
             self.db.executemany("INSERT OR REPLACE INTO gaps VALUES (?, ?, ?, ?, ?)",
                                 [(broker, g["kind"], g["ref"], g["occurred_at"], json.dumps(g)) for g in gaps])
@@ -375,7 +396,7 @@ class State:
 
     def set_asset(self, broker: str, isin: str, asset_id: str, symbol: str, exchange_mic: str | None,
                   name: str | None) -> None:
-        with self.db:
+        with self._writing():
             self.db.execute("INSERT OR REPLACE INTO assets VALUES (?, ?, ?, ?, ?, ?)",
                             (broker, isin, asset_id, symbol, exchange_mic, name))
 
@@ -383,7 +404,7 @@ class State:
         return self.db.execute("SELECT 1 FROM meta WHERE key = ?", (key,)).fetchone() is not None
 
     def set_flag(self, key: str) -> None:
-        with self.db:
+        with self._writing():
             self.db.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, now()))
 
     def meta(self, key: str) -> str | None:
@@ -391,18 +412,18 @@ class State:
         return row[0] if row else None
 
     def set_meta(self, key: str, value: str) -> None:
-        with self.db:
+        with self._writing():
             self.db.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, value))
 
     def delete_meta(self, key: str) -> None:
-        with self.db:
+        with self._writing():
             self.db.execute("DELETE FROM meta WHERE key = ?", (key,))
 
     def forget_broker(self, broker: str) -> int:
         """Remove everything stored for a broker; returns how many activities its sync created."""
         created = sum(len(json.loads(ids)) for (ids,) in self.db.execute(
             "SELECT activity_ids FROM synced WHERE broker = ? AND status = 'imported'", (broker,)))
-        with self.db:
+        with self._writing():
             for table in ("synced", "runs", "reconcile", "balances", "assets", "unknown_events", "gaps", "openings",
                           "statements"):
                 self.db.execute(f"DELETE FROM {table} WHERE broker = ?", (broker,))
@@ -414,7 +435,7 @@ class State:
 
         Keeps what the user entered (opening positions, uploaded statements) and the learned assets.
         """
-        with self.db:
+        with self._writing():
             for table in ("synced", "runs", "reconcile", "balances", "unknown_events", "gaps"):
                 self.db.execute(f"DELETE FROM {table} WHERE broker = ?", (broker,))
             self._delete_broker_meta(broker)
@@ -430,7 +451,7 @@ class State:
         (account, depot, reference) are masked: the user needs the text, not the numbers.
         """
         data = json.dumps(redact.mask_numbers(payload), default=str)
-        with self.db:
+        with self._writing():
             cur = self.db.execute(
                 "INSERT OR IGNORE INTO unknown_events VALUES (?, ?, ?, ?, ?, ?)",
                 (broker, tx_id, raw_type, occurred_at, data, now()),
@@ -448,7 +469,7 @@ class State:
         return datetime.fromisoformat(row[0]) if row and row[0] else None
 
     def resolve_unknown(self, broker: str, tx_id: str) -> None:
-        with self.db:
+        with self._writing():
             self.db.execute("DELETE FROM unknown_events WHERE broker = ? AND tx_id = ?", (broker, tx_id))
 
     # ── balances ────────────────────────────────────────────────────────────
@@ -456,7 +477,7 @@ class State:
         """(currency, amount) or (currency, amount, account) - ``account`` names a savings account
         (empty: the cash account)."""
         rows = [(broker, b[0], (b[2] if len(b) > 2 else "") or "", b[1], now()) for b in balances]
-        with self.db:
+        with self._writing():
             self.db.execute("DELETE FROM balances WHERE broker = ?", (broker,))
             self.db.executemany("INSERT INTO balances (broker, currency, account, amount, at) VALUES (?, ?, ?, ?, ?)",
                                 rows)
@@ -464,13 +485,13 @@ class State:
     def set_reconcile(self, broker: str, deviations: list[dict], notified: list[dict] | None = None) -> None:
         old = self.reconcile(broker)
         keep = notified if notified is not None else (old or {}).get("notified", [])
-        with self.db:
+        with self._writing():
             self.db.execute("INSERT OR REPLACE INTO reconcile VALUES (?, ?, ?, ?)",
                             (broker, json.dumps(deviations), json.dumps(keep), now()))
 
     def clear_reconcile(self, broker: str) -> None:
         """Forget the last check (out of date, e.g. after removing duplicates); the next run recomputes it."""
-        with self.db:
+        with self._writing():
             self.db.execute("DELETE FROM reconcile WHERE broker = ?", (broker,))
 
     def reconcile(self, broker: str) -> dict | None:
@@ -501,7 +522,7 @@ class State:
 
     # ── runs ────────────────────────────────────────────────────────────────
     def start_run(self, broker: str) -> int:
-        with self.db:
+        with self._writing():
             cur = self.db.execute(
                 "INSERT INTO runs (broker, started_at, status) VALUES (?, ?, 'running')", (broker, now())
             )
@@ -512,7 +533,7 @@ class State:
 
         Only call while holding the run lock: then no run can really be in progress.
         """
-        with self.db:
+        with self._writing():
             cur = self.db.execute(
                 "UPDATE runs SET status = 'aborted', finished_at = ?, message = ? WHERE status = 'running'",
                 (now(), "Abgebrochen - der Dienst wurde während des Abrufs beendet (Neustart, Update oder Absturz)."),
@@ -521,7 +542,7 @@ class State:
 
     def finish_run(self, run_id: int, status: str, *, created: int = 0, existing: int = 0, failed: int = 0,
                    unknown: int = 0, message: str = "") -> None:
-        with self.db:
+        with self._writing():
             self.db.execute(
                 "UPDATE runs SET finished_at = ?, status = ?, created = ?, existing = ?, failed = ?, unknown = ?,"
                 " message = ? WHERE id = ?",

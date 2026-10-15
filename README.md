@@ -42,9 +42,9 @@ Beim ersten Öffnen legst du ein Passwort fest. Es schützt deine Broker-Zugäng
 
 <img src="docs/screenshots/01-passwort.png" width="560" alt="Passwort festlegen">
 
-Danach zeigt die Übersicht, was noch zu tun ist:
+Danach zeigt die Übersicht eine Checkliste mit dem, was noch zu tun ist: Wealthfolio verbinden, den ersten Broker einrichten, Benachrichtigungen, und wahlweise Master-Passphrase und Zertifikat. Ist alles erledigt, lässt sie sich ausblenden.
 
-<img src="docs/screenshots/02-uebersicht.png" width="560" alt="Übersicht mit den Einrichtungsschritten">
+<img src="docs/screenshots/02-uebersicht.png" width="560" alt="Übersicht mit der Einrichtungs-Checkliste">
 
 ### 2. Wealthfolio verbinden
 
@@ -74,7 +74,7 @@ ntfy-App öffnen, *Thema abonnieren* und den Themennamen von dieser Seite eintra
 
 In der Übersicht **Alle abrufen** klicken (oder bei einem Broker **Jetzt abrufen**). Danach siehst du je Broker, was neu angelegt wurde und was schon in Wealthfolio war. Broker mit ausgeschaltetem *Automatisch abrufen* überspringt der tägliche Lauf und „Alle abrufen“ – sie rufst du mit ihrem eigenen Button ab.
 
-<img src="docs/screenshots/07-nach-dem-abruf.png" width="560" alt="Übersicht nach dem ersten Abruf">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/07-nach-dem-abruf-dunkel.png"><img src="docs/screenshots/07-nach-dem-abruf.png" width="560" alt="Übersicht nach dem ersten Abruf"></picture>
 
 Ab jetzt läuft der Abruf jeden Morgen zwischen 6:00 und 6:45 Uhr.
 
@@ -97,7 +97,7 @@ Der Dienst liest dein **DKB-Girokonto** per FinTS (HBCI), dieselbe Schnittstelle
 |---|---|
 | Gutschrift, Gehalt, eingehende Überweisung | Einzahlung (DEPOSIT) – eingehendes Geld ist immer eine Einzahlung |
 | Kartenzahlung, Lastschrift, ausgehende Überweisung | Auszahlung (WITHDRAWAL), also eine Ausgabe |
-| Ausgehende Überweisung auf ein eigenes Konto | Übertrag (TRANSFER_OUT, mit Gegenbuchung auf dem gewählten Konto), wenn unter *Überträge* eingetragen |
+| Ausgehende Überweisung auf ein eigenes Konto | Übertrag (TRANSFER_OUT, mit Gegenbuchung auf dem gewählten Konto), wenn ein Übertragsmuster passt (siehe *Im Alltag*) |
 | Habenzinsen / Kontoführungsentgelt beim Rechnungsabschluss | Zinsen (INTEREST) / Gebühr (FEE) |
 | Wertpapierabrechnung, Ertragsgutschrift, Dividende | **nichts** – siehe unten |
 
@@ -164,14 +164,14 @@ Der Dienst liest deine Trade-Republic-Timeline über die inoffizielle Schnittste
 | Zinsen | Zinsen (INTEREST) mit Steuer |
 | Vorabpauschale / Steuerkorrektur | Steuer (TAX) / Steuererstattung (CREDIT/TAX_REFUND) |
 | Einzahlung, Kartenerstattung | Einzahlung (DEPOSIT) |
-| Kartenzahlung, Überweisung | Auszahlung (WITHDRAWAL) oder – mit Eintrag unter *Überträge* – Übertrag aufs eigene Konto |
+| Kartenzahlung, Überweisung | Auszahlung (WITHDRAWAL) oder – mit passendem Übertragsmuster – Übertrag aufs eigene Konto |
 | Aktiensplit, Spin-off, Tausch, Depotübertrag, Private Markets | **nicht gebucht**, als unbekannt gemeldet – bitte von Hand oder per CSV-Import buchen |
 
 Reine Hinweise (Order angelegt/storniert, Dokumente, Adressänderung …) und stornierte Buchungen übernimmt der Dienst nicht.
 
 **CSV-Import und Dienst zusammen:** Was du schon per CSV importiert hast, erkennt der Dienst und legt es nicht noch einmal an: gleiche Art, gleicher Betrag, höchstens 36 Stunden auseinander, bei Käufen und Verkäufen dieselbe Stückzahl. Das Wertpapier darf dabei unter einem anderen Symbol stehen (beim Import zugeordneter Ticker, im Dienst die ISIN).
 
-**Duplikate aus Version 0.3.0/0.3.1:** Diese Versionen haben per CSV importierte Käufe, Verkäufe und Dividenden ein zweites Mal angelegt. Die Seite *Duplikate* zeigt sie neben der CSV-Buchung und löscht nach deiner Bestätigung nur die Kopie des Dienstes.
+**Duplikate aus Version 0.3.0/0.3.1:** Diese Versionen haben per CSV importierte Käufe, Verkäufe und Dividenden ein zweites Mal angelegt. Die Seite *Duplikate*, die sie fand, ist vorerst ausgeblendet; wer betroffen ist, findet die Kopien in Wealthfolio über den Kommentar `[SYNC tr:`.
 
 ## Scalable Capital
 
@@ -197,7 +197,7 @@ Der Dienst liest dein Scalable-Depot über **Scalables offizielles Kommandozeile
 | Zinsen | Zinsen (INTEREST) |
 | Steuer (z. B. Vorabpauschale) / Steuererstattung | Steuer (TAX) / Steuererstattung (CREDIT/TAX_REFUND) |
 | Gebühr (z. B. PRIME+) | Gebühr (FEE) |
-| Einzahlung / Auszahlung | Einzahlung (DEPOSIT) / Auszahlung (WITHDRAWAL) oder – mit Eintrag unter *Überträge* – Übertrag aufs eigene Konto |
+| Einzahlung / Auszahlung | Einzahlung (DEPOSIT) / Auszahlung (WITHDRAWAL) oder – mit passendem Übertragsmuster – Übertrag aufs eigene Konto |
 | Depotumzug (Wertpapiere aus- und wieder eingebucht, Bargeld mit `SWITCH-`) | **nicht gebucht** – heben sich auf |
 | Fondstausch (Wertpapiere und Gutschrift `SWAP_OUT` am selben Tag) | Verkauf zum gutgeschriebenen Betrag |
 | Rückzahlung/Knock-out eines Zertifikats (Ausbuchung mit Wert 0 plus Ausschüttung am selben Tag) | Verkauf zum ausgezahlten Betrag |
@@ -238,6 +238,8 @@ Vorgemerkte Umsätze und Orders übernimmt der Dienst erst, wenn sie gebucht sin
 
 Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in Wealthfolio: das Guthaben mit dem Cash des Verrechnungskontos (nicht bei comdirect, dort wird das Girokonto nicht gebucht), ob das Depotkonto kein Bargeld hält (es muss 0 sein) und keine Position „$CASH“ in einem der Konten steht, und, bei Trade Republic, Scalable Capital, comdirect und der Deutschen Bank, jede Position mit dem Bestand des Depotkontos. Die Übersicht zeigt das Ergebnis. Eine Abweichung, die auch beim nächsten Abruf noch besteht, kommt als ntfy-Nachricht. Direkt nach neuen Buchungen rechnet Wealthfolio noch. Typische Ursachen: eine Kapitalmaßnahme, die von Hand nachzubuchen ist, oder Bestände aus der Zeit vor dem Startdatum – die legst du auf der Seite *Prüfung* als Anfangsbestand an.
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/10-pruefung-dunkel.png"><img src="docs/screenshots/10-pruefung.png" width="560" alt="Seite Prüfung"></picture>
+
 Die Seite **Prüfung** zeigt außerdem, welche schon übernommenen Buchungen in Wealthfolio fehlen (*Wieder anlegen* oder *Ignorieren*), welche Buchungen des Dienstes es beim Broker nicht mehr gibt, wo im Depotkonto Bargeld stehen bleibt und welche Überträge kein Gegenstück haben.
 
 ## Im Alltag
@@ -248,7 +250,9 @@ Die Seite **Prüfung** zeigt außerdem, welche schon übernommenen Buchungen in 
 | Push-Nachricht „Abruf fehlgeschlagen“ | Übersicht öffnen, dort steht der Grund. Meist löst es sich beim nächsten Lauf von selbst |
 | „unbekannte Buchungen“ | Der Dienst kennt eine Buchungsart noch nicht und hat sie **nicht** übernommen. Unter *Unbekannte Buchungen* steht, was es war (IBANs, Konto- und Depotnummern ausgeblendet) – bei Bedarf von Hand in Wealthfolio eintragen und gern ein Issue mit dem Typ anlegen |
 | Abgleich zeigt Bargeld im Depotkonto oder zu viel/zu wenig auf dem Verrechnungskonto | Seite *Prüfung* öffnen: Sie listet die Zeitpunkte, an denen im Depotkonto Bargeld stehen bleibt (z. B. ein Kauf ohne Übertrag oder ein Übertrag, dessen Verkauf gelöscht wurde), und Überträge ohne Gegenstück – mit Datum, Betrag, Kommentar und ob die Buchung vom Dienst oder aus einem Import stammt. Korrigiert wird in Wealthfolio; die Seite ändert nichts |
-| Ein Broker soll noch einmal von vorn gebucht werden (z. B. nach geänderten Regeln) | In den Broker-Einstellungen *Neu aufsetzen*: löscht alle Buchungen des Dienstes für diesen Broker, der nächste Abruf holt alles ab dem Startdatum neu. Importe und Handeinträge bleiben |
+| Ein Broker soll noch einmal von vorn gebucht werden (z. B. nach geänderten Regeln) | In den Broker-Einstellungen *Neu aufsetzen …*: Die Seite zeigt, wie viele Buchungen des Dienstes gelöscht würden; gelöscht wird erst, wenn du den Namen des Brokers eintippst. Der nächste Abruf holt alles ab dem Startdatum neu. Importe und Handeinträge bleiben |
+| Auszahlungen auf ein eigenes Konto (z. B. Tagesgeld bei einer anderen Bank) | Seite *Überträge*: Muster mit IBAN oder Stichwort; eine passende Auszahlung wird dann ein Übertrag statt einer Ausgabe. Sobald Muster gespeichert sind, steht die Seite unter *Einstellungen*; dort lassen sie sich auch wieder löschen |
+| Passwort der Oberfläche ändern oder überall abmelden | *Einstellungen → Sicherheit → Passwort der Oberfläche*. Ein Wechsel beendet alle anderen Anmeldungen; *Alle anderen Sitzungen beenden* tut das ohne Wechsel. Eine Anmeldung gilt höchstens 12 Stunden und endet nach 30 Minuten ohne Aktivität. Häufige Passwörter („passwort1234“) nimmt der Dienst nicht an. Zugangsdaten ändern, *Neu aufsetzen* und den Abrufmodus wechseln verlangt das Passwort noch einmal, wenn die Anmeldung länger als 15 Minuten her ist |
 | Push-Nachricht „Abweichung zu Wealthfolio“ | Eine schon übernommene Buchung fehlt in Wealthfolio (gelöscht?), oder eine Buchung des Dienstes gibt es beim Broker nicht mehr (z. B. storniert). Seite *Prüfung* öffnen: Fehlende mit *Wieder anlegen* zurückholen oder *Ignorieren*, wenn sie zu Recht fehlen; Stornierte in Wealthfolio löschen |
 | Wertpapier soll in Wealthfolio unter seinem Ticker statt der ISIN laufen | Unter *Wertpapiere* die Zuordnung ISIN → Symbol eintragen |
 | Wertpapiere in Wealthfolio ohne Logo | Unter *Logos* einschalten und einen (kostenlosen) Schlüssel von logo.dev eintragen. Nach jedem Abruf holt der Dienst die Logos per ISIN und setzt sie in Wealthfolio (ab 3.8.0). Nur die ISINs gehen an logo.dev; eigene Logos bleiben, ein entferntes Logo kommt nicht wieder |
@@ -259,9 +263,18 @@ Die Seite **Prüfung** zeigt außerdem, welche schon übernommenen Buchungen in 
 | Oberfläche hinter einem Reverse Proxy | Sonst sieht der Dienst alle Anfragen von der Adresse des Proxys, und fünf falsche Passwörter von irgendwem sperren alle aus. Die Adresse des Proxys als `Environment=BROKERSYNC_TRUST_PROXY=<IP>` in einem Drop-in für `wealthfolio-broker-sync.service` eintragen (`systemctl edit wealthfolio-broker-sync`): Dann zählt die Sperre pro Nutzer |
 | Push-Nachricht „Broker Sync gesperrt“ (mit Master-Passphrase, nach einem Neustart) | Auf die Nachricht tippen und die Passphrase eingeben |
 
+## Bekannte Einschränkungen
+
+- **Ohne SQLCipher (z. B. ARM):** Gibt es für die Plattform kein `sqlcipher3`-Paket, liegt die Sync-Datenbank unverschlüsselt in `data/`. Zugangsdaten und Einstellungen bleiben verschlüsselt. Die Seite *Sicherheit* zeigt das an.
+- **Ohne TPM:** Den Schlüssel des Dienstes verschlüsselt `systemd-creds` mit dem Host-Secret des Containers (`/var/lib/systemd/credential.secret`); ein TPM nutzt ein Container nicht. Wer den ganzen Container kopiert, etwa als Backup, kann die Daten deshalb öffnen – außer mit Master-Passphrase. Wo `systemd-creds` nicht verschlüsseln kann, liegt der Schlüssel nur für root lesbar unter `/etc/wealthfolio-broker-sync/`.
+- **Trade Republic:** Eine offizielle Schnittstelle gibt es nicht. Der Dienst nutzt die der Web-App (über pytr); ändert Trade Republic sie, klappt der Abruf bis zu einem Update nicht.
+- **FinTS-Produkt-ID:** DKB und Deutsche Bank verlangen eine registrierte Produkt-ID, die du einträgst, bis der Dienst eine eigene hat.
+
 ## Sicherheit
 
 Was der Dienst speichert, ist verschlüsselt; die Seite **Sicherheit** zeigt jederzeit, was wie geschützt ist (in der Konsole: `brokersync-cli security-status`).
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/11-sicherheit-dunkel.png"><img src="docs/screenshots/11-sicherheit.png" width="560" alt="Seite Sicherheit"></picture>
 
 | Was | Wie |
 |---|---|

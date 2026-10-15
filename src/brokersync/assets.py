@@ -29,7 +29,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from .mapping import Accounts, SecurityMapping, is_cash_symbol
-from .model import Kind, Transaction
+from .model import Kind, Transaction, when
 from .state import State
 from .wealthfolio import WealthfolioClient
 
@@ -106,7 +106,7 @@ def valid_isin(code: str) -> bool:
 
 
 def _when(a: dict) -> datetime:
-    return datetime.fromisoformat(str(a.get("date")).replace("Z", "+00:00"))
+    return when(a.get("date") or "")
 
 
 def _entry(a: dict) -> dict:

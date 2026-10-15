@@ -1,5 +1,6 @@
 {% extends "base.html" %}{% block title %}{{ _("Sicherheit") }}{% endblock %}
 {% block content %}
+{% from "_forms.html" import reauth_field with context %}
 <h1 class="mt-s">{{ _("Sicherheit") }}</h1>
 <div class="card">
   <h2>{{ _("Master-Passphrase") }}</h2>
@@ -60,7 +61,28 @@
     <p class="muted mt-tight">{{ _("Anmeldungen bei Brokern und Banken bleiben gespeichert, der Dienst ruft täglich von selbst ab.") }}</p>
     <label class="check"><input type="radio" name="mode" value="safe" {{ 'checked' if sync_mode == 'safe' }}> {{ _("Sicher") }}</label>
     <p class="muted mt-tight">{{ _("Jeder Abruf beginnt mit deiner Anmeldung (App-Freigabe, TAN, Gerätecode), direkt danach meldet sich der Dienst wieder ab. Der tägliche Lauf ruft nicht ab, er erinnert dich per ntfy. Gilt für alle Broker.") }}</p>
+    {{ reauth_field("mode_pw") }}
     <div class="actions"><button>{{ _("Speichern") }}</button></div>
+  </form>
+</div>
+
+<div class="card" id="password">
+  <h2>{{ _("Passwort der Oberfläche") }}</h2>
+  <form method="post" action="/security/password">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="old_pw">{{ _("Bisheriges Passwort") }}</label>
+    <input type="password" id="old_pw" name="password" autocomplete="current-password" required>
+    <label for="new_pw">{{ _("Neues Passwort (mindestens {n} Zeichen)", n=12) }}</label>
+    <input type="password" id="new_pw" name="new" autocomplete="new-password" minlength="12" required>
+    <label for="new_pw2">{{ _("Wiederholen") }}</label>
+    <input type="password" id="new_pw2" name="new2" autocomplete="new-password" minlength="12" required>
+    <p class="muted">{{ _("Am besten eines aus einem Passwortmanager. Alle anderen Anmeldungen enden dabei.") }}</p>
+    <div class="actions"><button>{{ _("Passwort ändern") }}</button></div>
+  </form>
+  <form method="post" action="/security/sessions">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <p class="muted">{{ _("Angemeldet bleibt man höchstens 12 Stunden, nach 30 Minuten ohne Aktivität ist eine neue Anmeldung nötig.") }}</p>
+    <div class="actions"><button class="secondary">{{ _("Alle anderen Sitzungen beenden") }}</button></div>
   </form>
 </div>
 

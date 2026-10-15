@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import secrets
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,7 +25,7 @@ from ..mapping import Accounts
 from ..notify import Notifier
 from ..state import State
 from ..sync import Syncer
-from ..vault import Vault
+from ..vault import Vault, session_tag, verify_password
 from ..wealthfolio import WealthfolioClient, WealthfolioError
 from .gate import Gate, Throttle
 from .i18n import N_, translate
@@ -32,6 +33,12 @@ from .i18n import N_, translate
 # Pages anyone can open, without a login and without a CSRF token. Not /setup-password: its form carries a
 # CSRF token and the one-time setup code (#89) - else any web page could set the first password.
 PUBLIC = {"/login", "/healthz", "/ca.crt"}
+# Sessions of the UI (#96): signed out after this long without a request, and after this long at all; an action
+# that changes credentials, deletes bookings or the fetch mode asks for the password again after REAUTH_SECONDS.
+IDLE_SECONDS = 30 * 60
+MAX_SECONDS = 12 * 3600
+REAUTH_SECONDS = 15 * 60
+ACCOUNTS_SECONDS = 60
 # Keys of UI texts (#87), translated where they are shown (``_(label)`` in the templates).
 STATUS_LABEL = {"ok": N_("OK"), "needs_auth": N_("Anmeldung nötig"), "error": N_("Fehler"), "running": N_("läuft"),
                 "aborted": N_("abgebrochen")}
@@ -42,8 +49,8 @@ SETTINGS_PAGES = [
     ("/brokers", N_("Broker"), N_("Zugangsdaten, Konten, Startdatum, Anmeldung")),
     ("/notifications", N_("Benachrichtigungen"), N_("ntfy für TAN-Anfragen und Fehler")),
     ("/securities", N_("Wertpapiere"), N_("ISIN unter eigenem Symbol führen")),
-    # Hidden for now (waldonso2/wealthfolio-importer-addon#84):
-    # ("/transfers", N_("Überträge"), N_("Auszahlungen auf eigene Konten erkennen")),
+    # Only while patterns are saved (waldonso2/wealthfolio-importer-addon#84): each one stays visible and deletable.
+    ("/transfers", N_("Überträge"), N_("Auszahlungen auf eigene Konten erkennen")),
     ("/logos", N_("Logos"), N_("Logos der Wertpapiere von logo.dev")),
     ("/security", N_("Sicherheit"), N_("Abrufmodus, Verschlüsselung, Master-Passphrase, Zertifikat")),
     ("/appearance", N_("Darstellung"), N_("Sprache, hell oder dunkel")),
@@ -73,17 +80,50 @@ class AppContext:
     start_lock: threading.Lock = field(default_factory=threading.Lock)
     # PINs typed at a login that aren't stored (#85): kept in memory only until the run that follows.
     pins: dict[str, str] = field(default_factory=dict)
+    # The long action going on in the background (#104; a UI text key) and the message it ended with.
+    job: str = ""
+    job_result: dict | None = None
+    # The account check of page *Prüfung* (#104): {broker: Report}, when, and the account names.
+    audits: dict = field(default_factory=dict)
+    audits_at: float = 0.0
+    account_names: dict[str, str] = field(default_factory=dict)
+    audit_error: str | None = None
+    _accounts: tuple[float, str, list] | None = None
 
     def render(self, request: Request, name: str, **ctx) -> HTMLResponse:
         if "csrf" not in request.session:
             request.session["csrf"] = secrets.token_urlsafe(16)
         flash = request.session.pop("flash", None)
+        if not flash and self.job_result and request.session.get("user"):
+            flash, self.job_result = self.job_result, None  # what a background job ended with (#104)
         nav_unknown = self.state.unknown_count() if request.session.get("user") else 0
         theme, language = self.appearance()
+        try:
+            patterns = bool(self.cfg().transfer_patterns)
+        except Exception:  # locked: no settings pages anyway
+            patterns = False
+        pages = [p for p in SETTINGS_PAGES if p[0] != "/transfers" or patterns]
         return self.templates.TemplateResponse(request, name, {
             "csrf": request.session["csrf"], "flash": flash, "version": __version__, "adapters": self.adapters,
-            "nav_unknown": nav_unknown, "settings_pages": SETTINGS_PAGES, "theme": theme, "lang": language, **ctx,
+            "nav_unknown": nav_unknown, "settings_pages": pages, "theme": theme, "lang": language,
+            "reauth": not recent(request), **ctx,
         })
+
+    def reconfirm(self, request: Request, password: str) -> str | None:
+        """For a sensitive action (#96): None when the password was entered within ``REAUTH_SECONDS`` or is
+        right now, else the error text for the page."""
+        if recent(request):
+            return None
+        client = request.client.host if request.client else "?"
+        with self.throttle.attempt(client) as a:
+            if a.refused:
+                text, params = self.throttle.message(a)
+                return tr(request, text, **params)
+            a.ok = verify_password(password, self.vault.load().get("ui_password_hash"))
+        if not a.ok:
+            return tr(request, "Das Passwort der Oberfläche stimmt nicht.")
+        request.session["auth"] = int(time.time())
+        return None
 
     def appearance(self) -> tuple[str, str]:
         """Colour scheme and language of the pages; the defaults while the config can't be read (locked)."""
@@ -96,18 +136,26 @@ class AppContext:
     def cfg(self) -> config_mod.Config:
         return config_mod.load(self.data_dir)
 
-    def save(self, c: config_mod.Config) -> None:
-        config_mod.save(self.data_dir, c)
+    def update(self, change: Callable[[config_mod.Config], None]) -> config_mod.Config:
+        """Change the config under its lock (#117); check the form before, ``change`` only applies it."""
+        return config_mod.update(self.data_dir, change)
 
     def wf_client(self, c: config_mod.Config) -> WealthfolioClient:
         return self.make_wf(c.wealthfolio_url, self.vault.load().get("wealthfolio_password"))
 
-    def wf_accounts(self, c: config_mod.Config):
+    def wf_accounts(self, c: config_mod.Config, fresh: bool = False):
+        """Wealthfolio's active accounts, kept for ``ACCOUNTS_SECONDS`` (#104) unless ``fresh``."""
+        cached = self._accounts
+        if not fresh and cached and cached[1] == c.wealthfolio_url and time.monotonic() - cached[0] < ACCOUNTS_SECONDS:
+            return cached[2], None
         try:
             with self.wf_client(c) as wf:
-                return [a for a in wf.list_accounts() if a.is_active], None
+                accounts = [a for a in wf.list_accounts() if a.is_active]
         except WealthfolioError as e:
+            self._accounts = None
             return [], str(e)
+        self._accounts = (time.monotonic(), c.wealthfolio_url, accounts)
+        return accounts, None
 
     def needs_login(self, key: str, c: config_mod.Config) -> bool:
         """A fetch starts with a login in the UI: in the safe mode, when a credential is typed each time (#85),
@@ -123,6 +171,17 @@ class AppContext:
     def finish_login(self, key: str, adapter: BrokerAdapter) -> None:
         adapter.close()
         self.vault.store_session(key, adapter)
+
+
+def sign_in(request: Request, secrets_: dict) -> None:
+    """A fresh session after the password was checked, nothing carried over from before."""
+    now = int(time.time())
+    request.session.clear()
+    request.session.update(user="admin", pw=session_tag(secrets_), since=now, seen=now, auth=now)
+
+
+def recent(request: Request) -> bool:
+    return time.time() - request.session.get("auth", 0) <= REAUTH_SECONDS
 
 
 def get_ctx(request: Request) -> AppContext:

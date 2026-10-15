@@ -14,6 +14,7 @@ from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
+from ..model import when
 from .i18n import translate
 
 # Times are shown in German time; the container usually runs in UTC.
@@ -29,7 +30,7 @@ def _parse(value) -> datetime | date | None:
     try:
         if len(text) == 10:
             return date.fromisoformat(text)
-        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return when(text)
     except ValueError:
         return None
 

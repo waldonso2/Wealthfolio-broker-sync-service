@@ -1,5 +1,5 @@
 {% extends "base.html" %}{% from "_icons.html" import icon %}{% block title %}{{ _("Übersicht") }}{% endblock %}
-{% block head %}{% if running %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
+{% block head %}{% if refresh %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
 {% block content %}
 {% set LIGHT = {"green": _("alles in Ordnung"), "yellow": _("bitte ansehen"), "red": _("Handlungsbedarf"), "grey": _("noch kein Abruf")} %}
 {% for n in retired_notices %}
@@ -21,10 +21,33 @@
     <button {% if running %}disabled{% endif %}>{% if running %}{{ _("Abruf läuft …") }}{% else %}{{ _("Alle abrufen") }}{% endif %}</button>
   </form>
 </div>
+{% if running %}
+{% set PHASE = {"login": _("Anmeldung"), "fetch": _("Abruf"), "book": _("Buchen"), "check": _("Abgleich mit Wealthfolio")} %}
+<div class="card progress" aria-live="polite">
+  <p><strong>{% if progress.broker %}{{ _("{label} ({n} von {m})", label=progress.label, n=progress.n, m=progress.m) }}{% else %}{{ _("{job} läuft …", job=_(job)) }}{% endif %}</strong>
+  {% if progress.phase == "approval" %} · {{ _("Warte auf deine Freigabe in der App (seit {when})", when=progress.since | local) }}
+  {% elif progress.phase %} · {{ PHASE.get(progress.phase, progress.phase) }}{% endif %}</p>
+  <p class="muted">{% if refresh %}{{ _("Die Seite aktualisiert sich alle 10 Sekunden.") }} <a href="/?still=1">{{ _("Automatisch aktualisieren anhalten") }}</a>{% else %}<a href="/">{{ _("Aktualisieren") }}</a>{% endif %}</p>
+</div>
+{% endif %}
+{% if checklist %}
+{% set todo = checklist | rejectattr("optional") | rejectattr("done") | list %}
+<div class="card">
+  <details{% if todo %} open{% endif %}><summary><strong>{{ _("Einrichtung: {done} von {total} erledigt", done=checklist | rejectattr("optional") | selectattr("done") | list | length, total=checklist | rejectattr("optional") | list | length) }}</strong></summary>
+  <ul class="rows">{% for item in checklist %}
+    <li><span class="status {{ 'ok' if item.done else ('off' if item.optional else 'warn') }}">{{ _("erledigt") if item.done else (_("optional") if item.optional else _("offen")) }}</span>
+      <span class="grow"><a href="{{ item.href }}">{{ _(item.text) }}</a></span></li>{% endfor %}
+  </ul>
+  {% if not todo %}
+  <form method="post" action="/checklist/hide" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary">{{ _("Ausblenden") }}</button></form>
+  {% endif %}
+  </details>
+</div>
+{% endif %}
 {% if safe_mode %}<p class="muted">{{ _("Sicherer Modus: Jeder Abruf beginnt mit deiner Anmeldung, danach meldet sich der Dienst ab.") }} <a href="/security#mode">{{ _("Ändern") }}</a></p>
 {% else %}<p class="muted">{{ _("Automatischer Abruf:") }} {% if next_run %}{{ _("nächster Lauf {when}", when=next_run) }}{% else %}{{ _("täglich") }}{% endif %}{% if brokers | selectattr("has_credentials") | rejectattr("config.enabled") | list %} · {{ _("Broker ohne automatischen Abruf nur einzeln") }}{% endif %}.</p>{% endif %}
 
-{% if wf_missing %}
+{% if wf_missing and not checklist %}
 <div class="card"><div class="card-head"><span class="light red" role="img" aria-label="{{ _('Status: {s}', s=LIGHT['red']) }}"></span><h2>{{ _("Wealthfolio nicht verbunden") }}</h2></div>
   <div class="actions"><a class="button" href="/setup/wealthfolio">{{ _("Wealthfolio verbinden") }}</a></div></div>
 {% endif %}
@@ -53,8 +76,9 @@
   {% if b.reconcile and b.reconcile.deviations %}
   <details><summary>{{ _("Abweichungen zu Wealthfolio ({n})", n=b.reconcile.deviations | length) }}</summary>
     <div class="table"><table>
-      <tr><th>{{ _("Wert") }}</th><th>{{ b.label }}</th><th>Wealthfolio</th></tr>
-      {% for d in b.reconcile.deviations %}<tr><td data-label="{{ _('Wert') }}">{{ d.name }}</td><td data-label="{{ b.label }}">{{ d.broker }}</td><td data-label="Wealthfolio">{{ d.wealthfolio }}</td></tr>{% endfor %}
+      <caption class="sr-only">{{ _("Abweichungen {label} zu Wealthfolio", label=b.label) }}</caption>
+      <thead><tr><th scope="col">{{ _("Wert") }}</th><th scope="col">{{ b.label }}</th><th scope="col">Wealthfolio</th></tr></thead>
+      <tbody>{% for d in b.reconcile.deviations %}<tr><td data-label="{{ _('Wert') }}">{{ d.name }}</td><td data-label="{{ b.label }}">{{ d.broker }}</td><td data-label="Wealthfolio">{{ d.wealthfolio }}</td></tr>{% endfor %}</tbody>
     </table></div>
     <p class="muted">{{ _('Stand {when}. Gemeldet wird erst, was beim nächsten Abruf noch abweicht. Bestände von vor dem Startdatum unter <a href="/check">Prüfung</a> anlegen.', when=b.reconcile.at | local) }}</p>
   </details>

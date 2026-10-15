@@ -82,7 +82,7 @@ def test_overview_shows_three_runs_and_folds_the_rest(tmp_path):
     head, _, folded = page.partition("Ältere Läufe (2)")
     row = '<li><span class="status ok">'
     assert folded and head.count(row) == 3 and folded.count(row) == 2
-    assert "Einrichtung" not in page  # no setup steps any more
+    assert "Schritt für Schritt" not in page  # no setup steps any more (#83), a checklist instead (#110)
 
 
 def test_fonts_are_served_from_the_container(tmp_path):

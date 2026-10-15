@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block title %}{{ _("Neu aufsetzen") }}{% endblock %}
+{% block content %}
+{% from "_forms.html" import invalid, error, reauth_field with context %}
+<div class="card">
+  <h1>{{ _("{label} neu aufsetzen", label=adapter.label) }}</h1>
+  {% if wf_error %}
+  <div class="flash error" role="alert">{{ _("Wealthfolio nicht erreichbar: {error}", error=wf_error | redact) }}</div>
+  {% else %}
+  <p>{{ _("<strong>{n} Buchungen</strong> des Dienstes für {label} werden in Wealthfolio gelöscht (Kommentar „[SYNC {key}:…]“). Der nächste Abruf holt danach alles ab dem Startdatum neu. CSV-/PDF-Importe, von Hand angelegte Buchungen und eingetragene Anfangsbestände bleiben.", n=count, label=adapter.label, key=key) }}</p>
+  <form method="post" action="/brokers/{{ key }}/reset">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="confirm_name">{{ _("Zum Bestätigen den Namen des Brokers eingeben: {label}", label=adapter.label) }}</label>
+    <input type="text" id="confirm_name" name="name" autocomplete="off" required{{ invalid("name") }}>
+    {{ error("name") }}
+    {{ reauth_field("reset_pw") }}
+    <div class="actions">
+      <button class="danger">{{ _("{n} Buchungen löschen", n=count) }}</button>
+      <a class="button secondary" href="/brokers/{{ key }}">{{ _("Abbrechen") }}</a>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

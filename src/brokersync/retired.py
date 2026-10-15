@@ -24,11 +24,12 @@ RETIRED = {"dummy": "Dummy (Test)"}
 
 
 def clean_up(data_dir: Path, state: State, vault: Vault) -> None:
-    cfg = config_mod.load(data_dir)
-    if any(k in cfg.brokers for k in RETIRED):
-        for key in RETIRED:
-            cfg.brokers.pop(key, None)
-        config_mod.save(data_dir, cfg)
+    if any(k in config_mod.load(data_dir).brokers for k in RETIRED):
+        def drop_config(cfg: config_mod.Config) -> None:
+            for key in RETIRED:
+                cfg.brokers.pop(key, None)
+
+        config_mod.update(data_dir, drop_config)
     if any(k in vault.load().get("brokers", {}) for k in RETIRED):
         def drop(d: dict) -> None:
             for k in RETIRED:

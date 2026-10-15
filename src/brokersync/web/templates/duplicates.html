@@ -9,12 +9,14 @@
   <h2 class="mt-l">{{ _("{label}: {n} doppelt", label=r.label, n=r.found | length) }}</h2>
   {% if r.found %}
   <div class="table"><table>
-    <tr><th>{{ _("Datum") }}</th><th>{{ _("Art") }}</th><th>{{ _("Betrag") }}</th><th>{{ _("Vom Dienst") }}</th><th>{{ _("Schon vorhanden (CSV/PDF)") }}</th></tr>
+    <caption class="sr-only">{{ _("Doppelte Buchungen") }}</caption>
+    <thead><tr><th scope="col">{{ _("Datum") }}</th><th scope="col">{{ _("Art") }}</th><th scope="col">{{ _("Betrag") }}</th><th scope="col">{{ _("Vom Dienst") }}</th><th scope="col">{{ _("Schon vorhanden (CSV/PDF)") }}</th></tr></thead>
+    <tbody>
     {% for d in r.found[:300] %}
     <tr><td data-label="{{ _('Datum') }}">{{ d.sync.date | day }}</td><td data-label="{{ _('Art') }}">{{ d.sync.activityType }}</td><td data-label="{{ _('Betrag') }}">{{ d.sync.amount }}</td>
       <td data-label="{{ _('Vom Dienst') }}">{{ d.sync.assetSymbol }} – {{ d.sync.comment }}</td><td data-label="{{ _('Schon vorhanden (CSV/PDF)') }}">{{ d.original.assetSymbol }} – {{ d.original.comment }}</td></tr>
     {% endfor %}
-  </table></div>
+  </tbody></table></div>
   {% if r.found | length > 300 %}<p class="muted">{{ _("… und {n} weitere.", n=r.found | length - 300) }}</p>{% endif %}
   <form method="post">
     <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="broker" value="{{ r.key }}">

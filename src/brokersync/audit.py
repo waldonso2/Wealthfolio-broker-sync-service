@@ -28,6 +28,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from .mapping import Accounts, is_cash_symbol
+from .model import when
 from .wealthfolio import WealthfolioClient
 
 TOLERANCE = Decimal("0.02")
@@ -50,7 +51,7 @@ def _dec(v) -> Decimal:
 
 
 def _when(a: dict) -> datetime:
-    return datetime.fromisoformat(str(a.get("date")).replace("Z", "+00:00"))
+    return when(a.get("date") or "")
 
 
 def is_cash_transfer(a: dict) -> bool:

@@ -14,7 +14,7 @@ from ...notify import Notifier
 from ...sync import AlreadyRunning
 from .. import inputs
 from ..context import Ctx, language, redirect, tr
-from ..i18n import N_
+from ..i18n import N_, translate
 
 router = APIRouter()
 
@@ -30,21 +30,20 @@ def wealthfolio_page(request: Request, ctx: Ctx):
 @router.post("/setup/wealthfolio")
 def wealthfolio_save(request: Request, ctx: Ctx, url: str = Form(...), password: str = Form(""),
                      no_password: str = Form("")):
-    c = ctx.cfg()
     try:
-        c.wealthfolio_url = inputs.http_url(url, N_("Wealthfolio-Adresse"))
+        url = inputs.http_url(url, N_("Wealthfolio-Adresse"))
         if len(password) > inputs.MAX_TEXT:  # not stripped: a password may start or end with a space
             raise inputs.Invalid("{label}: höchstens {max_len} Zeichen.", label=N_("Passwort"),
                                  max_len=inputs.MAX_TEXT)
     except inputs.Invalid as e:
         return redirect(request, "/setup/wealthfolio", e.text(language(request)), "error")
-    ctx.save(c)
+    c = ctx.update(lambda c: setattr(c, "wealthfolio_url", url))
     if no_password:
         ctx.vault.update(lambda d: d.pop("wealthfolio_password", None))
     elif password:
         ctx.vault.update(lambda d: d.__setitem__("wealthfolio_password", password))
     ctx.vault.update(lambda d: d.__setitem__("wealthfolio_checked", False))
-    accounts, error = ctx.wf_accounts(c)
+    accounts, error = ctx.wf_accounts(c, fresh=True)
     if error:
         return redirect(request, "/setup/wealthfolio", tr(request, "Verbindung fehlgeschlagen: {error}", error=error),
                         "error")
@@ -59,8 +58,8 @@ def notifications_page(request: Request, ctx: Ctx):
     c = ctx.cfg()
     if not c.ntfy_topic:
         # 128 bits, saved at once (#98): who subscribes and reloads before saving keeps the same topic.
-        c.ntfy_topic = f"wealthfolio-sync-{secrets.token_urlsafe(16)}"
-        ctx.save(c)
+        topic = f"wealthfolio-sync-{secrets.token_urlsafe(16)}"
+        c = ctx.update(lambda c: setattr(c, "ntfy_topic", c.ntfy_topic or topic))
     return ctx.render(request, "notifications.html", cfg=c, has_token=bool(c.ntfy_token))
 
 
@@ -68,27 +67,29 @@ def notifications_page(request: Request, ctx: Ctx):
 def notifications_save(request: Request, ctx: Ctx, server: str = Form(...), topic: str = Form(""),
                        token: str = Form(""), public_url: str = Form(""), details: str = Form(""),
                        public_ok: str = Form(""), forget_token: str = Form(""), test: str = Form("")):
-    c = ctx.cfg()
     try:
-        c.ntfy_server = inputs.http_url(server, N_("ntfy-Server"))
-        c.ntfy_topic = inputs.text(topic, N_("Thema"), max_len=64)
-        c.public_url = inputs.http_url(public_url, N_("Adresse dieser Oberfläche"), required=False)
+        server = inputs.http_url(server, N_("ntfy-Server"))
+        topic = inputs.text(topic, N_("Thema"), max_len=64)
+        public_url = inputs.http_url(public_url, N_("Adresse dieser Oberfläche"), required=False)
         token = inputs.text(token, N_("Zugangstoken"))
     except inputs.Invalid as e:
         return redirect(request, "/notifications", e.text(language(request)), "error")
-    if c.ntfy_topic and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", c.ntfy_topic):
+    if topic and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", topic):
         return redirect(request, "/notifications", tr(request, "Thema: nur Buchstaben, Ziffern, - und _."), "error")
-    if details and urlsplit(c.ntfy_server).hostname == "ntfy.sh" and not public_ok:
+    if details and urlsplit(server).hostname == "ntfy.sh" and not public_ok:
         # On the public server anyone who knows the topic reads along: amounts only on purpose.
         return redirect(request, "/notifications", tr(request, "Details auf ntfy.sh: Dort liest jeder mit, der das "
                                                                "Thema kennt - bitte ausdrücklich bestätigen."),
                         "error")
-    c.ntfy_details = bool(details)
-    if forget_token:
-        c.ntfy_token = ""
-    elif token:
-        c.ntfy_token = token
-    ctx.save(c)
+
+    def change(c) -> None:
+        c.ntfy_server, c.ntfy_topic, c.public_url, c.ntfy_details = server, topic, public_url, bool(details)
+        if forget_token:
+            c.ntfy_token = ""
+        elif token:
+            c.ntfy_token = token
+
+    c = ctx.update(change)
     if test:
         n = ctx.notifier or Notifier(c.ntfy_server, c.ntfy_topic, c.ntfy_token)
         ok = n.send("Wealthfolio Broker Sync", "Testnachricht - Benachrichtigungen funktionieren.",
@@ -109,17 +110,19 @@ def securities_page(request: Request, ctx: Ctx):
 @router.post("/securities")
 def securities_save(request: Request, ctx: Ctx, isin: str = Form(...), symbol: str = Form(""),
                     exchange_mic: str = Form(""), delete: str = Form("")):
-    c = ctx.cfg()
     isin = isin.strip().upper()
     if delete:
-        c.security_mappings.pop(isin, None)
+        def drop(c) -> None:
+            c.security_mappings.pop(isin, None)
+
+        ctx.update(drop)
     else:
         try:
             isin = inputs.isin(isin)
-            c.security_mappings[isin] = {"symbol": inputs.symbol(symbol), "exchangeMic": inputs.mic(exchange_mic)}
+            mapping = {"symbol": inputs.symbol(symbol), "exchangeMic": inputs.mic(exchange_mic)}
         except inputs.Invalid as e:
             return redirect(request, "/securities", e.text(language(request)), "error")
-    ctx.save(c)
+        ctx.update(lambda c: c.security_mappings.__setitem__(isin, mapping))
     return redirect(request, "/securities", tr(request, "Gespeichert."))
 
 
@@ -133,9 +136,7 @@ def logos_page(request: Request, ctx: Ctx):
 @router.post("/logos")
 def logos_save(request: Request, ctx: Ctx, enabled: str = Form(""), token: str = Form(""),
                remove_token: str = Form(""), fetch: str = Form("")):
-    c = ctx.cfg()
-    c.logos_enabled = bool(enabled)
-    ctx.save(c)
+    c = ctx.update(lambda c: setattr(c, "logos_enabled", bool(enabled)))
     if remove_token:
         ctx.vault.update(lambda d: d.pop("logo_dev_token", None))
     elif token.strip():
@@ -148,18 +149,22 @@ def logos_save(request: Request, ctx: Ctx, enabled: str = Form(""), token: str =
     if not c.logos_enabled or not ctx.vault.load().get("logo_dev_token"):
         return redirect(request, "/logos", tr(request, "Erst einschalten und einen logo.dev-Schlüssel eintragen."),
                         "warn")
-    try:
-        result = ctx.syncer.update_logos()
-    except AlreadyRunning:
-        return redirect(request, "/logos", tr(request, "Ein Abruf läuft gerade - bitte gleich noch einmal."), "warn")
-    if result is None:
-        return redirect(request, "/logos", tr(request, "Logos konnten nicht geholt werden - siehe Protokoll."),
-                        "error")
-    text = tr(request, "{set} Logos gesetzt, {none} ohne Logo bei logo.dev, {failed} fehlgeschlagen.",
-              set=result.set, none=result.none, failed=result.failed)
-    if result.message:
-        text += f" {result.message}"
-    return redirect(request, "/logos", text, "warn" if result.message or result.failed else "ok")
+    from .overview import start_job
+
+    def work(lang: str) -> tuple[str, str]:
+        try:
+            result = ctx.syncer.update_logos()
+        except AlreadyRunning:
+            return translate("Ein Abruf läuft gerade - bitte gleich noch einmal.", lang), "warn"
+        if result is None:
+            return translate("Logos konnten nicht geholt werden - siehe Protokoll.", lang), "error"
+        text = translate("{set} Logos gesetzt, {none} ohne Logo bei logo.dev, {failed} fehlgeschlagen.", lang,
+                         set=result.set, none=result.none, failed=result.failed)
+        if result.message:
+            text += f" {result.message}"
+        return text, "warn" if result.message or result.failed else "ok"
+
+    return start_job(request, ctx, N_("Logos holen"), work, "/logos")
 
 
 # ── appearance ─────────────────────────────────────────────────────────────
@@ -177,7 +182,9 @@ def appearance_page(request: Request, ctx: Ctx):
 def appearance_save(request: Request, ctx: Ctx, theme: str = Form("system"), language: str = Form("de")):
     if theme not in THEMES or language not in LANGUAGES:
         return redirect(request, "/appearance", tr(request, "Unbekannte Auswahl."), "error")
-    c = ctx.cfg()
-    c.ui_theme, c.ui_language = theme, language
-    ctx.save(c)
+
+    def change(c) -> None:
+        c.ui_theme, c.ui_language = theme, language
+
+    ctx.update(change)
     return redirect(request, "/appearance", tr(request, "Gespeichert."))  # already in the language just chosen

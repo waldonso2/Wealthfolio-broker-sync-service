@@ -11,8 +11,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from ... import crypto
 from ... import security as security_mod
 from ...sync import AlreadyRunning
-from ...vault import verify_password
-from ..context import Ctx, redirect, tr
+from ...vault import end_ui_sessions, hash_password, verify_password, weak_password
+from ..context import Ctx, redirect, sign_in, tr
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -29,13 +29,13 @@ def security_page(request: Request, ctx: Ctx):
 
 
 @router.post("/security/mode")
-def security_mode(request: Request, ctx: Ctx, mode: str = Form("")):
+def security_mode(request: Request, ctx: Ctx, mode: str = Form(""), ui_password: str = Form("")):
     """Abrufmodus (#85): "auto" keeps the brokers' sessions, "safe" ends them after every fetch."""
     if mode not in ("auto", "safe"):
         return redirect(request, "/security", tr(request, "Unbekannter Abrufmodus."), "error")
-    c = ctx.cfg()
-    c.sync_mode = mode
-    ctx.save(c)
+    if error := ctx.reconfirm(request, ui_password):
+        return redirect(request, "/security#mode", error, "error")
+    ctx.update(lambda c: setattr(c, "sync_mode", mode))
     if mode == "safe":
         ctx.syncer.end_sessions()  # every saved login ends now, not only after the next fetch
         for adapter in ctx.pending.values():
@@ -73,6 +73,9 @@ def security_passphrase(request: Request, ctx: Ctx, password: str = Form(...), a
         if len(new) < crypto.MIN_PASSPHRASE:
             return redirect(request, "/security", tr(request, "Die Passphrase braucht mindestens {n} Zeichen.",
                                                      n=crypto.MIN_PASSPHRASE), "error")
+        if weak_password(new):
+            return redirect(request, "/security", tr(request, "Diese Passphrase ist zu verbreitet und schnell "
+                                                              "erraten."), "error")
         target = new
     try:
         security_mod.change_passphrase(ctx.data_dir, target)
@@ -86,6 +89,45 @@ def security_passphrase(request: Request, ctx: Ctx, password: str = Form(...), a
     return redirect(request, "/security", tr(request, "Master-Passphrase entfernt." if target is None
                                              else "Master-Passphrase gesetzt. Merke sie dir gut: Ohne sie sind die "
                                                   "Daten verloren."))
+
+
+@router.post("/security/password")
+def security_password(request: Request, ctx: Ctx, password: str = Form(...), new: str = Form(...),
+                      new2: str = Form(...)):
+    """A new UI password (#96); every other session ends with it."""
+    from .setup import password_problem
+
+    client = request.client.host if request.client else "?"
+    with ctx.throttle.attempt(client) as a:
+        if a.refused:
+            text, params = ctx.throttle.message(a)
+            return redirect(request, "/security#password", tr(request, text, **params), "error")
+        a.ok = verify_password(password, ctx.vault.load().get("ui_password_hash"))
+    if not a.ok:
+        return redirect(request, "/security#password", tr(request, "Das bisherige Passwort stimmt nicht."), "error")
+    if error := password_problem(request, new, new2):
+        return redirect(request, "/security#password", error, "error")
+    hashed = hash_password(new)
+
+    def change(d: dict) -> None:
+        d["ui_password_hash"] = hashed
+        end_ui_sessions(d)
+
+    sign_in(request, ctx.vault.update(change))
+    log.info("web UI: password changed, other sessions ended")
+    return redirect(request, "/security#password", tr(request, "Passwort geändert. Alle anderen Anmeldungen sind "
+                                                               "beendet."))
+
+
+@router.post("/security/sessions")
+def security_sessions(request: Request, ctx: Ctx):
+    """Sign out every other browser (#96): a new session version; this one signs in again at once."""
+    # Not a fresh login: this session keeps its age and the time of its last password check.
+    kept: dict[str, int] = {k: request.session[k] for k in ("since", "auth") if k in request.session}
+    sign_in(request, ctx.vault.update(end_ui_sessions))
+    request.session.update(kept)
+    log.info("web UI: all other sessions ended")
+    return redirect(request, "/security#password", tr(request, "Alle anderen Sitzungen sind beendet."))
 
 
 @router.post("/security/lock")
