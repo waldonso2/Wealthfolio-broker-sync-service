@@ -70,6 +70,7 @@ class AppContext:
     pending: dict[str, BrokerAdapter] = field(default_factory=dict)
     # Set while a sync started from the UI runs.
     running: threading.Event = field(default_factory=threading.Event)
+    start_lock: threading.Lock = field(default_factory=threading.Lock)
     # PINs typed at a login that aren't stored (#85): kept in memory only until the run that follows.
     pins: dict[str, str] = field(default_factory=dict)
 
@@ -121,7 +122,7 @@ class AppContext:
 
     def finish_login(self, key: str, adapter: BrokerAdapter) -> None:
         adapter.close()
-        self.vault.set_broker_session(key, adapter.session_state())
+        self.vault.store_session(key, adapter)
 
 
 def get_ctx(request: Request) -> AppContext:

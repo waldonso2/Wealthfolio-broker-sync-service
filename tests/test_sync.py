@@ -8,7 +8,7 @@ from brokersync import config as config_mod
 from brokersync.adapters import AdapterError, BrokerAdapter
 from brokersync.model import Kind, Transaction
 from brokersync.notify import Notifier
-from brokersync.sync import AlreadyRunning, Syncer, run_lock
+from brokersync.sync import BERLIN, AlreadyRunning, Syncer, run_lock
 from brokersync.vault import Vault
 from brokersync.wealthfolio import WealthfolioClient
 
@@ -32,9 +32,6 @@ class BrokenAdapter(BrokerAdapter):
 
     def login(self):
         raise AdapterError("broker is down")
-
-    def get_accounts(self):
-        return []
 
     def get_positions(self):
         return []
@@ -167,7 +164,7 @@ def test_since_uses_last_success_with_overlap(tmp_path):
     config_mod.save(tmp_path, cfg)
     syncer.run()
     syncer.run()
-    assert seen[0] == datetime(2026, 1, 1, tzinfo=UTC)
+    assert seen[0] == datetime(2026, 1, 1, tzinfo=BERLIN)
     assert seen[1] is not None and seen[1] < datetime.now(UTC)
 
 
@@ -189,11 +186,11 @@ def test_refetch_from_the_start_date_once(tmp_path):
     cfg.brokers["fake"].start_date = "2025-06-01"
     config_mod.save(tmp_path, cfg)
     syncer.run()
-    assert seen[1] != datetime(2025, 6, 1, tzinfo=UTC)  # a later start date alone changes nothing
+    assert seen[1] != datetime(2025, 6, 1, tzinfo=BERLIN)  # a later start date alone changes nothing
     syncer.state.set_flag(refetch_flag("fake"))
     syncer.run()
     syncer.run()
-    assert seen[2] == datetime(2025, 6, 1, tzinfo=UTC)
+    assert seen[2] == datetime(2025, 6, 1, tzinfo=BERLIN)
     assert seen[3] != seen[2]  # only once
     assert not syncer.state.flag(refetch_flag("fake"))
 
@@ -521,3 +518,13 @@ def test_dividends_matched_before_get_their_tax_once(tmp_path):
     # The first run asks for the details of the matched transaction again, later runs don't.
     assert "TEST-20260105-3" not in seen[0] and "TEST-20260105-3" in seen[1]
     assert len([u for u in wf.updated if u["id"] == imported["id"]]) == 1
+
+
+def test_the_start_date_begins_at_midnight_german_time():
+    """#108: a booking at 00:30 on the start date (German time) is inside the window."""
+    from brokersync.sync import Syncer
+
+    start = Syncer._start(config_mod.BrokerConfig(start_date="2026-01-01"))
+    assert start.astimezone(UTC).isoformat() == "2025-12-31T23:00:00+00:00"
+    summer = Syncer._start(config_mod.BrokerConfig(start_date="2026-07-01"))
+    assert summer.astimezone(UTC).isoformat() == "2026-06-30T22:00:00+00:00"

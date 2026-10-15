@@ -120,8 +120,19 @@ def test_notifications_and_securities(tmp_path):
     client, _, notifier = make(tmp_path)
     first_password(client)
     page = client.get("/notifications").text
-    topic = re.search(r'name="topic" value="(wealthfolio-sync-[0-9a-f]{12})"', page).group(1)
+    # 128 bits of chance (#98), and the same topic on every visit until saved - it was saved at once.
+    topic = re.search(r'name="topic" value="(wealthfolio-sync-[A-Za-z0-9_-]{22})"', page).group(1)
+    assert f'value="{topic}"' in client.get("/notifications").text
     token = csrf(client, "/notifications")
+    r = client.post("/notifications", data={"csrf": token, "server": "https://ntfy.sh", "topic": topic,
+                                            "details": "1"})
+    assert "bitte ausdrücklich bestätigen" in r.text and not config_mod.load(tmp_path).ntfy_details
+    client.post("/notifications", data={"csrf": token, "server": "https://ntfy.example", "topic": topic,
+                                        "token": "tk_secret"})
+    assert config_mod.load(tmp_path).ntfy_token == "tk_secret"
+    client.post("/notifications", data={"csrf": token, "server": "https://ntfy.example", "topic": topic,
+                                        "forget_token": "1"})
+    assert config_mod.load(tmp_path).ntfy_token == ""
     r = client.post("/notifications", data={"csrf": token, "server": "https://ntfy.sh", "topic": topic,
                                             "public_url": "http://sync.local:8090", "test": "1"})
     assert "Testnachricht gesendet" in r.text
@@ -300,3 +311,32 @@ def test_an_unexpected_error_shows_only_an_id(tmp_path, monkeypatch, caplog):
     assert r.status_code == 500 and "secret detail" not in r.text
     error_id = re.search(r"Fehler-ID ([0-9a-f]{6})", r.text).group(1)
     assert error_id in caplog.text  # the details are in the log, found by the id
+
+
+def test_a_wrong_code_is_counted_at_once_and_survives_a_restarted_login(tmp_path):
+    """A lock-out counter (comdirect: wrong TANs) is stored right away: starting the login again, or the
+    service restarting meanwhile, can't reset it."""
+    client, _, _ = make(tmp_path)
+    first_password(client)
+    Vault(tmp_path).set_broker_credentials("fake", {"username": "test"})
+    token = csrf(client, "/brokers/fake/login")
+    client.post("/brokers/fake/login/start", data={"csrf": token})
+    client.post("/brokers/fake/login", data={"csrf": token, "code": "999999"})
+    assert Vault(tmp_path).broker("fake")["session"]["wrong_tans"] == 1
+    client.post("/brokers/fake/login/start", data={"csrf": token})  # started again
+    client.post("/brokers/fake/login", data={"csrf": token, "code": "999998"})
+    assert Vault(tmp_path).broker("fake")["session"]["wrong_tans"] == 2
+
+
+def test_showing_the_login_page_asks_the_broker_nothing_and_shows_an_open_login_again(tmp_path):
+    """#99: a GET (reload, back, prefetch) never starts a login; an open one is shown, not replaced."""
+    client, _, _ = make(tmp_path)
+    first_password(client)
+    Vault(tmp_path).set_broker_credentials("fake", {"username": "test"})
+    page = client.get("/brokers/fake/login").text
+    assert "Anmeldung starten" in page and "Bestätigungscode" not in page
+    token = csrf(client, "/brokers/fake/login")
+    client.post("/brokers/fake/login/start", data={"csrf": token})
+    first = client.app.inner.state.ctx.pending["fake"]
+    assert "Bestätigungscode" in client.get("/brokers/fake/login").text
+    assert client.app.inner.state.ctx.pending["fake"] is first  # the same login, no new challenge

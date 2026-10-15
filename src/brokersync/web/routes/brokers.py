@@ -72,20 +72,23 @@ async def broker_save(request: Request, ctx: Ctx, key: str):
         return redirect(request, f"/brokers/{key}", tr(request, "Das {label}-Konto muss ein eigenes Wealthfolio-Konto "
                                                        "sein, nicht das Verrechnungs- oder Depotkonto.",
                                                        label=adapters[key].savings_label), "error")
-    ctx.save(c)
     old = ctx.vault.broker(key).get("credentials", {})
     creds = {}
     for f in adapters[key].credential_fields:
         v = str(form.get(f"cred_{f.name}", ""))
-        if len(v) > inputs.MAX_TEXT:
+        if len(v) > inputs.MAX_TEXT:  # checked before anything is saved: no half-saved form
             return redirect(request, f"/brokers/{key}", tr(request, "{label}: höchstens {max_len} Zeichen.",
                                                            label=f.label, max_len=inputs.MAX_TEXT), "error")
         creds[f.name] = v if v or not f.secret else old.get(f.name, "")
         if f.ask and form.get(f"forget_{f.name}"):
             creds[f.name] = ""  # typed at every login from now on, never stored (#85)
+    ctx.save(c)
     if creds != old:
         ctx.vault.set_broker_credentials(key, creds)
-        return redirect(request, f"/brokers/{key}/login", tr(request, "Gespeichert. Jetzt beim Broker anmelden."))
+        from .broker_login import start_login  # this POST starts the login with the new credentials (#99)
+
+        request.session["flash"] = {"text": tr(request, "Gespeichert. Jetzt beim Broker anmelden."), "level": "ok"}
+        return start_login(request, ctx, key, False)
     return redirect(request, "/", tr(request, "Gespeichert."))
 
 
@@ -118,6 +121,9 @@ async def broker_statement(request: Request, ctx: Ctx, key: str):
         return redirect(request, f"/brokers/{key}", tr(request, "Die Datei ist zu groß (höchstens 5 MB)."), "error")
     try:
         rows = adapters[key].parse_statement(data)
+        # Read it as the runs will, now: a row they can't read must not reach the state, or every run of
+        # this broker fails from then on.
+        adapters[key].statement_transactions(rows, None)
     except ValueError as e:
         return redirect(request, f"/brokers/{key}", str(e), "error")
     new = ctx.state.add_statement_rows(key, rows)

@@ -105,7 +105,7 @@ def test_translate_fills_the_params_after_the_lookup():
 
 def _english(tmp_path):
     client, wf, token = make_client(tmp_path, safe=False)
-    client.get("/brokers/fake/login")
+    client.post("/brokers/fake/login/start", data={"csrf": token})
     client.post("/brokers/fake/login", data={"csrf": token, "code": CODE})
     assert "Abruf beendet." in client.post("/run", data={"csrf": token}).text  # something on the overview
     r = client.post("/appearance", data={"csrf": token, "theme": "system", "language": "en"})

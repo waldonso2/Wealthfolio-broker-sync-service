@@ -250,3 +250,28 @@ def test_dkb_reads_the_depot_holdings_from_the_user_parameters(monkeypatch, capl
 
 def test_deutsche_bank_and_dkb_compare_their_positions():
     assert DeutscheBankAdapter.reports_positions and DkbAdapter.reports_positions
+
+
+def test_the_python_fints_patches_of_two_threads_dont_mix():
+    """#113: one thread's patch stays in place until it is done, and the original comes back at the end."""
+    import threading
+    import time
+
+    import fints.client
+
+    from brokersync.adapters import fints as fints_mod
+
+    original, seen = fints.client.MT535_Miniparser, []
+
+    def work():
+        with fints_mod._mt535_parser([]):
+            mine = fints.client.MT535_Miniparser
+            time.sleep(0.05)
+            seen.append(fints.client.MT535_Miniparser is mine)
+
+    threads = [threading.Thread(target=work) for _ in range(3)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert seen == [True, True, True] and fints.client.MT535_Miniparser is original

@@ -214,11 +214,13 @@ class Syncer:
 
     def end_sessions(self, keys: list[str] | None = None) -> None:
         """Safe mode: forget the brokers' sessions, keeping only the lock-out guards (``SAFETY_KEYS``)."""
-        brokers = self.vault.load().get("brokers", {})
-        for key in keys if keys is not None else list(brokers):
-            session = brokers.get(key, {}).get("session")
-            if session and session != safety_state(session):
-                self.vault.set_broker_session(key, safety_state(session))
+        def change(d: dict) -> None:  # under the vault's lock: a login's newer counters aren't lost
+            for key, b in d.get("brokers", {}).items():
+                session = b.get("session")
+                if (keys is None or key in keys) and session and session != safety_state(session):
+                    b["session"] = safety_state(session)
+
+        self.vault.update(change)
 
     def update_logos(self) -> logos_mod.Result | None:
         """The button on the page *Logos*: one pass now (under the sync lock)."""
@@ -273,8 +275,9 @@ class Syncer:
             result.messages.append(f"Unexpected error: {e}")
             notifier.send(f"{label}: Abruf fehlgeschlagen", f"Unerwarteter Fehler: {e}", link=self.link(cfg, "/"),
                           priority="high", tags="warning")
-        if cfg.safe_mode:
+        if cfg.safe_mode or self._safe_now():
             # Safe mode (#85): the login ends with the run, whatever happened - the next one needs the user.
+            # Also when it was switched on while this run went on: its session must not outlive the switch.
             self.end_sessions([key])
         if result.status == "ok" and result.failed:
             result.status = "error"
@@ -287,6 +290,12 @@ class Syncer:
         if result.status != "ok" and result.messages:
             log.warning("%s: %s", key, " | ".join(result.messages[:5]))
         return result
+
+    def _safe_now(self) -> bool:
+        try:
+            return config_mod.load(self.data_dir).safe_mode
+        except Exception:  # unreadable (locked meanwhile): end the session to be safe
+            return True
 
     def _sync_broker(self, cfg: config_mod.Config, key: str, result: BrokerResult) -> None:
         """One broker's run, as named steps in this order (ARCHITECTURE.md, *Ablauf eines Laufs*)."""
@@ -358,7 +367,7 @@ class Syncer:
         finally:
             # Keep whatever session the adapter has, even half-way through a login.
             adapter.close()
-            self.vault.set_broker_session(key, adapter.session_state())
+            self.vault.store_session(key, adapter)
 
     def _prepare(self, run: RunContext) -> None:
         """What is new, unknown events reported, accounts, mappings, patterns, savings transfer pairs."""
@@ -743,7 +752,8 @@ class Syncer:
     @staticmethod
     def _start(bcfg: config_mod.BrokerConfig) -> datetime | None:
         if bcfg.start_date:
-            return datetime.fromisoformat(bcfg.start_date).replace(tzinfo=UTC)
+            # The day starts at midnight German time, like everything else the user sees (#108).
+            return datetime.fromisoformat(bcfg.start_date).replace(tzinfo=BERLIN)
         return None
 
     def _sync_tx(self, wf: WealthfolioClient, key: str, tx: Transaction, accounts: Accounts,

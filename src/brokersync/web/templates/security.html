@@ -18,8 +18,13 @@
     <input type="password" id="new2" name="new2" autocomplete="new-password" minlength="{{ min_length }}">
     <div class="actions">
       <button name="action" value="set">{{ _("Passphrase ändern") if has_passphrase else _("Passphrase setzen") }}</button>
-      {% if has_passphrase %}<button class="secondary" name="action" value="remove">{{ _("Passphrase entfernen") }}</button>{% endif %}
     </div>
+    {% if has_passphrase %}
+    <details class="mt-m"><summary>{{ _("Passphrase entfernen") }}</summary>
+      <label class="check"><input type="checkbox" name="confirm_remove" value="1"> {{ _("Mir ist klar: Danach schützt nur noch der Schlüssel des Containers die Daten - ein Backup des Containers öffnet sie.") }}</label>
+      <div class="actions"><button class="danger" name="action" value="remove">{{ _("Passphrase entfernen") }}</button></div>
+    </details>
+    {% endif %}
   </form>
   {% if has_passphrase %}
   <form method="post" action="/security/lock">

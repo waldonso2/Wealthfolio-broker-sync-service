@@ -35,6 +35,7 @@ import base64
 import hashlib
 import logging
 import re
+import threading
 import time
 from collections import Counter
 from collections.abc import Iterator
@@ -46,7 +47,7 @@ from typing import ClassVar
 from zoneinfo import ZoneInfo
 
 from .. import redact
-from ..model import SAVINGS, BrokerAccount, CashBalance, Kind, Position, Transaction
+from ..model import SAVINGS, CashBalance, Kind, Position, Transaction
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
 
 log = logging.getLogger(__name__)
@@ -345,10 +346,6 @@ class FintsAdapter(BrokerAdapter):
                              f"„{a.get('product_name') or '?'}“ (Art {a.get('type') or '?'})"))
         return accounts
 
-    def get_accounts(self) -> list[BrokerAccount]:
-        return [BrokerAccount(a.iban or a.accountnumber, a.iban or a.accountnumber, "EUR")
-                for a in self._call(self._client.get_sepa_accounts)]
-
     def _savings_account(self):
         """The savings account (Tagesgeld): by the IBAN the user entered, else the account the bank calls a
         savings account (type 10-19, or its product name) other than the giro account."""
@@ -462,6 +459,8 @@ class FintsAdapter(BrokerAdapter):
             try:
                 texts = fetch(account, start, end)
             except Exception as e:
+                if type(e).__name__ in ("FinTSClientPINError", "FinTSClientTemporaryAuthError"):
+                    self._fail(e)  # a rejected PIN must stop everything, not only this diagnostic step
                 log.info("%s (FinTS): Depotumsätze von %s nicht lesbar: %s", self.label, what,
                          _bank_messages(str(e)) or f"{type(e).__name__}: {e}")
                 continue
@@ -554,6 +553,11 @@ def _bank_messages(text: str) -> str:
     return "; ".join(unique)
 
 
+# Both patches below change python-fints for the whole process: two logins at once (two brokers in the web
+# UI) must not see or undo each other's (#113). Re-entrant: one adapter may hold both.
+_PATCHING = threading.RLock()
+
+
 @contextmanager
 def _national_account_details():
     """Send account number, sub-account and bank code with the IBAN in camt requests (HKCAZ).
@@ -570,11 +574,12 @@ def _national_account_details():
         return cls(iban=acc.iban, bic=acc.bic, account_number=getattr(acc, "accountnumber", None) or None,
                    subaccount_number=getattr(acc, "subaccount", None) or None, bank_identifier=bank)
 
-    KTI1.from_sepa_account = classmethod(with_national)
-    try:
-        yield
-    finally:
-        KTI1.from_sepa_account = original
+    with _PATCHING:
+        KTI1.from_sepa_account = classmethod(with_national)
+        try:
+            yield
+        finally:
+            KTI1.from_sepa_account = original
 
 
 @contextmanager
@@ -590,12 +595,13 @@ def _mt535_parser(seen: list[str]) -> Iterator[None]:
             seen.append(mt535.structure(lines))
             return mt535.parse(lines)
 
-    original = fints.client.MT535_Miniparser
-    fints.client.MT535_Miniparser = Parser
-    try:
-        yield
-    finally:
-        fints.client.MT535_Miniparser = original
+    with _PATCHING:
+        original = fints.client.MT535_Miniparser
+        fints.client.MT535_Miniparser = Parser
+        try:
+            yield
+        finally:
+            fints.client.MT535_Miniparser = original
 
 
 def _yes(value) -> str:

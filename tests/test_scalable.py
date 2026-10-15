@@ -5,6 +5,7 @@ The CLI is replaced by ``fixtures/scalable/fake_sc.py``, which answers like
 """
 
 import json
+import re
 import threading
 from decimal import Decimal as D
 from pathlib import Path
@@ -161,7 +162,6 @@ def test_a_csv_import_of_the_same_buy_is_recognised():
 
 
 def test_login_in_the_web_ui(tmp_path, fake_sc):
-    import re
 
     from fastapi.testclient import TestClient
 
@@ -172,7 +172,8 @@ def test_login_in_the_web_ui(tmp_path, fake_sc):
                      adapters={"scalable": ScalableAdapter}, notifier=RecordingNotifier(), run_in_thread=False)
     client = TestClient(app)
     first_password(client)
-    page = client.get("/brokers/scalable/login").text
+    token = re.search(r'name="csrf" value="([^"]+)"', client.get("/brokers/scalable/login").text).group(1)
+    page = client.post("/brokers/scalable/login/start", data={"csrf": token}).text
     assert 'href="https://secure.scalable.example/device?user_code=ABCD-EFGH"' in page
     assert "ABCD-EFGH" in page and "Ich habe bestätigt" in page
     token = re.search(r'name="csrf" value="([^"]+)"', page).group(1)

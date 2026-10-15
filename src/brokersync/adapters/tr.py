@@ -31,7 +31,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
-from ..model import BrokerAccount, CashBalance, Kind, Position, Transaction
+from ..model import CashBalance, Kind, Position, Transaction
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
 
 SKIPPED_STATUS = {"CANCELED", "CANCELLED", "FAILED", "REJECTED", "PENDING"}
@@ -45,7 +45,7 @@ def _dec(x) -> Decimal | None:
     # pytr hands out floats; round to 8 places and drop trailing zeros (no exponent).
     if x is None:
         return None
-    d = Decimal(str(round(float(x), 8)))
+    d = Decimal(x) if isinstance(x, str) else Decimal(str(round(float(x), 8)))  # text as it is, no float
     return d.quantize(Decimal(1)) if d == d.to_integral() else d.normalize()
 
 
@@ -358,9 +358,6 @@ class TradeRepublicAdapter(BrokerAdapter):
         return [Position(p.get("isin") or p.get("instrumentId", ""), p.get("name", ""),
                          _dec(p.get("netSize")) or Decimal(0), "EUR")
                 for p in portfolio_positions(portfolio)]
-
-    def get_accounts(self) -> list[BrokerAccount]:
-        return [BrokerAccount("tr", "Trade Republic", "EUR")]
 
     @classmethod
     def replay(cls, recording: dict) -> TradeRepublicAdapter:

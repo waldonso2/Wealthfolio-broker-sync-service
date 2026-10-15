@@ -6,6 +6,7 @@ import re
 from datetime import date, timedelta
 from decimal import Decimal as D
 
+import pytest
 from fastapi.testclient import TestClient
 
 from brokersync import config as config_mod
@@ -266,3 +267,15 @@ def test_camt_asks_only_as_far_back_as_the_bank_keeps_bookings(monkeypatch):
     adapter.get_transactions(datetime(2019, 1, 1, tzinfo=UTC))  # a start date far back
     [(start, end)] = asked
     assert (end - start).days == 29 and adapter.history_start == start
+
+
+def test_a_csv_the_runs_cant_read_is_refused_at_the_upload_and_german_dates_are_read():
+    """A row with an unreadable number stopped every later run of the broker; now the upload says so."""
+    bad = "\n".join([HEADER, row(RECENT.isoformat(), "Kauf", "-", "DE000TEST001", "-100,00")]).encode()
+    rows = deutschebank_csv.parse(bad)
+    with pytest.raises(ValueError):
+        deutschebank_csv.transactions(rows, None)
+    german = "\n".join([HEADER, row(RECENT.strftime("%d.%m.%Y"), "Kauf", "2", "DE000TEST001", "-100,00",
+                                     kurs="50,00")]).encode()
+    [tx] = deutschebank_csv.transactions(deutschebank_csv.parse(german), None)
+    assert tx.datetime.date() == RECENT

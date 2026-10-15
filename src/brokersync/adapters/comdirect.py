@@ -51,7 +51,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from ..model import BrokerAccount, CashBalance, Kind, Position, Transaction
+from ..model import CashBalance, Kind, Position, Transaction
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
 
 log = logging.getLogger(__name__)
@@ -70,7 +70,9 @@ CONFIRM_WAIT = 30
 # A trade's giro booking lies this many days around its business date.
 SETTLEMENT_DAYS = 6
 # A trade without its giro booking after this many days is reported.
-UNSETTLED_DAYS = 10
+# Below the sync's overlap (sync.OVERLAP, 7 days): a trade still without its giro booking is reported while
+# it is still inside the fetch window - with 10 days it fell out of the window first and was never listed.
+UNSETTLED_DAYS = SETTLEMENT_DAYS
 PAGE_SIZE = 500
 # Without a date filter comdirect returns only about half a year; older bookings
 # come only when asked for explicitly. Without a start date: this far back.
@@ -198,7 +200,11 @@ def to_transactions(bookings: list[dict], depot_transactions: list[dict], wkn_to
             continue
         value = _dec(b.get("amount")) or Decimal(0)
         text = _text(b)
-        if value <= 0 or (INTEREST.search(text) and not DIVIDEND.search(text)):
+        if value == 0 or (INTEREST.search(text) and not DIVIDEND.search(text)):
+            continue
+        if value < 0:  # a dividend reversed: the original stays booked, so the user must see it
+            out.append(_unknown(f"acc-{b['reference']}", _noon(_day(b.get("bookingDate")) or today),
+                                "DIVIDENDE_STORNO", {"betrag": str(value), "text": text}))
             continue
         currency = _unit(b.get("amount"))
         when = _noon(_day(b.get("bookingDate")) or _day(b.get("valutaDate")) or today)
@@ -382,7 +388,9 @@ class ComdirectAdapter(BrokerAdapter):
                                                  or self._refresh()):
             return
         self._guard()
-        if self.on_user_action and (self.session.get("tan_type") not in (None, "P_TAN_PUSH")
+        # Only a push whose status can be polled may start from a scheduled run; an unknown type (credentials
+        # saved anew) waits for the web UI too - never a challenge nobody answers (each counts towards five).
+        if self.on_user_action and (self.session.get("tan_type") != "P_TAN_PUSH"
                                     or self.session.get("push_without_link")):
             # A TAN to type, or a push whose approval can't be checked: only the web UI can do
             # that - don't open a challenge nobody answers.
@@ -560,12 +568,6 @@ class ComdirectAdapter(BrokerAdapter):
                 self._positions += self.get(f"/brokerage/v3/depots/{d['depotId']}/positions",
                                             **{"with-attr": "instrument"}).get("values") or []
         return self._positions
-
-    def get_accounts(self) -> list[BrokerAccount]:
-        giro = self._giro()
-        account = giro.get("account") or {}
-        return [BrokerAccount(giro.get("accountId", ""), account.get("iban") or account.get("accountDisplayId") or "",
-                              account.get("currency") or "EUR")]
 
     def get_cash(self) -> list[CashBalance]:
         # The giro account isn't booked (only dividends land on the cash account): no balance to compare.

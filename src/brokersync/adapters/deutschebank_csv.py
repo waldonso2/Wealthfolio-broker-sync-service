@@ -78,6 +78,17 @@ def _num(value: str) -> Decimal:
     return number
 
 
+def _date(value: str) -> date:
+    """ISO (2024-03-15) or German (15.03.2024)."""
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        try:
+            return datetime.strptime(value, "%d.%m.%Y").date()
+        except ValueError as e:
+            raise ValueError(f"Kein Datum: {value!r}") from e
+
+
 def row_id(row: dict, seen: Counter) -> str:
     key = "|".join(row.get(k, "") for k in ("Buchungsdatum", "Umsatzart", "ISIN", "Nominal / Stück",
                                              "Ausmachender Betrag"))
@@ -91,7 +102,7 @@ def transactions(rows: list[dict], history_start: date | None) -> list[Transacti
     out = []
     for row in rows:
         tx_id = row_id(row, seen)
-        day = date.fromisoformat(row.get("Schlusstag / Zahltag") or row["Buchungsdatum"])
+        day = _date(row.get("Schlusstag / Zahltag") or row["Buchungsdatum"])
         when = datetime(day.year, day.month, day.day, 12, tzinfo=BERLIN).astimezone(UTC)
         kind_text = row["Umsatzart"]
         shares = _num(row["Nominal / Stück"])

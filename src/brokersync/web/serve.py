@@ -84,7 +84,8 @@ def serve(data_dir: Path, *, host: str, port: int, certfile: str | None, keyfile
     hosts = Hosts(lambda: known_hosts(data_dir, certfile))
     app = create_app(data_dir, secure=secure, hosts=hosts)
     configs = [uvicorn.Config(app, host=host, port=port, log_config=None, ssl_certfile=certfile,
-                              ssl_keyfile=keyfile, server_header=False, **proxy_options())]
+                              ssl_keyfile=keyfile, server_header=False, access_log=False,
+                              **proxy_options())]  # no access log: a URL can carry the setup code
     if secure and redirect_port:
         configs.append(uvicorn.Config(redirect_app(port, hosts), host=host, port=redirect_port, log_config=None,
                                       server_header=False, access_log=False))

@@ -35,6 +35,7 @@ import fcntl
 import json
 import os
 import secrets
+import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -242,12 +243,6 @@ def new_passphrase_key(data_dir: Path, passphrase: str | None) -> tuple[bytes, d
                  "_pkey": pkey.hex()}
 
 
-def write_keyring(data_dir: Path, ring: dict) -> None:
-    pkey = ring.pop("_pkey", None)
-    write_atomic(_keyring_file(data_dir), json.dumps(ring, indent=2).encode())
-    _cache_pkey(data_dir, bytes.fromhex(pkey) if pkey else None)
-
-
 # ── encryption ──────────────────────────────────────────────────────────────
 def subkey(key: bytes, purpose: str) -> bytes:
     return _hkdf(key, f"brokersync {purpose}")
@@ -278,13 +273,18 @@ def is_sealed(blob: bytes) -> bool:
 
 def write_atomic(path: Path, content: bytes) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "wb") as f:
-        f.write(content)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+    # A temp name of its own (mode 0600): two writers of the same file (two tabs, the timer) can't
+    # truncate each other's half-written copy.
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def fsync_file(path: Path) -> None:

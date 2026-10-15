@@ -3,6 +3,7 @@ app confirmation, session cookies, PIN safety, and the holdings check."""
 
 import asyncio
 import json
+import re
 from datetime import UTC, datetime
 from decimal import Decimal as D
 from pathlib import Path
@@ -411,7 +412,9 @@ def test_login_with_a_valid_session_says_no_confirmation_was_needed(tmp_path, ap
                      run_in_thread=False)
     client = TestClient(app)
     first_password(client)
-    r = client.get("/brokers/tr/login")
+    token = re.search(r'name="csrf" value="([^"]+)"', client.get("/brokers/tr/login").text).group(1)
+    assert FakeApi.instances == [] or FakeApi.instances[-1].calls == []  # showing the page asks nothing
+    r = client.post("/brokers/tr/login/start", data={"csrf": token})
     assert "Sitzung ist noch gültig" in r.text
     assert FakeApi.instances[-1].calls == ["resume"]
 
@@ -612,3 +615,20 @@ def test_too_many_attempts_and_other_errors_do_not_block_the_pin(api, monkeypatc
             a.login()
         # Not a rejected PIN: the next run may try again.
         assert not a.session_state().get("pin_rejected")
+
+
+def test_amounts_given_as_text_keep_their_digits():
+    from brokersync.adapters.tr import _dec
+
+    assert _dec("0.1") == D("0.1") and _dec("1234567.89") == D("1234567.89") and _dec(0.1) == D("0.1")
+    assert _dec("12.50") == D("12.5") and _dec(None) is None
+
+
+def test_pytr_still_has_the_internals_the_cookie_store_uses():
+    """#113: the adapter reads the cookies from pytr's private ``_websession``. An update of pytr that renames
+    it would silently cost the stored login - this test fails first."""
+    from pytr.api import TradeRepublicApi
+
+    api = TradeRepublicApi.__new__(TradeRepublicApi)
+    TradeRepublicApi.__init__(api, phone_no="+4900000000", pin="0000", save_cookies=False)
+    assert hasattr(api, "_websession") and hasattr(api._websession, "cookies")

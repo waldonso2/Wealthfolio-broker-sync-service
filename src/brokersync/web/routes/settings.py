@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import secrets
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -32,6 +33,9 @@ def wealthfolio_save(request: Request, ctx: Ctx, url: str = Form(...), password:
     c = ctx.cfg()
     try:
         c.wealthfolio_url = inputs.http_url(url, N_("Wealthfolio-Adresse"))
+        if len(password) > inputs.MAX_TEXT:  # not stripped: a password may start or end with a space
+            raise inputs.Invalid("{label}: höchstens {max_len} Zeichen.", label=N_("Passwort"),
+                                 max_len=inputs.MAX_TEXT)
     except inputs.Invalid as e:
         return redirect(request, "/setup/wealthfolio", e.text(language(request)), "error")
     ctx.save(c)
@@ -54,14 +58,16 @@ def wealthfolio_save(request: Request, ctx: Ctx, url: str = Form(...), password:
 def notifications_page(request: Request, ctx: Ctx):
     c = ctx.cfg()
     if not c.ntfy_topic:
-        c.ntfy_topic = f"wealthfolio-sync-{secrets.token_hex(6)}"
+        # 128 bits, saved at once (#98): who subscribes and reloads before saving keeps the same topic.
+        c.ntfy_topic = f"wealthfolio-sync-{secrets.token_urlsafe(16)}"
+        ctx.save(c)
     return ctx.render(request, "notifications.html", cfg=c, has_token=bool(c.ntfy_token))
 
 
 @router.post("/notifications")
 def notifications_save(request: Request, ctx: Ctx, server: str = Form(...), topic: str = Form(""),
                        token: str = Form(""), public_url: str = Form(""), details: str = Form(""),
-                       test: str = Form("")):
+                       public_ok: str = Form(""), forget_token: str = Form(""), test: str = Form("")):
     c = ctx.cfg()
     try:
         c.ntfy_server = inputs.http_url(server, N_("ntfy-Server"))
@@ -72,8 +78,15 @@ def notifications_save(request: Request, ctx: Ctx, server: str = Form(...), topi
         return redirect(request, "/notifications", e.text(language(request)), "error")
     if c.ntfy_topic and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", c.ntfy_topic):
         return redirect(request, "/notifications", tr(request, "Thema: nur Buchstaben, Ziffern, - und _."), "error")
+    if details and urlsplit(c.ntfy_server).hostname == "ntfy.sh" and not public_ok:
+        # On the public server anyone who knows the topic reads along: amounts only on purpose.
+        return redirect(request, "/notifications", tr(request, "Details auf ntfy.sh: Dort liest jeder mit, der das "
+                                                               "Thema kennt - bitte ausdrücklich bestätigen."),
+                        "error")
     c.ntfy_details = bool(details)
-    if token:
+    if forget_token:
+        c.ntfy_token = ""
+    elif token:
         c.ntfy_token = token
     ctx.save(c)
     if test:

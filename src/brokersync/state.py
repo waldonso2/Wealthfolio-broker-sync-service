@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -235,11 +236,10 @@ def encrypt_plain(path: Path, key: bytes) -> None:
         path.with_name(path.name + suffix).unlink(missing_ok=True)
 
 
-def rekey(data_dir: Path, old: bytes, new: bytes, path: Path | None = None) -> None:
-    """Re-encrypt the database (or a copy of it at ``path``) for a new data key."""
+def rekey(data_dir: Path, old: bytes, new: bytes, path: Path) -> None:
+    """Re-encrypt a copy of the database at ``path`` for a new data key - never ``state.db`` itself (#91)."""
     if sqlcipher is None:
         return
-    path = path or Path(data_dir) / "state.db"
     if not path.exists():
         return
     db = _connect(path, db_key(data_dir, old))
@@ -258,14 +258,32 @@ class State:
             with crypto.file_lock(data_dir, "state.lock"):
                 if is_plain(path):
                     encrypt_plain(path, k)
-        self.db = _connect(path, k)
+        self._path, self._key = path, k
+        # One connection per thread (#101): the web UI's requests run in a thread pool, and on a shared
+        # connection one thread's ``with self.db:`` would commit or roll back another one's writes.
+        self._local = threading.local()
+        self._connections: list = []
+        self._lock = threading.Lock()
         self.db.executescript(SCHEMA)
         migrate(self.db)
         if path.exists():
             os.chmod(path, 0o600)
 
+    @property
+    def db(self):
+        conn = getattr(self._local, "db", None)
+        if conn is None:
+            conn = self._local.db = _connect(self._path, self._key)
+            with self._lock:
+                self._connections.append(conn)
+        return conn
+
     def close(self) -> None:
-        self.db.close()
+        with self._lock:
+            for conn in self._connections:
+                conn.close()
+            self._connections.clear()
+        self._local = threading.local()
 
     # ── transactions ────────────────────────────────────────────────────────
     def known(self, broker: str) -> set[str]:
