@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from ... import __version__
 from ... import security as security_mod
-from ...vault import check_setup_code, hash_password, needs_rehash, verify_password
+from ...vault import check_setup_code, hash_password, needs_rehash, password_tag, verify_password
 from ..context import Ctx, redirect, tr
 
 log = logging.getLogger(__name__)
@@ -63,13 +63,15 @@ def setup_password(request: Request, ctx: Ctx, password: str = Form(...), passwo
                         tr(request, "Das Passwort braucht mindestens {n} Zeichen, beide Eingaben müssen gleich sein.",
                            n=MIN_PASSWORD), "error")
 
+    hashed = hash_password(password)
+
     def set_password(d: dict) -> None:
-        d["ui_password_hash"] = hash_password(password)
+        d["ui_password_hash"] = hashed
         d.pop("setup_code", None)  # used up
 
     ctx.vault.update(set_password)
     request.session.clear()  # a fresh session, nothing carried over from before the password existed
-    request.session["user"] = "admin"
+    request.session.update(user="admin", pw=password_tag(hashed))
     if not ctx.cfg().public_url:
         c = ctx.cfg()
         c.public_url = str(request.base_url).rstrip("/")
@@ -93,9 +95,10 @@ def login(request: Request, ctx: Ctx, password: str = Form(...)):
         a.ok = verify_password(password, stored)
     if a.ok:
         if stored and needs_rehash(stored):
-            ctx.vault.update(lambda d: d.__setitem__("ui_password_hash", hash_password(password)))
+            stored = hash_password(password)
+            ctx.vault.update(lambda d: d.__setitem__("ui_password_hash", stored))
         request.session.clear()
-        request.session["user"] = "admin"
+        request.session.update(user="admin", pw=password_tag(stored))
         return redirect(request, "/")
     log.warning("web UI: wrong password from %s", client)
     return redirect(request, "/login", tr(request, "Falsches Passwort."), "error")

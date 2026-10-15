@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import ClassVar
 
-from ..model import BrokerAccount, CashBalance, Position, Transaction
+from ..model import CashBalance, Position, Transaction
 
 
 @dataclass(frozen=True)
@@ -92,6 +92,12 @@ class BrokerAdapter(ABC):
     def __init__(self, credentials: dict[str, str], session: dict | None = None):
         self.credentials = credentials
         self.session = dict(session or {})
+        # The session as it was last read or written: the vault keeps another process's lock-out counters
+        # when the stored one changed meanwhile (``Vault.store_session``).
+        self.stored_session = dict(session or {})
+        # Set by the web UI while a login waits for the user: its challenge and since when (monotonic).
+        self.ui_challenge: Challenge | None = None
+        self.ui_since = 0.0
         # Set by the sync: tells the user to act now (e.g. confirm in the bank's
         # app) while the adapter waits. Unset in the web UI, which shows the
         # challenge itself.
@@ -142,9 +148,6 @@ class BrokerAdapter(ABC):
         responses; see tests/contract/README.md.
         """
         raise NotImplementedError(f"{cls.__name__} has no replay support")
-
-    @abstractmethod
-    def get_accounts(self) -> list[BrokerAccount]: ...
 
     @abstractmethod
     def get_positions(self) -> list[Position]: ...

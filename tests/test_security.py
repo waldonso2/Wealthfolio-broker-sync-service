@@ -201,6 +201,13 @@ def test_the_ui_sets_the_passphrase_locks_and_unlocks(tmp_path):
     r = client.post("/unlock", data={"passphrase": "meine passphrase!"}, follow_redirects=False)
     assert r.headers["location"] == "/login"
     assert client.get("/brokers").status_code == 200
+    # Removing it takes a second, deliberate step (#110).
+    token = csrf(client, "/security")
+    r = client.post("/security/passphrase", data={"csrf": token, "password": UI_PW, "action": "remove"})
+    assert "bitte bestätigen" in r.text and crypto.passphrase_enabled(tmp_path)
+    client.post("/security/passphrase", data={"csrf": token, "password": UI_PW, "action": "remove",
+                                              "confirm_remove": "1"})
+    assert not crypto.passphrase_enabled(tmp_path)
 
 
 def test_a_locked_timer_run_says_so(tmp_path, monkeypatch):
@@ -681,3 +688,29 @@ def test_the_units_are_hardened_and_the_run_has_a_time_limit():
                        "RemoveIPC=true", "NoNewPrivileges=true", "CapabilityBoundingSet=\n"):
             assert option in text, (name, option)
     assert "TimeoutStartSec=45min" in (units / "wealthfolio-broker-sync-run.service").read_text()
+
+
+def test_a_cookie_of_an_earlier_password_signs_in_nobody(tmp_path):
+    """brokersync-reset-password while the web UI runs: a copied cookie of before is not valid again once a
+    new password is set - the session is bound to the password."""
+    client = logged_in(tmp_path)
+    stolen = dict(client.cookies)
+    import os
+
+    from brokersync import cli
+    os.environ["BROKERSYNC_DATA"] = str(tmp_path)
+    try:
+        cli.main(["reset-ui-password"])
+    finally:
+        os.environ.pop("BROKERSYNC_DATA")
+    first_password(client, "ein-ganz-neues-pw")
+    thief = TestClient(client.app, base_url="http://sync.local", cookies=stolen)
+    assert thief.get("/", follow_redirects=False).headers["location"] == "/login"
+    assert client.get("/", follow_redirects=False).status_code == 200
+
+
+def test_the_access_log_stays_off_the_setup_code_can_be_in_a_url():
+    from pathlib import Path
+
+    serve = (Path(__file__).parent.parent / "src" / "brokersync" / "web" / "serve.py").read_text()
+    assert serve.count("access_log=False") == 2

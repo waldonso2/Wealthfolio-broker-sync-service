@@ -124,3 +124,39 @@ def test_colour_scheme_and_language_are_chosen_on_the_page_appearance(tmp_path):
     assert (config_mod.load(tmp_path).ui_theme, config_mod.load(tmp_path).ui_language) == ("light", "en")
     assert 'data-theme="dark"' in client.post("/appearance", data={"csrf": token, "theme": "dark"}).text
     assert "Unbekannte Auswahl" in client.post("/appearance", data={"csrf": token, "theme": "pink"}).text
+
+
+def test_the_colours_meet_wcag_aa_in_both_schemes():
+    """#105: status text ≥ 4.5:1 on card and page, the traffic light's grey ≥ 3:1, and the counter badge."""
+    import re
+    from pathlib import Path
+
+    css = (Path(__file__).parent.parent / "src" / "brokersync" / "web" / "static" / "style.css").read_text()
+    light = dict(re.findall(r"--([a-z-]+): (#[0-9a-f]{6})", css.split("@media")[0]))
+    dark = dict(re.findall(r"--([a-z-]+): (#[0-9a-f]{6})", css.split(':root[data-theme="dark"]')[1].split("}")[0]))
+
+    def lum(h):
+        c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+    def ratio(a, b):
+        hi, lo = sorted((lum(a), lum(b)), reverse=True)
+        return (hi + 0.05) / (lo + 0.05)
+
+    for scheme in (light, dark):
+        for bg in (scheme["bg"], scheme["card"]):
+            for text in ("ok", "warn", "error", "muted", "text"):
+                assert ratio(scheme[text], bg) >= 4.5, (text, scheme[text], bg)
+            assert ratio(scheme["grey"], bg) >= 3, (scheme["grey"], bg)
+        assert ratio(scheme["on-primary"], scheme["warn"]) >= 4.5  # the counter of *Unbekannt*
+
+
+def test_english_pages_use_english_formats():
+    """#115: with the language English, days are ISO and amounts 1,234.56; German stays as it was."""
+    from brokersync.web import views
+
+    assert views.local_day("2026-03-03T10:00:00Z", "en") == "2026-03-03"
+    assert views.local_time("2026-03-03T10:00:00Z", lang="en") == "2026-03-03 11:00"
+    assert views.money("1234.5", "en") == "1,234.50" and views.money("1234.5") == "1.234,50"
+    assert views.local_day("2026-03-03T10:00:00Z") == "03.03.2026"

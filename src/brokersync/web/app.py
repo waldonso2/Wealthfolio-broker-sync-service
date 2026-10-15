@@ -21,6 +21,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from jinja2 import pass_context
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -29,7 +30,7 @@ from ..adapters import ADAPTERS, BrokerAdapter
 from ..notify import Notifier
 from ..state import State
 from ..sync import UNMATCHED_SECURITIES, Syncer
-from ..vault import Vault
+from ..vault import Vault, password_tag
 from ..wealthfolio import WealthfolioClient
 from . import i18n, views
 from .context import PUBLIC, SETTINGS_PAGES, STATUS_LABEL, AppContext, accounts_of, csrf_guard
@@ -88,9 +89,12 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         # code (#89), so it isn't in PUBLIC.
         if path in PUBLIC or path == "/setup-password" or path.startswith("/static/"):
             return await call_next(request)
-        if not vault.load().get("ui_password_hash"):
+        stored = vault.load().get("ui_password_hash")
+        if not stored:
             return RedirectResponse("/setup-password", 303)
-        if not request.session.get("user"):
+        if not request.session.get("user") or request.session.get("pw") != password_tag(stored):
+            # Also a cookie of an earlier password: after brokersync-reset-password it signs in nobody.
+            request.session.clear()
             return RedirectResponse("/login", 303)
         return await call_next(request)
 
@@ -140,10 +144,12 @@ def _error_pages(app: FastAPI, ctx: AppContext) -> None:
 def _templates() -> Jinja2Templates:
     templates = Jinja2Templates(directory=HERE / "templates")
     # One format for every date and time, German time (#73).
-    templates.env.filters["local"] = views.local_time
-    templates.env.filters["day"] = views.local_day
+    # In the page's language (#115): German or English formats.
+    templates.env.filters["local"] = pass_context(lambda c, v, seconds=False: views.local_time(v, seconds,
+                                                                                            c.get("lang", "de")))
+    templates.env.filters["day"] = pass_context(lambda c, v: views.local_day(v, c.get("lang", "de")))
     templates.env.filters["utc"] = views.utc_iso
-    templates.env.filters["money"] = views.money
+    templates.env.filters["money"] = pass_context(lambda c, v: views.money(v, c.get("lang", "de")))
     # The UI's texts in the page's language (#87): ``{{ _("Speichern") }}``, see ``web/i18n.py``.
     templates.env.globals["_"] = i18n.template_gettext
     templates.env.globals["describe_unknown"] = views.describe_unknown

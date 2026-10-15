@@ -569,6 +569,22 @@ EN: dict[str, str] = {
     "Unerwarteter Fehler (Fehler-ID {id}). Die Einzelheiten stehen im Log des Dienstes.":
         "Unexpected error (error id {id}). The details are in the service's log.",
     "Zur Übersicht": "To the overview",
+    "Der Dienst meldet sich bei {label} an; je nach Broker bestätigst du das in der App oder gibst eine TAN ein.":
+        "The service signs in at {label}; depending on the broker you confirm it in the app or enter a TAN.",
+    "Anmeldung starten": "Start sign-in",
+    "Gerade läuft ein Abruf - bitte danach anmelden.": "A fetch is running - please sign in afterwards.",
+    "Details auf ntfy.sh: Dort liest jeder mit, der das Thema kennt - bitte ausdrücklich bestätigen.":
+        "Details on ntfy.sh: anyone who knows the topic reads along there - please confirm explicitly.",
+    "Gespeichertes Token entfernen": "Remove the saved token",
+    "Mir ist klar: Auf ntfy.sh liest jeder die Details mit, der das Thema kennt":
+        "I understand: on ntfy.sh anyone who knows the topic reads the details",
+    "Echte Nachrichten verlinken nur auf diese Oberfläche, nie auf eine fremde Seite.":
+        "Real messages only link to this UI, never to another site.",
+    "Mir ist klar: Danach schützt nur noch der Schlüssel des Containers die Daten - "
+    "ein Backup des Containers öffnet sie.":
+        "I understand: afterwards only the container's key protects the data - a backup of the container opens it.",
+    "Zum Entfernen bitte bestätigen, dass die Daten danach ohne Passphrase gespeichert sind.":
+        "To remove it, please confirm that the data are then stored without a passphrase.",
     "Zu viele Fehlversuche. Bitte in {n} Minuten erneut versuchen.":
         "Too many failed attempts. Please try again in {n} minutes.",
     "Falsches Passwort.": "Wrong password.",

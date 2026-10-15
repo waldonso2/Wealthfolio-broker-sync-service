@@ -58,7 +58,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from ..model import BrokerAccount, CashBalance, Kind, Position, Transaction
+from ..model import CashBalance, Kind, Position, Transaction
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
 
 log = logging.getLogger(__name__)
@@ -627,10 +627,6 @@ class ScalableAdapter(BrokerAdapter):
         return adapter
 
     # ── data ────────────────────────────────────────────────────────────────
-    def get_accounts(self) -> list[BrokerAccount]:
-        pid = (self.credentials.get("portfolio_id") or "").strip()
-        return [BrokerAccount(pid or "scalable", "Scalable Capital", "EUR")]
-
     def get_transactions(self, since: datetime | None) -> list[Transaction]:
         items: list[dict] = []
         cursor = None

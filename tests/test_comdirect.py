@@ -1,6 +1,7 @@
 """comdirect: login with session TAN and the lock-out guard, against a fake API."""
 
 import json
+from datetime import date
 from decimal import Decimal as D
 
 import httpx
@@ -9,6 +10,7 @@ import pytest
 from brokersync.adapters import AdapterError, AuthRequired
 from brokersync.adapters import comdirect as cd
 from brokersync.adapters.comdirect import ComdirectAdapter
+from brokersync.model import Kind
 
 CREDS = {"username": "12345678", "pin": "TEST-PIN", "client_id": "test-client", "client_secret": "test-secret"}
 
@@ -93,7 +95,7 @@ def test_web_login_with_photo_tan_push(api):
 
 
 def test_scheduled_run_asks_on_the_phone_and_waits(api):
-    s = ComdirectAdapter(CREDS)
+    s = ComdirectAdapter(CREDS, {"tan_type": "P_TAN_PUSH"})  # known from the web login
     notes: list[str] = []
     s.on_user_action = notes.append
     with pytest.raises(AuthRequired, match="nicht rechtzeitig"):
@@ -205,7 +207,7 @@ def test_trade_settlement_and_unsettled_trades():
 def test_a_push_without_status_link_is_left_to_the_web_ui(monkeypatch):
     fake = FakeComdirect(link=False)
     monkeypatch.setattr(ComdirectAdapter, "transport", httpx.MockTransport(fake.handle))
-    s = ComdirectAdapter(CREDS)
+    s = ComdirectAdapter(CREDS, {"tan_type": "P_TAN_PUSH"})
     s.on_user_action = lambda m: None
     with pytest.raises(AuthRequired, match="Weboberfläche"):
         s.login()
@@ -262,3 +264,28 @@ def test_the_token_never_goes_to_a_status_link_of_another_host(api, monkeypatch)
     a._pending["link"] = "https://api.comdirect.de/api/session/v1/authentications/CH-1"
     api.approved = True
     assert a._wait_push(0)
+
+
+def test_a_scheduled_run_with_an_unknown_tan_type_opens_no_challenge(api):
+    """Credentials saved anew (session empty): only the web UI may ask comdirect for a TAN - it could be one
+    to type in, and every unanswered challenge counts towards comdirect's five."""
+    s = ComdirectAdapter(CREDS)
+    s.on_user_action = lambda m: None
+    with pytest.raises(AuthRequired, match="Weboberfläche"):
+        s.login()
+    assert api.challenges == 0
+
+
+def test_a_trade_without_giro_booking_is_reported_while_still_fetched():
+    """It must turn UNKNOWN before it drops out of the sync's window (overlap of 7 days)."""
+    from brokersync.sync import OVERLAP
+
+    assert cd.UNSETTLED_DAYS < OVERLAP.days
+
+
+def test_a_reversed_dividend_is_reported():
+    booking = {"reference": "R-STORNO", "bookingStatus": "BOOKED", "bookingDate": "2026-03-02",
+               "transactionType": {"key": "ZINSEN_DIVIDENDEN"}, "amount": {"value": "-12.34", "unit": "EUR"},
+               "remittanceInfo": "STORNO DIVIDENDE TEST AG ISIN DE0000000001"}
+    [tx] = cd.to_transactions([booking], [], {}, today=date(2026, 3, 5))
+    assert tx.kind == Kind.UNKNOWN and tx.raw_type == "DIVIDENDE_STORNO" and tx.id == "acc-R-STORNO"

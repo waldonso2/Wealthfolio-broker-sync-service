@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.20.0
+
+Lock-out safety, concurrency and robustness, from a full audit of 15.10.2026 and the backlog (waldonso2/wealthfolio-importer-addon#98, #99, #101, #105, #108, #110, #113, #115 and the audit list):
+
+- **Bank lock-out (comdirect, FinTS):**
+  - A wrong TAN in the web UI counts at once. Until now the count was lost when the login was started again.
+  - The web login and the daily run can no longer overwrite each other's TAN counters.
+  - A scheduled comdirect run asks for a TAN only when the web login found a push TAN, never for an unknown type.
+  - Opening the login page asks the broker nothing; *Anmeldung starten* does. An open login is shown again instead of replaced, and closes after 15 minutes.
+  - A PIN the bank rejects while reading depot transactions now stops further attempts like everywhere else.
+- **Bookings:**
+  - comdirect: a trade whose giro booking never comes is listed as unknown while it is still fetched. Until now it could silently drop out after a week.
+  - comdirect: a reversed dividend is listed as unknown.
+  - Deutsche Bank: a CSV the runs can't read is refused at the upload. Until now it broke every later run of the broker. German dates (`15.03.2024`) are read too.
+  - The start date begins at midnight German time, not UTC.
+  - Trade Republic amounts given as text keep their digits.
+- **Safety and concurrency:**
+  - After `brokersync-reset-password` a cookie of the old password signs in nobody, also while the web UI keeps running.
+  - The web server keeps no access log, because a link can carry the setup code.
+  - Switching to *Sicher* during a run also ends that run's login.
+  - Each request thread has its own database connection.
+  - Files are written through a temp file of their own; settings are saved under the same lock as the re-encryption.
+  - The re-encryption makes its staged files durable before the journal.
+  - Two quick clicks on *Jetzt abrufen* start one run.
+  - A broker form is saved only when all of it is valid.
+  - The Wealthfolio password is length-checked.
+- **Notifications (#98):** a new ntfy topic has 128 bits and is saved at once, so it stays the same while you subscribe. A saved token can be removed. Details on ntfy.sh need an explicit confirmation.
+- **Look (#105, #115, #110):**
+  - Colours meet WCAG AA in light and dark (warn, OK, muted, the grey light, error in dark).
+  - In English, dates are `2026-03-15` and amounts `1,234.56`.
+  - *Passphrase entfernen* needs a confirmation.
+- **Clean-up:** unused code removed (`get_accounts` of every adapter, `BrokerAccount`, `crypto.write_keyring`); `state.rekey` can no longer re-encrypt `state.db` in place.
+
 ## 0.19.0
 
 Supply chain and hardening (waldonso2/wealthfolio-importer-addon#88, #97, #107), from the audits of 13.10.2026:

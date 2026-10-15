@@ -34,28 +34,36 @@ def _parse(value) -> datetime | date | None:
         return None
 
 
+# The day's format per UI language (#115): German, or ISO for English (unambiguous, unlike 03/04).
+DAY = {"de": "%d.%m.%Y", "en": "%Y-%m-%d"}
+
+
+def _day_format(lang: str) -> str:
+    return DAY.get(lang, DAY["de"])
+
+
 def _local(moment: datetime) -> datetime:
     return (moment if moment.tzinfo else moment.replace(tzinfo=UTC)).astimezone(TZ)
 
 
-def local_time(value, seconds: bool = False) -> str:
-    """A moment in German time: 03.03.2026 11:00 (with ``seconds``: 11:00:01)."""
+def local_time(value, seconds: bool = False, lang: str = "de") -> str:
+    """A moment in German time: 03.03.2026 11:00 (with ``seconds``: 11:00:01; English: 2026-03-03 11:00)."""
     parsed = _parse(value)
     if parsed is None:
         return str(value or "")
     if not isinstance(parsed, datetime):
-        return parsed.strftime("%d.%m.%Y")
-    return _local(parsed).strftime("%d.%m.%Y %H:%M:%S" if seconds else "%d.%m.%Y %H:%M")
+        return parsed.strftime(_day_format(lang))
+    return _local(parsed).strftime(_day_format(lang) + (" %H:%M:%S" if seconds else " %H:%M"))
 
 
-def local_day(value) -> str:
-    """The day of a date or moment in German time: 03.03.2026."""
+def local_day(value, lang: str = "de") -> str:
+    """The day of a date or moment in German time: 03.03.2026 (English: 2026-03-03)."""
     parsed = _parse(value)
     if parsed is None:
         return str(value or "")
     if isinstance(parsed, datetime):
         parsed = _local(parsed)
-    return parsed.strftime("%d.%m.%Y")
+    return parsed.strftime(_day_format(lang))
 
 
 def utc_iso(value) -> str:
@@ -66,15 +74,17 @@ def utc_iso(value) -> str:
     return parsed.isoformat() if parsed else ""
 
 
-def money(value) -> str:
-    """German number format: 1.234,56 - anything that isn't a finite number is shown as it is (#106)."""
+def money(value, lang: str = "de") -> str:
+    """German number format: 1.234,56 (English: 1,234.56) - anything that isn't a finite number is shown as
+    it is (#106)."""
     try:
         number = Decimal(str(value))
     except InvalidOperation:
         return str(value)
     if not number.is_finite():
         return str(value)
-    return f"{number:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    english = f"{number:,.2f}"
+    return english if lang == "en" else english.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _amount(text) -> str:

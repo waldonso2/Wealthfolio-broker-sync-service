@@ -52,7 +52,7 @@ def security_mode(request: Request, ctx: Ctx, mode: str = Form("")):
 
 @router.post("/security/passphrase")
 def security_passphrase(request: Request, ctx: Ctx, password: str = Form(...), action: str = Form(...),
-                        new: str = Form(""), new2: str = Form("")):
+                        new: str = Form(""), new2: str = Form(""), confirm_remove: str = Form("")):
     client = request.client.host if request.client else "?"
     with ctx.throttle.attempt(client) as a:
         if a.refused:
@@ -62,6 +62,9 @@ def security_passphrase(request: Request, ctx: Ctx, password: str = Form(...), a
     if not a.ok:
         return redirect(request, "/security", tr(request, "Das Passwort der Oberfläche stimmt nicht."), "error")
     if action == "remove":
+        if not confirm_remove:  # a second, deliberate step (#110): the data are then no longer behind it
+            return redirect(request, "/security", tr(request, "Zum Entfernen bitte bestätigen, dass die Daten "
+                                                              "danach ohne Passphrase gespeichert sind."), "error")
         target = None
     else:
         if new != new2:

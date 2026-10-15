@@ -3,10 +3,14 @@ between). With ``run`` the fetch follows the login; "Alle abrufen" chains the lo
 
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from ... import redact
 from ...adapters import AdapterError, AuthRequired, BrokerAdapter
+from ...sync import AlreadyRunning, run_lock
 from ..context import AppContext, Ctx, redirect, tr
 from .overview import start_run
 
@@ -23,40 +27,82 @@ def _page(request: Request, ctx: AppContext, key: str, challenge, run: bool) -> 
                       run=run, position=position, safe=ctx.cfg().safe_mode)
 
 
+# An open login waits this long for its TAN or confirmation; then it is closed (and a typed PIN dropped).
+PENDING_SECONDS = 15 * 60
+
+
 @router.get("/brokers/{key}/login", response_class=HTMLResponse)
-def broker_login_start(request: Request, ctx: Ctx, key: str):
-    adapters = ctx.adapters
-    if key not in adapters:
+def broker_login_page(request: Request, ctx: Ctx, key: str):
+    """Shows an open login again, or offers to start one - a GET never contacts the broker (#99): reloading,
+    going back or a browser's prefetch must not ask for another TAN (comdirect locks after five)."""
+    if key not in ctx.adapters:
         return redirect(request, "/brokers", tr(request, "Unbekannter Broker."), "error")
-    # In the safe mode a login is only good for the fetch that follows it.
     run = request.query_params.get("run") == "1" or ctx.cfg().safe_mode
+    adapter = _open_login(ctx, key)
+    if adapter is not None:
+        return _page(request, ctx, key, adapter.ui_challenge, run)
+    return ctx.render(request, "broker_login_start.html", key=key, adapter=ctx.adapters[key], run=run)
+
+
+@router.post("/brokers/{key}/login/start")
+def broker_login_start(request: Request, ctx: Ctx, key: str, run: str = Form("")):
+    if key not in ctx.adapters:
+        return redirect(request, "/brokers", tr(request, "Unbekannter Broker."), "error")
+    return start_login(request, ctx, key, run == "1" or ctx.cfg().safe_mode)
+
+
+def start_login(request: Request, ctx: AppContext, key: str, run: bool):
+    """Log in at the broker - only from a POST (the button, *Jetzt abrufen*, the next of *Alle abrufen*)."""
     old = ctx.pending.pop(key, None)
     if old is not None:
-        old.close()
+        ctx.finish_login(key, old)  # its counters (wrong TANs) are stored before the new login reads them
     stored = ctx.vault.broker(key)
-    adapter = adapters[key](stored.get("credentials", {}), stored.get("session"))
+    adapter = ctx.adapters[key](stored.get("credentials", {}), stored.get("session"))
     try:
-        adapter.login()
-    except AuthRequired as e:
+        # Under the sync lock: a run (the timer) uses the stored session, the two must not race for the
+        # lock-out counters. Only the call to the broker - the run that may follow takes the lock itself.
+        with run_lock(ctx.data_dir):
+            try:
+                adapter.login()
+                outcome: AuthRequired | AdapterError | None = None
+            except (AuthRequired, AdapterError) as e:
+                outcome = e
+            ctx.vault.store_session(key, adapter)
+    except AlreadyRunning:
+        return redirect(request, "/", tr(request, "Gerade läuft ein Abruf - bitte danach anmelden."), "warn")
+    if isinstance(outcome, AuthRequired):
+        adapter.ui_challenge, adapter.ui_since = outcome.challenge, time.monotonic()
         ctx.pending[key] = adapter
-        ctx.vault.set_broker_session(key, adapter.session_state())
-        return _page(request, ctx, key, e.challenge, run)
-    except AdapterError as e:
-        ctx.finish_login(key, adapter)  # keeps e.g. a rejected PIN, so nothing retries it
-        return _failed(request, ctx, key, e, run)
+        return _page(request, ctx, key, outcome.challenge, run)
+    if isinstance(outcome, AdapterError):
+        ctx.finish_login(key, adapter)  # closed, then stored: e.g. a rejected PIN, so nothing retries it
+        return _failed(request, ctx, key, outcome, run)
     return _logged_in(request, ctx, key, adapter, run, confirmed=False)
+
+
+def _open_login(ctx: AppContext, key: str):
+    """The login waiting for the user, unless it waited too long (then it is closed)."""
+    adapter = ctx.pending.get(key)
+    if adapter is not None and time.monotonic() - adapter.ui_since > PENDING_SECONDS:
+        ctx.pending.pop(key, None)
+        ctx.pins.pop(key, None)
+        ctx.finish_login(key, adapter)
+        return None
+    return adapter
 
 
 @router.post("/brokers/{key}/login")
 def broker_login_finish(request: Request, ctx: Ctx, key: str, code: str = Form(""), run: str = Form("")):
     want_run = run == "1"
-    adapter = ctx.pending.get(key)
+    adapter = _open_login(ctx, key)
     if adapter is None:
         return redirect(request, f"/brokers/{key}/login{'?run=1' if want_run else ''}",
                         tr(request, "Die Anmeldung ist abgelaufen, bitte neu starten."), "warn")
     try:
         adapter.complete_login(code)
     except AuthRequired as e:
+        adapter.ui_challenge = e.challenge
+        ctx.vault.store_session(key, adapter)  # a wrong TAN is counted at once, not only at the end
         return _page(request, ctx, key, e.challenge, want_run)
     except AdapterError as e:
         ctx.pending.pop(key, None)
@@ -114,7 +160,9 @@ def _next(request: Request, ctx: AppContext, key: str, dropped: bool = False, no
             queue["run"].remove(key)
         request.session["run_queue"] = queue
         if queue["todo"]:
-            return redirect(request, f"/brokers/{queue['todo'][0]}/login?run=1", note or None, level)
+            if note:  # shown on the next broker's login page
+                request.session["flash"] = {"text": redact.redact(note), "level": level}
+            return start_login(request, ctx, queue["todo"][0], True)
         request.session.pop("run_queue", None)
         if not queue["run"]:
             return redirect(request, "/", note or tr(request, "Nichts abzurufen."), level)

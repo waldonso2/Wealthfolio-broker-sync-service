@@ -64,9 +64,8 @@ class Vault:
         self._save(data)
         return data
 
-    def _save(self, data: dict, key: bytes | None = None) -> None:
-        key = key or crypto.data_key(self.dir)
-        crypto.write_atomic(self.file, crypto.seal(key, json.dumps(data).encode(), PURPOSE))
+    def _save(self, data: dict) -> None:
+        crypto.write_atomic(self.file, crypto.seal(crypto.data_key(self.dir), json.dumps(data).encode(), PURPOSE))
 
     def update(self, change: Callable[[dict], None]) -> dict:
         """Read, change and write back under the lock."""
@@ -90,6 +89,30 @@ class Vault:
 
     def set_broker_session(self, key: str, session: dict) -> None:
         self.update(lambda d: d.setdefault("brokers", {}).setdefault(key, {}).__setitem__("session", session))
+
+    def store_session(self, key: str, adapter) -> None:
+        """Write the adapter's session back. If someone else wrote one since the adapter read it (the web
+        login and the timer's run at the same time), the higher lock-out counters win - a bank must never
+        see more TAN requests than it allows. Credentials saved anew meanwhile (session emptied): theirs
+        wins, the old login's session is dropped."""
+        session = adapter.session_state()
+
+        def change(d: dict) -> None:
+            b = d.setdefault("brokers", {}).setdefault(key, {})
+            stored = b.get("session") or {}
+            new = dict(session)
+            if stored != adapter.stored_session:
+                if not stored:
+                    return
+                for k in ("open_challenges", "wrong_tans"):
+                    if k in stored or k in new:
+                        new[k] = max(int(stored.get(k) or 0), int(new.get(k) or 0))
+                if stored.get("pin_rejected"):
+                    new["pin_rejected"] = True
+            b["session"] = new
+            adapter.stored_session = dict(new)
+
+        self.update(change)
 
 
 def _register(data: dict) -> None:
@@ -116,6 +139,13 @@ def _hasher():
 
 def hash_password(password: str) -> str:
     return _hasher().hash(password)
+
+
+def password_tag(stored: str | None) -> str:
+    """Goes into the session at login: a session of an earlier password (before a reset) is no longer valid."""
+    import hashlib
+
+    return hashlib.sha256((stored or "").encode()).hexdigest()[:16]
 
 
 def verify_password(password: str, stored: str | None) -> bool:

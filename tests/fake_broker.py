@@ -13,7 +13,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from brokersync.adapters.base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
-from brokersync.model import BrokerAccount, CashBalance, Kind, Position, Transaction
+from brokersync.model import CashBalance, Kind, Position, Transaction
 
 CODE = "000000"
 ISIN = "IE00B4L5Y983"
@@ -66,15 +66,13 @@ class FakeBroker(BrokerAdapter):
 
     def complete_login(self, code: str) -> None:
         if code.strip() != CODE:
+            self.session["wrong_tans"] = self.session.get("wrong_tans", 0) + 1  # like comdirect's guard
             raise AuthRequired(Challenge("code", f"Falscher Code. Gib {CODE} ein."))
         self.session["confirmed"] = True
         self.session["anchor"] = datetime.now(UTC).isoformat()
 
     def _anchor(self) -> datetime:
         return datetime.fromisoformat(self.session["anchor"])
-
-    def get_accounts(self) -> list[BrokerAccount]:
-        return [BrokerAccount("fake-1", "Testdepot", "EUR")]
 
     def get_positions(self) -> list[Position]:
         return [Position(ISIN, NAME, Decimal("5"), "EUR", Decimal("510"))]

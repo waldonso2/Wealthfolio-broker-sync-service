@@ -12,10 +12,13 @@
     <div class="muted">{{ _("Auf ntfy.sh kann jeder ein Thema lesen, der den Namen kennt – der vorgeschlagene Name ist deshalb zufällig. Leer = keine Benachrichtigungen.") }}</div>
     <label for="token">{{ _("Zugangstoken (nur bei eigenem ntfy-Server mit Anmeldung)") }}</label>
     <input type="password" id="token" name="token" autocomplete="off" placeholder="{{ _('•••••••• (gespeichert)') if has_token else '' }}">
+    {% if has_token %}<label class="check"><input type="checkbox" name="forget_token" value="1"> {{ _("Gespeichertes Token entfernen") }}</label>{% endif %}
     <label for="public">{{ _("Adresse dieser Oberfläche (für Links in den Nachrichten)") }}</label>
     <input type="url" id="public" name="public_url" value="{{ cfg.public_url }}" placeholder="https://192.168.1.51:8443">
     <label class="check"><input type="checkbox" name="details" value="1" {{ 'checked' if cfg.ntfy_details }}> {{ _("Details in den Nachrichten (Beträge, Bestände, Fehlertexte)") }}</label>
     <div class="muted">{{ _("Aus: Die Nachricht sagt nur, was passiert ist, und verlinkt auf die Oberfläche. Auf einem öffentlichen ntfy-Server empfohlen.") }}</div>
+    <label class="check"><input type="checkbox" name="public_ok" value="1" {{ 'checked' if cfg.ntfy_details }}> {{ _("Mir ist klar: Auf ntfy.sh liest jeder die Details mit, der das Thema kennt") }}</label>
+    <div class="muted">{{ _("Echte Nachrichten verlinken nur auf diese Oberfläche, nie auf eine fremde Seite.") }}</div>
     <div class="actions">
       <button>{{ _("Speichern") }}</button>
       <button class="secondary" name="test" value="1">{{ _("Speichern und Testnachricht senden") }}</button>

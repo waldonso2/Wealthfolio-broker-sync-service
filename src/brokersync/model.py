@@ -39,13 +39,6 @@ SECURITY_KINDS = {Kind.BUY, Kind.SELL, Kind.DIVIDEND}
 
 
 @dataclass(frozen=True)
-class BrokerAccount:
-    id: str
-    name: str
-    currency: str
-
-
-@dataclass(frozen=True)
 class Position:
     isin: str
     name: str

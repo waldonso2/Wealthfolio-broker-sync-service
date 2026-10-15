@@ -83,22 +83,22 @@ def test_fetch_now_starts_with_the_login_and_logs_out_afterwards(tmp_path):
     page = client.get("/").text
     assert "Sicherer Modus" in page
     r = client.post("/run", data={"csrf": token, "broker": "fake"})
-    assert r.url.path == "/brokers/fake/login" and r.url.query == b"run=1"
+    # The POST started the login itself (#99).
     assert 'name="run" value="1"' in r.text and "Danach ruft der Dienst gleich ab" in r.text
     r = client.post("/brokers/fake/login", data={"csrf": token, "code": CODE, "run": "1"})
     assert "Abruf beendet" in r.text and len(wf.activities) == 7
     assert Vault(tmp_path).broker("fake")["session"] == {}
     # The next fetch needs the login again.
     r = client.post("/run", data={"csrf": token, "broker": "fake"})
-    assert r.url.path == "/brokers/fake/login" and f"Gib den Bestätigungscode {CODE} ein" in r.text
+    assert f"Gib den Bestätigungscode {CODE} ein" in r.text
 
 
 def test_fetch_all_chains_the_logins_and_a_broker_can_be_skipped(tmp_path):
     client, wf, token = make(tmp_path, adapters={"fake": FakeBroker, "fake2": SecondBroker})
     r = client.post("/run", data={"csrf": token})
-    assert r.url.path == "/brokers/fake/login" and "Anmeldung 1 von 2" in r.text and "überspringen" in r.text
+    assert "Anmeldung 1 von 2" in r.text and "überspringen" in r.text
     r = client.post("/brokers/fake/login", data={"csrf": token, "code": CODE, "run": "1"})
-    assert r.url.path == "/brokers/fake2/login" and "Anmeldung 2 von 2" in r.text
+    assert "Anmeldung 2 von 2" in r.text and "Zweitbroker" in r.text
     assert wf.activities == []  # nothing fetched before the last login
     r = client.post("/brokers/fake2/login/skip", data={"csrf": token})
     assert "Abruf beendet" in r.text and len(wf.activities) == 7
@@ -144,7 +144,7 @@ def test_fints_pin_typed_in_the_ui_is_used_for_the_run_and_never_stored(tmp_path
     Vault(tmp_path).set_broker_credentials("dkb", {**CREDS, "pin": ""})
     # Auto mode, but no PIN stored: "Jetzt abrufen" starts with the login too.
     r = client.post("/run", data={"csrf": token, "broker": "dkb"})
-    assert r.url.path == "/brokers/dkb/login" and 'type="password" id="code"' in r.text
+    assert 'type="password" id="code"' in r.text
     r = client.post("/brokers/dkb/login", data={"csrf": token, "code": PIN, "run": "1"})
     assert "Ich habe in der App bestätigt" in r.text
     r = client.post("/brokers/dkb/login", data={"csrf": token, "code": "", "run": "1"})

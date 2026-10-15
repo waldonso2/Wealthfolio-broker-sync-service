@@ -189,8 +189,13 @@ class Gate:
         self.locked_app = _locked_app(self, templates_dir, static_dir)
 
     def reset(self) -> None:
-        """Rebuild the UI on the next request (after the keys changed)."""
-        self.inner = None
+        """Rebuild the UI on the next request (after the keys changed). The old app's database connections
+        are closed: they may still point at the file the re-encryption replaced."""
+        old, self.inner = self.inner, None
+        if old is not None:
+            ctx = old.state.ctx
+            for state in (ctx.state, ctx.syncer.state):
+                state.close()
 
     def app(self):
         if crypto.is_locked(self.data_dir):

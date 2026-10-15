@@ -181,6 +181,7 @@ def _stage_data_tier(d: Path, new_data: bytes, new_host: bytes, ring: dict) -> N
 
 
 def _write_journal(d: Path, kind: str, check: bytes) -> None:
+    crypto.fsync_dir(d)  # the staged files' renames are on disk before the journal can say they exist
     crypto.write_atomic(d / JOURNAL, json.dumps({"kind": kind, "check": check.hex()}).encode())
 
 
