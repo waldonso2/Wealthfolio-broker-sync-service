@@ -229,11 +229,11 @@ def test_two_config_changes_at_once_both_stay(tmp_path):
             time.sleep(0.05)  # both inside read-change-write at once without the lock
         config_mod.update(tmp_path, apply)
 
-    threads = [threading.Thread(target=change, args=("ui_theme", "dark")),
+    threads = [threading.Thread(target=change, args=("sync_mode", "safe")),
                threading.Thread(target=change, args=("ui_language", "en"))]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
     c = config_mod.load(tmp_path)
-    assert (c.ui_theme, c.ui_language) == ("dark", "en")
+    assert (c.sync_mode, c.ui_language) == ("safe", "en")

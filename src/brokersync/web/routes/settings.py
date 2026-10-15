@@ -215,23 +215,22 @@ def logos_save(request: Request, ctx: Ctx, enabled: str = Form(""), token: str =
 
 
 # ── appearance ─────────────────────────────────────────────────────────────
-THEMES = {"system": N_("Wie das Gerät"), "light": N_("Hell"), "dark": N_("Dunkel")}
 # Each language under its own name, in every language.
 LANGUAGES = {"de": "Deutsch", "en": "English"}
 
 
 @router.get("/appearance", response_class=HTMLResponse)
 def appearance_page(request: Request, ctx: Ctx):
-    return ctx.render(request, "appearance.html", cfg=ctx.cfg(), themes=THEMES, languages=LANGUAGES)
+    return ctx.render(request, "appearance.html", cfg=ctx.cfg(), languages=LANGUAGES)
 
 
 @router.post("/appearance")
-def appearance_save(request: Request, ctx: Ctx, theme: str = Form("system"), language: str = Form("de")):
-    if theme not in THEMES or language not in LANGUAGES:
+def appearance_save(request: Request, ctx: Ctx, language: str = Form("de")):
+    if language not in LANGUAGES:
         return redirect(request, "/appearance", tr(request, "Unbekannte Auswahl."), "error")
 
     def change(c) -> None:
-        c.ui_theme, c.ui_language = theme, language
+        c.ui_language = language
 
     ctx.update(change)
     return redirect(request, "/appearance", tr(request, "Gespeichert."))  # already in the language just chosen

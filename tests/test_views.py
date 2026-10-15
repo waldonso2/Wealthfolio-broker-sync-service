@@ -112,18 +112,39 @@ def test_overview_card_has_two_buttons_and_the_reasons_link_to_their_page(tmp_pa
     assert ">Unbekannte<" not in card and ">Prüfen<" not in card
 
 
-def test_colour_scheme_and_language_are_chosen_on_the_page_appearance(tmp_path):
+def test_the_language_is_chosen_on_the_page_appearance_light_or_dark_in_the_header(tmp_path):
     from brokersync import config as config_mod
 
     from .test_safe_mode import make as make_safe
 
     client, _, token = make_safe(tmp_path, safe=False)
-    assert "data-theme" not in client.get("/").text  # default: as the device
-    r = client.post("/appearance", data={"csrf": token, "theme": "light", "language": "en"})
-    assert "Saved." in r.text and '<html lang="en" data-theme="light">' in r.text  # in the new language
-    assert (config_mod.load(tmp_path).ui_theme, config_mod.load(tmp_path).ui_language) == ("light", "en")
-    assert 'data-theme="dark"' in client.post("/appearance", data={"csrf": token, "theme": "dark"}).text
-    assert "Unbekannte Auswahl" in client.post("/appearance", data={"csrf": token, "theme": "pink"}).text
+    page = client.get("/").text
+    # #123: every page starts in the device's colours; the header's switch turns them until a reload, CSS only.
+    assert "data-theme" not in page and "<script" not in page
+    assert 'id="theme-toggle"' in page and 'autocomplete="off"' in page and 'for="theme-toggle"' in page
+    assert ">Hell/Dunkel umschalten<" in page  # named for screen readers
+    assert 'name="theme"' not in client.get("/appearance").text
+    r = client.post("/appearance", data={"csrf": token, "language": "en"})
+    assert "Saved." in r.text and '<html lang="en">' in r.text and ">Switch light/dark<" in r.text
+    assert config_mod.load(tmp_path).ui_language == "en"
+    assert "Unknown choice" in client.post("/appearance", data={"csrf": token, "language": "fr"}).text
+
+
+def test_a_saved_fixed_colour_scheme_of_before_is_ignored(tmp_path):
+    import json
+    from dataclasses import asdict
+
+    from brokersync import config as config_mod
+    from brokersync import crypto
+
+    config_mod.save(tmp_path, config_mod.Config(ui_language="en"))
+    data = {**asdict(config_mod.Config(ui_language="en")), "ui_theme": "dark"}  # as stored before #123
+    for k in config_mod.NOTIFY_FIELDS:
+        data.pop(k)
+    crypto.write_atomic(tmp_path / "config.enc",
+                        crypto.seal(crypto.data_key(tmp_path), json.dumps(data).encode(), "config"))
+    c = config_mod.load(tmp_path)
+    assert c.ui_language == "en" and not hasattr(c, "ui_theme")
 
 
 def test_the_colours_meet_wcag_aa_in_both_schemes():
@@ -133,7 +154,8 @@ def test_the_colours_meet_wcag_aa_in_both_schemes():
 
     css = (Path(__file__).parent.parent / "src" / "brokersync" / "web" / "static" / "style.css").read_text()
     light = dict(re.findall(r"--([a-z-]+): (#[0-9a-f]{6})", css.split("@media")[0]))
-    dark = dict(re.findall(r"--([a-z-]+): (#[0-9a-f]{6})", css.split(':root[data-theme="dark"]')[1].split("}")[0]))
+    switched = css.split(":root:has(#theme-toggle:checked) {")[1]
+    dark = dict(re.findall(r"--([a-z-]+): (#[0-9a-f]{6})", switched.split("}")[0]))
 
     def lum(h):
         c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]

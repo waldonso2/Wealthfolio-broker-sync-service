@@ -93,14 +93,12 @@ EN: dict[str, str] = {
     "Abrufmodus, Verschlüsselung, Master-Passphrase, Zertifikat":
         "Fetch mode, encryption, master passphrase, certificate",
     "Darstellung": "Appearance",
-    "Sprache, hell oder dunkel": "Language, light or dark",
     "Duplikate": "Duplicates",
     "Doppelte Buchungen finden und entfernen": "Find and remove duplicate bookings",
-    "Farbschema": "Colour scheme",
     "Sprache": "Language",
-    "Wie das Gerät": "Like the device",
-    "Hell": "Light",
-    "Dunkel": "Dark",
+    "Hell/Dunkel umschalten": "Switch light/dark",
+    "Hell oder dunkel: wie das Gerät. Das Symbol oben schaltet bis zum Neuladen um.":
+        "Light or dark: as the device. The symbol at the top switches until the page is reloaded.",
     # ── common words ──
     "Speichern": "Save",
     "Gespeichert.": "Saved.",

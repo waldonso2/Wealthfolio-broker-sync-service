@@ -14,20 +14,23 @@
   --serif: "Merriweather", ui-serif, Georgia, serif;
   color-scheme: light;
 }
-/* Colour scheme (page Darstellung): the device's setting, or always light / always dark (data-theme). */
+/* Colour scheme: the device's, turned the other way while the header's switch is on (#123) - CSS only, no
+   script; after a reload the switch is off again, so every visit starts in the device's colours. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not(:has(#theme-toggle:checked)) {
     --bg: #100f0f; --card: #1c1b1a; --line: #282726; --line-2: #343331; --text: #cecdc3; --muted: #878580;
     --primary: #cecdc3; --on-primary: #100f0f; --accent: #4385be;
     --ok: #879a39; --warn: #d0a215; --error: #e0614f; --grey: #7a7974;
     color-scheme: dark;
   }
 }
-:root[data-theme="dark"] {
+@media (prefers-color-scheme: light) {
+  :root:has(#theme-toggle:checked) {
     --bg: #100f0f; --card: #1c1b1a; --line: #282726; --line-2: #343331; --text: #cecdc3; --muted: #878580;
     --primary: #cecdc3; --on-primary: #100f0f; --accent: #4385be;
     --ok: #879a39; --warn: #d0a215; --error: #e0614f; --grey: #7a7974;
     color-scheme: dark;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -59,6 +62,10 @@ nav.main a:hover { background: var(--card); color: var(--text); }
 nav.main a[aria-current] { background: var(--card); color: var(--text); }
 nav.main svg { width: 18px; height: 18px; flex: none; }
 form.logout { display: inline; margin: 0; }
+.theme-switch { display: inline-flex; padding: 8px; border-radius: 8px; color: var(--muted); cursor: pointer; }
+.theme-switch:hover { background: var(--card); color: var(--text); }
+.theme-switch svg { width: 20px; height: 20px; }
+:root:has(#theme-toggle:focus-visible) .theme-switch { outline: 2px solid var(--accent); outline-offset: 2px; }
 .count { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 99px; background: var(--warn);
   color: var(--on-primary); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
 

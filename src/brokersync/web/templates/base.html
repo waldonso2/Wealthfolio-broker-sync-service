@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="{{ lang | default('de') }}"{% if theme in ("light", "dark") %} data-theme="{{ theme }}"{% endif %}>
+<html lang="{{ lang | default('de') }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-{% if theme == "light" %}<meta name="theme-color" content="#fffcf0">{% elif theme == "dark" %}<meta name="theme-color" content="#100f0f">{% else %}<meta name="theme-color" content="#fffcf0" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#100f0f" media="(prefers-color-scheme: dark)">{% endif %}
+<meta name="theme-color" content="#fffcf0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#100f0f" media="(prefers-color-scheme: dark)">
 <title>{% block title %}Broker Sync{% endblock %} · Wealthfolio Broker Sync</title>
 <link rel="stylesheet" href="/static/style.css">
 {% block head %}{% endblock %}
@@ -13,6 +13,8 @@
 <body{% if request.session.get("user") %} class="has-tabs"{% endif %}>
 <header><div class="wrap">
   <a class="brand" href="/">Broker Sync <span class="version">v{{ version }}</span></a>
+  <input type="checkbox" id="theme-toggle" class="sr-only" autocomplete="off">
+  <label for="theme-toggle" class="theme-switch" title="{{ _('Hell/Dunkel umschalten') }}">{{ icon("theme") }}<span class="sr-only">{{ _("Hell/Dunkel umschalten") }}</span></label>
   {% if request.session.get("user") %}
   {% set path = request.url.path %}
   {% set in_settings = path == "/settings" or path.startswith("/brokers") or path in settings_pages | map(attribute=0) | list %}
