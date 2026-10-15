@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.24.0
+
+- **Light or dark from the header (waldonso2/wealthfolio-importer-addon#123):** a symbol in the header (a half-filled circle, also on phones) switches between light and dark with one tap. Every visit starts in the device's colours; the switch lasts until the page is reloaded. It works without JavaScript (a checkbox evaluated by CSS), so the CSP stays as it was.
+- The colour scheme is no longer chosen on *Darstellung* (only the language); a fixed choice saved before is ignored.
+
 ## 0.23.2
 
 - **"Fehlt in Wealthfolio" for bookings that are there:** a transaction booked before whose activities the sync can't find any more is first looked for among the imports, with the rules of the duplicate detection. If an import holds the same booking, it is linked to that activity and not reported. This happens when Wealthfolio took every part of a booking for a duplicate of the import (nothing created, so no id to remember), or when an import was booked anew. Bookings that are really gone are reported as before.

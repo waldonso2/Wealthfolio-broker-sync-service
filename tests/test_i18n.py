@@ -11,7 +11,6 @@ from jinja2 import Environment, nodes
 from brokersync import audit, security
 from brokersync.web import i18n
 from brokersync.web.context import SETTINGS_PAGES, STATUS_LABEL
-from brokersync.web.routes.settings import THEMES
 
 from .fake_broker import CODE
 from .test_safe_mode import make as make_client
@@ -67,7 +66,7 @@ def template_keys() -> dict[str, str]:
 def test_every_ui_text_has_an_english_entry():
     keys = {**python_keys(), **template_keys()}
     # Shown through ``_(value)``: the values of these tables are keys too.
-    for value in [*STATUS_LABEL.values(), *THEMES.values(), *(t for _, title, hint in SETTINGS_PAGES
+    for value in [*STATUS_LABEL.values(), *(t for _, title, hint in SETTINGS_PAGES
                                                                 for t in (title, hint)),
                   audit.source({"comment": "[SYNC x:1]"}), audit.source({})]:
         keys.setdefault(value, "table")

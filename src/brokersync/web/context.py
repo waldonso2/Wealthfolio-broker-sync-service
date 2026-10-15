@@ -53,7 +53,7 @@ SETTINGS_PAGES = [
     ("/transfers", N_("Überträge"), N_("Auszahlungen auf eigene Konten erkennen")),
     ("/logos", N_("Logos"), N_("Logos der Wertpapiere von logo.dev")),
     ("/security", N_("Sicherheit"), N_("Abrufmodus, Verschlüsselung, Master-Passphrase, Zertifikat")),
-    ("/appearance", N_("Darstellung"), N_("Sprache, hell oder dunkel")),
+    ("/appearance", N_("Darstellung"), N_("Sprache")),
     # Hidden for now (waldonso2/wealthfolio-importer-addon#84):
     # ("/duplicates", N_("Duplikate"), N_("Doppelte Buchungen finden und entfernen")),
 ]
@@ -97,7 +97,7 @@ class AppContext:
         if not flash and self.job_result and request.session.get("user"):
             flash, self.job_result = self.job_result, None  # what a background job ended with (#104)
         nav_unknown = self.state.unknown_count() if request.session.get("user") else 0
-        theme, language = self.appearance()
+        language = self.language()
         try:
             patterns = bool(self.cfg().transfer_patterns)
         except Exception:  # locked: no settings pages anyway
@@ -105,7 +105,7 @@ class AppContext:
         pages = [p for p in SETTINGS_PAGES if p[0] != "/transfers" or patterns]
         return self.templates.TemplateResponse(request, name, {
             "csrf": request.session["csrf"], "flash": flash, "version": __version__, "adapters": self.adapters,
-            "nav_unknown": nav_unknown, "settings_pages": pages, "theme": theme, "lang": language,
+            "nav_unknown": nav_unknown, "settings_pages": pages, "lang": language,
             "reauth": not recent(request), **ctx,
         })
 
@@ -130,13 +130,12 @@ class AppContext:
         request.session["auth"] = int(time.time())
         return None
 
-    def appearance(self) -> tuple[str, str]:
-        """Colour scheme and language of the pages; the defaults while the config can't be read (locked)."""
+    def language(self) -> str:
+        """Language of the pages; German while the config can't be read (locked)."""
         try:
-            c = self.cfg()
+            return self.cfg().ui_language
         except Exception:
-            return "system", "de"
-        return c.ui_theme, c.ui_language
+            return "de"
 
     def cfg(self) -> config_mod.Config:
         return config_mod.load(self.data_dir)
@@ -213,7 +212,7 @@ Ctx = Annotated[AppContext, Depends(get_ctx)]
 def language(request: Request) -> str:
     """The language of the pages (#87): ``Config.ui_language``, German while the config can't be read."""
     ctx = getattr(request.app.state, "ctx", None)
-    return ctx.appearance()[1] if ctx is not None else "de"
+    return ctx.language() if ctx is not None else "de"
 
 
 def tr(request: Request, text: str, **params) -> str:
