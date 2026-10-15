@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.24.1
+
+- **Light/dark stays when you change the page (#123):** the header's symbol switched only the page it was tapped on; the next page came back in the device's colours. The session now remembers the choice: every page until you log out, a new session starts in the device's colours again. Still no JavaScript (a small form like *Abmelden*).
+- The symbol sits at the height of the logout symbol.
+
 ## 0.24.0
 
 - **Light or dark from the header (waldonso2/wealthfolio-importer-addon#123):** a symbol in the header (a half-filled circle, also on phones) switches between light and dark with one tap. Every visit starts in the device's colours; the switch lasts until the page is reloaded. It works without JavaScript (a checkbox evaluated by CSS), so the CSP stays as it was.

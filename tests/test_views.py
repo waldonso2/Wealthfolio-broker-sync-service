@@ -119,13 +119,25 @@ def test_the_language_is_chosen_on_the_page_appearance_light_or_dark_in_the_head
 
     client, _, token = make_safe(tmp_path, safe=False)
     page = client.get("/").text
-    # #123: every page starts in the device's colours; the header's switch turns them until a reload, CSS only.
-    assert "data-theme" not in page and "<script" not in page
-    assert 'id="theme-toggle"' in page and 'autocomplete="off"' in page and 'for="theme-toggle"' in page
-    assert ">Hell/Dunkel umschalten<" in page  # named for screen readers
+    # #123: a session starts in the device's colours; the header's symbol turns them for every page until
+    # logout - no script.
+    assert "data-flip" not in page and "<script" not in page
+    assert 'action="/theme"' in page and 'aria-label="Hell/Dunkel umschalten"' in page
+    assert 'aria-pressed="false"' in page
+    r = client.post("/theme", data={"csrf": token, "next": "/check"}, follow_redirects=False)
+    assert (r.status_code, r.headers["location"]) == (303, "/check")
+    for path in ("/", "/check", "/settings"):  # every page, not only the one it was clicked on
+        assert '<html lang="de" data-flip>' in client.get(path).text
+    assert 'aria-pressed="true"' in client.get("/").text
+    client.post("/theme", data={"csrf": token, "next": "/"})
+    assert "data-flip" not in client.get("/").text  # and back
+    for bad in ("//evil.example/x", "https://evil.example/", "/\\evil.example"):  # only a path of this site
+        assert client.post("/theme", data={"csrf": token, "next": bad}, follow_redirects=False).headers[
+            "location"] == "/"
+    assert client.post("/theme", data={"next": "/"}).status_code == 400  # CSRF
     assert 'name="theme"' not in client.get("/appearance").text
     r = client.post("/appearance", data={"csrf": token, "language": "en"})
-    assert "Saved." in r.text and '<html lang="en">' in r.text and ">Switch light/dark<" in r.text
+    assert "Saved." in r.text and '<html lang="en"' in r.text and 'aria-label="Switch light/dark"' in r.text
     assert config_mod.load(tmp_path).ui_language == "en"
     assert "Unknown choice" in client.post("/appearance", data={"csrf": token, "language": "fr"}).text
 
@@ -154,7 +166,7 @@ def test_the_colours_meet_wcag_aa_in_both_schemes():
 
     css = (Path(__file__).parent.parent / "src" / "brokersync" / "web" / "static" / "style.css").read_text()
     light = dict(re.findall(r"--([a-z-]+): (#[0-9a-f]{6})", css.split("@media")[0]))
-    switched = css.split(":root:has(#theme-toggle:checked) {")[1]
+    switched = css.split(":root[data-flip] {")[1]
     dark = dict(re.findall(r"--([a-z-]+): (#[0-9a-f]{6})", switched.split("}")[0]))
 
     def lum(h):

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ lang | default('de') }}">
+<html lang="{{ lang | default('de') }}"{% if request.session.get("flip") %} data-flip{% endif %}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -13,8 +13,6 @@
 <body{% if request.session.get("user") %} class="has-tabs"{% endif %}>
 <header><div class="wrap">
   <a class="brand" href="/">Broker Sync <span class="version">v{{ version }}</span></a>
-  <input type="checkbox" id="theme-toggle" class="sr-only" autocomplete="off">
-  <label for="theme-toggle" class="theme-switch" title="{{ _('Hell/Dunkel umschalten') }}">{{ icon("theme") }}<span class="sr-only">{{ _("Hell/Dunkel umschalten") }}</span></label>
   {% if request.session.get("user") %}
   {% set path = request.url.path %}
   {% set in_settings = path == "/settings" or path.startswith("/brokers") or path in settings_pages | map(attribute=0) | list %}
@@ -24,6 +22,7 @@
     <a href="/unknown"{% if path == "/unknown" %} aria-current="page"{% endif %}>{{ icon("unknown") }}<span>{{ _("Unbekannt") }}</span>{% if nav_unknown %} <span class="count" aria-label="{{ _('{n} offen', n=nav_unknown) }}">{{ nav_unknown }}</span>{% endif %}</a>
     <a href="/settings"{% if in_settings %} aria-current="page"{% endif %}>{{ icon("settings") }}<span>{{ _("Einstellungen") }}</span></a>
   </nav>
+  <form method="post" action="/theme" class="logout"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ request.url.path }}"><button class="link" title="{{ _('Hell/Dunkel umschalten') }}" aria-label="{{ _('Hell/Dunkel umschalten') }}" aria-pressed="{{ 'true' if request.session.get('flip') else 'false' }}">{{ icon("theme") }}</button></form>
   <form method="post" action="/logout" class="logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link" title="{{ _('Abmelden') }}" aria-label="{{ _('Abmelden') }}">{{ icon("logout") }}</button></form>
   {% endif %}
 </div></header>

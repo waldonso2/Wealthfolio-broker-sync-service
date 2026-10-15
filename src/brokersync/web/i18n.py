@@ -97,8 +97,8 @@ EN: dict[str, str] = {
     "Doppelte Buchungen finden und entfernen": "Find and remove duplicate bookings",
     "Sprache": "Language",
     "Hell/Dunkel umschalten": "Switch light/dark",
-    "Hell oder dunkel: wie das Gerät. Das Symbol oben schaltet bis zum Neuladen um.":
-        "Light or dark: as the device. The symbol at the top switches until the page is reloaded.",
+    "Hell oder dunkel: wie das Gerät. Das Symbol oben schaltet bis zum Abmelden um.":
+        "Light or dark: as the device. The symbol at the top switches until you log out.",
     # ── common words ──
     "Speichern": "Save",
     "Gespeichert.": "Saved.",
