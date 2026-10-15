@@ -334,6 +334,7 @@ class Syncer:
                                               run.full)
             self._book(run, wf)
             self._phase("check")
+            self._relink(run)
             self._compare(cfg, key, run.transactions, run.synced, run.activities, run.full, run.since)
             if run.tax_backfill:
                 self._backfill_tax(run, wf)
@@ -522,6 +523,34 @@ class Syncer:
         else:
             return []
         return wf.search_activities(accounts.ids, first, last)
+
+    def _relink(self, run: RunContext) -> None:
+        """A transaction booked before whose stored activities are gone, while Wealthfolio holds the same booking
+        from an import (matched by ``ExistingIndex``, like a new one): it is booked, linked to that activity, not
+        missing. Happens when Wealthfolio rejected every leg as a duplicate of the import (nothing to remember)
+        or an import was booked anew (new ids)."""
+        tagged: dict[str, set[str]] = {}
+        for a in run.activities:
+            m = coverage.SYNC_REF.search(a.get("comment") or "")
+            if m and m.group(1) == run.key:
+                tagged.setdefault(m.group(2), set()).add(a["id"])
+        present = {a["id"] for a in run.activities}
+        index = ExistingIndex(run.activities)
+        # Never another transaction's activity: what the state links and what carries a [SYNC] reference.
+        index.used |= {i for _, ids in run.synced.values() for i in ids} | {i for ids in tagged.values() for i in ids}
+        for tx in run.transactions:
+            row = run.synced.get(tx.id)
+            if (not row or row[0] == "ignored" or tx.kind == Kind.UNKNOWN or tx.id in tagged
+                    or any(i in present for i in row[1] if i)):
+                continue
+            try:
+                payloads = to_activities(tx, run.key, run.accounts, run.mappings, run.patterns)
+            except MappingError:
+                continue
+            match = index.find(tx_ref(run.key, tx), payloads)
+            if match:
+                self.state.mark(run.key, tx.id, "existing", [match])
+                run.synced[tx.id] = ("existing", [match])
 
     def _compare(self, cfg: config_mod.Config, key: str, transactions: list[Transaction],
                  synced: dict[str, tuple[str, list[str]]], activities: list[dict], full: bool,

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.2
+
+- **"Fehlt in Wealthfolio" for bookings that are there:** a transaction booked before whose activities the sync can't find any more is first looked for among the imports, with the rules of the duplicate detection. If an import holds the same booking, it is linked to that activity and not reported. This happens when Wealthfolio took every part of a booking for a duplicate of the import (nothing created, so no id to remember), or when an import was booked anew. Bookings that are really gone are reported as before.
+
 ## 0.23.1
 
 - **Trade Republic: three more kinds of bookings** (waldonso2/Wealthfolio-broker-sync-service#76, #78, #79, as the CSV import books them):

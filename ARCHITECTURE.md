@@ -84,7 +84,7 @@ So kommt ein neuer Broker ohne Änderungen an Mapping und Sync aus.
 1. `_plan_window`: Adapter mit gespeicherter Session, Abrufzeitraum (ganze Historie, einmaliger Backfill, *Ab Startdatum neu abrufen*, Sparkonto ab Startdatum), schon Synchronisiertes.
 2. `_fetch`: Login, Transaktionen, Anfangsbestände, hochgeladene Kontoauszüge, Kontostand, Positionen; die Session wird auch nach einem Fehler gespeichert.
 3. `_prepare`: Neues bestimmen, Unbekanntes melden, Konten, Zuordnungen, Überträge-Muster, Sparkonto-Paare.
-4. Mit Wealthfolio: `_repair_cash_assets` (vor dem Abgleich, damit er reparierte Aktivitäten sieht), `_add_before_history` (Importe vor der Bankhistorie), Aktivitäten laden, `_book` (Bankseite von Wertpapierbuchungen zuletzt), `_compare` (coverage.py), `_backfill_tax` (einmalig), `_learn_assets`, `_check_holdings` (nur nach einem Lauf ohne Fehler).
+4. Mit Wealthfolio: `_repair_cash_assets` (vor dem Abgleich, damit er reparierte Aktivitäten sieht), `_add_before_history` (Importe vor der Bankhistorie), Aktivitäten laden, `_book` (Bankseite von Wertpapierbuchungen zuletzt), `_relink` (eine schon übernommene Buchung, deren Aktivitäten fehlen, die ein Import aber enthält, wird mit dessen Aktivität verknüpft statt als fehlend gemeldet), `_compare` (coverage.py), `_backfill_tax` (einmalig), `_learn_assets`, `_check_holdings` (nur nach einem Lauf ohne Fehler).
 5. `_commit_flags`: offene Wertpapier-Gegenbuchungen melden, verschwundene Unbekannte auflösen, einmalige Flags nur nach einem Lauf ohne Fehler zurücksetzen.
 
 ```mermaid
