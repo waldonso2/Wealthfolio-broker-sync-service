@@ -251,35 +251,46 @@ def _direction(item: dict) -> int:
 def _netted(items: list[dict]) -> set[str]:
     """Ids of depot-migration pairs that cancel out (security legs and their cash leg)."""
     done: set[str] = set()
+    _pair_security_legs(items, done)
+    _pair_switch_cash(items, done)
+    return done
+
+
+def _pair_security_legs(items: list[dict], done: set[str]) -> None:
+    """A security out and in again: same ISIN and shares, within NETTING_WINDOW."""
     transfers = [i for i in items if i.get("type") == "NON_TRADE_SECURITY_TRANSACTION" and _direction(i)]
     outs = sorted((i for i in transfers if _direction(i) < 0), key=lambda i: _at(i["last_event_datetime"]))
     ins = [i for i in transfers if _direction(i) > 0]
     for o in outs:
-        best = None
-        for i in ins:
-            if i["id"] in done or i.get("isin") != o.get("isin"):
-                continue
-            if abs(_dec(i.get("quantity")) or 0) != abs(_dec(o.get("quantity")) or 0):
-                continue
-            gap = abs(_at(i["last_event_datetime"]) - _at(o["last_event_datetime"]))
-            if gap <= NETTING_WINDOW and (best is None or gap < best[0]):
-                best = (gap, i)
-        if best:
-            done.update((o["id"], best[1]["id"]))
+        shares = abs(_dec(o.get("quantity")) or 0)
+        match = _nearest(o, ins, done, lambda i, o=o, shares=shares: i.get("isin") == o.get("isin")
+                         and abs(_dec(i.get("quantity")) or 0) == shares)
+        if match:
+            done.update((o["id"], match["id"]))
+
+
+def _pair_switch_cash(items: list[dict], done: set[str]) -> None:
+    """A ``SWITCH-`` deposit and an equal withdrawal: the cash of a depot migration."""
     deposits = [i for i in items if i.get("cash_transaction_type") == "DEPOSIT"
                 and "SWITCH-" in f"{i.get('id', '')} {i.get('description') or ''}"]
     withdrawals = [i for i in items if i.get("cash_transaction_type") == "WITHDRAWAL"]
     for dep in deposits:
-        best = None
-        for w in withdrawals:
-            if w["id"] in done or abs(_dec(w.get("amount")) or 0) != abs(_dec(dep.get("amount")) or 0):
-                continue
-            gap = abs(_at(w["last_event_datetime"]) - _at(dep["last_event_datetime"]))
-            if gap <= NETTING_WINDOW and (best is None or gap < best[0]):
-                best = (gap, w)
-        if best:
-            done.update((dep["id"], best[1]["id"]))
-    return done
+        amount = abs(_dec(dep.get("amount")) or 0)
+        match = _nearest(dep, withdrawals, done, lambda w, amount=amount: abs(_dec(w.get("amount")) or 0) == amount)
+        if match:
+            done.update((dep["id"], match["id"]))
+
+
+def _nearest(item: dict, candidates: list[dict], done: set[str], same) -> dict | None:
+    """The candidate not yet paired that ``same`` accepts, nearest in time to ``item`` within NETTING_WINDOW."""
+    best = None
+    for c in candidates:
+        if c["id"] in done or not same(c):
+            continue
+        gap = abs(_at(c["last_event_datetime"]) - _at(item["last_event_datetime"]))
+        if gap <= NETTING_WINDOW and (best is None or gap < best[0]):
+            best = (gap, c)
+    return best[1] if best else None
 
 
 def _day(item: dict):
@@ -686,8 +697,7 @@ class ScalableAdapter(BrokerAdapter):
             shares = _dec(h.get("quantity"))
             if not h.get("isin") or not shares:
                 continue
-            out.append(Position(h["isin"], h.get("name") or "", shares,
-                                h.get("valuation_currency") or "EUR", _dec(h.get("valuation"))))
+            out.append(Position(h["isin"], h.get("name") or "", shares, h.get("valuation_currency") or "EUR"))
         return out
 
     def get_cash(self) -> list[CashBalance]:

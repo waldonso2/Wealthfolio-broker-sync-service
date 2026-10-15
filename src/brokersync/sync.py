@@ -27,18 +27,18 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from . import assets as assets_mod
-from . import audit as audit_mod
 from . import config as config_mod
 from . import coverage, crypto, meta_keys, retired
+from . import history as history_mod
 from . import logos as logos_mod
 from . import repair as repair_mod
 from .adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
 from .adapters.base import safety_state
 from .adapters.fints import NO_TAN_DAYS
 from .dedup import ExistingIndex
+from .history import BERLIN, opening_id
 from .mapping import Accounts, MappingError, SecurityMapping, TransferPattern, to_activities, tx_ref
 from .model import CashBalance, Kind, Position, Transaction, when
 from .notify import Notifier
@@ -48,7 +48,7 @@ from .vault import Vault
 from .wealthfolio import Duplicate, WealthfolioClient, WealthfolioError, connect
 
 log = logging.getLogger(__name__)
-BERLIN = ZoneInfo("Europe/Berlin")
+__all__ = ["BERLIN", "opening_id"]  # where the web UI and the tests take them from
 
 # Re-fetch this much before the last successful run: brokers book late.
 OVERLAP = timedelta(days=7)
@@ -59,10 +59,6 @@ UNMATCHED_SECURITIES = "WERTPAPIER_OHNE_GEGENSTUECK"
 
 def tax_flag(key: str) -> str:
     return meta_keys.DIVIDEND_TAX(key)
-
-
-def opening_id(isin: str, day: str) -> str:
-    return f"start-{isin}-{day}"
 
 
 def refetch_flag(key: str) -> str:
@@ -161,6 +157,7 @@ class Syncer:
         self.state = State(self.data_dir)
         retired.clean_up(self.data_dir, self.state, self.vault)
         self.adapters = adapters or ADAPTERS
+        self._consent_existing()
         self._wealthfolio = wealthfolio or WealthfolioClient
         # Seconds to give Wealthfolio to recalculate holdings before the check.
         self.recalc_wait = float(os.environ.get("BROKERSYNC_RECALC_WAIT", "5"))
@@ -168,6 +165,20 @@ class Syncer:
         self._pins: dict[str, str] = {}  # PINs typed at the login, for the current run only (#85)
         self._progress: dict = {}  # the broker being fetched, for the overview (#104)
         self._logo_source = logo_source or logos_mod.LogoDev
+
+    def _consent_existing(self) -> None:
+        """Brokers with a ``consent`` set up before it existed (0.23.0, #112): their credentials were saved
+        before - they count as agreed. New credentials can't be saved without agreeing (broker settings)."""
+        brokers = self.vault.load().get("brokers", {})
+        cfg = config_mod.load(self.data_dir)
+        keys = [k for k, a in self.adapters.items() if a.consent and brokers.get(k, {}).get("credentials")
+                and not (cfg.brokers.get(k) and cfg.brokers[k].consented)]
+        def agree(c: config_mod.Config) -> None:
+            for k in keys:
+                c.broker(k).consented = True
+
+        if keys:
+            config_mod.update(self.data_dir, agree)
 
     def notifier(self, cfg: config_mod.Config) -> Notifier:
         if self._notifier:
@@ -333,6 +344,8 @@ class Syncer:
     def _plan_window(self, cfg: config_mod.Config, key: str, result: BrokerResult) -> RunContext:
         """The adapter with its session, and from when it reads (full history, backfill, refetch, savings)."""
         bcfg = cfg.brokers[key]
+        if self.adapters[key].consent and not bcfg.consented:
+            raise AdapterError("Erst in den Broker-Einstellungen den Hinweis zur Schnittstelle bestätigen.")
         if not bcfg.cash_account_id or not bcfg.portfolio_account_id:
             raise AdapterError("No Wealthfolio accounts assigned - finish the setup for this broker.")
         secrets = self.vault.load()
@@ -651,29 +664,7 @@ class Syncer:
         except WealthfolioError as e:
             log.info("%s: imports before the bank history not checked: %s", key, e)
             return []
-        matched = {i for _, ids in synced.values() for i in ids}
-        trades = [a for a in activities if a.get("accountId") == accounts.portfolio
-                  and a.get("activityType") in ("BUY", "SELL")]
-        first = datetime(history.year, history.month, history.day, tzinfo=BERLIN)
-        out = []
-        for a in activities:
-            if a.get("accountId") != accounts.cash or not audit_mod.is_cash_transfer(a) or a.get("id") in matched \
-                    or coverage.SYNC_REF.search(a.get("comment") or ""):
-                continue
-            at = audit_mod._when(a)
-            if at >= first:
-                continue
-            buy = a.get("activityType") == "TRANSFER_OUT"
-            if not any(t.get("activityType") == ("BUY" if buy else "SELL")
-                       and abs((audit_mod._when(t) - at).total_seconds()) <= audit_mod.MOMENT_SECONDS
-                       for t in trades):
-                continue
-            out.append(Transaction(
-                id=f"pre-{a['id']}", kind=Kind.DEPOSIT if buy else Kind.WITHDRAWAL,
-                datetime=at + timedelta(seconds=-3 if buy else 3), currency=a.get("currency") or "EUR",
-                net=abs(audit_mod._dec(a.get("amount"))),
-                label=("Deposit for a buy before the bank history read" if buy
-                       else "Withdrawal after a sale before the bank history read")))
+        out = history_mod.money_before(activities, accounts, history, synced)
         new = [t for t in out if t.id not in synced]
         if new:
             log.info("%s: %d imported trade(s) before the bank history (%s) get their money", key, len(new),
@@ -682,19 +673,7 @@ class Syncer:
 
     def _openings(self, key: str) -> list[Transaction]:
         """Opening positions the user entered (page Prüfung): a buy on that day, its cost deposited first."""
-        out = []
-        for o in self.state.openings(key):
-            shares, price, fee = Decimal(o["shares"]), Decimal(o["price"]), Decimal(o["fee"])
-            day = date.fromisoformat(o["day"])
-            # Holdings read before 0.9.9 (python-fints' parser) could carry "<ISIN>|/DE/<WKN>" as ISIN: the id
-            # keeps it (it is booked under it), the ISIN is the real one, so the holdings check finds it.
-            isin = o["isin"].split("|")[0].strip()
-            out.append(Transaction(
-                id=opening_id(o["isin"], o["day"]), kind=Kind.BUY,
-                datetime=datetime(day.year, day.month, day.day, 12, tzinfo=BERLIN).astimezone(UTC),
-                currency=o["currency"], net=shares * price + fee, isin=isin, name=o["name"], shares=shares,
-                gross=shares * price, fee=fee, label="Anfangsbestand", external_cash=True))
-        return out
+        return history_mod.openings(self.state.openings(key))
 
     def _reconcile(self, cfg: config_mod.Config, key: str, wf: WealthfolioClient, accounts: Accounts,
                    cash: list[CashBalance], positions: list[Position] | None,

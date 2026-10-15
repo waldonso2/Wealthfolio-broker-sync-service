@@ -582,7 +582,7 @@ class ComdirectAdapter(BrokerAdapter):
             if not isin or not shares:
                 continue
             out.append(Position(isin, instrument.get("name") or "", shares, _unit(p.get("currentValue")),
-                                _dec(p.get("currentValue")), cost=_dec(p.get("purchasePrice"))))
+                                cost=_dec(p.get("purchasePrice"))))
         return out
 
     def get_transactions(self, since: datetime | None) -> list[Transaction]:

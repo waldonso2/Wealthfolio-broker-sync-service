@@ -62,10 +62,11 @@ def test_units_and_setup_agree_on_paths():
 
 
 def test_version_is_the_same_everywhere():
+    """One place, pyproject.toml (#80): the package reads it from its installed metadata."""
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
-    assert project["version"] == brokersync.__version__
+    assert project["version"] == brokersync.__version__, "reinstall: pip install --no-deps --no-build-isolation -e ."
     changelog = (ROOT / "CHANGELOG.md").read_text()
-    assert f"## {brokersync.__version__}" in changelog
+    assert f"## {project['version']}" in changelog
 
 
 def test_setup_survives_its_own_pitfalls():

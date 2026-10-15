@@ -144,7 +144,38 @@ def _day(text: str) -> date | None:
         return None
 
 
-def parse(text: str) -> list[Movement]:  # noqa: C901 (#80)
+# Fields of a movement read as they are (the 12-character prefix, then the value): attribute and how.
+_FIELDS = {
+    ":98A::ESET//": ("trade_date", _day), ":98C::ESET//": ("trade_date", _day),
+    ":98A::SETT//": ("settle_date", _day), ":98C::SETT//": ("settle_date", _day),
+    ":22H::REDE//": ("direction", lambda v: v[:4]),
+    ":22H::PAYM//": ("payment", lambda v: v[:4]),
+    ":22F::TRAN//": ("indicator", lambda v: v[:4]),
+    ":25D::MOVE//": ("reversal", lambda v: v[:4] == "REVE"),
+    ":20C::RELA//": ("reference", lambda v: v),
+    ":70E::TRDE//": ("text", lambda v: " ".join(v.split("|"))),
+}
+
+
+def _read(current: Movement, f: str) -> None:
+    """One field inside a movement (``:16R:TRAN`` … ``:16S:TRAN``)."""
+    if f.startswith(":36B::PSTA//"):
+        m = re.search(r"/(?:UNIT|FAMT)/(N?)(\d+(?:,\d*)?)", f)
+        if m:
+            value = _number(m.group(2))
+            current.shares = -value if value is not None and m.group(1) else value
+    elif f.startswith(":19A::PSTA//"):
+        m = re.match(r"(N?)([A-Z]{3})(\d+(?:,\d*)?)", f[12:])
+        if m:
+            value = _number(m.group(3))
+            current.amount = -value if value is not None and m.group(1) else value
+            current.currency = m.group(2)
+    elif f[:12] in _FIELDS:
+        attribute, convert = _FIELDS[f[:12]]
+        setattr(current, attribute, convert(f[12:]))
+
+
+def parse(text: str) -> list[Movement]:
     out: list[Movement] = []
     isin, name = None, ""
     current: Movement | None = None
@@ -162,35 +193,8 @@ def parse(text: str) -> list[Movement]:  # noqa: C901 (#80)
             if current is not None:
                 out.append(current)
             current = None
-        elif current is None:
-            continue
-        elif f.startswith(":36B::PSTA//"):
-            m = re.search(r"/(?:UNIT|FAMT)/(N?)(\d+(?:,\d*)?)", f)
-            if m:
-                value = _number(m.group(2))
-                current.shares = -value if value is not None and m.group(1) else value
-        elif f.startswith(":19A::PSTA//"):
-            m = re.match(r"(N?)([A-Z]{3})(\d+(?:,\d*)?)", f[12:])
-            if m:
-                value = _number(m.group(3))
-                current.amount = -value if value is not None and m.group(1) else value
-                current.currency = m.group(2)
-        elif f.startswith((":98A::ESET//", ":98C::ESET//")):
-            current.trade_date = _day(f[12:])
-        elif f.startswith((":98A::SETT//", ":98C::SETT//")):
-            current.settle_date = _day(f[12:])
-        elif f.startswith(":22H::REDE//"):
-            current.direction = f[12:16]
-        elif f.startswith(":22H::PAYM//"):
-            current.payment = f[12:16]
-        elif f.startswith(":22F::TRAN//"):
-            current.indicator = f[12:16]
-        elif f.startswith(":25D::MOVE//"):
-            current.reversal = f[12:16] == "REVE"
-        elif f.startswith(":20C::RELA//"):
-            current.reference = f[12:]
-        elif f.startswith(":70E::TRDE//"):
-            current.text = " ".join(f[12:].split("|"))
+        elif current is not None:
+            _read(current, f)
     return out
 
 

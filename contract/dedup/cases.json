@@ -592,6 +592,141 @@
    "expect": {
     "1": null
    }
+  },
+  {
+   "name": "the nearest of two equal deposits is the one",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "cash",
+     "activityType": "DEPOSIT",
+     "date": "2024-03-01T10:00:00Z",
+     "amount": "100",
+     "currency": "EUR"
+    },
+    {
+     "id": "e2",
+     "accountId": "cash",
+     "activityType": "DEPOSIT",
+     "date": "2024-03-02T09:00:00Z",
+     "amount": "100",
+     "currency": "EUR"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "cash",
+     "activityType": "DEPOSIT",
+     "date": "2024-03-02T10:00:00Z",
+     "amount": "100",
+     "currency": "EUR"
+    },
+    {
+     "line": 2,
+     "accountId": "cash",
+     "activityType": "DEPOSIT",
+     "date": "2024-03-01T11:00:00Z",
+     "amount": "100",
+     "currency": "EUR"
+    }
+   ],
+   "expect": {
+    "1": "e2",
+    "2": "e1"
+   }
+  },
+  {
+   "name": "a deposit in another currency is another booking",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "cash",
+     "activityType": "DEPOSIT",
+     "date": "2024-03-01T10:00:00Z",
+     "amount": "100",
+     "currency": "USD"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "cash",
+     "activityType": "DEPOSIT",
+     "date": "2024-03-01T10:00:00Z",
+     "amount": "100",
+     "currency": "EUR"
+    }
+   ],
+   "expect": {
+    "1": null
+   }
+  },
+  {
+   "name": "without a currency on one side the rest decides",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "cash",
+     "activityType": "DEPOSIT",
+     "date": "2024-03-01T10:00:00Z",
+     "amount": "100"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "cash",
+     "activityType": "DEPOSIT",
+     "date": "2024-03-01T12:00:00Z",
+     "amount": "100",
+     "currency": "EUR"
+    }
+   ],
+   "expect": {
+    "1": "e1"
+   }
+  },
+  {
+   "name": "of two trades with the same shares the nearer one",
+   "existing": [
+    {
+     "id": "e1",
+     "accountId": "depot",
+     "activityType": "BUY",
+     "date": "2024-03-04T09:00:00Z",
+     "amount": "201",
+     "quantity": "2",
+     "unitPrice": "100",
+     "assetSymbol": "VWCE",
+     "assetId": "VWCE"
+    },
+    {
+     "id": "e2",
+     "accountId": "depot",
+     "activityType": "BUY",
+     "date": "2024-03-05T09:00:00Z",
+     "amount": "201",
+     "quantity": "2",
+     "unitPrice": "100",
+     "assetSymbol": "VWCE",
+     "assetId": "VWCE"
+    }
+   ],
+   "incoming": [
+    {
+     "line": 1,
+     "accountId": "depot",
+     "activityType": "BUY",
+     "date": "2024-03-05T10:00:00Z",
+     "amount": "201",
+     "quantity": "2",
+     "symbol": "IE00BK5BQT80"
+    }
+   ],
+   "expect": {
+    "1": "e2"
+   }
   }
  ]
 }

@@ -86,7 +86,7 @@ Der Dienst liest dein **DKB-Girokonto** per FinTS (HBCI), dieselbe Schnittstelle
 
 - **Anmeldename und PIN:** dieselben wie im DKB-Banking.
 - **IBAN des Girokontos:** nur nötig, wenn du bei der DKB mehrere Konten hast.
-- **FinTS-Produkt-ID:** Banken verlangen für FinTS eine bei der Deutschen Kreditwirtschaft registrierte Produkt-ID. Sobald dieser Dienst eine hat, ist sie fest eingebaut und das Feld entfällt. Bis dahin trägst du hier eine registrierte Produkt-ID ein.
+- **FinTS-Produkt-ID:** Banken verlangen für FinTS eine bei der Deutschen Kreditwirtschaft registrierte Produkt-ID. Sobald dieser Dienst eine hat, ist sie fest eingebaut und das Feld entfällt. Bis dahin trägst du hier deine eigene registrierte Produkt-ID ein – eine fremde zu nutzen oder weiterzugeben widerspricht den Registrierungsbedingungen.
 - **Konten:** ein DKB-Verrechnungskonto und ein DKB-Depotkonto in Wealthfolio, wahlweise dazu ein **Tagesgeld-Konto** (siehe unten).
 
 **Freigabe in der DKB-App:** Bei der ersten Anmeldung und danach in Abständen (nach den PSD2-Regeln meist alle 90 Tage) will die DKB eine Bestätigung in der DKB-App. In der Oberfläche bestätigst du in der App und klickst dann *Ich habe in der App bestätigt*. Läuft gerade der tägliche Abruf, schickt der Dienst eine ntfy-Nachricht und wartet drei Minuten auf deine Freigabe.
@@ -145,7 +145,7 @@ Der Dienst liest dein **Deutsche-Bank-Girokonto** und den **Bestand deines maxbl
 
 Der Dienst liest deine Trade-Republic-Timeline über die inoffizielle Schnittstelle der App, mit dem Open-Source-Projekt [pytr](https://github.com/pytr-org/pytr). Er liest nur; Orders oder Auszahlungen kann er nicht auslösen.
 
-> **Bitte beachten:** Trade Republic bietet keine offizielle Schnittstelle. Die genutzte kann sich jederzeit ändern, dann klappt der Abruf bis zu einem Update nicht. Ein automatisierter Zugriff ist von Trade Republic vermutlich nicht vorgesehen. Wer das nicht möchte, importiert die Buchungen weiter per CSV.
+> **Bitte beachten:** Trade Republic bietet keine offizielle Schnittstelle. Die genutzte kann sich jederzeit ändern, dann klappt der Abruf bis zu einem Update nicht. Ein automatisierter Zugriff ist von Trade Republic vermutlich nicht vorgesehen. Wer das nicht möchte, importiert die Buchungen weiter per CSV. Deshalb bestätigst du in den Broker-Einstellungen einmal, dass du diesen Hinweis gelesen hast; vorher startet keine Anmeldung.
 
 **Einrichten** unter *Broker → Trade Republic*:
 

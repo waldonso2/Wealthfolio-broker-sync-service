@@ -88,6 +88,9 @@ class BrokerAdapter(ABC):
     # A bank account besides the cash account that can be booked into a Wealthfolio account of its own
     # (the bank's Tagesgeld): what to call it, empty if the adapter can't read one.
     savings_label: ClassVar[str] = ""
+    # What the user must have read before the first login (#112, an unofficial interface): German, shown with a
+    # checkbox in the broker settings; the answer is ``BrokerConfig.consented``. Empty: nothing to agree to.
+    consent: ClassVar[str] = ""
 
     def __init__(self, credentials: dict[str, str], session: dict | None = None):
         self.credentials = credentials

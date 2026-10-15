@@ -36,6 +36,8 @@ class BrokerConfig:
     savings_account_id: str = ""
     # First run fetches from here (ISO date); later runs from the last success.
     start_date: str = ""
+    # The adapter's ``consent`` was agreed to (#112); without it no login starts.
+    consented: bool = False
 
 
 @dataclass

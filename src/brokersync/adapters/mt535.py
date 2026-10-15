@@ -6,8 +6,9 @@ one reads, per ``:16R:FIN`` … ``:16S:FIN`` block:
 
 - ``:35B:ISIN <isin>`` with the WKN (``/DE/…``) and the name on the next lines,
 - ``:93B:`` - shares (``UNIT``) or nominal (``FAMT``), the ``AGGR`` balance first,
-- ``:19A::HOLD//`` - the holding's value and currency (sign ``N`` = negative),
-- ``:90A:``/``:90B:`` - the price, if there is no ``:19A:``.
+- ``:19A::HOLD//`` - the holding's currency (its value isn't used: a bond priced in per cent (``PRCT``) would
+  need the nominal, #118),
+- ``:90A:``/``:90B:`` - the price's currency, if there is no ``:19A:``.
 
 ``structure`` describes an answer without its values (tags and qualifiers), so a
 bank's format can be checked from the log without personal data.
@@ -29,7 +30,6 @@ class Holding:
     name: str
     pieces: Decimal | None
     value_symbol: str | None
-    total_value: Decimal | None
 
 
 AMOUNT = re.compile(r"(N?)([A-Z]{3})?(\d+(?:,\d*)?)")  # [N]EUR123,45
@@ -69,38 +69,46 @@ def _blocks(fields: list[str]) -> list[list[str]]:
     return blocks
 
 
+def _isin_and_name(field: str) -> tuple[str | None, str | None]:
+    """``:35B:ISIN <isin>`` with the WKN (``/DE/…``) and the name on the next lines."""
+    parts = field[5:].split("|")
+    m = re.match(r"ISIN\s+([A-Z]{2}[A-Z0-9]{9}\d)", parts[0])
+    rest = [p.strip() for p in parts[1:] if p.strip() and not p.strip().startswith("/")]
+    return (m.group(1) if m else None), (" ".join(rest) or None)
+
+
+def _pieces(field: str) -> Decimal | None:
+    m = re.search(r"/[A-Z0-9]*/(?:UNIT|FAMT)/(N?)(\d+(?:,\d*)?)", field)
+    if not m:
+        return None
+    value = _number(m.group(2))
+    return -value if value is not None and m.group(1) else value
+
+
+def _currency(field: str) -> str | None:
+    """Of the holding's value (``:19A::HOLD//``) or its price (``:90A:``/``:90B:``)."""
+    if field.startswith(":19A::HOLD//"):
+        m = AMOUNT.match(field[12:])
+        return m.group(2) if m else None
+    m = re.search(r"/[A-Z0-9]*/(?:ACTU|PRCT)/([A-Z]{3})?\d", field)
+    return m.group(1) if m else None
+
+
 def _holding(block: list[str]) -> Holding | None:
-    isin = name = currency = None
-    pieces = total = price = None
+    isin = name = currency = price_currency = None
+    pieces = None
     for f in block:
         if f.startswith(":35B:"):
-            parts = f[5:].split("|")
-            m = re.match(r"ISIN\s+([A-Z]{2}[A-Z0-9]{9}\d)", parts[0])
-            if m:
-                isin = m.group(1)
-            rest = [p.strip() for p in parts[1:] if p.strip() and not p.strip().startswith("/")]
-            name = " ".join(rest) or None
+            isin, name = _isin_and_name(f)
         elif f.startswith(":93B:") and (pieces is None or "::AGGR//" in f):
-            m = re.search(r"/[A-Z0-9]*/(?:UNIT|FAMT)/(N?)(\d+(?:,\d*)?)", f)
-            if m:
-                value = _number(m.group(2))
-                pieces = -value if value is not None and m.group(1) else value
+            pieces = _pieces(f)
         elif f.startswith(":19A::HOLD//"):
-            m = AMOUNT.match(f[12:])
-            if m:
-                currency = m.group(2) or currency
-                value = _number(m.group(3))
-                total = -value if value is not None and m.group(1) else value
-        elif f.startswith((":90A:", ":90B:")) and price is None:
-            m = re.search(r"/[A-Z0-9]*/(?:ACTU|PRCT)/([A-Z]{3})?(\d+(?:,\d*)?)", f)
-            if m:
-                price = _number(m.group(2))
-                currency = currency or m.group(1)
+            currency = _currency(f) or currency
+        elif f.startswith((":90A:", ":90B:")):
+            price_currency = price_currency or _currency(f)
     if not isin:
         return None
-    if total is None and price is not None and pieces is not None:
-        total = price * pieces
-    return Holding(isin, name or isin, pieces, currency, total)
+    return Holding(isin, name or isin, pieces, currency or price_currency)
 
 
 def parse(lines: list[str]) -> list[Holding]:

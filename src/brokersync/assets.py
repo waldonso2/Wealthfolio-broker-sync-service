@@ -126,7 +126,7 @@ def _isins(text: str) -> set[str]:
     return {i for i in ISIN.findall(text) if valid_isin(i)}
 
 
-def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, accounts: Accounts,  # noqa: C901 (#80)
+def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, accounts: Accounts,
                        isins: set[str], recheck: frozenset[str] | set[str] = frozenset()) -> int:
     """Learn the assets of ``isins`` (positions the broker reports whose asset is unknown or doesn't fit) from
     imported trades whose transfer names the ISIN; returns how many were learned or corrected.
@@ -139,32 +139,76 @@ def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, account
     their transfers as well)."""
     known = state.assets(broker)
     activities = wf.search_activities([accounts.cash, accounts.portfolio], date(1970, 1, 1), date(2100, 1, 1))
+    exact = _by_statement(activities, isins)
+    corrected = _store_unique(state, broker, known, exact)
+    wanted = {i for i in isins if len(exact.get(i, {})) != 1 and (i in recheck or not _preferred(i, known.get(i)))}
+    if not wanted:
+        return corrected
+    trades = _trades_by_time(activities)
+    learned = corrected + _learn_by_time(state, broker, known, wanted, trades)
+    if wanted:
+        _explain(broker, wanted, trades, known, exact)
+    return learned
+
+
+def _store_unique(state: State, broker: str, known: dict, found: dict[str, dict[str, dict]]) -> int:
+    """Store each ISIN ``found`` names exactly one asset for, where it differs; how many."""
+    stored = 0
+    for isin, assets in found.items():
+        if len(assets) == 1:
+            entry = next(iter(assets.values()))
+            if (known.get(isin) or {}).get("asset_id") != entry["asset_id"]:
+                state.set_asset(broker, isin, **entry)
+                known[isin] = entry
+                stored += 1
+    return stored
+
+
+def _learn_by_time(state: State, broker: str, known: dict, wanted: set[str], trades: list) -> int:
+    """Pass after pass: an ISIN that names exactly one asset not taken yet; what is learned leaves ``wanted``
+    and narrows the next pass."""
+    # An asset stored for the same ISIN under another spelling (python-fints' "<ISIN>|/DE/<WKN>") isn't taken.
+    taken = {e["asset_id"] for i, e in known.items() if clean_isin(i) not in wanted}
+    learned = 0
+    while True:
+        found: dict[str, dict[str, dict]] = {}  # ISIN -> asset id -> entry
+        for entry, named in trades:
+            left = named & wanted
+            if len(left) == 1 and entry["asset_id"] not in taken:
+                found.setdefault(next(iter(left)), {})[entry["asset_id"]] = entry
+        new = {isin: next(iter(assets.values())) for isin, assets in found.items() if len(assets) == 1}
+        if not new:
+            return learned
+        for isin, entry in new.items():
+            if (known.get(isin) or {}).get("asset_id") != entry["asset_id"]:
+                state.set_asset(broker, isin, **entry)
+                learned += 1
+            wanted.discard(isin)
+            taken.add(entry["asset_id"])
+
+
+def _by_statement(activities: list[dict], isins: set[str]) -> dict[str, dict[str, dict]]:
+    """ISIN → asset id → entry, from a PDF import's trade whose transfers (same ``[PDF …]``) name one ISIN."""
     by_ref: dict[str, set[str]] = {}
     for a in activities:
         m = PDF_REF.search(a.get("comment") or "")
         if m and a.get("activityType") in ("TRANSFER_IN", "TRANSFER_OUT"):
             by_ref.setdefault(m.group(0), set()).update(_isins(a.get("comment") or ""))
-    exact: dict[str, dict[str, dict]] = {}  # ISIN -> asset id -> entry
+    exact: dict[str, dict[str, dict]] = {}
     for a in activities:
         m = PDF_REF.search(a.get("comment") or "")
         named = by_ref.get(m.group(0), set()) & isins if m else set()
         if len(named) == 1 and a.get("activityType") in ("BUY", "SELL") and a.get("assetId") \
                 and not is_cash_symbol(a.get("assetId")):
             exact.setdefault(next(iter(named)), {})[a["assetId"]] = _entry(a)
-    corrected = 0
-    for isin, assets in exact.items():
-        if len(assets) == 1:
-            entry = next(iter(assets.values()))
-            if (known.get(isin) or {}).get("asset_id") != entry["asset_id"]:
-                state.set_asset(broker, isin, **entry)
-                known[isin] = entry
-                corrected += 1
-    wanted = {i for i in isins if len(exact.get(i, {})) != 1 and (i in recheck or not _preferred(i, known.get(i)))}
-    if not wanted:
-        return corrected
+    return exact
+
+
+def _trades_by_time(activities: list[dict]) -> list[tuple[dict, set[str]]]:
+    """Each trade with the ISINs its transfers name: within LEG_SECONDS, of the same amount if there are any."""
     transfers = [(_when(a), _amount(a), _isins(a.get("comment") or ""))
                  for a in activities if a.get("activityType") in ("TRANSFER_IN", "TRANSFER_OUT")]
-    trades = []  # (asset entry, ISINs its transfers name)
+    trades = []
     for a in activities:
         asset_id = a.get("assetId") or ""
         if a.get("activityType") not in ("BUY", "SELL") or not asset_id or is_cash_symbol(asset_id):
@@ -177,24 +221,7 @@ def learn_from_imports(state: State, broker: str, wf: WealthfolioClient, account
         named = set().union(*(same or [names for _, names in near]))
         if named:
             trades.append((_entry(a), named))
-    # An asset stored for the same ISIN under another spelling (python-fints' "<ISIN>|/DE/<WKN>") isn't taken.
-    learned, taken = corrected, {e["asset_id"] for i, e in known.items() if clean_isin(i) not in wanted}
-    while True:
-        found: dict[str, dict[str, dict]] = {}  # ISIN -> asset id -> entry
-        for entry, named in trades:
-            left = named & wanted
-            if len(left) == 1 and entry["asset_id"] not in taken:
-                found.setdefault(next(iter(left)), {})[entry["asset_id"]] = entry
-        new = {isin: next(iter(assets.values())) for isin, assets in found.items() if len(assets) == 1}
-        if not new:
-            _explain(broker, wanted, trades, known, exact)
-            return learned
-        for isin, entry in new.items():
-            if (known.get(isin) or {}).get("asset_id") != entry["asset_id"]:
-                state.set_asset(broker, isin, **entry)
-                learned += 1
-            wanted.discard(isin)
-            taken.add(entry["asset_id"])
+    return trades
 
 
 def _explain(broker: str, wanted: set[str], trades: list, known: dict, exact: dict) -> None:

@@ -149,7 +149,18 @@ def _check_amounts(tx: Transaction) -> None:
             )
 
 
-def to_activities(  # noqa: C901 (#80)
+# Cash-only kinds booked as one activity: Wealthfolio type, subtype, default label, whether the text is added.
+# The comments are part of Wealthfolio's duplicate fingerprint - never reword them.
+_CASH_KINDS = {
+    Kind.DEPOSIT: ("DEPOSIT", None, "Deposit", True),
+    Kind.FEE: ("FEE", None, "Fee", True),
+    Kind.TAX: ("TAX", None, "Tax", False),
+    Kind.BONUS: ("CREDIT", "BONUS", "Bonus", True),
+    Kind.TAX_REFUND: ("CREDIT", "TAX_REFUND", "Tax refund", False),
+}
+
+
+def to_activities(
     tx: Transaction,
     broker: str,
     accounts: Accounts,
@@ -162,163 +173,192 @@ def to_activities(  # noqa: C901 (#80)
     if tx.kind == Kind.SECURITIES_CASH:
         raise MappingError("The cash side of a securities transaction is booked by the securities side.")
     _check_amounts(tx)
-    mappings = mappings or {}
-    ref = tx_ref(broker, tx)
-    gid = group_id(broker, tx)
-    ccy = tx.currency
-    out: list[dict] = []
+    return _Booking(tx, broker, accounts, mappings or {}, patterns or []).activities()
 
-    def cash(account: str, activity_type: str, seconds: int, amount: Decimal, comment: str, *,
+
+class _Booking:
+    """The activities of one transaction (``to_activities``), one method per kind of booking."""
+
+    def __init__(self, tx: Transaction, broker: str, accounts: Accounts, mappings: dict[str, SecurityMapping],
+                 patterns: list[TransferPattern]):
+        self.tx, self.broker, self.accounts, self.mappings, self.patterns = tx, broker, accounts, mappings, patterns
+        self.ref = tx_ref(broker, tx)
+        self.gid = group_id(broker, tx)
+        self.tax_field = fmt(tx.tax) if tx.tax > 0 else None
+        self.refund = -tx.tax if tx.tax < 0 else Decimal(0)
+        self.out: list[dict] = []
+
+    def cash(self, account: str, activity_type: str, seconds: int, amount: Decimal, comment: str, *,
              subtype: str | None = None, source_group: str | None = None, tax: Decimal | None = None) -> dict:
-        p = {
+        return _clean({
             "accountId": account,
             "activityType": activity_type,
             "subtype": subtype,
-            "activityDate": iso(tx.datetime, seconds),
-            "currency": ccy,
+            "activityDate": iso(self.tx.datetime, seconds),
+            "currency": self.tx.currency,
             "quantity": "1",
             "unitPrice": "1",
             "amount": fmt(amount),
             "tax": fmt(tax) if tax else None,
             "comment": comment,
             "sourceGroupId": source_group,
-        }
-        return _clean(p)
+        })
 
-    tax_field = fmt(tx.tax) if tx.tax > 0 else None
-    refund = -tx.tax if tx.tax < 0 else Decimal(0)
+    def activities(self) -> list[dict]:
+        tx, accounts = self.tx, self.accounts
+        # Cash-only kinds live on the cash account - or on the savings account they were booked on.
+        if tx.account == SAVINGS and not accounts.savings:
+            raise MappingError("A booking of the savings account, but no Wealthfolio account is assigned to it.")
+        self.own = accounts.savings if tx.account == SAVINGS else accounts.cash
+        if tx.own_transfer and tx.kind in (Kind.DEPOSIT, Kind.WITHDRAWAL):
+            return self.own_transfer()
+        if tx.kind in _CASH_KINDS:
+            activity_type, subtype, default, with_text = _CASH_KINDS[tx.kind]
+            text = _text(tx) if with_text else ""
+            return [self.cash(self.own, activity_type, 0, tx.net, f"{tx.label or default}{_name(tx)}{text}{self.ref}",
+                              subtype=subtype)]
+        if tx.kind == Kind.WITHDRAWAL:
+            return self.withdrawal()
+        if tx.kind == Kind.INTEREST:
+            return self.interest()
+        if tx.kind == Kind.DIVIDEND:
+            return self.dividend()
+        return self.trade()
 
-    # Cash-only kinds live on the cash account - or on the savings account they were booked on.
-    if tx.account == SAVINGS and not accounts.savings:
-        raise MappingError("A booking of the savings account, but no Wealthfolio account is assigned to it.")
-    own = accounts.savings if tx.account == SAVINGS else accounts.cash
-    if tx.own_transfer and tx.kind in (Kind.DEPOSIT, Kind.WITHDRAWAL):
+    def own_transfer(self) -> list[dict]:
+        tx, accounts, ref, gid = self.tx, self.accounts, self.ref, self.gid
         if not accounts.savings:
             raise MappingError("A transfer to the savings account, but no Wealthfolio account is assigned to it.")
         what = tx.text or tx.label or "Transfer"
         source, target = ((accounts.cash, accounts.savings) if tx.kind == Kind.WITHDRAWAL
                           else (accounts.savings, accounts.cash))
         names = {accounts.cash: "Cash", accounts.savings: "Savings"}
-        return [cash(source, "TRANSFER_OUT", 0, tx.net, f"-> {names[target]}: {what}{ref}", source_group=gid),
-                cash(target, "TRANSFER_IN", 0, tx.net, f"<- {names[source]}: {what}{ref}", source_group=gid)]
-    if tx.kind == Kind.DEPOSIT:
-        return [cash(own, "DEPOSIT", 0, tx.net, f"{tx.label or 'Deposit'}{_name(tx)}{_text(tx)}{ref}")]
-    if tx.kind == Kind.WITHDRAWAL:
-        # Only outbound money checks the transfer patterns (addon rule): an
-        # inbound transfer is always a deposit.
-        p = match_pattern(tx, patterns or [])
-        if p:
-            what = tx.text or tx.label or "Transfer"
-            out.append(cash(own, "TRANSFER_OUT", 0, tx.net, f"-> {p.label}: {what}{_name(tx, ' (')}{ref}",
-                            source_group=gid if p.destination_account_id else None))
-            if p.destination_account_id:
-                out.append(cash(p.destination_account_id, "TRANSFER_IN", 0, tx.net,
-                                f"<- {broker.upper()}: {what}{ref}", source_group=gid))
-            return out
-        return [cash(own, "WITHDRAWAL", 0, tx.net,
-                     f"{tx.label or 'Withdrawal'}{_name(tx)}{_text(tx)}{ref}")]
-    if tx.kind == Kind.FEE:
-        return [cash(own, "FEE", 0, tx.net, f"{tx.label or 'Fee'}{_name(tx)}{_text(tx)}{ref}")]
-    if tx.kind == Kind.TAX:
-        return [cash(own, "TAX", 0, tx.net, f"{tx.label or 'Tax'}{_name(tx)}{ref}")]
-    if tx.kind == Kind.BONUS:
-        return [cash(own, "CREDIT", 0, tx.net, f"{tx.label or 'Bonus'}{_name(tx)}{_text(tx)}{ref}",
-                     subtype="BONUS")]
-    if tx.kind == Kind.TAX_REFUND:
-        return [cash(own, "CREDIT", 0, tx.net, f"{tx.label or 'Tax refund'}{_name(tx)}{ref}",
-                     subtype="TAX_REFUND")]
-    if tx.kind == Kind.INTEREST:
-        out.append(cash(own, "INTEREST", 0, tx.net - refund,
-                        f"{tx.label or 'Interest'}{_name(tx)}{_text(tx)}{ref}",
-                        tax=tx.tax if tx.tax > 0 else None))
-        if refund:
-            out.append(cash(own, "CREDIT", 0, refund, f"Tax refund on interest{ref}", subtype="TAX_REFUND"))
+        return [self.cash(source, "TRANSFER_OUT", 0, tx.net, f"-> {names[target]}: {what}{ref}", source_group=gid),
+                self.cash(target, "TRANSFER_IN", 0, tx.net, f"<- {names[source]}: {what}{ref}", source_group=gid)]
+
+    def withdrawal(self) -> list[dict]:
+        tx, ref, gid = self.tx, self.ref, self.gid
+        # Only outbound money checks the transfer patterns (addon rule): an inbound transfer is always a deposit.
+        p = match_pattern(tx, self.patterns)
+        if not p:
+            return [self.cash(self.own, "WITHDRAWAL", 0, tx.net,
+                              f"{tx.label or 'Withdrawal'}{_name(tx)}{_text(tx)}{ref}")]
+        what = tx.text or tx.label or "Transfer"
+        out = [self.cash(self.own, "TRANSFER_OUT", 0, tx.net, f"-> {p.label}: {what}{_name(tx, ' (')}{ref}",
+                         source_group=gid if p.destination_account_id else None)]
+        if p.destination_account_id:
+            out.append(self.cash(p.destination_account_id, "TRANSFER_IN", 0, tx.net,
+                                 f"<- {self.broker.upper()}: {what}{ref}", source_group=gid))
         return out
 
-    m = mappings.get(tx.isin or "")
-    asset = _clean({
-        "id": m.asset_id if m else None,
-        "symbol": m.symbol if m else tx.isin,
-        "exchangeMic": m.exchange_mic if m else None,
-        "name": (m.name if m and m.name else None) or tx.name or None,
-        "quoteCcy": ccy,
-    })
-    label = tx.label or tx.kind.value.title()
+    def interest(self) -> list[dict]:
+        tx, ref, refund = self.tx, self.ref, self.refund
+        out = [self.cash(self.own, "INTEREST", 0, tx.net - refund,
+                         f"{tx.label or 'Interest'}{_name(tx)}{_text(tx)}{ref}", tax=tx.tax if tx.tax > 0 else None)]
+        if refund:
+            out.append(self.cash(self.own, "CREDIT", 0, refund, f"Tax refund on interest{ref}", subtype="TAX_REFUND"))
+        return out
 
-    def refund_credit(what: str) -> dict:
-        return cash(accounts.portfolio, "CREDIT", 0, refund, f"Tax refund on {what} of {tx.name}{ref}",
-                    subtype="TAX_REFUND")
+    def asset(self) -> dict:
+        tx = self.tx
+        m = self.mappings.get(tx.isin or "")
+        return _clean({
+            "id": m.asset_id if m else None,
+            "symbol": m.symbol if m else tx.isin,
+            "exchangeMic": m.exchange_mic if m else None,
+            "name": (m.name if m and m.name else None) or tx.name or None,
+            "quoteCcy": tx.currency,
+        })
 
-    def sweep_to_cash(text: str) -> None:
-        out.append(cash(accounts.portfolio, "TRANSFER_OUT", 1, tx.net, f"{text} -> Cash{ref}", source_group=gid))
-        out.append(cash(accounts.cash, "TRANSFER_IN", 2, tx.net, f"{text} from Portfolio{ref}", source_group=gid))
+    @property
+    def label(self) -> str:
+        return self.tx.label or self.tx.kind.value.title()
 
-    if tx.kind == Kind.DIVIDEND:
-        out.append(_clean({
-            "accountId": accounts.portfolio,
+    def refund_credit(self, what: str) -> dict:
+        return self.cash(self.accounts.portfolio, "CREDIT", 0, self.refund,
+                         f"Tax refund on {what} of {self.tx.name}{self.ref}", subtype="TAX_REFUND")
+
+    def sweep_to_cash(self, text: str) -> None:
+        tx, ref, gid = self.tx, self.ref, self.gid
+        self.out.append(self.cash(self.accounts.portfolio, "TRANSFER_OUT", 1, tx.net, f"{text} -> Cash{ref}",
+                                  source_group=gid))
+        self.out.append(self.cash(self.accounts.cash, "TRANSFER_IN", 2, tx.net, f"{text} from Portfolio{ref}",
+                                  source_group=gid))
+
+    def dividend(self) -> list[dict]:
+        tx = self.tx
+        self.out.append(_clean({
+            "accountId": self.accounts.portfolio,
             "activityType": "DIVIDEND",
             "activityDate": iso(tx.datetime),
-            "currency": ccy,
+            "currency": tx.currency,
             # Scalable reports no share count for a payout: quantity 1, like the addon.
             "quantity": fmt(tx.shares) if tx.shares else "1",
-            "amount": fmt(tx.net - refund),
-            "tax": tax_field,
-            "comment": f"{label} {tx.name}{ref}",
-            "asset": asset,
+            "amount": fmt(tx.net - self.refund),
+            "tax": self.tax_field,
+            "comment": f"{self.label} {tx.name}{self.ref}",
+            "asset": self.asset(),
         }))
-        if refund:
-            out.append(refund_credit("dividend"))
+        if self.refund:
+            self.out.append(self.refund_credit("dividend"))
         # A payout always stays on the cash account, whatever external_cash says.
-        sweep_to_cash(f"{label} {tx.name}")
-        return out
+        self.sweep_to_cash(f"{self.label} {tx.name}")
+        return self.out
 
-    if not tx.shares or tx.gross is None:
-        raise MappingError(f"{tx.kind.value} {tx.id} has no share count or gross amount")
-    quantity = fmt(tx.shares)
-    unit_price = fmt(round6(tx.gross / tx.shares))
-    fee = fmt(tx.fee)
-    trade = _clean({
-        "accountId": accounts.portfolio,
-        "activityType": tx.kind.value,
-        "activityDate": iso(tx.datetime),
-        "currency": ccy,
-        "quantity": quantity,
-        "unitPrice": unit_price,
-        "fee": fee,
-        "tax": tax_field,
-        "amount": trade_final_cash(tx.kind, quantity, unit_price, fee, tax_field or "0"),
-        "comment": f"{label} {tx.name}{ref}",
-        "asset": asset,
-    })
+    def trade(self) -> list[dict]:
+        tx = self.tx
+        if not tx.shares or tx.gross is None:
+            raise MappingError(f"{tx.kind.value} {tx.id} has no share count or gross amount")
+        quantity = fmt(tx.shares)
+        unit_price = fmt(round6(tx.gross / tx.shares))
+        fee = fmt(tx.fee)
+        trade = _clean({
+            "accountId": self.accounts.portfolio,
+            "activityType": tx.kind.value,
+            "activityDate": iso(tx.datetime),
+            "currency": tx.currency,
+            "quantity": quantity,
+            "unitPrice": unit_price,
+            "fee": fee,
+            "tax": self.tax_field,
+            "amount": trade_final_cash(tx.kind, quantity, unit_price, fee, self.tax_field or "0"),
+            "comment": f"{self.label} {tx.name}{self.ref}",
+            "asset": self.asset(),
+        })
+        if tx.kind == Kind.BUY:
+            return self.buy(trade)
+        return self.sell(trade)
 
-    if tx.kind == Kind.BUY and tx.bonus_funded:
-        # As the addon's STOCKPERK-funded buy: the broker's money arrives on the
-        # securities account as a bonus and pays the buy there.
-        out.append(cash(accounts.portfolio, "CREDIT", -1, tx.net, f"{label} bonus for {tx.isin} ({tx.name}){ref}",
-                        subtype="BONUS"))
-        out.append(trade)
-        return out
-
-    if tx.kind == Kind.BUY:
+    def buy(self, trade: dict) -> list[dict]:
+        tx, accounts, ref, gid, out = self.tx, self.accounts, self.ref, self.gid, self.out
+        if tx.bonus_funded:
+            # As the addon's STOCKPERK-funded buy: the broker's money arrives on the
+            # securities account as a bonus and pays the buy there.
+            out.append(self.cash(accounts.portfolio, "CREDIT", -1, tx.net,
+                                 f"{self.label} bonus for {tx.isin} ({tx.name}){ref}", subtype="BONUS"))
+            out.append(trade)
+            return out
         if tx.external_cash:
-            out.append(cash(accounts.cash, "DEPOSIT", -3, tx.net, f"Deposit for {tx.isin} ({tx.name}) buy{ref}"))
-        out.append(cash(accounts.cash, "TRANSFER_OUT", -2, tx.net,
-                        f"Funds for {tx.isin} ({tx.name}) buy -> Portfolio{ref}", source_group=gid))
-        out.append(cash(accounts.portfolio, "TRANSFER_IN", -1, tx.net, f"Funds from Cash for {tx.isin} buy{ref}",
-                        source_group=gid))
+            out.append(self.cash(accounts.cash, "DEPOSIT", -3, tx.net, f"Deposit for {tx.isin} ({tx.name}) buy{ref}"))
+        out.append(self.cash(accounts.cash, "TRANSFER_OUT", -2, tx.net,
+                             f"Funds for {tx.isin} ({tx.name}) buy -> Portfolio{ref}", source_group=gid))
+        out.append(self.cash(accounts.portfolio, "TRANSFER_IN", -1, tx.net, f"Funds from Cash for {tx.isin} buy{ref}",
+                             source_group=gid))
         out.append(trade)
-        if refund:
-            out.append(refund_credit("purchase"))
+        if self.refund:
+            out.append(self.refund_credit("purchase"))
         return out
 
-    out.append(trade)
-    if refund:
-        out.append(refund_credit("sale"))
-    sweep_to_cash(f"{tx.isin} ({tx.name}) sale")
-    if tx.external_cash:
-        out.append(cash(accounts.cash, "WITHDRAWAL", 3, tx.net,
-                        f"Proceeds of {tx.isin} ({tx.name}) sale paid out{ref}"))
-    return out
+    def sell(self, trade: dict) -> list[dict]:
+        tx, out = self.tx, self.out
+        out.append(trade)
+        if self.refund:
+            out.append(self.refund_credit("sale"))
+        self.sweep_to_cash(f"{tx.isin} ({tx.name}) sale")
+        if tx.external_cash:
+            out.append(self.cash(self.accounts.cash, "WITHDRAWAL", 3, tx.net,
+                                 f"Proceeds of {tx.isin} ({tx.name}) sale paid out{self.ref}"))
+        return out
 
 
 def _name(tx: Transaction, sep: str = " ") -> str:

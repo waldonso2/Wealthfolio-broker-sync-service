@@ -94,13 +94,16 @@ class Report:
         return sum((m.net for m in self.moments), Decimal(0))
 
 
-def check(activities: list[dict], accounts: Accounts) -> Report:  # noqa: C901 (#80)
+def check(activities: list[dict], accounts: Accounts) -> Report:
     depot = sorted((a for a in activities if a.get("accountId") == accounts.portfolio), key=_when)
     cash = [a for a in activities if a.get("accountId") == accounts.cash]
-    report = Report(depot_cash=sum((cash_effect(a) for a in depot), Decimal(0)),
-                    cash=sum((cash_effect(a) for a in cash), Decimal(0)))
+    return Report(depot_cash=sum((cash_effect(a) for a in depot), Decimal(0)),
+                  cash=sum((cash_effect(a) for a in cash), Decimal(0)),
+                  moments=_unpaired(_moments(depot)), lonely=_lonely(depot, cash))
 
-    # Depot moments: activities less than MOMENT_SECONDS apart belong together.
+
+def _moments(depot: list[dict]) -> list[Moment]:
+    """Depot moments that leave cash: activities less than MOMENT_SECONDS apart belong together."""
     group: list[dict] = []
     moments: list[Moment] = []
     for a in [*depot, None]:
@@ -111,41 +114,44 @@ def check(activities: list[dict], accounts: Accounts) -> Report:  # noqa: C901 (
             group = []
         if a is not None:
             group.append(a)
-    report.moments = _unpaired(moments)
+    return moments
 
-    # Transfers between the two accounts without their other leg.
+
+def _partner(a: dict, others: list[dict], used: set[str]) -> dict | None:
+    """The other leg of a transfer: the same ``sourceGroupId``, else the same amount nearest within a minute."""
+    want = "TRANSFER_OUT" if a["activityType"] == "TRANSFER_IN" else "TRANSFER_IN"
+    amount = abs(_dec(a.get("amount")))
+    group_id = a.get("sourceGroupId")
+    best = None
+    for o in others:
+        if o["id"] in used or o.get("activityType") != want or not is_cash_transfer(o):
+            continue
+        if abs(abs(_dec(o.get("amount"))) - amount) > TOLERANCE:
+            continue
+        if group_id and o.get("sourceGroupId") == group_id:
+            return o
+        gap = abs((_when(o) - _when(a)).total_seconds())
+        if gap <= PARTNER_SECONDS and (best is None or gap < best[0]):
+            best = (gap, o)
+    return best[1] if best else None
+
+
+def _lonely(depot: list[dict], cash: list[dict]) -> list[dict]:
+    """Transfers between the two accounts without their other leg."""
     used: set[str] = set()
-
-    def partner(a: dict, others: list[dict]) -> dict | None:
-        want = "TRANSFER_OUT" if a["activityType"] == "TRANSFER_IN" else "TRANSFER_IN"
-        amount = abs(_dec(a.get("amount")))
-        group_id = a.get("sourceGroupId")
-        best = None
-        for o in others:
-            if o["id"] in used or o.get("activityType") != want or not is_cash_transfer(o):
-                continue
-            if abs(abs(_dec(o.get("amount"))) - amount) > TOLERANCE:
-                continue
-            if group_id and o.get("sourceGroupId") == group_id:
-                return o
-            gap = abs((_when(o) - _when(a)).total_seconds())
-            if gap <= PARTNER_SECONDS and (best is None or gap < best[0]):
-                best = (gap, o)
-        return best[1] if best else None
-
+    lonely = []
     for a in depot:
         if not is_cash_transfer(a):
             continue
-        p = partner(a, cash)
+        p = _partner(a, cash, used)
         if p:
             used.add(p["id"])
         else:
-            report.lonely.append(a)
+            lonely.append(a)
     for a in cash:
         if is_cash_transfer(a) and a["id"] not in used and "portfolio" in (a.get("comment") or "").lower():
-            report.lonely.append(a)
-    report.lonely.sort(key=_when)
-    return report
+            lonely.append(a)
+    return sorted(lonely, key=_when)
 
 
 def _unpaired(moments: list[Moment]) -> list[Moment]:

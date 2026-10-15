@@ -18,6 +18,12 @@
     {% if f.ask and stored.get(f.name) %}<label class="check"><input type="checkbox" name="forget_{{ f.name }}" value="1"> {{ _("{label} nicht mehr speichern – bei jeder Anmeldung eingeben", label=f.label) }}</label>{% endif %}
     {% endfor %}
 
+    {% if adapter.consent %}
+    <div class="flash warn" role="note">{{ adapter.consent }}</div>
+    {% if b.consented %}<p class="muted">{{ _("Hinweis zur Schnittstelle bestätigt.") }}</p>
+    {% else %}<label class="check"><input type="checkbox" name="consent" value="1"{{ invalid("consent") }}> {{ _("Ich habe den Hinweis gelesen und möchte den Zugang trotzdem nutzen.") }}</label>
+    {{ error("consent") }}{% endif %}
+    {% endif %}
     <h2 class="mt-l">{{ _("Wealthfolio-Konten") }}</h2>
     {% if wf_error %}<div class="flash error">{{ _("Wealthfolio nicht erreichbar: {error}", error=wf_error | redact) }} – <a href="/setup/wealthfolio">{{ _("Verbindung prüfen") }}</a></div>{% endif %}
     <p class="muted">{{ _("Ein Verrechnungskonto für Ein- und Auszahlungen, ein Depotkonto für die Wertpapiere. Hast du schon per CSV/PDF importiert, nimm dieselben Konten, dann werden diese Buchungen erkannt.") }}</p>

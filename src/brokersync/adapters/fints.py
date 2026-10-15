@@ -90,7 +90,9 @@ def credential_fields(bank: str, banking: str, *, blz: bool = False, username_he
                         help="Nur nötig, wenn du unten ein Wealthfolio-Konto für das Tagesgeld wählst und der Dienst "
                              "es nicht selbst findet."),
         CredentialField("product_id", "FinTS-Produkt-ID",
-                        help="Wird bald fest eingebaut. Bis dahin hier die registrierte Produkt-ID eintragen."),
+                        help="Nur deine eigene, bei der Deutschen Kreditwirtschaft registrierte Produkt-ID "
+                             "verwenden: Eine fremde zu nutzen oder weiterzugeben widerspricht den "
+                             "Registrierungsbedingungen. Sobald der Dienst eine eigene hat, ist sie fest eingebaut."),
     ]
     return fields
 
@@ -293,28 +295,36 @@ class FintsAdapter(BrokerAdapter):
                      _yes(acc_ops.get("GET_HOLDINGS")))
 
     # ── data ────────────────────────────────────────────────────────────────
+    def _upd(self) -> dict[str, dict]:
+        """The accounts of the user parameters (UPD) by IBAN."""
+        return {(a.get("iban") or "").upper(): a for a in self._information().get("accounts") or [] if a.get("iban")}
+
+    def _typed_iban(self, field: str) -> str:
+        return (self.credentials.get(field) or "").replace(" ", "").upper()
+
+    def _log_chosen(self, flag: str, what: str, chosen) -> None:
+        """Once per adapter: which account the bank's name says was chosen."""
+        if not getattr(self, flag):
+            setattr(self, flag, True)
+            name = self._upd().get((chosen.iban or "").upper(), {}).get("product_name")
+            log.info("%s (FinTS): %s von „%s“", self.label, what, name or "?")
+
     def _account(self):
         accounts = self._call(self._client.get_sepa_accounts)
         if not accounts:
             raise AdapterError(f"{_cap(self.bank)} meldet kein Konto für diesen Zugang.")
-        wanted = (self.credentials.get("iban") or "").replace(" ", "").upper()
+        wanted = self._typed_iban("iban")
         if wanted:
-            for a in accounts:
-                if (a.iban or "").upper() == wanted:
-                    return a
-            raise AdapterError(f"Die IBAN {wanted} gehört nicht zu diesem {self.label}-Zugang.")
+            chosen = next((a for a in accounts if (a.iban or "").upper() == wanted), None)
+            if chosen is None:
+                raise AdapterError(f"Die IBAN {wanted} gehört nicht zu diesem {self.label}-Zugang.")
+            return chosen
         # Without an IBAN: the giro account by the account type the bank reports (FinTS: 1-9 current
         # accounts; 10-19 savings, 30-39 depots), else the first account with an IBAN.
-        giro = {(a.get("iban") or "").upper() for a in self._information().get("accounts") or []
-                if isinstance(a.get("type"), int) and 1 <= a["type"] <= 9 and a.get("iban")
-                and not SAVINGS_NAME.search(a.get("product_name") or "")}
-        chosen = (next((a for a in accounts if (a.iban or "").upper() in giro), None)
+        upd = self._upd()
+        chosen = (next((a for a in accounts if _kind(upd.get((a.iban or "").upper())) == "giro"), None)
                   or next((a for a in accounts if a.iban), accounts[0]))
-        if not self._logged_account:
-            self._logged_account = True
-            name = next((a.get("product_name") for a in self._information().get("accounts") or []
-                         if a.get("iban") and (a.get("iban") or "").upper() == (chosen.iban or "").upper()), None)
-            log.info("%s (FinTS): Umsätze und Saldo von „%s“", self.label, name or "?")
+        self._log_chosen("_logged_account", "Umsätze und Saldo", chosen)
         return chosen
 
     def _depot_accounts(self) -> list[tuple[object, str]]:
@@ -323,60 +333,43 @@ class FintsAdapter(BrokerAdapter):
         holdings but without IBAN (a depot is not a SEPA account at most banks)."""
         info = self._information().get("accounts") or []
         holdings_ibans = {(a.get("iban") or "").upper() for a in info if _ops(a).get("GET_HOLDINGS")}
-        accounts = []
         sepa = self._call(self._client.get_sepa_accounts) or []
+        accounts = [(a, "Konto mit IBAN" if a.iban else "Konto ohne IBAN") for a in sepa
+                    if not (info and a.iban and a.iban.upper() not in holdings_ibans)]  # a giro: no holdings
         # python-fints takes the bank's country from the BIC (HKWPD's account, Account2/3): a depot without
         # IBAN gets the BIC of the bank's other accounts, else one naming Germany.
         bic = next((a.bic for a in sepa if getattr(a, "bic", None)), None) or "XXXXDEXXXXX"
-        for a in sepa:
-            if info and a.iban and a.iban.upper() not in holdings_ibans:
-                continue  # a giro or savings account: no holdings to ask for
-            accounts.append((a, "Konto mit IBAN" if a.iban else "Konto ohne IBAN"))
         known = {(a.accountnumber, getattr(a, "subaccount", None)) for a, _ in accounts}
-        for a in info:
-            number = a.get("account_number")
-            if not _ops(a).get("GET_HOLDINGS") or a.get("iban") or not number:
-                continue
-            if (number, a.get("subaccount_number")) in known:
-                continue
-            bank_id = a.get("bank_identifier")
-            accounts.append((_sepa_account(number, a.get("subaccount_number"),
-                                           getattr(bank_id, "bank_code", None) or self.blz
-                                           or (self.credentials.get("blz") or "").replace(" ", ""), bic),
-                             f"„{a.get('product_name') or '?'}“ (Art {a.get('type') or '?'})"))
-        return accounts
+        return accounts + [(self._upd_account(a, bic), f"„{a.get('product_name') or '?'}“ (Art {a.get('type') or '?'})")
+                           for a in info if _depot_without_iban(a, known)]
+
+    def _upd_account(self, a: dict, bic: str):
+        """A depot the user parameters list without IBAN, as the account python-fints asks for holdings."""
+        bank_id = a.get("bank_identifier")
+        return _sepa_account(a["account_number"], a.get("subaccount_number"),
+                             getattr(bank_id, "bank_code", None) or self.blz
+                             or (self.credentials.get("blz") or "").replace(" ", ""), bic)
 
     def _savings_account(self):
         """The savings account (Tagesgeld): by the IBAN the user entered, else the account the bank calls a
         savings account (type 10-19, or its product name) other than the giro account."""
         accounts = [a for a in self._call(self._client.get_sepa_accounts) or [] if a.iban]
         giro = (self._account().iban or "").upper()
-        wanted = (self.credentials.get("savings_iban") or "").replace(" ", "").upper()
+        wanted = self._typed_iban("savings_iban")
         if wanted:
             chosen = next((a for a in accounts if a.iban.upper() == wanted), None)
             if chosen is None:
                 raise AdapterError(f"Die IBAN des Tagesgeldkontos gehört nicht zu diesem {self.label}-Zugang.")
         else:
-            info = {(a.get("iban") or "").upper(): a for a in self._information().get("accounts") or []
-                    if a.get("iban")}
-
-            def savings(a) -> bool:
-                entry = info.get(a.iban.upper(), {})
-                kind = entry.get("type")
-                return (isinstance(kind, int) and 10 <= kind <= 19) or bool(
-                    SAVINGS_NAME.search(entry.get("product_name") or ""))
-
-            chosen = next((a for a in accounts if a.iban.upper() != giro and savings(a)), None)
+            upd = self._upd()
+            chosen = next((a for a in accounts if a.iban.upper() != giro
+                           and _kind(upd.get(a.iban.upper())) == "savings"), None)
             if chosen is None:
                 raise AdapterError(f"{_cap(self.bank)} meldet kein Tagesgeldkonto für diesen Zugang - bitte die "
                                    "IBAN des Tagesgeldkontos in den Broker-Einstellungen eintragen.")
         if chosen.iban.upper() == giro:
             raise AdapterError("Girokonto und Tagesgeldkonto sind dasselbe Konto - bitte die IBANs prüfen.")
-        if not self._logged_savings:
-            self._logged_savings = True
-            name = next((a.get("product_name") for a in self._information().get("accounts") or []
-                         if (a.get("iban") or "").upper() == chosen.iban.upper()), None)
-            log.info("%s (FinTS): Tagesgeld: Umsätze und Saldo von „%s“", self.label, name or "?")
+        self._log_chosen("_logged_savings", "Tagesgeld: Umsätze und Saldo", chosen)
         return chosen
 
     def get_cash(self) -> list[CashBalance]:
@@ -409,8 +402,7 @@ class FintsAdapter(BrokerAdapter):
                 if not h.ISIN or h.pieces is None:
                     log.info("%s (FinTS): eine Position ohne ISIN oder Stückzahl übersprungen", self.label)
                     continue
-                out.append(Position(h.ISIN, h.name, Decimal(str(h.pieces)), h.value_symbol or "EUR",
-                                    Decimal(str(h.total_value)) if h.total_value is not None else None))
+                out.append(Position(h.ISIN, h.name, Decimal(str(h.pieces)), h.value_symbol or "EUR"))
         return out
 
     def _records(self, account, start: date, end: date) -> tuple[list[dict], str]:
@@ -539,6 +531,24 @@ class FintsAdapter(BrokerAdapter):
 
 def _cap(text: str) -> str:
     return text[:1].upper() + text[1:]
+
+
+def _depot_without_iban(a: dict, known: set) -> bool:
+    """An account of the user parameters with holdings and no IBAN, not already among the SEPA accounts."""
+    number = a.get("account_number")
+    return bool(_ops(a).get("GET_HOLDINGS") and not a.get("iban") and number
+                and (number, a.get("subaccount_number")) not in known)
+
+
+def _kind(entry: dict | None) -> str:
+    """What the bank says an account of the user parameters is: "savings" (type 10-19 or its product name),
+    "giro" (type 1-9), else ""."""
+    if not entry:
+        return ""
+    kind, name = entry.get("type"), entry.get("product_name") or ""
+    if (isinstance(kind, int) and 10 <= kind <= 19) or SAVINGS_NAME.search(name):
+        return "savings"
+    return "giro" if isinstance(kind, int) and 1 <= kind <= 9 else ""
 
 
 def _ops(entry: dict) -> dict[str, bool]:

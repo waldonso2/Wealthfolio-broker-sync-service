@@ -195,6 +195,9 @@ class TradeRepublicAdapter(BrokerAdapter):
         CredentialField("pin", "PIN", secret=True, help="Die 4-stellige PIN der Trade-Republic-App."),
     ]
 
+    consent = ("Trade Republic bietet keine offizielle Schnittstelle. Der Dienst nutzt die der Web-App (über die "
+               "Bibliothek pytr), wie andere Finanzprogramme auch. Trade Republic kann sie jederzeit ändern oder "
+               "solche Zugriffe untersagen; dann klappt der Abruf nicht mehr. Der Dienst liest nur, er handelt nie.")
     # Replaced in tests; real runs use pytr.
     reports_positions = True
 

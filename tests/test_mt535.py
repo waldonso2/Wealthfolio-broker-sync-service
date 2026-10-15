@@ -53,11 +53,12 @@ TEST ANLEIHE
 
 def test_holdings_are_read_even_without_a_total_value():
     fund, share, bond = mt535.parse(ANSWER)
-    assert (fund.ISIN, fund.name, fund.pieces, fund.value_symbol, fund.total_value) == \
-        ("LU0000000001", "TEST WORLD FONDS", D("12.5"), "EUR", D("1234.5"))
-    # No :19A: - python-fints' own parser fails here; the value comes from price × shares.
-    assert (share.ISIN, share.name, share.pieces, share.total_value) == ("DE0000000002", "TEST AKTIE", D("7"), D("70"))
-    assert (bond.ISIN, bond.pieces, bond.value_symbol, bond.total_value) == ("DE0000000003", D("1000"), "EUR", D("-5"))
+    assert (fund.ISIN, fund.name, fund.pieces, fund.value_symbol) == \
+        ("LU0000000001", "TEST WORLD FONDS", D("12.5"), "EUR")
+    # No :19A: - python-fints' own parser fails here; the currency comes from the price.
+    assert (share.ISIN, share.name, share.pieces, share.value_symbol) == ("DE0000000002", "TEST AKTIE", D("7"), "EUR")
+    assert (bond.ISIN, bond.pieces, bond.value_symbol) == ("DE0000000003", D("1000"), "EUR")
+    assert not hasattr(fund, "total_value")  # never read; for a bond in per cent it would be wrong (#118)
 
 
 def test_the_structure_names_tags_but_no_values():
