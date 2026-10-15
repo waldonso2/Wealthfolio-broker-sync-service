@@ -211,6 +211,13 @@ Nach jedem Lauf ohne Fehler vergleicht `reconcile.py` den Kontostand und, bei Ad
 
 ## Daten und Geheimnisse
 
+**Gleichzeitig: Web-Prozess und Timer (0.20.0).**
+- **Datenbank:** Jeder Thread hat seine eigene Datenbankverbindung (`State.db` ist threadlokal).
+- **Dateien:** Jede Datei wird über eine eigene Temp-Datei geschrieben (`crypto.write_atomic` mit `mkstemp`).
+- **Sperren:** Einstellungen und Tresor schreiben unter `secrets.lock`, derselben Sperre wie die Neuverschlüsselung.
+- **Broker-Sitzungen** gehen nur über `Vault.store_session` zurück in den Tresor. Hat seit dem Lesen jemand anderes geschrieben, gewinnen die höheren Sperrschutz-Zähler. Ist die Sitzung leer, weil neue Zugangsdaten gespeichert wurden, gewinnt der leere Stand.
+- **Sitzungs-Cookies** tragen `password_tag` des Passwort-Hashs. Ein Cookie von vor `brokersync-reset-password` meldet niemanden an.
+
 Alles liegt verschlüsselt in `BROKERSYNC_DATA` (Standard `/opt/wealthfolio-broker-sync/data`, Modus 0700, Dateien 0600); der Schlüssel liegt nicht dort (`crypto.py`).
 
 **Schlüssel.** Der *Host-Schlüssel* (32 Zufallsbytes) kommt in dieser Reihenfolge aus `$CREDENTIALS_DIRECTORY/brokersync-key` (systemd: `LoadCredentialEncrypted=` aus `/etc/wealthfolio-broker-sync/key.cred`, mit `systemd-creds` verschlüsselt; wo das nicht geht `LoadCredential=` aus einer root-only Datei), `$BROKERSYNC_KEY_FILE` oder – nur Entwicklung, Tests und Installationen vor 0.9.0 – `data/secret.key`. Daraus leitet HKDF-SHA256 zwei Stufen ab:
@@ -292,7 +299,7 @@ Aufbau (#76): `web/app.py` baut die App (`create_app` mit Gate, Vorlagen und Fil
 | `POST /run` | Abruf starten, für alle oder einen Broker (`broker=`). Läuft im Hintergrund-Thread |
 | `/setup/wealthfolio` | Wealthfolio-URL und -Passwort, Verbindungstest |
 | `/brokers`, `/brokers/{key}` | Broker-Liste, Zugangsdaten, Konten, Startdatum, automatischer Abruf |
-| `/brokers/{key}/login` | Login mit TAN, Code oder App-Bestätigung |
+| `/brokers/{key}/login`, `POST …/login/start` | Login mit TAN, Code oder App-Bestätigung. Der GET fragt den Broker nie: Er zeigt die offene Anmeldung wieder oder eine Startseite. Erst der POST startet sie, unter der Sync-Sperre (#99). Nach 15 Minuten wird eine offene Anmeldung geschlossen |
 | `/brokers/{key}/refetch` | nächster Abruf einmal wieder ab dem Startdatum |
 | `/transfers` | Muster für Überträge auf eigene Konten – **vorerst ausgeblendet** (`routes.HIDDEN`, #84); gespeicherte Muster gelten weiter |
 | `/notifications` | ntfy-Server, -Topic, -Token, öffentliche URL |
