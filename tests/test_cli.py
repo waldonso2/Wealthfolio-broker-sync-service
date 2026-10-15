@@ -61,7 +61,7 @@ def test_run_with_an_empty_data_dir_does_nothing(data):
 
 def test_reset_ui_password_keeps_everything_else(data, capsys):
     vault = Vault(data)
-    vault.update(lambda d: d.update(ui_password_hash=hash_password("geheim-123456"), wealthfolio_password="wf"))
+    vault.update(lambda d: d.update(ui_password_hash=hash_password("Kiefer-Ozelot-9182"), wealthfolio_password="wf"))
     assert cli.main(["reset-ui-password"]) == 0
     stored = vault.load()
     assert stored.pop("setup_code")["sha256"] and stored == {"wealthfolio_password": "wf"}
@@ -75,7 +75,7 @@ def test_setup_code_only_while_no_password_is_set(data, capsys):
     vault = Vault(data)
     assert cli.main(["setup-code"]) == 0
     assert check_setup_code(vault, capsys.readouterr().out.strip().rsplit(" ", 1)[-1])
-    vault.update(lambda d: d.update(ui_password_hash=hash_password("geheim-123456")))
+    vault.update(lambda d: d.update(ui_password_hash=hash_password("Kiefer-Ozelot-9182")))
     assert cli.main(["setup-code"]) == 1 and "brokersync-reset-password" in capsys.readouterr().err
 
 

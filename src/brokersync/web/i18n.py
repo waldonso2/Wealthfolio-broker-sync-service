@@ -548,7 +548,6 @@ EN: dict[str, str] = {
         "Forgot the password? Run <code>brokersync-reset-password</code> in the container's console.",
     "Das Passwort braucht mindestens {n} Zeichen, beide Eingaben müssen gleich sein.":
         "The password needs at least {n} characters, and both entries must be the same.",
-    "Passwort gespeichert. Jetzt Schritt für Schritt einrichten.": "Password saved. Now set things up step by step.",
     "Gerade laufen zu viele Anmeldungen gleichzeitig. Bitte gleich noch einmal versuchen.":
         "Too many sign-ins are running at the same time. Please try again in a moment.",
     "Der Einrichtungscode stimmt nicht oder ist abgelaufen.": "The setup code is wrong or has expired.",
@@ -728,4 +727,125 @@ EN: dict[str, str] = {
     "Master-Passphrase entfernt.": "Master passphrase removed.",
     "Master-Passphrase gesetzt. Merke sie dir gut: Ohne sie sind die Daten verloren.":
         "Master passphrase set. Remember it well: without it the data is lost.",
+    # 0.21.0
+    "Kontenprüfung":
+        "Account check",
+    "Logos holen":
+        "Fetching logos",
+    "Passwort gespeichert. Die Übersicht zeigt, was noch einzurichten ist.":
+        "Password saved. The overview shows what is left to set up.",
+    "Dieses Passwort ist zu verbreitet und schnell erraten. Am besten eines aus einem Passwortmanager.":
+        "This password is too common and quickly guessed. Best take one from a password manager.",
+    "Passwort geändert. Alle anderen Anmeldungen sind beendet.":
+        "Password changed. Every other sign-in has ended.",
+    "Alle anderen Sitzungen sind beendet.":
+        "All other sessions have ended.",
+    "Das bisherige Passwort stimmt nicht.":
+        "The current password is wrong.",
+    "Diese Passphrase ist zu verbreitet und schnell erraten.":
+        "This passphrase is too common and quickly guessed.",
+    "{job} läuft im Hintergrund. Das Ergebnis erscheint hier, sobald es fertig ist.":
+        "{job} runs in the background. The result shows here once it is done.",
+    "Abruf":
+        "Fetch",
+    "Ersten Broker einrichten":
+        "Set up the first broker",
+    "Benachrichtigungen einrichten (für TAN-Anfragen und Fehler)":
+        "Set up notifications (for TAN requests and errors)",
+    "Optional: Master-Passphrase setzen":
+        "Optional: set a master passphrase",
+    "Optional: dem Zertifikat der Oberfläche vertrauen":
+        "Optional: trust the certificate of this UI",
+    "Gerade läuft noch: {job}. Bitte danach noch einmal.":
+        "Still running: {job}. Please try again afterwards.",
+    "{job} ist fehlgeschlagen - siehe Protokoll.":
+        "{job} failed - see the log.",
+    "Bitte genau „{label}“ eingeben.":
+        "Please type exactly “{label}”.",
+    "Die Konten werden gerade geprüft …":
+        "The accounts are being checked …",
+    "Konten geprüft {when}.":
+        "Accounts checked {when}.",
+    "Neu prüfen":
+        "Check again",
+    "Fehlt in Wealthfolio":
+        "Missing in Wealthfolio",
+    "Auswahl":
+        "Selection",
+    "Buchung vom {day} über {amount} {currency} auswählen":
+        "Select the booking of {day} over {amount} {currency}",
+    "Nicht mehr bei {label}":
+        "No longer at {label}",
+    "Anfangsbestände":
+        "Opening positions",
+    "Depot-Zeitpunkte mit Bargeld":
+        "Securities account moments with cash",
+    "Überträge ohne Gegenstück":
+        "Transfers without a counterpart",
+    "Ignorierte Buchungen":
+        "Ignored bookings",
+    "Anmeldung":
+        "Login",
+    "Buchen":
+        "Booking",
+    "Abgleich mit Wealthfolio":
+        "Comparing with Wealthfolio",
+    "{label} ({n} von {m})":
+        "{label} ({n} of {m})",
+    "{job} läuft …":
+        "{job} running …",
+    "Warte auf deine Freigabe in der App (seit {when})":
+        "Waiting for your approval in the app (since {when})",
+    "Die Seite aktualisiert sich alle 10 Sekunden.":
+        "The page refreshes every 10 seconds.",
+    "Automatisch aktualisieren anhalten":
+        "Stop refreshing automatically",
+    "Aktualisieren":
+        "Refresh",
+    "Einrichtung: {done} von {total} erledigt":
+        "Setup: {done} of {total} done",
+    "erledigt":
+        "done",
+    "optional":
+        "optional",
+    "offen":
+        "open",
+    "Abweichungen {label} zu Wealthfolio":
+        "Deviations {label} vs. Wealthfolio",
+    "Passwort der Oberfläche":
+        "Password of this UI",
+    "Bisheriges Passwort":
+        "Current password",
+    "Neues Passwort (mindestens {n} Zeichen)":
+        "New password (at least {n} characters)",
+    "Am besten eines aus einem Passwortmanager. Alle anderen Anmeldungen enden dabei.":
+        "Best take one from a password manager. Every other sign-in ends with it.",
+    "Passwort ändern":
+        "Change password",
+    "Angemeldet bleibt man höchstens 12 Stunden, nach 30 Minuten ohne Aktivität ist eine neue Anmeldung nötig.":
+        "A sign-in lasts at most 12 hours; after 30 minutes without activity you sign in again.",
+    "Alle anderen Sitzungen beenden":
+        "End all other sessions",
+    "{label} neu aufsetzen":
+        "Start {label} over",
+    "<strong>{n} Buchungen</strong> des Dienstes für {label} werden in Wealthfolio gelöscht (Kommentar "
+    "„[SYNC {key}:…]“). Der nächste Abruf holt danach alles ab dem Startdatum neu. CSV-/PDF-Importe, von "
+    "Hand angelegte Buchungen und eingetragene Anfangsbestände bleiben.":
+        "<strong>{n} bookings</strong> of the service for {label} are deleted in Wealthfolio (comment “[SYNC "
+        "{key}:…]”). The next fetch then gets everything from the start date again. CSV/PDF imports, bookings "
+        "entered by hand and opening positions stay.",
+    "Zum Bestätigen den Namen des Brokers eingeben: {label}":
+        "To confirm, type the broker's name: {label}",
+    "{n} Buchungen löschen":
+        "Delete {n} bookings",
+    "Abbrechen":
+        "Cancel",
+    "Passwort der Oberfläche (nur beim Ändern der Zugangsdaten)":
+        "Password of this UI (only when changing the credentials)",
+    "Neu aufsetzen …":
+        "Start over …",
+    "Übertragsmuster":
+        "Transfer patterns",
+    "Aktion":
+        "Action",
 }

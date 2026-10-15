@@ -11,9 +11,12 @@ separate processes. Files of versions before 0.9.0 (Fernet with the key in
 
 from __future__ import annotations
 
+import copy
+import functools
 import hashlib
 import hmac
 import json
+import os
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -33,6 +36,8 @@ class Vault:
     def __init__(self, data_dir: Path):
         self.dir = Path(data_dir)
         self.file = self.dir / "secrets.enc"
+        # The decrypted file, by its identity on disk: decrypted again only when it changed (#104).
+        self._cache: tuple[tuple, dict] | None = None
 
     @contextmanager
     def _locked(self) -> Iterator[None]:
@@ -42,16 +47,21 @@ class Vault:
     def load(self) -> dict:
         if not self.file.exists():
             return {}
-        raw = self.file.read_bytes()
+        with open(self.file, "rb") as f:
+            st = os.fstat(f.fileno())
+            stamp = (st.st_ino, st.st_mtime_ns, st.st_size)
+            if self._cache and self._cache[0] == stamp:
+                return copy.deepcopy(self._cache[1])
+            raw = f.read()
         key = crypto.data_key(self.dir)
         if not crypto.is_sealed(raw):
-            data = self._migrate(raw)
-        else:
-            try:
-                data = json.loads(crypto.unseal(key, raw, PURPOSE))
-            except crypto.DecryptError as e:
-                raise VaultError(f"{self.file} can't be decrypted with the service's key") from e
+            return self._migrate(raw)
+        try:
+            data = json.loads(crypto.unseal(key, raw, PURPOSE))
+        except crypto.DecryptError as e:
+            raise VaultError(f"{self.file} can't be decrypted with the service's key") from e
         _register(data)
+        self._cache = (stamp, copy.deepcopy(data))
         return data
 
     def _migrate(self, raw: bytes) -> dict:
@@ -141,11 +151,28 @@ def hash_password(password: str) -> str:
     return _hasher().hash(password)
 
 
-def password_tag(stored: str | None) -> str:
-    """Goes into the session at login: a session of an earlier password (before a reset) is no longer valid."""
-    import hashlib
+def session_tag(data: dict) -> str:
+    """Goes into the session at login: a session of an earlier password (before a reset or a change) or of an
+    earlier session version (logout, "Alle Sitzungen beenden", #96) is no longer valid."""
+    stored = f"{data.get('ui_password_hash') or ''}:{data.get('ui_session_gen', 0)}"
+    return hashlib.sha256(stored.encode()).hexdigest()[:16]
 
-    return hashlib.sha256((stored or "").encode()).hexdigest()[:16]
+
+def end_ui_sessions(d: dict) -> None:
+    """For ``Vault.update``: every session signed in so far signs in nobody from now on."""
+    d["ui_session_gen"] = int(d.get("ui_session_gen", 0)) + 1
+
+
+def weak_password(password: str) -> bool:
+    """One of the most common passwords, also with digits or signs around it ("passwort1234", #96)."""
+    core = password.lower().strip("0123456789!?.,;:-_+*#@$%&/()=<> ")
+    return len(set(password)) < 5 or not core or core in _common() or password.lower() in _common()
+
+
+@functools.cache
+def _common() -> frozenset[str]:
+    text = (Path(__file__).parent / "common-passwords.txt").read_text(encoding="utf-8")
+    return frozenset(line.strip().lower() for line in text.splitlines() if line.strip() and not line.startswith("#"))
 
 
 def verify_password(password: str, stored: str | None) -> bool:

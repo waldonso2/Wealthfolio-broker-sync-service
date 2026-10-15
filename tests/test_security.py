@@ -27,7 +27,7 @@ from .test_sync import RecordingNotifier, setup
 from .test_web import csrf
 
 PIN = "pin-7364-geheim"
-UI_PW = "geheim-123456"
+UI_PW = "Kiefer-Ozelot-9182"
 
 
 def client_for(tmp_path, *, secure=False):
@@ -179,6 +179,39 @@ def test_with_a_passphrase_nothing_opens_without_it(tmp_path):
     assert not crypto.is_locked(tmp_path) and State(tmp_path).runs("fake")
     with pytest.raises(ValueError, match="mindestens"):
         security.change_passphrase(tmp_path, "kurz")
+
+
+def test_a_write_during_a_passphrase_change_is_kept_or_refused_never_lost(tmp_path, monkeypatch):
+    """#120: the UI writes to state.db while the passphrase changes (*Ignorieren* in another tab)."""
+    import threading
+
+    syncer, _ = setup(tmp_path, FakeWealthfolio())
+    syncer.run()
+    ui = State(tmp_path)  # the web UI's, opened before
+    outcome = []
+
+    def write():
+        try:
+            ui.set_meta("x", "1")
+            outcome.append("written")
+        except state_mod.StateReplaced:
+            outcome.append("refused")
+
+    stage = security._stage_data_tier
+    writer = threading.Thread(target=write)
+
+    def staging(*args):
+        writer.start()  # it waits for the change, it doesn't write into the copy being made
+        writer.join(0.2)
+        assert writer.is_alive()
+        stage(*args)
+
+    monkeypatch.setattr(security, "_stage_data_tier", staging)
+    security.change_passphrase(tmp_path, "eine sehr lange passphrase")
+    writer.join(5)
+    assert outcome == ["refused"]  # the user gets an error and does it again
+    assert State(tmp_path).meta("x") is None
+    State(tmp_path).set_meta("x", "1")  # with the new file: fine
 
 
 def test_the_ui_sets_the_passphrase_locks_and_unlocks(tmp_path):

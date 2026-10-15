@@ -38,7 +38,10 @@ RETIRED_NOTICE = MetaKey("retired-notice", "json", True,
                          "a removed broker left activities in Wealthfolio: {label, activities, search}")
 LOGO = MetaKey("logo", "json", False, "logo status of a Wealthfolio asset: {isin, status, at} (logos.py)")
 LOGOS_LAST = MetaKey("logos:last", "json", False, "the result of the last logo pass (logos.py)")
+PROGRESS = MetaKey("progress", "json", False,
+                   "the run going on: {broker, label, phase, n, m, since}, gone after it (overview, #104)")
+CHECKLIST_HIDDEN = MetaKey("checklist-hidden", "flag", False, "the setup checklist of the overview was hidden (#110)")
 
 ALL = (ASSETS_LEARNED, CASH_ASSETS_REPAIRED, REFETCH, SAVINGS_ACCOUNT, DIVIDEND_TAX, HISTORY_START, POSITIONS,
-       RETIRED_NOTICE, LOGO, LOGOS_LAST)
+       RETIRED_NOTICE, LOGO, LOGOS_LAST, PROGRESS, CHECKLIST_HIDDEN)
 BROKER_KEYS = tuple(k for k in ALL if k.per_broker)

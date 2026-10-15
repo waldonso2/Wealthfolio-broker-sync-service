@@ -31,7 +31,7 @@
     {% for href, title, hint in settings_pages %}<a href="{{ href }}"{% if path == href or (href == "/brokers" and path.startswith("/brokers")) %} aria-current="page"{% endif %}>{{ _(title) }}</a>{% endfor %}
   </nav>
   {% endif %}
-  {% if flash %}<div class="flash {{ flash.level }}">{{ flash.text }}</div>{% endif %}
+  {% if flash %}<div class="flash {{ flash.level }}" role="{{ 'alert' if flash.level == 'error' else 'status' }}">{{ flash.text }}</div>{% endif %}
   {% block content %}{% endblock %}
 </main>
 <footer class="wrap"><p class="muted">{{ _("Version {version} · alle Daten verschlüsselt · nur lesender Zugriff auf die Broker", version=version) }}</p></footer>

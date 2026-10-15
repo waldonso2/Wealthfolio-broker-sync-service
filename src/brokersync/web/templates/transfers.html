@@ -6,13 +6,15 @@
   <p class="muted">{{ _("Eingehende Überweisungen bleiben immer Einzahlungen.") }}</p>
   {% if patterns %}
   <div class="table"><table>
-    <tr><th>{{ _("Name") }}</th><th>IBAN</th><th>{{ _("Stichwort") }}</th><th>{{ _("Gegenkonto in Wealthfolio") }}</th><th></th></tr>
+    <caption class="sr-only">{{ _("Übertragsmuster") }}</caption>
+    <thead><tr><th scope="col">{{ _("Name") }}</th><th scope="col">IBAN</th><th scope="col">{{ _("Stichwort") }}</th><th scope="col">{{ _("Gegenkonto in Wealthfolio") }}</th><th scope="col"><span class="sr-only">{{ _("Aktion") }}</span></th></tr></thead>
+    <tbody>
     {% for p in patterns %}
     <tr><td data-label="{{ _('Name') }}">{{ p.label }}</td><td data-label="IBAN"><code>{{ p.iban }}</code></td><td data-label="{{ _('Stichwort') }}">{{ p.keyword }}</td>
       <td data-label="{{ _('Gegenkonto in Wealthfolio') }}">{{ names.get(p.destinationAccountId, _("– nur als Übertrag markieren –") if not p.destinationAccountId else p.destinationAccountId) }}</td>
       <td><form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link" name="delete" value="{{ loop.index0 }}">{{ _("Entfernen") }}</button></form></td></tr>
     {% endfor %}
-  </table></div>
+  </tbody></table></div>
   {% endif %}
   {% if wf_error %}<div class="flash error">{{ _("Wealthfolio nicht erreichbar: {error}", error=wf_error | redact) }}</div>{% endif %}
   <form method="post">

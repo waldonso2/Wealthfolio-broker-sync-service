@@ -143,7 +143,9 @@ def change_passphrase(data_dir: Path, new: str | None) -> None:
     d = Path(data_dir)
     if new is not None and len(new) < crypto.MIN_PASSPHRASE:
         raise ValueError(f"Die Passphrase braucht mindestens {crypto.MIN_PASSPHRASE} Zeichen.")
-    with run_lock(d, wait=30), crypto.file_lock(d, "secrets.lock"):
+    # The UI's own writes to state.db wait meanwhile (#120); a write that waited past the swap is refused
+    # (``StateReplaced``), never written into the old file.
+    with run_lock(d, wait=30), crypto.file_lock(d, "secrets.lock"), state_mod.WRITES:
         recover(d, locked=True)
         new_key, ring = crypto.new_passphrase_key(d, new)
         pkey = ring.pop("_pkey", None)
@@ -246,11 +248,9 @@ def migrate(data_dir: Path) -> list[str]:
         done.append("Sync-Datenbank mit SQLCipher verschlüsselt")
     if crypto.is_locked(d):
         return done
-    cfg = config_mod.load(d)
-    m = re.fullmatch(r"http://([^/:]+):8090", cfg.public_url or "")
+    m = re.fullmatch(r"http://([^/:]+):8090", config_mod.load(d).public_url or "")
     if m:
-        cfg.public_url = f"https://{m.group(1)}:8443"
-        config_mod.save(d, cfg)
+        config_mod.update(d, lambda cfg: setattr(cfg, "public_url", f"https://{m.group(1)}:8443"))
         done.append("Adresse für Links auf HTTPS umgestellt")
     for f in [d] + [p for p in d.glob("*") if p.is_file()]:
         mode = stat.S_IMODE(f.stat().st_mode)

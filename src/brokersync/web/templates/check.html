@@ -1,8 +1,14 @@
 {% extends "base.html" %}{% block title %}{{ _("Prüfung") }}{% endblock %}
+{% block head %}{% if auditing %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
 {% block content %}
 <h1 class="mt-s">{{ _("Prüfung") }}</h1>
 <p class="muted">{{ _("Broker und Wealthfolio im Vergleich. Der Dienst legt nichts von selbst wieder an und löscht nichts – du entscheidest.") }}</p>
 {% if wf_error %}<div class="flash error">{{ _("Wealthfolio nicht erreichbar: {error}", error=wf_error | redact) }}</div>{% endif %}
+<form method="post" action="/check/audit" class="actions">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <p class="muted grow" aria-live="polite">{% if auditing %}{{ _("Die Konten werden gerade geprüft …") }}{% elif audited_at %}{{ _("Konten geprüft {when}.", when=audited_at | local) }}{% endif %}</p>
+  <button class="secondary" {% if auditing %}disabled{% endif %}>{{ _("Neu prüfen") }}</button>
+</form>
 
 {% for b in brokers %}
 {% set missing = b.gaps | selectattr("kind", "in", ["missing", "partial"]) | list %}
@@ -32,11 +38,13 @@
     <form method="post" action="/check/{{ b.key }}">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <div class="table"><table>
-        <tr><th></th><th>{{ _("Datum") }}</th><th>{{ _("Art") }}</th><th>{{ _("Wertpapier") }}</th><th>{{ _("Betrag") }}</th><th>{{ _("Fehlt") }}</th></tr>
+        <caption class="sr-only">{{ _("Fehlt in Wealthfolio") }}</caption>
+        <thead><tr><th scope="col"><span class="sr-only">{{ _("Auswahl") }}</span></th><th scope="col">{{ _("Datum") }}</th><th scope="col">{{ _("Art") }}</th><th scope="col">{{ _("Wertpapier") }}</th><th scope="col">{{ _("Betrag") }}</th><th scope="col">{{ _("Fehlt") }}</th></tr></thead>
+        <tbody>
         {% for g in missing %}
-        <tr><td><input type="checkbox" name="tx" value="{{ g.ref }}" aria-label="{{ _('auswählen') }}"></td><td data-label="{{ _('Datum') }}">{{ g.occurred_at | local }}</td><td data-label="{{ _('Art') }}">{{ g.label }}</td><td data-label="{{ _('Wertpapier') }}">{{ g.name }}</td><td data-label="{{ _('Betrag') }}">{{ g.amount }} {{ g.currency }}</td><td data-label="{{ _('Fehlt') }}">{{ _("ganz") if g.kind == "missing" else _("teilweise") }}</td></tr>
+        <tr><td><input type="checkbox" name="tx" value="{{ g.ref }}" aria-label="{{ _('Buchung vom {day} über {amount} {currency} auswählen', day=g.occurred_at | day, amount=g.amount, currency=g.currency) }}"></td><td data-label="{{ _('Datum') }}">{{ g.occurred_at | local }}</td><td data-label="{{ _('Art') }}">{{ g.label }}</td><td data-label="{{ _('Wertpapier') }}">{{ g.name }}</td><td data-label="{{ _('Betrag') }}">{{ g.amount }} {{ g.currency }}</td><td data-label="{{ _('Fehlt') }}">{{ _("ganz") if g.kind == "missing" else _("teilweise") }}</td></tr>
         {% endfor %}
-      </table></div>
+      </tbody></table></div>
       <div class="actions"><button name="action" value="rebook">{{ _("Wieder anlegen") }}</button><button class="secondary" name="action" value="ignore">{{ _("Ignorieren") }}</button></div>
     </form>
   </div>
@@ -47,11 +55,13 @@
     <h3>{{ _("Nicht mehr bei {label}: {n}", label=b.label, n=orphans | length) }}</h3>
     <p class="muted">{{ _("Vom Broker storniert oder entfernt – in Wealthfolio prüfen und löschen (bei Überträgen beide Seiten).") }}</p>
     <div class="table"><table>
-      <tr><th>{{ _("Datum") }}</th><th>{{ _("Art") }}</th><th>{{ _("Wertpapier") }}</th><th>{{ _("Betrag") }}</th><th>{{ _("Vorgang") }}</th></tr>
+      <caption class="sr-only">{{ _("Nicht mehr bei {label}", label=b.label) }}</caption>
+      <thead><tr><th scope="col">{{ _("Datum") }}</th><th scope="col">{{ _("Art") }}</th><th scope="col">{{ _("Wertpapier") }}</th><th scope="col">{{ _("Betrag") }}</th><th scope="col">{{ _("Vorgang") }}</th></tr></thead>
+      <tbody>
       {% for g in orphans %}
       <tr><td data-label="{{ _('Datum') }}">{{ g.occurred_at | local }}</td><td data-label="{{ _('Art') }}">{{ g.label }}</td><td data-label="{{ _('Wertpapier') }}">{{ g.name }}</td><td data-label="{{ _('Betrag') }}">{{ g.amount }} {{ g.currency }}</td><td data-label="{{ _('Vorgang') }}">{{ g.tx_id }}</td></tr>
       {% endfor %}
-    </table></div>
+    </tbody></table></div>
   </div>
   {% endif %}
 
@@ -74,13 +84,15 @@
     {% endfor %}
     {% if pending %}
     <div class="table"><table>
-      <tr><th>{{ _("Wertpapier") }}</th><th>{{ _("Kaufdatum") }}</th><th>{{ _("Stück") }}</th><th>{{ _("Kurs") }}</th><th>{{ _("Gebühr") }}</th><th>{{ _("Status") }}</th></tr>
+      <caption class="sr-only">{{ _("Anfangsbestände") }}</caption>
+      <thead><tr><th scope="col">{{ _("Wertpapier") }}</th><th scope="col">{{ _("Kaufdatum") }}</th><th scope="col">{{ _("Stück") }}</th><th scope="col">{{ _("Kurs") }}</th><th scope="col">{{ _("Gebühr") }}</th><th scope="col">{{ _("Status") }}</th></tr></thead>
+      <tbody>
       {% for o in pending %}
       <tr><td data-label="{{ _('Wertpapier') }}">{{ o.name }} <span class="muted">{{ o.isin }}</span></td><td data-label="{{ _('Kaufdatum') }}">{{ o.day | day }}</td><td data-label="{{ _('Stück') }}">{{ o.shares }}</td><td data-label="{{ _('Kurs') }}">{{ o.price }} {{ o.currency }}</td><td data-label="{{ _('Gebühr') }}">{{ o.fee }}</td>
         <td data-label="{{ _('Status') }}">{{ _("wird beim nächsten Abruf gebucht") }}
           <form method="post" action="/check/{{ b.key }}/opening" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="isin" value="{{ o.isin }}"><input type="hidden" name="day" value="{{ o.day }}"><button class="secondary" name="action" value="delete">{{ _("Entfernen") }}</button></form></td></tr>
       {% endfor %}
-    </table></div>
+    </tbody></table></div>
     {% endif %}
   </div>
   {% endif %}
@@ -93,14 +105,16 @@
     <p class="muted">{{ _("Jedem Block fehlt eine Seite – z. B. ein Kauf ohne Übertrag vom {account}, oder eine Buchung doppelt. Korrigieren in Wealthfolio.", account=b.cash_name) }}</p>
     <details><summary>{{ _("Buchungen zeigen") }}</summary>
     <div class="table"><table>
-      <tr><th>{{ _("Zeitpunkt") }}</th><th>{{ _("Art") }}</th><th>{{ _("Betrag") }}</th><th>{{ _("Wirkung") }}</th><th>{{ _("Kommentar") }}</th><th>{{ _("Herkunft") }}</th></tr>
+      <caption class="sr-only">{{ _("Depot-Zeitpunkte mit Bargeld") }}</caption>
+      <thead><tr><th scope="col">{{ _("Zeitpunkt") }}</th><th scope="col">{{ _("Art") }}</th><th scope="col">{{ _("Betrag") }}</th><th scope="col">{{ _("Wirkung") }}</th><th scope="col">{{ _("Kommentar") }}</th><th scope="col">{{ _("Herkunft") }}</th></tr></thead>
+      <tbody>
       {% for m in x.moments[:200] %}
         {% for a in m.activities %}
         <tr><td data-label="{{ _('Zeitpunkt') }}"><time datetime="{{ a.date | utc }}" title="UTC: {{ a.date | utc }}">{{ a.date | local(seconds=True) }}</time></td><td data-label="{{ _('Art') }}">{{ a.activityType }}{% if a.subtype %}/{{ a.subtype }}{% endif %}</td><td data-label="{{ _('Betrag') }}">{{ a.amount }}</td><td data-label="{{ _('Wirkung') }}">{{ effect(a) | money }}</td><td data-label="{{ _('Kommentar') }}">{{ a.assetSymbol }} {{ a.comment }}</td><td data-label="{{ _('Herkunft') }}">{{ _(source(a)) }}</td></tr>
         {% endfor %}
         <tr><td colspan="6"><strong>{{ _("bleibt stehen: {amount} EUR", amount=m.net | money) }}</strong></td></tr>
       {% endfor %}
-    </table></div>
+    </tbody></table></div>
     {% if x.moments | length > 200 %}<p class="muted">{{ _("… und {n} weitere.", n=x.moments | length - 200) }}</p>{% endif %}
     </details>
   </div>
@@ -112,11 +126,13 @@
     <p class="muted">{{ _("Auf dem anderen Konto fehlt der passende Übertrag.") }}</p>
     <details><summary>{{ _("Buchungen zeigen") }}</summary>
     <div class="table"><table>
-      <tr><th>{{ _("Zeitpunkt") }}</th><th>{{ _("Konto") }}</th><th>{{ _("Art") }}</th><th>{{ _("Betrag") }}</th><th>{{ _("Kommentar") }}</th><th>{{ _("Herkunft") }}</th></tr>
+      <caption class="sr-only">{{ _("Überträge ohne Gegenstück") }}</caption>
+      <thead><tr><th scope="col">{{ _("Zeitpunkt") }}</th><th scope="col">{{ _("Konto") }}</th><th scope="col">{{ _("Art") }}</th><th scope="col">{{ _("Betrag") }}</th><th scope="col">{{ _("Kommentar") }}</th><th scope="col">{{ _("Herkunft") }}</th></tr></thead>
+      <tbody>
       {% for a in x.lonely[:200] %}
       <tr><td data-label="{{ _('Zeitpunkt') }}"><time datetime="{{ a.date | utc }}" title="UTC: {{ a.date | utc }}">{{ a.date | local(seconds=True) }}</time></td><td data-label="{{ _('Konto') }}">{{ b.depot_name if a.accountId == b.depot_id else b.cash_name }}</td><td data-label="{{ _('Art') }}">{{ a.activityType }}</td><td data-label="{{ _('Betrag') }}">{{ a.amount }}</td><td data-label="{{ _('Kommentar') }}">{{ a.comment }}</td><td data-label="{{ _('Herkunft') }}">{{ _(source(a)) }}</td></tr>
       {% endfor %}
-    </table></div>
+    </tbody></table></div>
     </details>
   </div>
   {% endif %}
@@ -126,11 +142,13 @@
   <form method="post" action="/check/{{ b.key }}">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="table"><table>
-      <tr><th></th><th>{{ _("Datum") }}</th><th>{{ _("Art") }}</th><th>{{ _("Wertpapier") }}</th><th>{{ _("Betrag") }}</th></tr>
+      <caption class="sr-only">{{ _("Ignorierte Buchungen") }}</caption>
+      <thead><tr><th scope="col"><span class="sr-only">{{ _("Auswahl") }}</span></th><th scope="col">{{ _("Datum") }}</th><th scope="col">{{ _("Art") }}</th><th scope="col">{{ _("Wertpapier") }}</th><th scope="col">{{ _("Betrag") }}</th></tr></thead>
+      <tbody>
       {% for g in ignored %}
-      <tr><td><input type="checkbox" name="tx" value="{{ g.ref }}" aria-label="{{ _('auswählen') }}"></td><td data-label="{{ _('Datum') }}">{{ g.occurred_at | local }}</td><td data-label="{{ _('Art') }}">{{ g.label }}</td><td data-label="{{ _('Wertpapier') }}">{{ g.name }}</td><td data-label="{{ _('Betrag') }}">{{ g.amount }} {{ g.currency }}</td></tr>
+      <tr><td><input type="checkbox" name="tx" value="{{ g.ref }}" aria-label="{{ _('Buchung vom {day} über {amount} {currency} auswählen', day=g.occurred_at | day, amount=g.amount, currency=g.currency) }}"></td><td data-label="{{ _('Datum') }}">{{ g.occurred_at | local }}</td><td data-label="{{ _('Art') }}">{{ g.label }}</td><td data-label="{{ _('Wertpapier') }}">{{ g.name }}</td><td data-label="{{ _('Betrag') }}">{{ g.amount }} {{ g.currency }}</td></tr>
       {% endfor %}
-    </table></div>
+    </tbody></table></div>
     <div class="actions"><button class="secondary" name="action" value="rebook">{{ _("Doch anlegen") }}</button></div>
   </form>
   </details>

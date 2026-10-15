@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -114,9 +115,26 @@ def save(directory: Path, cfg: Config, key: bytes | None = None) -> None:
     # Under the lock a passphrase change holds: the key is taken after it, so a save can't seal the config
     # with a key that was just replaced.
     with crypto.file_lock(d, "secrets.lock"):
-        config_blob, notify_blob = sealed(cfg, key or crypto.data_key(d), crypto.host_key(d))
-        crypto.write_atomic(d / "config.enc", config_blob)
-        crypto.write_atomic(d / "notify.enc", notify_blob)
+        _write(d, cfg, key)
+
+
+def update(directory: Path, change: Callable[[Config], None]) -> Config:
+    """Read, change and write back under the lock (#117): two changes at once (two tabs, the timer's clean-up)
+    both stay. Check the user's input before, ``change`` only applies it."""
+    d = Path(directory)
+    if (d / "config.json").exists():
+        _migrate(d)  # takes the lock itself (save)
+    with crypto.file_lock(d, "secrets.lock"):
+        cfg = load(d)
+        change(cfg)
+        _write(d, cfg)
+        return cfg
+
+
+def _write(d: Path, cfg: Config, key: bytes | None = None) -> None:
+    config_blob, notify_blob = sealed(cfg, key or crypto.data_key(d), crypto.host_key(d))
+    crypto.write_atomic(d / "config.enc", config_blob)
+    crypto.write_atomic(d / "notify.enc", notify_blob)
 
 
 def _migrate(d: Path) -> None:

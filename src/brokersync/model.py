@@ -8,9 +8,21 @@ are ``Decimal`` throughout - never floats - so the activity amounts are exact.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
+
+
+def when(value: str | date | datetime) -> datetime:
+    """A moment from Wealthfolio or the state (#119), always in UTC: ``…Z``, an offset, no zone at all (taken as
+    UTC) or only a day (its midnight UTC) - so comparing two of them never fails on naive vs. aware."""
+    if isinstance(value, datetime):
+        moment = value
+    elif isinstance(value, date):
+        moment = datetime(value.year, value.month, value.day)
+    else:
+        moment = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+    return moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment.astimezone(UTC)
 
 
 class Kind(StrEnum):

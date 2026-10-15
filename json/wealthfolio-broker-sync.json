@@ -33,7 +33,7 @@
   },
   "notes": [
     {
-      "text": "Open the web UI after the installation; the first visit asks you to choose a password, then an assistant guides you through the setup.",
+      "text": "Open the web UI after the installation; the first visit asks you to choose a password with the setup code the installation shows, then a checklist on the overview shows what is left to set up.",
       "type": "info"
     },
     {
@@ -41,7 +41,7 @@
       "type": "info"
     },
     {
-      "text": "The web UI uses a self-signed certificate (https://<ip>:8443): confirm the browser warning once. Plain http on port 8090 redirects there.",
+      "text": "The web UI (https://<ip>:8443) uses a certificate of the container's own CA: confirm the browser warning once, or import /ca.crt (page Sicherheit) so browsers trust it. Plain http on port 8090 redirects there.",
       "type": "info"
     },
     {

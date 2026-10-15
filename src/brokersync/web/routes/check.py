@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+import time
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Request
@@ -19,19 +20,19 @@ from ..i18n import N_
 router = APIRouter()
 
 
+AUDIT_SECONDS = 10 * 60
+
+
 @router.get("/check", response_class=HTMLResponse)
 def check_page(request: Request, ctx: Ctx):
     c = ctx.cfg()
     adapters, state = ctx.adapters, ctx.state
-    audits, names, error = {}, {}, None
-    try:
-        with ctx.wf_client(c) as wf:
-            names = {a.id: a.name for a in wf.list_accounts()}
-            for key, b in c.brokers.items():
-                if key in adapters and b.cash_account_id and b.portfolio_account_id:
-                    audits[key] = audit.run(wf, accounts_of(b))
-    except WealthfolioError as e:
-        error = str(e)
+    if time.time() - ctx.audits_at > AUDIT_SECONDS:
+        # The account check reads every activity: in the background (#104), the page shows the last result.
+        from .overview import launch
+
+        launch(ctx, N_("Kontenprüfung"), lambda lang: _audit(ctx, c), language(request))
+    audits, names, error = ctx.audits, ctx.account_names, ctx.audit_error
     # Everything about a broker in one card (#83): gaps, opening positions and the account check.
     brokers = []
     cash_name, depot_name = tr(request, "Verrechnungskonto"), tr(request, "Depotkonto")  # an account Wealthfolio lacks
@@ -52,7 +53,32 @@ def check_page(request: Request, ctx: Ctx):
         entry["issues"] = open_gaps + len(missing) + audit_issues
         brokers.append(entry)
     return ctx.render(request, "check.html", wf_error=error, source=audit.source, effect=audit.cash_effect,
-                      brokers=brokers)
+                      brokers=brokers,
+                      audited_at=datetime.fromtimestamp(ctx.audits_at, UTC) if ctx.audits_at else None,
+                      auditing=ctx.running.is_set() and ctx.job == N_("Kontenprüfung"))
+
+
+def _audit(ctx: AppContext, c) -> None:
+    """The account check of every broker, kept for the page (``AUDIT_SECONDS``)."""
+    audits, names, error = {}, {}, None
+    try:
+        with ctx.wf_client(c) as wf:
+            names = {a.id: a.name for a in wf.list_accounts()}
+            for key, b in c.brokers.items():
+                if key in ctx.adapters and b.cash_account_id and b.portfolio_account_id:
+                    audits[key] = audit.run(wf, accounts_of(b))
+    except WealthfolioError as e:
+        error = str(e)
+    ctx.audits, ctx.account_names, ctx.audit_error, ctx.audits_at = audits, names, error, time.time()
+
+
+@router.post("/check/audit")
+def check_audit(request: Request, ctx: Ctx):
+    """*Neu prüfen*: the account check now, in the background."""
+    from .overview import start_job
+
+    ctx.audits_at = 0.0
+    return start_job(request, ctx, N_("Kontenprüfung"), lambda lang: _audit(ctx, ctx.cfg()), "/check")
 
 
 def missing_positions(ctx: AppContext, key: str) -> list[dict]:

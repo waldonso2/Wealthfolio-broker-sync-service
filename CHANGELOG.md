@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.21.0
+
+UI sessions, forms and long actions (waldonso2/wealthfolio-importer-addon#121).
+
+- **Sessions (#96):** a sign-in ends after 30 minutes without activity and after 12 hours at all. Logout ends every session (a copied cookie no longer works; `Clear-Site-Data`). New on *Sicherheit*: change the UI password (ends all other sessions) and *Alle anderen Sitzungen beenden*. Changing credentials, *Neu aufsetzen* and the fetch mode ask for the password again when the sign-in is older than 15 minutes. Common passwords (a list of 10,000 plus German ones, also with digits around them) are refused for the UI password and the master passphrase.
+- **Forms (#103):** the broker form comes back with what was typed (never a secret) and the error at its field (`aria-invalid`, `aria-describedby`), status 422, nothing saved. Flash messages have `role="alert"`/`"status"`. The start date can't be set in the future (`max`).
+- **Long actions in the background (#104):** *Neu aufsetzen*, *Logos jetzt holen* and the account check of *Prüfung* run as background jobs; *Prüfung* shows the last check with its time and *Neu prüfen*. The overview shows which broker a run is at, its step, and when it waits for an approval in the app; it refreshes every 10 s instead of 3 s and can be paused. The vault is decrypted only when its file changed; Wealthfolio's accounts and the timer's next run are kept for a minute.
+- **Neu aufsetzen in two steps (#110):** a page shows how many bookings would be deleted; deleting needs the broker's name typed in. A setup checklist on the overview replaces the old "step by step" message.
+- **Tables (#105):** caption, `thead`/`tbody`, `scope="col"`; checkbox labels name their booking.
+- **Transfer patterns (#84):** *Überträge* is listed under *Einstellungen* again while patterns are saved, so every pattern that applies can be seen and deleted. *Duplikate* stays hidden.
+- **Config under its lock (#117):** every change reads, changes and writes the config under one lock; two changes at once both stay.
+- **One date parser (#119):** `model.when` for every moment from Wealthfolio or the state; a date without time zone or without time no longer breaks a broker's run.
+- **Passphrase change and UI writes (#120):** writes to the sync database wait while it is re-encrypted; one that waited past the switch is refused, never lost silently.
+- **Docs (#111):** README: checklist, *Überträge*, *Neu aufsetzen*, sessions, known limitations; no "self-signed" left (catalog entry, CLI help), screenshots taken anew.
+
 ## 0.20.0
 
 Lock-out safety, concurrency and robustness, from a full audit of 15.10.2026 and the backlog (waldonso2/wealthfolio-importer-addon#98, #99, #101, #105, #108, #110, #113, #115 and the audit list):

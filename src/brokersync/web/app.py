@@ -15,6 +15,7 @@ from __future__ import annotations
 import html
 import logging
 import secrets
+import time
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
@@ -30,10 +31,19 @@ from ..adapters import ADAPTERS, BrokerAdapter
 from ..notify import Notifier
 from ..state import State
 from ..sync import UNMATCHED_SECURITIES, Syncer
-from ..vault import Vault, password_tag
+from ..vault import Vault, session_tag
 from ..wealthfolio import WealthfolioClient
 from . import i18n, views
-from .context import PUBLIC, SETTINGS_PAGES, STATUS_LABEL, AppContext, accounts_of, csrf_guard
+from .context import (
+    IDLE_SECONDS,
+    MAX_SECONDS,
+    PUBLIC,
+    SETTINGS_PAGES,
+    STATUS_LABEL,
+    AppContext,
+    accounts_of,
+    csrf_guard,
+)
 from .gate import Gate, Hosts, Throttle
 from .i18n import N_
 from .routes import ROUTERS
@@ -89,18 +99,23 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         # code (#89), so it isn't in PUBLIC.
         if path in PUBLIC or path == "/setup-password" or path.startswith("/static/"):
             return await call_next(request)
-        stored = vault.load().get("ui_password_hash")
-        if not stored:
+        secrets_ = vault.load()
+        if not secrets_.get("ui_password_hash"):
             return RedirectResponse("/setup-password", 303)
-        if not request.session.get("user") or request.session.get("pw") != password_tag(stored):
-            # Also a cookie of an earlier password: after brokersync-reset-password it signs in nobody.
-            request.session.clear()
+        session, now = request.session, time.time()
+        if (not session.get("user") or session.get("pw") != session_tag(secrets_)
+                or now - session.get("seen", 0) > IDLE_SECONDS or now - session.get("since", 0) > MAX_SECONDS):
+            # Also a cookie of an earlier password or session version (#96): after a logout, a password change
+            # or brokersync-reset-password it signs in nobody; and none after 30 min idle or 12 h at all.
+            session.clear()
             return RedirectResponse("/login", 303)
+        if now - session["seen"] > 60:  # not every request: a page that reloads itself keeps the session anyway
+            session["seen"] = int(now)
         return await call_next(request)
 
     # Added after the middleware above so it runs first and fills request.session.
     app.add_middleware(SessionMiddleware, secret_key=session_key, same_site="strict", https_only=secure,
-                       max_age=24 * 3600)
+                       max_age=MAX_SECONDS)
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
     for router in ROUTERS:
         app.include_router(router)
