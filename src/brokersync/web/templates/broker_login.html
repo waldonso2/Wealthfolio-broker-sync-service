@@ -4,7 +4,7 @@
   {% if position %}<p class="muted">{{ _("Anmeldung {n} von {total}", n=position[0], total=position[1]) }}</p>{% endif %}
   <h1>{{ _("Anmeldung bei {label}", label=adapter.label) }}</h1>
   <p>{{ challenge.message }}</p>
-  {% if challenge.image %}<p><img src="{{ challenge.image }}" alt="{{ _('TAN-Grafik') }}" class="tan-image"></p>{% endif %}
+  {% if challenge.image and challenge.image.startswith("data:image/") %}<p><img src="{{ challenge.image }}" alt="{{ _('TAN-Grafik') }}" class="tan-image"></p>{% endif %}
   {% if challenge.url %}<p><a class="button" href="{{ challenge.url }}" target="_blank" rel="noopener noreferrer">{{ _("Link öffnen") }}</a></p>{% endif %}
   <form method="post" action="/brokers/{{ key }}/login">
     <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -21,6 +21,12 @@
     <input type="hidden" name="code" value="">
     <div class="actions"><button>{{ _("Ich habe bestätigt") if challenge.url else _("Ich habe in der App bestätigt") }}</button></div>
     {% endif %}
+  </form>
+  <p class="muted">{{ _("Diese Anmeldung wartet bis {when}. Danach oder wenn keine Anfrage kam:", when=until | local) }}</p>
+  <form method="post" action="/brokers/{{ key }}/login/start">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="run" value="{{ '1' if run else '' }}">
+    <div class="actions"><button class="secondary">{{ _("Anmeldung neu starten") }}</button></div>
   </form>
   {% if run %}<p class="muted">{% if position %}{{ _("Nach der letzten Anmeldung werden alle zusammen abgerufen.") }} {% else %}{{ _("Danach ruft der Dienst gleich ab.") }} {% endif %}{% if safe %}{{ _("Sicherer Modus: Nach dem Abruf meldet er sich wieder ab.") }}{% endif %}</p>{% endif %}
   {% if position %}

@@ -43,7 +43,7 @@ from .mapping import Accounts, MappingError, SecurityMapping, TransferPattern, t
 from .model import CashBalance, Kind, Position, Transaction, when
 from .notify import Notifier
 from .reconcile import compare
-from .state import State
+from .state import State, masked
 from .vault import Vault
 from .wealthfolio import Duplicate, WealthfolioClient, WealthfolioError, connect
 
@@ -714,7 +714,8 @@ class Syncer:
         except WealthfolioError as e:
             log.info("%s: no holdings for the check: %s", key, e)
             return
-        deviations = [d.as_dict() for d in compare(cash, positions, wf_cash, wf_portfolio,
+        # Masked as stored (SEC-04), so "the same as last time" compares like with like.
+        deviations = [masked(d.as_dict()) for d in compare(cash, positions, wf_cash, wf_portfolio,
                                                    {i: m.symbol for i, m in mappings.items()},
                                                    {i: a["asset_id"] for i, a in self.state.assets(key).items()},
                                                    wf_savings=wf_savings,

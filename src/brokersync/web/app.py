@@ -174,6 +174,10 @@ def _templates() -> Jinja2Templates:
     templates.env.globals["report_url"] = views.report_url
     # Foreign error texts (banks, brokers, Wealthfolio) on a page: never a secret or an account number.
     templates.env.filters["redact"] = lambda text: redact.redact(str(text)) if text else text
+    # A stored run message line by line: the service's own (German) lines in the page's language, foreign
+    # ones as they are (V-04).
+    templates.env.filters["known"] = pass_context(lambda c, text: "\n".join(
+        i18n.lookup(line, c.get("lang")) for line in str(text).split("\n")) if text else text)
     templates.env.globals["STATUS"] = STATUS_LABEL
     templates.env.globals["UNMATCHED_SECURITIES"] = UNMATCHED_SECURITIES
     return templates

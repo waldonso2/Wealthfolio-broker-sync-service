@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.25.0
+
+Audit 2.0 (waldonso2/Wealthfolio-broker-sync-service#85), every finding checked against the code:
+
+- **Encrypted database on ARM64 (SEC-05):** SQLCipher now also comes for ARM64 (`sqlcipher3-wheels`, a build of the same `sqlcipher3` module; locked with hashes). An existing plain `state.db` is encrypted at the next start. Only platforms without either wheel (e.g. 32-bit ARM) stay plain, as *Sicherheit* says.
+- **Setup code never in a URL (V-01):** a password that is too short or too common no longer sends the browser to `/setup-password?code=…` (the history kept the code); the page comes back with the code in its form.
+- **Masked texts in the comparison (SEC-04):** what *Prüfung* stores about missing bookings and deviations has its texts masked like unknown bookings (IBANs, long numbers); ids, amounts and ISINs stay.
+- **No error page for a damaged setup code (V-02):** it counts as expired.
+- **Run texts in English (V-04):** "aborted by a restart" follows the page's language; texts of banks and brokers stay as they are.
+- **TAN pictures only embedded (SEC-08):** the login shows a TAN graphic only as a data: URL (the CSP already allowed nothing else).
+- **Duplicates by meaning (SEC-09):** Wealthfolio's duplicate answer is recognised in any wording.
+- **Bank not answering (UX-04):** FinTS says in German that the bank doesn't answer (network or timeout), the technical text after it.
+- **Login: until when, and start over (UX-05):** the login page says until when it waits and offers *Anmeldung neu starten*.
+- Checked and already in place: the FinTS session never holds the PIN (SEC-02 - python-fints doesn't serialise it; a test now pins the blob's contents), `BROKERSYNC_TRUST_PROXY` (SEC-03, since 0.20.0), progress of a run and screen-reader labels (UX-01, A11Y-01, since 0.21.0), the Argon2 parameters of the passphrase (V-03: stored with it since 0.9.0).
+- Planned for 0.26.0: optional JSON logs and metrics (OPS-04).
+
 ## 0.24.1
 
 - **Light/dark stays when you change the page (#123):** the header's symbol switched only the page it was tapped on; the next page came back in the device's colours. The session now remembers the choice: every page until you log out, a new session starts in the device's colours again. Still no JavaScript (a small form like *Abmelden*).

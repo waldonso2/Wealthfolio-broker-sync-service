@@ -266,7 +266,7 @@ Die Seite **Prüfung** zeigt außerdem, welche schon übernommenen Buchungen in 
 
 ## Bekannte Einschränkungen
 
-- **Ohne SQLCipher (z. B. ARM):** Gibt es für die Plattform kein `sqlcipher3`-Paket, liegt die Sync-Datenbank unverschlüsselt in `data/`. Zugangsdaten und Einstellungen bleiben verschlüsselt. Die Seite *Sicherheit* zeigt das an.
+- **Ohne SQLCipher:** SQLCipher gibt es für x86-64 und ARM64. Auf anderen Plattformen (z. B. 32-Bit-ARM) liegt die Sync-Datenbank unverschlüsselt in `data/`. Zugangsdaten und Einstellungen bleiben verschlüsselt. Die Seite *Sicherheit* zeigt das an.
 - **Ohne TPM:** Den Schlüssel des Dienstes verschlüsselt `systemd-creds` mit dem Host-Secret des Containers (`/var/lib/systemd/credential.secret`); ein TPM nutzt ein Container nicht. Wer den ganzen Container kopiert, etwa als Backup, kann die Daten deshalb öffnen – außer mit Master-Passphrase. Wo `systemd-creds` nicht verschlüsseln kann, liegt der Schlüssel nur für root lesbar unter `/etc/wealthfolio-broker-sync/`.
 - **Trade Republic:** Eine offizielle Schnittstelle gibt es nicht. Der Dienst nutzt die der Web-App (über pytr); ändert Trade Republic sie, klappt der Abruf bis zu einem Update nicht.
 - **FinTS-Produkt-ID:** DKB und Deutsche Bank verlangen eine registrierte Produkt-ID, die du einträgst, bis der Dienst eine eigene hat.

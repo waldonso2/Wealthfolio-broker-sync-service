@@ -168,7 +168,9 @@ class WealthfolioClient:
         r = self._request("POST", "/activities", json=payload)
         if r.status_code >= 400:
             detail = _detail(r)
-            if "Duplicate activity" in detail:
+            # Wealthfolio's fingerprint check (409, "Duplicate activity detected"): any wording of it, not
+            # only today's (SEC-09) - a real error never says "duplicate".
+            if "duplicate" in detail.lower():
                 return Duplicate(detail)
             raise WealthfolioError(f"Wealthfolio rejected the activity ({payload.get('activityType')}): {detail}")
         return r.json()

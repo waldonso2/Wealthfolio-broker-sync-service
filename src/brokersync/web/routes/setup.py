@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import re
-from urllib.parse import quote
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -62,7 +61,11 @@ def setup_password(request: Request, ctx: Ctx, password: str = Form(...), passwo
         return redirect(request, "/setup-password",
                         tr(request, "Der Einrichtungscode stimmt nicht oder ist abgelaufen."), "error")
     if error := password_problem(request, password, password2):
-        return redirect(request, f"/setup-password?code={quote(code.strip())}", error, "error")
+        # The page again, the code in its form - never in a URL, where the browser's history keeps it (V-01).
+        page = ctx.render(request, "setup_password.html", code=code.strip()[:64],
+                          flash={"text": error, "level": "error"})
+        page.status_code = 422
+        return page
 
     hashed = hash_password(password)
 

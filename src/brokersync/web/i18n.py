@@ -96,6 +96,12 @@ EN: dict[str, str] = {
     "Duplikate": "Duplicates",
     "Doppelte Buchungen finden und entfernen": "Find and remove duplicate bookings",
     "Sprache": "Language",
+    "Diese Anmeldung wartet bis {when}. Danach oder wenn keine Anfrage kam:":
+        "This login waits until {when}. After that, or if no request arrived:",
+    "Anmeldung neu starten": "Start the login again",
+    # Stored by state.abort_stale_runs, shown through the filter ``known``.
+    "Abgebrochen - der Dienst wurde während des Abrufs beendet (Neustart, Update oder Absturz).":
+        "Aborted - the service was stopped during the fetch (restart, update or crash).",
     "Hell/Dunkel umschalten": "Switch light/dark",
     "Hell oder dunkel: wie das Gerät. Das Symbol oben schaltet bis zum Abmelden um.":
         "Light or dark: as the device. The symbol at the top switches until you log out.",
@@ -685,8 +691,8 @@ EN: dict[str, str] = {
         "AES-256-GCM (config.enc, notifications in notify.enc).",
     "config.json liegt noch unverschlüsselt vor.": "config.json is still there unencrypted.",
     "Sync-Datenbank": "Sync database",
-    "Unverschlüsselt: SQLCipher gibt es für diese Plattform nicht (nur x86-64).":
-        "Unencrypted: SQLCipher isn't available for this platform (x86-64 only).",
+    "Unverschlüsselt: SQLCipher gibt es für diese Plattform nicht (nur x86-64 und ARM64).":
+        "Unencrypted: SQLCipher isn't available for this platform (x86-64 and ARM64 only).",
     "Mit SQLCipher verschlüsselt (AES-256).": "Encrypted with SQLCipher (AES-256).",
     "Noch unverschlüsselt - wird beim nächsten Öffnen verschlüsselt.":
         "Still unencrypted - encrypted the next time it is opened.",

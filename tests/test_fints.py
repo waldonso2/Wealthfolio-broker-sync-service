@@ -135,7 +135,7 @@ def test_messages_name_the_bank(opts, monkeypatch):
         raise ConnectionError("server unreachable")
 
     monkeypatch.setattr(FakeFinTS, "__enter__", down)
-    with pytest.raises(AdapterError, match=r"^Beispielbank \(FinTS\): server unreachable"):
+    with pytest.raises(AdapterError, match=r"^Die Beispielbank antwortet nicht .*server unreachable"):
         ExampleBank(PROFILES[ExampleBank]).login()
 
 
