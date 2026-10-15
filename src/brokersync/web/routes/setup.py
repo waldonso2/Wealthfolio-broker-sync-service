@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from urllib.parse import quote
 
 from fastapi import APIRouter, Form, HTTPException, Request
@@ -128,6 +129,15 @@ def _new_client(ctx, client: str) -> None:
                 tags="warning")
     except Exception:  # a notification never stops a login
         log.exception("notification of a new login failed")
+
+
+@router.post("/theme")
+def theme_switch(request: Request, next: str = Form("/")):
+    """Light/dark the other way round than the device, for this session (#123): every page until logout."""
+    request.session["flip"] = not request.session.get("flip")
+    # Back to the page it came from - a path of this site only, never another host.
+    safe = re.fullmatch(r"/[A-Za-z0-9/_.\-]*", next) and not next.startswith("//")
+    return RedirectResponse(next if safe else "/", 303)
 
 
 @router.post("/logout")
