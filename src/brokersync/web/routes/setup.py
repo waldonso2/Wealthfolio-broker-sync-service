@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from ... import __version__
 from ... import security as security_mod
+from ...notify import Notifier
 from ...vault import check_setup_code, end_ui_sessions, hash_password, needs_rehash, verify_password, weak_password
 from ..context import Ctx, redirect, sign_in, tr
 
@@ -56,6 +57,7 @@ def setup_password(request: Request, ctx: Ctx, password: str = Form(...), passwo
         a.ok = check_setup_code(ctx.vault, code)
     if not a.ok:
         log.warning("web UI: wrong or expired setup code from %s", client)
+        ctx.event(request, "setup_password", ok=False)
         return redirect(request, "/setup-password",
                         tr(request, "Der Einrichtungscode stimmt nicht oder ist abgelaufen."), "error")
     if error := password_problem(request, password, password2):
@@ -68,6 +70,7 @@ def setup_password(request: Request, ctx: Ctx, password: str = Form(...), passwo
         d.pop("setup_code", None)  # used up
 
     sign_in(request, ctx.vault.update(set_password))
+    ctx.event(request, "setup_password")
     url = str(request.base_url).rstrip("/")
     ctx.update(lambda c: setattr(c, "public_url", c.public_url or url))
     return redirect(request, "/", tr(request, "Passwort gespeichert. Die Übersicht zeigt, was noch einzurichten ist."))
@@ -104,14 +107,33 @@ def login(request: Request, ctx: Ctx, password: str = Form(...)):
             rehashed = hash_password(password)
             secrets_ = ctx.vault.update(lambda d: d.__setitem__("ui_password_hash", rehashed))
         sign_in(request, secrets_)
+        _new_client(ctx, client)
+        ctx.event(request, "login")
         return redirect(request, "/")
     log.warning("web UI: wrong password from %s", client)
+    ctx.event(request, "login", ok=False)
     return redirect(request, "/login", tr(request, "Falsches Passwort."), "error")
+
+
+def _new_client(ctx, client: str) -> None:
+    """A login from an address none came from before (#102): ntfy says so - unless it is the very first."""
+    if ctx.state.known_client(client) or not ctx.state.events(1):
+        return
+    try:
+        c = ctx.cfg()
+        if c.ntfy_topic:
+            (ctx.notifier or Notifier(c.ntfy_server, c.ntfy_topic, c.ntfy_token)).send(
+                "Broker Sync: neue Anmeldung", f"Anmeldung an der Oberfläche von {client} - zum ersten Mal von dort. "
+                "Warst du das nicht, das Passwort ändern.", link=f"{c.public_url}/security" if c.public_url else None,
+                tags="warning")
+    except Exception:  # a notification never stops a login
+        log.exception("notification of a new login failed")
 
 
 @router.post("/logout")
 def logout(request: Request, ctx: Ctx):
     # A copied cookie signs in nobody afterwards (#96); one user, so every session ends.
     ctx.vault.update(end_ui_sessions)
+    ctx.event(request, "logout")
     request.session.clear()
     return RedirectResponse("/login", 303, headers={"Clear-Site-Data": '"cookies"'})

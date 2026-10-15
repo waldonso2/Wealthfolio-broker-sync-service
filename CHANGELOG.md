@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.22.0
+
+Transport, isolation, operation (waldonso2/wealthfolio-importer-addon#121).
+
+- **The UI's CA signs only this container (#92):** its name constraints are now exactly the container's name, `localhost` and its current addresses (each a single address), no longer every private network and local domain - whoever has its key can't vouch for the router or the NAS. **Import the CA once more after this update** (page *Sicherheit*); a new address means a new CA. CA valid 2 years. A root timer (`wealthfolio-broker-sync-cert.timer`, `brokersync renew-cert`) renews the certificate daily and restarts the UI when it changed. More names or addresses (also Tailscale's 100.64.0.0/10) in `/etc/wealthfolio-broker-sync/tls/extra-names`.
+- **`sc` in a sandbox (#93):** Scalable's CLI runs under Landlock (`brokersync.sandbox`): it can't read `data/`, the key or the unlock cache, and writes only its temp dir; its environment holds no `CREDENTIALS_DIRECTORY` or `BROKERSYNC_*`. The units allow `@sandbox`. A kernel without Landlock runs it without, and *Sicherheit* says so.
+- **Honest protection (#94):** *Sicherheit* tells TPM, the container's host secret and a root-only file apart; without a TPM and a master passphrase it says a container backup holds key and data. Footer and summary claim database encryption only with SQLCipher. `setup.sh` moves a root-only key into `systemd-creds` once that can encrypt.
+- **Wealthfolio with its own certificate (#95):** trusted by its SHA-256 fingerprint, checked in the TLS handshake before the password is sent. The page shows the fingerprint of a certificate nobody vouches for, to compare and save. *Nur testen* checks address, certificate and password without saving; a warning at the field for `http://`.
+- **Event log (#102):** logins (also failed), logouts, password, sessions, credentials, Wealthfolio address, passphrase, fetch mode, *Neu aufsetzen*, lock and unlock, with the client's address, on *Sicherheit* (last 100, kept 180 days; new table, migration 2). A login from a new address is notified via ntfy.
+- **Backup and restore (#109):** `brokersync-cli backup > file`, `brokersync-cli restore < file` - restore checks the archive opens with this container's key before it touches `data/`, keeps the previous data, refuses while the UI runs.
+- The command line is one function per command.
+
 ## 0.21.0
 
 UI sessions, forms and long actions (waldonso2/wealthfolio-importer-addon#121).

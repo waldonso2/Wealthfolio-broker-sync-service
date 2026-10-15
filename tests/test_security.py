@@ -421,10 +421,13 @@ def test_the_certificate_comes_from_the_containers_ca_and_browsers_can_verify_it
     ips = {str(i) for i in leaf.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
            .get_values_for_type(x509.IPAddress)}
     assert ips == {"192.168.178.110", "fd1e::1", "127.0.0.1"}  # no public address in a local certificate
-    # Kept while it fits; a new address gets a new certificate from the same CA.
-    assert "valid until" in ensure_certificate(d, ["wealthfolio-broker-sync"], ["192.168.178.110"])
-    assert "New certificate" in ensure_certificate(d, ["wealthfolio-broker-sync"], ["192.168.178.111"])
-    assert (d / "ca.pem").read_bytes() == ca_pem
+    # Kept while it fits; a new address needs a new CA (#92) - the old one may sign only the old address.
+    assert "valid until" in ensure_certificate(d, ["wealthfolio-broker-sync"], ["192.168.178.110", "2003:ce::1",
+                                                                              "fd1e::1"])
+    out = ensure_certificate(d, ["wealthfolio-broker-sync"], ["192.168.178.111"])
+    assert "New certificate" in out and "New CA" in out and (d / "ca.pem").read_bytes() != ca_pem
+    _verify((d / "ca.pem").read_bytes(), (d / "cert.pem").read_bytes(),
+            x509.IPAddress(ipaddress.ip_address("192.168.178.111")))
 
 
 def test_the_ca_cannot_vouch_for_a_public_site(tmp_path):
@@ -452,6 +455,39 @@ def test_the_ca_cannot_vouch_for_a_public_site(tmp_path):
     with pytest.raises(Exception, match="(?i)constraint|name"):
         _verify((d / "ca.pem").read_bytes(), forged.public_bytes(serialization.Encoding.PEM),
                 x509.DNSName("www.deutsche-bank.de"))
+
+    # Nor for any other device at home (#92): the router, another address, a whole local domain.
+    import ipaddress
+
+    for name in (x509.DNSName("fritz.box"), x509.DNSName("nas.lan"), x509.DNSName("x.lan"),
+                 x509.IPAddress(ipaddress.ip_address("192.168.1.1"))):
+        other = (x509.CertificateBuilder().subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "x")]))
+                 .issuer_name(ca.subject).public_key(key.public_key()).serial_number(2)
+                 .not_valid_before(now - timedelta(minutes=1)).not_valid_after(now + timedelta(days=30))
+                 .add_extension(x509.SubjectAlternativeName([name]), critical=False)
+                 .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+                 .sign(ca_key, hashes.SHA256()))
+        with pytest.raises(Exception, match="(?i)constraint|name"):
+            _verify((d / "ca.pem").read_bytes(), other.public_bytes(serialization.Encoding.PEM), name)
+
+
+def test_an_old_wide_ca_is_replaced_and_extra_names_are_added(tmp_path):
+    from cryptography import x509
+
+    from brokersync import tls
+
+    d = tmp_path / "tls"
+    tls.ensure_certificate(d, ["sync"], ["192.168.1.5"])
+    ca = x509.load_pem_x509_certificate((d / "ca.pem").read_bytes())
+    constraints = ca.extensions.get_extension_for_class(x509.NameConstraints).value.permitted_subtrees
+    assert {str(getattr(c, "value", c)) for c in constraints} == {"sync", "localhost", "192.168.1.5/32",
+                                                                   "127.0.0.1/32"}
+    # A Tailscale address and a DNS name from extra-names; garbage and public addresses are ignored.
+    (d / "extra-names").write_text("# mine\n100.101.102.103\nsync.example.org\n8.8.8.8\n*.lan\n")
+    names, ips = tls.extra_names(d)
+    assert (names, ips) == (["sync.example.org"], ["100.101.102.103"])
+    assert "New CA" in tls.ensure_certificate(d, ["sync", *names], ["192.168.1.5", *ips])
+    _verify((d / "ca.pem").read_bytes(), (d / "cert.pem").read_bytes(), x509.DNSName("sync.example.org"))
 
 
 def test_an_old_self_signed_certificate_is_replaced_and_a_foreign_one_kept(tmp_path):

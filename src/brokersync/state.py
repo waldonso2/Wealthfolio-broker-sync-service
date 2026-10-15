@@ -17,7 +17,7 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from . import crypto, meta_keys, redact
@@ -146,9 +146,21 @@ def _balances_account_column(db) -> None:
     db.execute("ALTER TABLE balances_new RENAME TO balances")
 
 
+def _events_table(db) -> None:
+    """2: security-relevant actions of the UI (#102): logins, credentials, passphrase, mode, *Neu aufsetzen*."""
+    db.execute("""CREATE TABLE events (
+      at TEXT NOT NULL,
+      event TEXT NOT NULL,
+      client TEXT NOT NULL DEFAULT '',
+      ok INTEGER NOT NULL DEFAULT 1,
+      broker TEXT NOT NULL DEFAULT '',
+      detail TEXT NOT NULL DEFAULT '')""")
+    db.execute("CREATE INDEX events_at ON events (at)")
+
+
 # Schema changes after SCHEMA (the state of 0.13.x), in order: MIGRATIONS[n] brings a database from
 # version n to n + 1 (``PRAGMA user_version``). Never edit or reorder one that shipped - append.
-MIGRATIONS = [_balances_account_column]
+MIGRATIONS = [_balances_account_column, _events_table]
 SCHEMA_VERSION = len(MIGRATIONS)
 
 
@@ -178,6 +190,10 @@ def migrate(db) -> int:
     finally:
         db.isolation_level = level
     return version
+
+
+# How long the event log (#102) keeps an entry.
+EVENT_DAYS = 180
 
 
 def now() -> str:
@@ -521,6 +537,31 @@ class State:
         ]
 
     # ── runs ────────────────────────────────────────────────────────────────
+    # ── events (#102) ───────────────────────────────────────────────────────
+    def add_event(self, event: str, *, client: str = "", ok: bool = True, broker: str = "", detail: str = "") -> None:
+        """Never a secret: ``detail`` is masked (``redact``) and short."""
+        from . import redact
+
+        with self._writing():
+            self.db.execute("INSERT INTO events VALUES (?, ?, ?, ?, ?, ?)",
+                            (now(), event, client[:64], int(ok), broker, redact.redact(detail)[:200]))
+
+    def events(self, limit: int = 100) -> list[dict]:
+        rows = self.db.execute("SELECT at, event, client, ok, broker, detail FROM events ORDER BY at DESC, rowid DESC "
+                               "LIMIT ?", (limit,))
+        return [{"at": r[0], "event": r[1], "client": r[2], "ok": bool(r[3]), "broker": r[4], "detail": r[5]}
+                for r in rows]
+
+    def known_client(self, client: str) -> bool:
+        """A successful login (or the first password) came from ``client`` before."""
+        return self.db.execute("SELECT 1 FROM events WHERE event IN ('login', 'setup_password') AND ok = 1 "
+                               "AND client = ? LIMIT 1", (client,)).fetchone() is not None
+
+    def prune_events(self, days: int = EVENT_DAYS) -> None:
+        cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+        with self._writing():
+            self.db.execute("DELETE FROM events WHERE at < ?", (cutoff,))
+
     def start_run(self, broker: str) -> int:
         with self._writing():
             cur = self.db.execute(

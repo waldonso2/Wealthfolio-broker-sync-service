@@ -41,6 +41,8 @@ class BrokerConfig:
 @dataclass
 class Config:
     wealthfolio_url: str = "http://localhost:8080"
+    # SHA-256 of Wealthfolio's own certificate, trusted instead of a CA (#95); empty: the usual CAs.
+    wealthfolio_fingerprint: str = ""
     # Address of this service's UI as the user reaches it; used for links in
     # notifications.
     public_url: str = ""

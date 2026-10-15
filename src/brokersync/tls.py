@@ -3,21 +3,25 @@
 ``deploy/setup.sh`` (``brokersync make-cert``) keeps two things in
 ``/etc/wealthfolio-broker-sync/tls`` (root only):
 
-- **The CA** (``ca.pem``, ``ca-key.pem``): created once, valid 10 years. The
-  user imports ``ca.pem`` once (page *Sicherheit*, ``/ca.crt``); from then on the
-  browser trusts the UI, renewed certificates included. It may only sign names
-  of the local network (*name constraints*: private IP ranges, the container's
-  name, ``.local``/``.lan``/``.home.arpa``/``.fritz.box``) - even with its key, no
-  certificate for a public site would be accepted. The service never sees the key.
+- **The CA** (``ca.pem``, ``ca-key.pem``): valid 2 years. The user imports
+  ``ca.pem`` once (page *Sicherheit*, ``/ca.crt``); from then on the browser trusts
+  the UI, renewed certificates included. It may only sign this container (#92,
+  *name constraints*): its name, ``localhost`` and its current addresses, each a
+  single address - not the router, the NAS or any other device, even for whoever
+  has its key. A new name or address means a new CA, to import once more. The
+  service never sees the key.
 - **The certificate** (``cert.pem``, ``key.pem``), signed by the CA, for the
   container's name and private addresses; renewed when it runs out or an
-  address changes. A certificate the user put there (from another issuer) is kept.
+  address changes - ``brokersync renew-cert`` daily (``wealthfolio-broker-sync-cert.timer``).
+  More names or addresses (a Tailscale address, a DNS name) go one per line into
+  ``extra-names`` there. A certificate the user put there (from another issuer) is kept.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import os
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -28,12 +32,14 @@ from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 VALID_DAYS = 825  # what browsers accept for a certificate of a private CA
 RENEW_DAYS = 30
-CA_VALID_DAYS = 3650
-CA_RENEW_DAYS = 365
+CA_VALID_DAYS = 730
+CA_RENEW_DAYS = 60
 CA_NAME = "Wealthfolio Broker Sync CA"
+# Addresses a certificate may name: private networks, and 100.64.0.0/10 (Tailscale, carrier-grade NAT).
 PRIVATE_NETWORKS = [ipaddress.ip_network(n) for n in (
-    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8", "fc00::/7", "fe80::/10", "::1/128")]
-LOCAL_DOMAINS = ["localhost", "local", "lan", "home.arpa", "fritz.box", "internal"]
+    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8", "100.64.0.0/10", "fc00::/7", "fe80::/10",
+    "::1/128")]
+EXTRA_NAMES = "extra-names"
 
 
 def _names(cert: x509.Certificate) -> tuple[set[str], set[str]]:
@@ -51,6 +57,30 @@ def _private_ip(value: str) -> str | None:
     except ValueError:
         return None
     return str(ip) if any(ip in n for n in PRIVATE_NETWORKS) else None
+
+
+HOST_NAME = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$")
+
+
+def extra_names(directory: Path) -> tuple[list[str], list[str]]:
+    """Names and addresses from ``extra-names`` (one per line, ``#`` comments): a Tailscale address, a DNS name.
+    Only exactly these - the CA may sign them and nothing near them."""
+    path = directory / EXTRA_NAMES
+    names: list[str] = []
+    ips: list[str] = []
+    for line in path.read_text().splitlines() if path.exists() else []:
+        value = line.split("#", 1)[0].strip().lower()
+        if not value:
+            continue
+        try:
+            ipaddress.ip_address(value)
+        except ValueError:
+            if HOST_NAME.match(value):
+                names.append(value)
+            continue
+        if _private_ip(value):  # a public address never: the certificate is for this container at home
+            ips.append(value)
+    return names, ips
 
 
 def _write(path: Path, data: bytes) -> None:
@@ -79,19 +109,34 @@ def fingerprint(cert: x509.Certificate) -> str:
     return cert.fingerprint(hashes.SHA256()).hex(":").upper()
 
 
-def _ensure_ca(directory: Path, hosts: list[str]) -> tuple[x509.Certificate, ec.EllipticCurvePrivateKey, bool]:
+def _permitted(names: list[str], ips: list[str]) -> list[x509.GeneralName]:
+    """Exactly this container (#92): its names and each address as a single host (/32, /128)."""
+    return ([x509.DNSName(n) for n in sorted(set(names))]
+            + [x509.IPAddress(ipaddress.ip_network(i)) for i in sorted(set(ips))])
+
+
+def _constraints(ca: x509.Certificate) -> set:
+    try:
+        return set(ca.extensions.get_extension_for_class(x509.NameConstraints).value.permitted_subtrees or [])
+    except x509.ExtensionNotFound:
+        return set()
+
+
+def _ensure_ca(directory: Path, names: list[str], ips: list[str]
+               ) -> tuple[x509.Certificate, ec.EllipticCurvePrivateKey, bool]:
     ca_file, ca_key_file = directory / "ca.pem", directory / "ca-key.pem"
+    permitted = _permitted(names, ips)
     if ca_file.exists() and ca_key_file.exists():
         ca = x509.load_pem_x509_certificate(ca_file.read_bytes())
-        if ca.not_valid_after_utc - datetime.now(UTC) > timedelta(days=CA_RENEW_DAYS):
+        # A CA of an older version may sign the whole home network: replaced (#92), as is one for other names.
+        if (ca.not_valid_after_utc - datetime.now(UTC) > timedelta(days=CA_RENEW_DAYS)
+                and _constraints(ca) == set(permitted)):
             ca_key = serialization.load_pem_private_key(ca_key_file.read_bytes(), None)
             if isinstance(ca_key, ec.EllipticCurvePrivateKey):
                 return ca, ca_key, False
     key = ec.generate_private_key(ec.SECP256R1())
-    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, f"{CA_NAME} ({hosts[0]})"),
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, f"{CA_NAME} ({names[0]})"),
                       x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Wealthfolio Broker Sync")])
-    permitted = ([x509.DNSName(d) for d in sorted(set(hosts) | set(LOCAL_DOMAINS))]
-                 + [x509.IPAddress(n) for n in PRIVATE_NETWORKS])
     now = datetime.now(UTC)
     ca = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
           .serial_number(x509.random_serial_number()).not_valid_before(now - timedelta(minutes=5))
@@ -115,7 +160,7 @@ def ensure_certificate(directory: Path, hosts: list[str], ips: list[str]) -> str
     hosts = [h.lower() for h in dict.fromkeys(h for h in hosts if h)] or ["localhost"]
     ips = sorted({p for p in (_private_ip(i) for i in ips + ["127.0.0.1"]) if p})
     names = sorted(set(hosts) | {"localhost"})
-    ca, ca_key, new_ca = _ensure_ca(directory, hosts)
+    ca, ca_key, new_ca = _ensure_ca(directory, [hosts[0], *names], ips)
     if cert_file.exists() and key_file.exists() and not new_ca:
         cert = x509.load_pem_x509_certificate(cert_file.read_bytes())
         ours = _issued_by(cert, ca)

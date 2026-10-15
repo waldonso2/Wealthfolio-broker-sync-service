@@ -287,6 +287,11 @@ def _locked_app(gate: Gate, templates_dir: Path, static_dir: Path) -> FastAPI:
             a.ok = crypto.unlock(gate.data_dir, passphrase)
         if a.ok:
             log.info("web UI: service unlocked")
+            from ..state import State
+
+            state = State(gate.data_dir)
+            state.add_event("unlock", client=client)
+            state.close()
             return RedirectResponse("/login", 303)
         log.warning("web UI: wrong master passphrase from %s", client)
         return page(request, "Die Passphrase stimmt nicht.", 403)

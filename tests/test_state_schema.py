@@ -19,6 +19,7 @@ def _as_0_13(tmp_path) -> None:
             ("dkb", "EUR:savings", "10000.00", "2026-10-01T06:00:00+00:00"),
             ("tr", "EUR", "12.34", "2026-10-02T06:00:00+00:00"),
         ])
+        s.db.execute("DROP TABLE events")  # 0.22.0 (#102)
         s.db.execute("PRAGMA user_version = 0")
     s.mark("dkb", "tx-1", "imported", ["a1", "a2"])
     s.close()

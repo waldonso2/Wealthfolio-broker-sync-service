@@ -45,7 +45,7 @@ from .notify import Notifier
 from .reconcile import compare
 from .state import State
 from .vault import Vault
-from .wealthfolio import Duplicate, WealthfolioClient, WealthfolioError
+from .wealthfolio import Duplicate, WealthfolioClient, WealthfolioError, connect
 
 log = logging.getLogger(__name__)
 BERLIN = ZoneInfo("Europe/Berlin")
@@ -161,7 +161,7 @@ class Syncer:
         self.state = State(self.data_dir)
         retired.clean_up(self.data_dir, self.state, self.vault)
         self.adapters = adapters or ADAPTERS
-        self._wealthfolio = wealthfolio or (lambda url, pw: WealthfolioClient(url, pw))
+        self._wealthfolio = wealthfolio or WealthfolioClient
         # Seconds to give Wealthfolio to recalculate holdings before the check.
         self.recalc_wait = float(os.environ.get("BROKERSYNC_RECALC_WAIT", "5"))
         self._notifier = notifier
@@ -203,6 +203,7 @@ class Syncer:
             finally:
                 self._pins = {}
                 self.state.delete_meta(meta_keys.PROGRESS())
+                self.state.prune_events()
             return results
 
     def _phase(self, phase: str) -> None:
@@ -244,7 +245,8 @@ class Syncer:
         learned = {a["asset_id"]: isin for key in cfg.brokers for isin, a in self.state.assets(key).items()}
         source = self._logo_source(token)
         try:
-            with self._wealthfolio(cfg.wealthfolio_url, secrets.get("wealthfolio_password")) as wf:
+            with connect(self._wealthfolio, cfg.wealthfolio_url, secrets.get("wealthfolio_password"),
+                         cfg.wealthfolio_fingerprint) as wf:
                 return logos_mod.update(self.state, wf, source, learned)
         except Exception:
             log.exception("logos not updated")
@@ -312,7 +314,8 @@ class Syncer:
         self._fetch(run)
         self._prepare(run)
         self._phase("book")
-        with self._wealthfolio(cfg.wealthfolio_url, run.secrets.get("wealthfolio_password")) as wf:
+        with connect(self._wealthfolio, cfg.wealthfolio_url, run.secrets.get("wealthfolio_password"),
+                     cfg.wealthfolio_fingerprint) as wf:
             # Before the check against existing activities: it then sees them repaired.
             run.repaired = self._repair_cash_assets(key, wf, run.accounts)
             self._add_before_history(run, wf)

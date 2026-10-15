@@ -34,6 +34,6 @@
   {% if flash %}<div class="flash {{ flash.level }}" role="{{ 'alert' if flash.level == 'error' else 'status' }}">{{ flash.text }}</div>{% endif %}
   {% block content %}{% endblock %}
 </main>
-<footer class="wrap"><p class="muted">{{ _("Version {version} · alle Daten verschlüsselt · nur lesender Zugriff auf die Broker", version=version) }}</p></footer>
+<footer class="wrap"><p class="muted">{% if db_encrypted() %}{{ _("Version {version} · alle Daten verschlüsselt · nur lesender Zugriff auf die Broker", version=version) }}{% else %}{{ _("Version {version} · Zugangsdaten und Einstellungen verschlüsselt, die Sync-Datenbank nicht · nur lesender Zugriff auf die Broker", version=version) }}{% endif %}</p></footer>
 </body>
 </html>

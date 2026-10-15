@@ -53,7 +53,8 @@ def test_units_and_setup_agree_on_paths():
         if unit.suffix == ".service":
             assert "ExecStart=/opt/wealthfolio-broker-sync/venv/bin/brokersync" in text
             assert "BROKERSYNC_DATA=/opt/wealthfolio-broker-sync/data" in text
-            assert "User=brokersync" in text
+            # Only the certificate's renewal is root: it writes /etc/wealthfolio-broker-sync/tls (#92).
+            assert "User=brokersync" in text or ("User=root" in text and "renew-cert" in text)
     assert "USER_NAME=brokersync" in setup and 'BASE=/opt/wealthfolio-broker-sync' in setup
     ct = (ROOT / "ct" / f"{SLUG}.sh").read_text()
     for name in ("wealthfolio-broker-sync", "wealthfolio-broker-sync-run.timer"):

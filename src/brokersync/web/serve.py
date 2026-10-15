@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 import uvicorn
 
 from .. import config as config_mod
+from ..backup import hold_ui_lock
 from .app import create_app
 from .gate import Hosts
 
@@ -92,6 +93,7 @@ def serve(data_dir: Path, *, host: str, port: int, certfile: str | None, keyfile
     if not secure:
         log.warning("web UI without TLS: passwords cross the network in plain text")
     servers = [uvicorn.Server(c) for c in configs]
+    ui_lock = hold_ui_lock(data_dir)  # brokersync-cli restore refuses to run under a running UI (#109)
 
     async def main():
         async def stop_together():
@@ -103,4 +105,7 @@ def serve(data_dir: Path, *, host: str, port: int, certfile: str | None, keyfile
 
         await asyncio.gather(*(s.serve() for s in servers), stop_together())
 
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    finally:
+        ui_lock.close()

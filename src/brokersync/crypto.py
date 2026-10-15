@@ -202,6 +202,21 @@ def data_key(data_dir: Path) -> bytes:
     return _data_key(data_dir, pkey)
 
 
+def data_key_for(data_dir: Path, ring: dict) -> bytes:
+    """The data key of files sealed under ``ring`` (the keyring of a backup, #109): this container's host key and
+    the passphrase entered now; raises ``Locked`` or ``DecryptError`` if they don't open it."""
+    p = ring.get("passphrase")
+    if not p:
+        return _data_key(data_dir, None)
+    pkey = _cached_pkey(data_dir)
+    if pkey is None:
+        raise Locked("Der Dienst ist gesperrt: Bitte erst entsperren.")
+    key = _data_key(data_dir, pkey)
+    if not _check_ok(key, p["check"]):
+        raise DecryptError("sealed with another master passphrase")
+    return key
+
+
 def unlock(data_dir: Path, passphrase: str) -> bool:
     ring = keyring(data_dir)
     p = ring.get("passphrase")

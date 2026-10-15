@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import config as config_mod
-from . import crypto
+from . import crypto, sandbox
 from . import state as state_mod
 from .sync import run_lock
 from .vault import Vault
@@ -40,7 +40,10 @@ class Check:
 
 
 KEY_DETAILS = {
-    "systemd-creds": N_("Mit systemd-creds verschlüsselt außerhalb von data/; der Dienst bekommt ihn nur beim Start."),
+    "systemd-creds-tpm2": N_("Mit systemd-creds und dem TPM verschlüsselt außerhalb von data/; eine Kopie des "
+                             "Containers allein öffnet ihn nicht."),
+    "systemd-creds": N_("Mit systemd-creds verschlüsselt außerhalb von data/, mit dem Host-Secret des Containers "
+                        "(kein TPM); der Dienst bekommt ihn nur beim Start."),
     "systemd": N_("Außerhalb von data/, nur für root lesbar; der Dienst bekommt ihn beim Start (systemd-creds "
                   "konnte hier nicht verschlüsseln)."),
     "file": N_("Aus BROKERSYNC_KEY_FILE."),
@@ -53,11 +56,16 @@ def status(data_dir: Path, *, secure: bool) -> list[Check]:
     d = Path(data_dir)
     out: list[Check] = []
     source = crypto.host_key_source(d)
-    out.append(Check(N_("Schlüssel des Dienstes"), source in ("systemd-creds", "systemd", "file"),
-                     KEY_DETAILS[source]))
+    out.append(Check(N_("Schlüssel des Dienstes"), source in ("systemd-creds-tpm2", "systemd-creds", "systemd", "file"),
+                     KEY_DETAILS.get(source, KEY_DETAILS["systemd"])))
     if crypto.passphrase_enabled(d):
         out.append(Check(N_("Master-Passphrase"), True, N_("Gesetzt: Ohne sie sind Zugangsdaten, Einstellungen und "
                                                            "Sync-Daten nicht lesbar, auch nicht aus einer Sicherung.")))
+    elif source != "systemd-creds-tpm2":
+        # #94: without a TPM the key's protection lives in the container too - a backup of it holds both.
+        out.append(Check(N_("Master-Passphrase"), True, N_("Nicht gesetzt, und ohne TPM: Ein Backup des Containers "
+                                                           "enthält Schlüssel und Daten. Master-Passphrase setzen "
+                                                           "oder die Backups verschlüsseln."), warn=True))
     else:
         out.append(Check(N_("Master-Passphrase"), True, N_("Nicht gesetzt: Abrufe laufen nach einem Neustart ohne "
                                                            "Zutun weiter. Wer den ganzen Container samt Schlüssel "
@@ -80,6 +88,10 @@ def status(data_dir: Path, *, secure: bool) -> list[Check]:
         out.append(Check(N_("Sync-Datenbank"), not plain, N_("Mit SQLCipher verschlüsselt (AES-256).") if not plain
                          else N_("Noch unverschlüsselt - wird beim nächsten Öffnen verschlüsselt.")))
     out.append(_connection(secure))
+    out.append(Check(N_("Scalable CLI"), True, N_("Läuft in einer Sandbox (Landlock): kein Zugriff auf data/ und "
+                                                  "den Schlüssel.") if sandbox.supported() else
+                     N_("Ohne Sandbox: Der Kernel kann kein Landlock. sc bekommt trotzdem weder Schlüssel noch "
+                        "Einstellungen des Dienstes."), warn=not sandbox.supported()))
     loose = _loose_permissions(d)
     out.append(Check(N_("Dateirechte"), not loose, N_("Nur der Dienst-Benutzer kann data/ lesen.") if not loose
                      else N_("Für andere lesbar: {files}"), params={"files": ", ".join(loose)} if loose else {}))

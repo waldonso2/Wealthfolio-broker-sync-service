@@ -16,10 +16,13 @@ Wealthfolio rejects an exact duplicate (same idempotency fingerprint) with
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import re
+import ssl
 from dataclasses import dataclass
 from datetime import date
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 
@@ -52,14 +55,61 @@ class Account:
     is_active: bool
 
 
+class _Pinned(ssl.SSLContext):
+    """TLS to a Wealthfolio with a certificate of its own (#95): trusted by its SHA-256 fingerprint, not by a CA.
+    Checked in the handshake, before the first byte of a request - the password - is sent."""
+
+    pin = ""
+
+    def wrap_socket(self, sock, *args, **kwargs):  # type: ignore[override]
+        tls = super().wrap_socket(sock, *args, **kwargs)
+        der = tls.getpeercert(binary_form=True) or b""
+        if not hmac.compare_digest(hashlib.sha256(der).hexdigest(), self.pin):
+            tls.close()
+            raise ssl.SSLCertVerificationError("Wealthfolio's certificate is not the one trusted (SHA-256 differs)")
+        return tls
+
+
+def normalize_fingerprint(value: str) -> str:
+    """``AB:CD:…`` or ``abcd…`` → 64 lower-case hex digits; empty if it isn't a SHA-256."""
+    hex_ = re.sub(r"[\s:]", "", value or "").lower()
+    return hex_ if re.fullmatch(r"[0-9a-f]{64}", hex_) else ""
+
+
+def pinned_context(fingerprint: str) -> ssl.SSLContext:
+    ctx = _Pinned(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE  # the fingerprint is the check
+    ctx.pin = normalize_fingerprint(fingerprint)
+    return ctx
+
+
+def server_fingerprint(url: str) -> str:
+    """The SHA-256 of the certificate the server at ``url`` shows now - to show the user, who confirms it."""
+    parts = urlsplit(url)
+    pem = ssl.get_server_certificate((parts.hostname or "", parts.port or 443), timeout=10)
+    return hashlib.sha256(ssl.PEM_cert_to_DER_cert(pem)).hexdigest().upper()
+
+
+def is_certificate_error(error: Exception) -> bool:
+    return "CERTIFICATE_VERIFY_FAILED" in str(error) or "certificate" in str(error).lower()
+
+
+def connect(make, url: str, password: str | None, fingerprint: str = ""):
+    """``make(url, password)`` - the factory of the app or the tests - with the pinned certificate, if any."""
+    return make(url, password, fingerprint=fingerprint) if fingerprint else make(url, password)
+
+
 class WealthfolioClient:
     def __init__(self, base_url: str, password: str | None, *, timeout: float = 30.0,
-                 transport: httpx.BaseTransport | None = None):
+                 transport: httpx.BaseTransport | None = None, fingerprint: str = ""):
         self.base_url = base_url.rstrip("/")
         self.password = password or None
         self._token: str | None = None
+        verify: ssl.SSLContext | bool = pinned_context(fingerprint) if fingerprint else True
         self._http = httpx.Client(base_url=self.base_url, timeout=timeout, transport=transport,
-                                  follow_redirects=False)
+                                  follow_redirects=False, verify=verify)
 
     def close(self) -> None:
         self._http.close()
