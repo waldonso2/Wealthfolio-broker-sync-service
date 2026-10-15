@@ -333,6 +333,8 @@ class State:
                 "INSERT OR REPLACE INTO synced VALUES (?, ?, ?, ?, ?)",
                 (broker, tx_id, status, json.dumps(activity_ids), now()),
             )
+            # Booked now (e.g. a type the adapter learned since): no longer unknown.
+            self.db.execute("DELETE FROM unknown_events WHERE broker = ? AND tx_id = ?", (broker, tx_id))
 
     def synced(self, broker: str) -> dict[str, tuple[str, list[str]]]:
         rows = self.db.execute("SELECT tx_id, status, activity_ids FROM synced WHERE broker = ?", (broker,))

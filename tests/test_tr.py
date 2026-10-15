@@ -82,10 +82,22 @@ def test_cash_events_and_taxes():
     assert (vorab.kind, vorab.net) == (Kind.TAX, D("0.19"))
 
 
+def test_tax_charge_referral_bonus_and_worthless_book_like_the_csv_import():
+    charge = by_raw("SSP_TAX_CORRECTION")  # pytr calls it a refund, but it takes money
+    (a,) = to_activities(charge, "tr", Accounts("c", "p"))
+    assert (a["accountId"], a["activityType"], a["amount"]) == ("c", "TAX", "12.34")
+    (a,) = to_activities(by_raw("REFERRAL_FIRST_TRADE_EXECUTED_INVITER"), "tr", Accounts("c", "p"))
+    assert (a["accountId"], a["activityType"], a["subtype"], a["amount"]) == ("c", "CREDIT", "BONUS", "15")
+    worthless = by_raw("SSP_CORPORATE_ACTION_ACTIVITY")
+    (a,) = to_activities(worthless, "tr", Accounts("c", "p"))  # a sale at 0, no money moves (as the addon)
+    assert (a["accountId"], a["activityType"], a["quantity"], a["amount"]) == ("p", "SELL", "3", "0")
+
+
 def test_unknown_and_informational_events():
     out = txs()
     unknown = [t for t in out if t.kind == Kind.UNKNOWN]
-    assert [t.raw_type for t in unknown] == ["SSP_CORPORATE_ACTION_INVOICE_SHARES (SPLIT)"]
+    assert [t.raw_type for t in unknown] == ["SSP_CORPORATE_ACTION_INVOICE_SHARES (SPLIT)",
+                                             "SSP_CORPORATE_ACTION_INSTRUMENT"]  # reinvestment: no share count
     assert set(unknown[0].raw) == {"eventType", "title", "subtitle", "status"}  # nothing personal
     # With an amount, it is shown so the event can be booked by hand - still nothing personal.
     from brokersync.adapters.tr import _unknown
@@ -239,7 +251,7 @@ def setup_sync(tmp_path):
 def test_sync_books_the_timeline_and_reports_lasting_deviations(tmp_path):
     syncer, wf, notifier = setup_sync(tmp_path)
     [r] = syncer.run()
-    assert (r.status, r.created, r.unknown) == ("ok", 12, 1)
+    assert (r.status, r.created, r.unknown) == ("ok", 15, 2)
     assert syncer.state.balances("tr") == [{"currency": "EUR", "account": "", "amount": "1234.56",
                                              "at": syncer.state.balances("tr")[0]["at"]}]
     devs = syncer.state.reconcile("tr")["deviations"]

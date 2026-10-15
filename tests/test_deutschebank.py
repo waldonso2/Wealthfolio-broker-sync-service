@@ -3,7 +3,7 @@
 All data fabricated: TEST securities, invented depot and account numbers."""
 
 import re
-from datetime import date, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal as D
 
 import pytest
@@ -14,7 +14,7 @@ from brokersync.adapters import deutschebank_csv
 from brokersync.adapters.deutschebank import DeutscheBankAdapter
 from brokersync.mapping import Accounts, to_activities
 from brokersync.model import Kind
-from brokersync.sync import UNMATCHED_SECURITIES, Syncer
+from brokersync.sync import BERLIN, UNMATCHED_SECURITIES, Syncer
 from brokersync.vault import Vault
 from brokersync.wealthfolio import WealthfolioClient
 
@@ -27,7 +27,7 @@ HEADER = ("Buchungsdatum;Schlusstag / Zahltag;Valuta;Depot-Nr.;Konto-Nr.;Umsatza
           "ISIN;Handelswährung;Kurs;Devisenkurs;Stückzinsen;Kapitalertragssteuer inkl. Solidaritätszuschlag;"
           "Ausländische Quellensteuer;Vergütete Steuern;Transaktionspreis inkl. sonstiger Kosten;Eigene Spesen;"
           "Fremde Spesen;Ausmachender Betrag;Depot-/Portfolioname")
-TODAY = date.today()
+TODAY = datetime.now(BERLIN).date()  # the adapter's day: German time, not the host's
 RECENT = TODAY - timedelta(days=10)
 BUY_DAY = TODAY - timedelta(days=5)
 

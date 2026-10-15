@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.23.1
+
+- **Trade Republic: three more kinds of bookings** (waldonso2/Wealthfolio-broker-sync-service#76, #78, #79, as the CSV import books them):
+  - a tax correction that takes money (pytr calls it a refund) is a tax (TAX);
+  - a referral bonus is a bonus (CREDIT/BONUS) on the cash account;
+  - a security written off as worthless is a sale at 0 on the securities account, without any transfer.
+- A dividend reinvestment stays unknown (#77): pytr reads no share count for it. Book it by hand or import it.
+- An unknown booking that a later run books (after *Ab Startdatum neu abrufen*) leaves the page *Unbekannt*.
+- README: only the current version is described.
+
 ## 0.23.0
 
 Data and cleanup, with the addon's 3.9.4 (waldonso2/wealthfolio-importer-addon#121).

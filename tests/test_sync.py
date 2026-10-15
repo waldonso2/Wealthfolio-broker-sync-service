@@ -288,6 +288,17 @@ def test_a_known_unknown_event_gets_the_newer_payload_but_is_not_reported_again(
     assert st.unknown_events("tr")[0]["payload"]["betrag"] == "1 EUR"
 
 
+def test_an_unknown_event_booked_later_leaves_the_list(tmp_path):
+    """A type the adapter learned in an update: *Ab Startdatum neu abrufen* books it, *Unbekannt* drops it."""
+    from brokersync.state import State
+
+    st = State(tmp_path)
+    st.add_unknown("tr", "e1", "X", "2026-01-01", {"eventType": "X"})
+    st.add_unknown("tr", "e2", "Y", "2026-01-01", {"eventType": "Y"})
+    st.mark("tr", "e1", "created", ["a1"])
+    assert [e["tx_id"] for e in st.unknown_events("tr")] == ["e2"]
+
+
 class CrashingAdapter(BrokenAdapter):
     """A bug in an adapter: an exception the sync doesn't expect, after a login."""
 
