@@ -91,6 +91,28 @@ def test_a_deleted_activity_is_reported_not_recreated_until_the_user_says_so(tmp
     assert syncer.state.gaps("fake") == []
 
 
+def test_a_booking_an_import_holds_is_linked_not_missing(tmp_path):
+    """The sync's activities are gone (or never were: Wealthfolio took every leg for a duplicate of the import),
+    but the import books the same dividend: it is booked, so linked to the import's activity, not reported."""
+    wf = FakeWealthfolio()
+    syncer, notifier = full_setup(tmp_path, wf)
+    syncer.run()
+    ours = [a for a in wf.activities if DIVIDEND in (a.get("comment") or "")]
+    for a in ours:
+        wf.activities.remove(a)
+    main = next(a for a in ours if a["activityType"] == "DIVIDEND")
+    wf.activities.append({**main, "id": "csv-div", "comment": "Dividend (CSV import)"})
+    [r] = syncer.run()
+    assert (r.status, r.created) == ("ok", 0)
+    assert syncer.state.gaps("fake") == []
+    assert syncer.state.synced("fake")[DIVIDEND] == ("existing", ["csv-div"])
+    assert not any("Abweichung zu Wealthfolio" in t for t, _, _ in notifier.sent)
+    # Gone for good: reported as before.
+    wf.activities.remove(next(a for a in wf.activities if a["id"] == "csv-div"))
+    syncer.run()
+    assert [(g["kind"], g["ref"]) for g in syncer.state.gaps("fake")] == [("missing", DIVIDEND)]
+
+
 def test_a_missing_leg_is_partial_and_ignored_ones_stay_away(tmp_path):
     wf = FakeWealthfolio()
     syncer, notifier = full_setup(tmp_path, wf)
