@@ -44,6 +44,8 @@ SystemCallArchitectures=native
 # refused one fails with EPERM instead of killing the process. Hidden: other users' processes, and no
 # System V IPC left behind.
 SystemCallFilter=@system-service
+# Landlock for Scalable's sc (brokersync.sandbox, #93).
+SystemCallFilter=@sandbox
 SystemCallErrorNumber=EPERM
 ProtectProc=invisible
 RemoveIPC=true

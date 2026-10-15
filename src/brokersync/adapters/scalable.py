@@ -58,6 +58,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from .. import sandbox
 from ..model import CashBalance, Kind, Position, Transaction
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
 
@@ -70,6 +71,10 @@ CONFIG_TOML = '[auth]\nsession_backend = "file"\nsigning_key_backend = "file"\n'
 # Files the CLI keeps in its config directory that make up the session.
 SESSION_FILES = ("session.json", "auth-signing-key.json", "broker_context.json", "state.json")
 COMMAND_TIMEOUT = 120
+# What of the service's environment ``sc`` gets (#93); everything else (CREDENTIALS_DIRECTORY, BROKERSYNC_*) not.
+PASS_ENV: tuple[str, ...] = ("LANG", "LC_ALL", "TZ")
+# More paths ``sc`` may write (tests: the fake's control directory).
+EXTRA_WRITE: tuple[str, ...] = ()
 LOGIN_PROMPT_TIMEOUT = 30
 # How long "Ich habe bestätigt" waits for the CLI to see the confirmation (it polls every few seconds).
 CONFIRM_WAIT = 45
@@ -391,16 +396,24 @@ class ScCli:
                 if (self.config_dir / name).is_file()}
 
     def _env(self) -> dict[str, str]:
-        env = dict(os.environ)
-        env.update(HOME=str(self.home), XDG_CONFIG_HOME=str(self.home / "config"), NO_COLOR="1", TERM="dumb")
+        """Only what ``sc`` needs (#93): never ``CREDENTIALS_DIRECTORY`` or ``BROKERSYNC_*`` of the service."""
+        env = {k: os.environ[k] for k in PASS_ENV if k in os.environ}
+        env.update(PATH="/usr/local/bin:/usr/bin:/bin", HOME=str(self.home), XDG_CONFIG_HOME=str(self.home / "config"),
+                   TMPDIR=str(self.home), NO_COLOR="1", TERM="dumb")
         return env
+
+    def _command(self, *args: str) -> list[str]:
+        """``sc`` in the sandbox (``brokersync.sandbox``): it writes only its temp dir, never reads ``data/``."""
+        sc = sc_binary()
+        if not os.path.isfile(sc):
+            raise AdapterError("Scalable CLI (sc) ist nicht installiert - im Container `update` ausführen.")
+        return sandbox.command(sc, list(args), read=[os.path.dirname(os.path.abspath(sc))],
+                               write=[str(self.home), *EXTRA_WRITE])
 
     def run(self, *args: str) -> dict:
         try:
-            r = subprocess.run([sc_binary(), *args, "--json"], capture_output=True, text=True, env=self._env(),
+            r = subprocess.run(self._command(*args, "--json"), capture_output=True, text=True, env=self._env(),
                                cwd=self.home, timeout=COMMAND_TIMEOUT)
-        except FileNotFoundError as e:
-            raise AdapterError("Scalable CLI (sc) ist nicht installiert - im Container `update` ausführen.") from e
         except subprocess.TimeoutExpired as e:
             raise AdapterError("Scalable CLI hat nicht rechtzeitig geantwortet.") from e
         try:
@@ -422,9 +435,9 @@ class ScCli:
         """Start ``sc login``; returns (link, code) as soon as the CLI prints them."""
         try:
             self.login_process = subprocess.Popen(
-                [sc_binary(), "login", "--local-read-only"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                self._command("login", "--local-read-only"), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, env=self._env(), cwd=self.home)
-        except FileNotFoundError as e:
+        except FileNotFoundError as e:  # the Python of the sandbox
             raise AdapterError("Scalable CLI (sc) ist nicht installiert - im Container `update` ausführen.") from e
         found = threading.Event()
 

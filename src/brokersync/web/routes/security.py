@@ -12,7 +12,7 @@ from ... import crypto
 from ... import security as security_mod
 from ...sync import AlreadyRunning
 from ...vault import end_ui_sessions, hash_password, verify_password, weak_password
-from ..context import Ctx, redirect, sign_in, tr
+from ..context import EVENTS, Ctx, redirect, sign_in, tr
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -25,7 +25,7 @@ def security_page(request: Request, ctx: Ctx):
     return ctx.render(request, "security.html", checks=security_mod.status(ctx.data_dir, secure=ctx.secure),
                       ca=bool(security_mod.ca_file()), ca_fingerprint=security_mod.ca_fingerprint(),
                       has_passphrase=crypto.passphrase_enabled(ctx.data_dir), min_length=crypto.MIN_PASSPHRASE,
-                      wf_plain=wf_plain, sync_mode=c.sync_mode)
+                      wf_plain=wf_plain, sync_mode=c.sync_mode, events=ctx.state.events(100), labels=EVENTS)
 
 
 @router.post("/security/mode")
@@ -36,6 +36,7 @@ def security_mode(request: Request, ctx: Ctx, mode: str = Form(""), ui_password:
     if error := ctx.reconfirm(request, ui_password):
         return redirect(request, "/security#mode", error, "error")
     ctx.update(lambda c: setattr(c, "sync_mode", mode))
+    ctx.event(request, "mode", detail=mode)
     if mode == "safe":
         ctx.syncer.end_sessions()  # every saved login ends now, not only after the next fetch
         for adapter in ctx.pending.values():
@@ -60,6 +61,7 @@ def security_passphrase(request: Request, ctx: Ctx, password: str = Form(...), a
             return redirect(request, "/security", tr(request, text, **params), "error")
         a.ok = verify_password(password, ctx.vault.load().get("ui_password_hash"))
     if not a.ok:
+        ctx.event(request, "passphrase", ok=False)
         return redirect(request, "/security", tr(request, "Das Passwort der Oberfläche stimmt nicht."), "error")
     if action == "remove":
         if not confirm_remove:  # a second, deliberate step (#110): the data are then no longer behind it
@@ -85,7 +87,12 @@ def security_passphrase(request: Request, ctx: Ctx, password: str = Form(...), a
         return redirect(request, "/security", tr(request, "Gerade läuft ein Abruf. Bitte danach erneut versuchen."),
                         "warn")
     log.info("master passphrase %s", "removed" if target is None else "set")
-    ctx.gate.reset()  # the database connection and the vault use the new key from the next request on
+    ctx.gate.reset()
+    from ...state import State
+
+    state = State(ctx.data_dir)  # the old app's connections are closed: the new file, the new key
+    state.add_event("passphrase", client=client, detail="removed" if target is None else "set")
+    state.close()  # the database connection and the vault use the new key from the next request on
     return redirect(request, "/security", tr(request, "Master-Passphrase entfernt." if target is None
                                              else "Master-Passphrase gesetzt. Merke sie dir gut: Ohne sie sind die "
                                                   "Daten verloren."))
@@ -104,6 +111,7 @@ def security_password(request: Request, ctx: Ctx, password: str = Form(...), new
             return redirect(request, "/security#password", tr(request, text, **params), "error")
         a.ok = verify_password(password, ctx.vault.load().get("ui_password_hash"))
     if not a.ok:
+        ctx.event(request, "password", ok=False)
         return redirect(request, "/security#password", tr(request, "Das bisherige Passwort stimmt nicht."), "error")
     if error := password_problem(request, new, new2):
         return redirect(request, "/security#password", error, "error")
@@ -114,6 +122,7 @@ def security_password(request: Request, ctx: Ctx, password: str = Form(...), new
         end_ui_sessions(d)
 
     sign_in(request, ctx.vault.update(change))
+    ctx.event(request, "password")
     log.info("web UI: password changed, other sessions ended")
     return redirect(request, "/security#password", tr(request, "Passwort geändert. Alle anderen Anmeldungen sind "
                                                                "beendet."))
@@ -126,12 +135,14 @@ def security_sessions(request: Request, ctx: Ctx):
     kept: dict[str, int] = {k: request.session[k] for k in ("since", "auth") if k in request.session}
     sign_in(request, ctx.vault.update(end_ui_sessions))
     request.session.update(kept)
+    ctx.event(request, "sessions")
     log.info("web UI: all other sessions ended")
     return redirect(request, "/security#password", tr(request, "Alle anderen Sitzungen sind beendet."))
 
 
 @router.post("/security/lock")
 def security_lock(request: Request, ctx: Ctx):
+    ctx.event(request, "lock")
     crypto.lock(ctx.data_dir)
     ctx.gate.reset()
     log.info("web UI: service locked")

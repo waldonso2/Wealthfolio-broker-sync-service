@@ -37,7 +37,7 @@
 {% if ca %}
 <div class="card">
   <h2>{{ _("Dem Zertifikat vertrauen") }}</h2>
-  <p>{{ _("Einmal auf dem Gerät importiert, verschwindet „Nicht sicher“ – auch nach jeder Erneuerung. Gilt nur für Namen im lokalen Netz.") }}</p>
+  <p>{{ _("Einmal auf dem Gerät importiert, verschwindet „Nicht sicher“ – auch nach jeder Erneuerung. Die CA kann nur diesen Container bestätigen: seinen Namen und seine Adressen, keinen Router und kein anderes Gerät. Ändert sich der Name oder eine Adresse, entsteht eine neue CA, die du einmal neu importierst.") }}</p>
   <div class="actions"><a class="button" href="/ca.crt">{{ _("CA-Zertifikat herunterladen") }}</a></div>
   <p class="muted">{{ _("SHA-256 zum Vergleich:") }} <code>{{ ca_fingerprint }}</code></p>
   <details><summary>{{ _("So importierst du es") }}</summary>
@@ -95,7 +95,7 @@
     <span class="light {{ 'green' if not issues else ('red' if all_checks | rejectattr('ok') | list else 'yellow') }}" role="img" aria-label="{{ _('{n} offene Punkte', n=issues) }}"></span>
     <h2>{{ _("Prüfungen") }}</h2>
   </div>
-  <p class="summary-line">{{ _("<strong>{fine} von {total}</strong> in Ordnung. Zugangsdaten, Sitzungen und Einstellungen mit AES-256-GCM, die Datenbank mit SQLCipher verschlüsselt, der Schlüssel liegt nicht bei den Daten.", fine=fine | length, total=all_checks | length + (1 if wf_plain else 0)) }}</p>
+  <p class="summary-line">{{ _("<strong>{fine} von {total}</strong> in Ordnung.", fine=fine | length, total=all_checks | length + (1 if wf_plain else 0)) }} {{ _("Zugangsdaten, Sitzungen und Einstellungen mit AES-256-GCM verschlüsselt.") }} {% if db_encrypted() %}{{ _("Die Sync-Datenbank mit SQLCipher.") }}{% else %}{{ _("Die Sync-Datenbank nicht: SQLCipher gibt es für diese Plattform nicht.") }}{% endif %}</p>
   {% if issues %}
   <ul class="rows">
     {% for c in open_checks %}
@@ -117,5 +117,19 @@
     </ul>
   </details>
   {% endif %}
+</div>
+<div class="card" id="events">
+  <details><summary><strong>{{ _("Ereignisse ({n})", n=events | length) }}</strong></summary>
+  <p class="muted">{{ _("Anmeldungen und Änderungen an Zugangsdaten, Passphrase und Abrufmodus der letzten 180 Tage, die neuesten zuerst. Ohne Passwörter und Zugangsdaten.") }}</p>
+  {% if events %}
+  <div class="table"><table>
+    <caption class="sr-only">{{ _("Ereignisse") }}</caption>
+    <thead><tr><th scope="col">{{ _("Zeitpunkt") }}</th><th scope="col">{{ _("Ereignis") }}</th><th scope="col">{{ _("Von") }}</th><th scope="col">{{ _("Ergebnis") }}</th></tr></thead>
+    <tbody>{% for e in events %}
+    <tr><td data-label="{{ _('Zeitpunkt') }}"><time datetime="{{ e.at | utc }}">{{ e.at | local }}</time></td><td data-label="{{ _('Ereignis') }}">{{ _(labels.get(e.event, e.event)) }}{% if e.broker %} · {{ adapters[e.broker].label if e.broker in adapters else e.broker }}{% endif %}{% if e.detail %} · {{ e.detail }}{% endif %}</td><td data-label="{{ _('Von') }}">{{ e.client }}</td><td data-label="{{ _('Ergebnis') }}"><span class="status {{ 'ok' if e.ok else 'error' }}">{{ _("OK") if e.ok else _("abgelehnt") }}</span></td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  {% endif %}
+  </details>
 </div>
 {% endblock %}

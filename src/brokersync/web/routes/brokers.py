@@ -111,6 +111,7 @@ async def broker_save(request: Request, ctx: Ctx, key: str):
     ctx.update(lambda c: c.brokers.__setitem__(key, b))
     if creds != old:
         ctx.vault.set_broker_credentials(key, creds)
+        ctx.event(request, "credentials", broker=key)
         from .broker_login import start_login  # this POST starts the login with the new credentials (#99)
 
         request.session["flash"] = {"text": tr(request, "Gespeichert. Jetzt beim Broker anmelden."), "level": "ok"}
@@ -204,6 +205,8 @@ def broker_reset(request: Request, ctx: Ctx, key: str, name: str = Form(""), ui_
     if not b.cash_account_id or not b.portfolio_account_id:
         return redirect(request, f"/brokers/{key}", tr(request, "Erst die beiden Wealthfolio-Konten wählen."), "error")
     from .overview import start_job
+
+    ctx.event(request, "reset", broker=key)
 
     def work(lang: str) -> tuple[str, str]:
         try:

@@ -27,6 +27,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from .. import crypto, redact
+from .. import state as state_mod
 from ..adapters import ADAPTERS, BrokerAdapter
 from ..notify import Notifier
 from ..state import State
@@ -76,7 +77,7 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
                 throttle: Throttle, logo_source=None) -> FastAPI:
     vault = Vault(data_dir)
     adapters = adapters or ADAPTERS
-    make_wf = wealthfolio or (lambda url, pw: WealthfolioClient(url, pw))
+    make_wf = wealthfolio or WealthfolioClient
     ctx = AppContext(data_dir=data_dir, vault=vault, state=State(data_dir), adapters=adapters, make_wf=make_wf,
                      syncer=Syncer(data_dir, wealthfolio=make_wf, notifier=notifier, adapters=adapters,
                                    logo_source=logo_source),
@@ -168,6 +169,8 @@ def _templates() -> Jinja2Templates:
     # The UI's texts in the page's language (#87): ``{{ _("Speichern") }}``, see ``web/i18n.py``.
     templates.env.globals["_"] = i18n.template_gettext
     templates.env.globals["describe_unknown"] = views.describe_unknown
+    # What the footer and *Sicherheit* may claim (#94): the database only where SQLCipher is there.
+    templates.env.globals["db_encrypted"] = lambda: state_mod.ENCRYPTED
     templates.env.globals["report_url"] = views.report_url
     # Foreign error texts (banks, brokers, Wealthfolio) on a page: never a secret or an account number.
     templates.env.filters["redact"] = lambda text: redact.redact(str(text)) if text else text

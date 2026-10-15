@@ -1,5 +1,6 @@
-"""Command line: ``brokersync serve`` (web UI, HTTPS), ``brokersync run`` (one sync, for the timer) and the
-helpers ``deploy/setup.sh`` uses (``make-cert``, ``migrate``)."""
+"""Command line: ``brokersync serve`` (web UI, HTTPS), ``brokersync run`` (one sync, for the timer), the helpers
+``deploy/setup.sh`` uses (``renew-cert``, ``migrate``) and ``backup``/``restore`` (#109). One function per command
+(``COMMANDS``)."""
 
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from . import __version__, redact
 from .config import data_dir
 
 
-def main(argv: list[str] | None = None) -> int:  # noqa: C901 (#80)
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="brokersync", description="Wealthfolio Broker Sync")
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -29,17 +30,27 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 (#80)
     sc.add_argument("--dir", default="/opt/wealthfolio-broker-sync/bin")
     cert = sub.add_parser("make-cert",
                           help="create or renew the TLS certificate of the web UI (signed by the container's own CA)")
-    cert.add_argument("--dir", default="/etc/wealthfolio-broker-sync/tls")
+    cert.add_argument("--dir", default=TLS_DIR)
     cert.add_argument("--host", action="append", default=[], help="host name for the certificate (repeatable)")
     cert.add_argument("--ip", action="append", default=[], help="IP address for the certificate (repeatable)")
+    renew = sub.add_parser("renew-cert", help="the UI certificate for this container's name and current addresses, "
+                                              "plus extra-names; restarts the UI when it changed (root, daily)")
+    renew.add_argument("--dir", default=TLS_DIR)
+    renew.add_argument("--no-restart", action="store_true", help="don't restart the web UI (deploy/setup.sh)")
     sub.add_parser("migrate", help="bring the data of an older version up to date (encryption)")
     sub.add_parser("rotate-key", help="re-encrypt everything for a new host key, read from stdin (deploy/setup.sh)")
     sub.add_parser("recover", help="finish or undo a re-encryption that was interrupted (also on every start)")
     sub.add_parser("security-status", help="what is protected how (the page Sicherheit)")
-    args = parser.parse_args(argv)
+    sub.add_parser("backup", help="data/ as an encrypted archive to stdout: brokersync-cli backup > file.tar.gz")
+    sub.add_parser("restore", help="data/ from such an archive on stdin, after checking it opens with this "
+                                   "container's key; the web UI must be stopped")
+    return parser
 
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
     setup_logging()
-    if args.cmd in ("serve", "run", "migrate", "recover"):
+    if args.cmd in ("serve", "run", "migrate", "recover", "backup", "restore"):
         from .security import recover
 
         done = recover(data_dir())
@@ -48,98 +59,162 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 (#80)
         if args.cmd == "recover":
             print(f"Re-encryption {done}." if done else "Nothing to recover.")
             return 0
+    return COMMANDS[args.cmd](args)
 
-    if args.cmd == "serve":
-        from .web.serve import serve
 
-        serve(data_dir(), host=args.host, port=args.port, certfile=args.certfile, keyfile=args.keyfile,
-              redirect_port=args.redirect_port)
+TLS_DIR = "/etc/wealthfolio-broker-sync/tls"
+
+
+def _serve(args) -> int:
+    from .web.serve import serve
+
+    serve(data_dir(), host=args.host, port=args.port, certfile=args.certfile, keyfile=args.keyfile,
+          redirect_port=args.redirect_port)
+    return 0
+
+
+def _make_cert(args) -> int:
+    from pathlib import Path
+
+    from .tls import ensure_certificate
+
+    print(ensure_certificate(Path(args.dir), args.host, args.ip))
+    return 0
+
+
+def _renew_cert(args) -> int:
+    """#92: daily (wealthfolio-broker-sync-cert.timer) - after an address change, a fitting certificate within 24 h."""
+    import socket
+    import subprocess
+    from pathlib import Path
+
+    from .tls import ensure_certificate, extra_names
+
+    directory = Path(args.dir)
+    try:
+        ips = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=10).stdout.split()
+    except (OSError, subprocess.SubprocessError):
+        ips = []
+    names, more_ips = extra_names(directory)
+    before = (directory / "cert.pem").read_bytes() if (directory / "cert.pem").exists() else b""
+    print(ensure_certificate(directory, [socket.gethostname(), *names], ips + more_ips))
+    for f in directory.glob("*.pem"):
+        f.chmod(0o600)
+    if not args.no_restart and (directory / "cert.pem").read_bytes() != before:
+        subprocess.run(["systemctl", "try-restart", "wealthfolio-broker-sync"], timeout=120, check=False)
+    return 0
+
+
+def _migrate(args) -> int:
+    from .security import migrate
+
+    for line in migrate(data_dir()) or ["Nothing to migrate."]:
+        print(line)
+    return 0
+
+
+def _rotate_key(args) -> int:
+    from . import crypto
+    from .security import rotate_host_key
+
+    try:
+        rotate_host_key(data_dir(), sys.stdin.buffer.read().strip())
+    except (crypto.Locked, ValueError) as e:
+        print(f"Key not rotated: {e}", file=sys.stderr)
+        return 1
+    print("Everything re-encrypted for the new key.")
+    return 0
+
+
+def _security_status(args) -> int:
+    import os
+
+    from .security import status
+
+    for c in status(data_dir(), secure=bool(os.environ.get("BROKERSYNC_TLS"))):
+        print(f"{'HINWEIS' if c.warn else 'OK' if c.ok else 'PROBLEM':8} {c.label}: {c.text}")
+    return 0
+
+
+def _run(args) -> int:
+    from . import crypto
+    from .sync import AlreadyRunning, Syncer
+
+    if crypto.is_locked(data_dir()):
+        _notify_locked()
+        return 1
+    try:
+        results = Syncer(data_dir()).run(args.broker)
+    except AlreadyRunning as e:
+        print(e)
         return 0
+    for r in results:
+        print(f"{r.broker}: {r.status} - {r.created} neu, {r.existing} schon vorhanden, {r.failed} fehlgeschlagen,"
+              f" {r.unknown} unbekannt")
+    return 1 if any(r.status == "error" for r in results) else 0
 
-    if args.cmd == "make-cert":
-        from pathlib import Path
 
-        from .tls import ensure_certificate
+def _setup_code(args) -> int:
+    from .vault import SETUP_CODE_HOURS, Vault, new_setup_code
 
-        print(ensure_certificate(Path(args.dir), args.host, args.ip))
-        return 0
+    vault = Vault(data_dir())
+    if args.cmd == "reset-ui-password":
+        def forget(d: dict) -> None:
+            d.pop("ui_password_hash", None)
+            d.pop("ui_session_key", None)  # signs everyone out
 
-    if args.cmd == "migrate":
-        from .security import migrate
+        vault.update(forget)
+        print("Web UI password removed.")
+    elif vault.load().get("ui_password_hash"):
+        print("The web UI password is set already; to choose a new one: brokersync-reset-password",
+              file=sys.stderr)
+        return 1
+    # Printed here, on the console only - never logged.
+    print(f"Setup code (valid {SETUP_CODE_HOURS} h, enter it with the new password): {new_setup_code(vault)}")
+    return 0
 
-        for line in migrate(data_dir()) or ["Nothing to migrate."]:
-            print(line)
-        return 0
 
-    if args.cmd == "rotate-key":
-        from . import crypto
-        from .security import rotate_host_key
+def _install_sc(args) -> int:
+    from pathlib import Path
 
-        try:
-            rotate_host_key(data_dir(), sys.stdin.buffer.read().strip())
-        except (crypto.Locked, ValueError) as e:
-            print(f"Key not rotated: {e}", file=sys.stderr)
-            return 1
-        print("Everything re-encrypted for the new key.")
-        return 0
+    from .sc_install import InstallError, install
 
-    if args.cmd == "security-status":
-        import os
+    try:
+        version, new = install(Path(args.dir))
+    except (InstallError, OSError) as e:
+        print(f"Scalable CLI not installed: {e}", file=sys.stderr)
+        return 1
+    print(f"Scalable CLI {version} {'installed' if new else 'is up to date'} in {args.dir}.")
+    return 0
 
-        from .security import status
 
-        for c in status(data_dir(), secure=bool(os.environ.get("BROKERSYNC_TLS"))):
-            print(f"{'HINWEIS' if c.warn else 'OK' if c.ok else 'PROBLEM':8} {c.label}: {c.text}")
-        return 0
+def _backup(args) -> int:
+    from .backup import write
 
-    if args.cmd == "run":
-        from . import crypto
-        from .sync import AlreadyRunning, Syncer
+    if sys.stdout.isatty():
+        print("Redirect the archive into a file: brokersync-cli backup > backup.tar.gz", file=sys.stderr)
+        return 2
+    names = write(data_dir(), sys.stdout.buffer)
+    sys.stdout.buffer.flush()
+    print(f"Backed up {len(names)} files - they open only with this container's key "
+          "(/etc/wealthfolio-broker-sync) and the master passphrase, if set.", file=sys.stderr)
+    return 0
 
-        if crypto.is_locked(data_dir()):
-            _notify_locked()
-            return 1
-        try:
-            results = Syncer(data_dir()).run(args.broker)
-        except AlreadyRunning as e:
-            print(e)
-            return 0
-        for r in results:
-            print(f"{r.broker}: {r.status} - {r.created} neu, {r.existing} schon vorhanden, {r.failed} fehlgeschlagen,"
-                  f" {r.unknown} unbekannt")
-        return 1 if any(r.status == "error" for r in results) else 0
 
-    if args.cmd in ("reset-ui-password", "setup-code"):
-        from .vault import SETUP_CODE_HOURS, Vault, new_setup_code
+def _restore(args) -> int:
+    from .backup import RestoreError, restore
 
-        vault = Vault(data_dir())
-        if args.cmd == "reset-ui-password":
-            def forget(d: dict) -> None:
-                d.pop("ui_password_hash", None)
-                d.pop("ui_session_key", None)  # signs everyone out
+    try:
+        print(restore(data_dir(), sys.stdin.buffer))
+    except RestoreError as e:
+        print(f"Not restored, data/ unchanged: {e}", file=sys.stderr)
+        return 1
+    return 0
 
-            vault.update(forget)
-            print("Web UI password removed.")
-        elif vault.load().get("ui_password_hash"):
-            print("The web UI password is set already; to choose a new one: brokersync-reset-password",
-                  file=sys.stderr)
-            return 1
-        # Printed here, on the console only - never logged.
-        print(f"Setup code (valid {SETUP_CODE_HOURS} h, enter it with the new password): {new_setup_code(vault)}")
-        return 0
-    if args.cmd == "install-sc":
-        from pathlib import Path
 
-        from .sc_install import InstallError, install
-
-        try:
-            version, new = install(Path(args.dir))
-        except (InstallError, OSError) as e:
-            print(f"Scalable CLI not installed: {e}", file=sys.stderr)
-            return 1
-        print(f"Scalable CLI {version} {'installed' if new else 'is up to date'} in {args.dir}.")
-        return 0
-    return 2
+COMMANDS = {"serve": _serve, "run": _run, "reset-ui-password": _setup_code, "setup-code": _setup_code,
+            "install-sc": _install_sc, "make-cert": _make_cert, "renew-cert": _renew_cert, "migrate": _migrate,
+            "rotate-key": _rotate_key, "security-status": _security_status, "backup": _backup, "restore": _restore}
 
 
 def setup_logging() -> None:

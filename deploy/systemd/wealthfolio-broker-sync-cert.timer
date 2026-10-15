@@ -1,0 +1,10 @@
+[Unit]
+Description=Wealthfolio Broker Sync - renew the web UI's certificate daily (new address, running out)
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

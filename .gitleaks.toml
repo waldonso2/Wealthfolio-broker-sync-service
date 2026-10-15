@@ -11,5 +11,6 @@ regexes = [
   '''^geheim-123456$''',          # UI password in the web tests up to 0.20.0, now a "common" example
   '''^Kiefer-Ozelot-9182$''',     # UI password in the web tests (tests/helpers.py)
   '''^Moewe-Kartoffel-Jazz-71$''',  # a new UI password in tests/test_ui_sessions.py
+  '''^Geh3im-Broker-PIN$''',      # a broker credential in tests/test_events.py (must not reach the event log)
   '''^pk_test-logo-key-123$''',   # logo.dev key in tests/test_logos.py
 ]

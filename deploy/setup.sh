@@ -60,13 +60,21 @@ new_key() {
 remove() {
   shred -u "$1" 2>/dev/null || rm -f "$1"
 }
-# store_key <file> <suffix>: $ETC/key.cred<suffix> (systemd-creds, checked by decrypting) or, where
-# systemd-creds can't encrypt, $ETC/secret.key<suffix> (root-only). Prints the file it wrote.
+# encrypt_key <file> <credential>: systemd-creds, with the TPM where there is one (#94), checked by decrypting;
+# $ETC/key-protection says which (tpm2 or host).
+encrypt_key() {
+  local with=host
+  if timeout 30 systemd-creds has-tpm2 >/dev/null 2>&1; then
+    with=tpm2+host
+  fi
+  timeout 60 systemd-creds encrypt --with-key="$with" --name=brokersync-key "$1" "$2" 2>/dev/null &&
+    timeout 60 systemd-creds decrypt --name=brokersync-key "$2" - 2>/dev/null | cmp -s - "$1" &&
+    chmod 600 "$2" && echo "${with%+host}" >"$ETC/key-protection"
+}
+# store_key <file> <suffix>: $ETC/key.cred<suffix> (systemd-creds) or, where systemd-creds can't encrypt,
+# $ETC/secret.key<suffix> (root-only). Prints the file it wrote.
 store_key() {
-  if [[ ! -f "$ETC/secret.key" ]] &&
-    timeout 60 systemd-creds encrypt --name=brokersync-key "$1" "$ETC/key.cred$2" 2>/dev/null &&
-    timeout 60 systemd-creds decrypt --name=brokersync-key "$ETC/key.cred$2" - 2>/dev/null | cmp -s - "$1"; then
-    chmod 600 "$ETC/key.cred$2"
+  if [[ ! -f "$ETC/secret.key" ]] && encrypt_key "$1" "$ETC/key.cred$2"; then
     echo "$ETC/key.cred$2"
   else
     rm -f "$ETC/key.cred$2"
@@ -90,9 +98,22 @@ if [[ ! -f "$ETC/key.cred" && ! -f "$ETC/secret.key" ]]; then
   store_key "$KEY_TMP" "" || true
   remove "$KEY_TMP"
 fi
+# A key kept root-only because systemd-creds couldn't encrypt it then: moved as soon as it can (#94).
+if [[ -f "$ETC/secret.key" && ! -f "$ETC/key.cred" ]]; then
+  if encrypt_key "$ETC/secret.key" "$ETC/key.cred"; then
+    remove "$ETC/secret.key"
+    echo "The service's key is now encrypted with systemd-creds." >&2
+  else
+    rm -f "$ETC/key.cred"
+  fi
+fi
 if [[ -f "$ETC/key.cred" ]]; then
   KEY_LINE="LoadCredentialEncrypted=brokersync-key:$ETC/key.cred"
   KEY_SOURCE=systemd-creds
+  # Encrypted with the TPM (#94): the page Sicherheit says so; without one, a container backup holds the key.
+  if [[ "$(cat "$ETC/key-protection" 2>/dev/null)" == tpm2 ]]; then
+    KEY_SOURCE=systemd-creds-tpm2
+  fi
 else
   KEY_LINE="LoadCredential=brokersync-key:$ETC/secret.key"
   KEY_SOURCE=systemd
@@ -103,20 +124,17 @@ for unit in wealthfolio-broker-sync wealthfolio-broker-sync-run; do
     >"/etc/systemd/system/$unit.service.d/10-key.conf"
 done
 
-# TLS for the web UI: a certificate from the container's own CA (name-constrained) for its name and addresses,
-# renewed when it runs out or an address changes; a certificate of your own in
-# $ETC/tls (cert.pem, key.pem) is kept.
-CERT_ARGS=(--dir "$ETC/tls" --host "$(hostname)")
-for ip in $(hostname -I 2>/dev/null || true); do
-  CERT_ARGS+=(--ip "$ip")
-done
-"$BASE/venv/bin/brokersync" make-cert "${CERT_ARGS[@]}"
-chmod 600 "$ETC/tls/"*.pem
+# TLS for the web UI: a certificate from the container's own CA (limited to its name and addresses, #92),
+# renewed when it runs out or an address changes - here and daily by wealthfolio-broker-sync-cert.timer.
+# More names or addresses: one per line in $ETC/tls/extra-names. A certificate of your own in $ETC/tls
+# (cert.pem, key.pem) is kept.
+"$BASE/venv/bin/brokersync" renew-cert --dir "$ETC/tls" --no-restart
 
 install -m 644 "$APP"/deploy/systemd/*.service "$APP"/deploy/systemd/*.timer /etc/systemd/system/
 install -m 755 "$APP/deploy/brokersync-cli" /usr/local/bin/brokersync-cli
 install -m 755 "$APP/deploy/brokersync-reset-password" /usr/local/bin/brokersync-reset-password
 systemctl daemon-reload
+systemctl enable -q --now wealthfolio-broker-sync-cert.timer || true
 
 # Data of older versions: credentials, settings and database encrypted with the
 # key that now lives outside data/. Only then the old key file goes.

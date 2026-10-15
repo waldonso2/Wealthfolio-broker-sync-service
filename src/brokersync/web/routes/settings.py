@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import re
 import secrets
 from urllib.parse import urlsplit
@@ -12,8 +13,9 @@ from fastapi.responses import HTMLResponse
 from ... import logos as logos_mod
 from ...notify import Notifier
 from ...sync import AlreadyRunning
+from ...wealthfolio import WealthfolioError, connect, is_certificate_error, normalize_fingerprint, server_fingerprint
 from .. import inputs
-from ..context import Ctx, language, redirect, tr
+from ..context import AppContext, Ctx, language, redirect, tr
 from ..i18n import N_, translate
 
 router = APIRouter()
@@ -23,31 +25,76 @@ router = APIRouter()
 @router.get("/setup/wealthfolio", response_class=HTMLResponse)
 def wealthfolio_page(request: Request, ctx: Ctx):
     c = ctx.cfg()
-    has_pw = bool(ctx.vault.load().get("wealthfolio_password"))
-    return ctx.render(request, "wealthfolio.html", cfg=c, has_password=has_pw)
+    return _wealthfolio_form(request, ctx, c.wealthfolio_url, c.wealthfolio_fingerprint)
+
+
+def _wealthfolio_form(request: Request, ctx: AppContext, url: str, fingerprint: str, *, error: str = "",
+                      offer: str = "", status: int = 200) -> HTMLResponse:
+    """The form, after a test or an error with what was typed (never the password). ``offer``: the fingerprint
+    of the certificate the server shows, to trust after the user compared it (#95)."""
+    response = ctx.render(request, "wealthfolio.html", url=url, fingerprint=fingerprint, error=error, offer=offer,
+                          has_password=bool(ctx.vault.load().get("wealthfolio_password")),
+                          plain=url.startswith("http://") and not _local(url))
+    response.status_code = status
+    return response
+
+
+def _local(url: str) -> bool:
+    return (urlsplit(url).hostname or "") in ("localhost", "127.0.0.1", "::1")
 
 
 @router.post("/setup/wealthfolio")
 def wealthfolio_save(request: Request, ctx: Ctx, url: str = Form(...), password: str = Form(""),
-                     no_password: str = Form("")):
+                     no_password: str = Form(""), fingerprint: str = Form(""), test: str = Form("")):
     try:
         url = inputs.http_url(url, N_("Wealthfolio-Adresse"))
         if len(password) > inputs.MAX_TEXT:  # not stripped: a password may start or end with a space
             raise inputs.Invalid("{label}: höchstens {max_len} Zeichen.", label=N_("Passwort"),
                                  max_len=inputs.MAX_TEXT)
+        pin = normalize_fingerprint(fingerprint)
+        if fingerprint.strip() and not pin:
+            raise inputs.Invalid("{label}: 64 Hex-Zeichen (SHA-256), mit oder ohne Doppelpunkte.",
+                                 label=N_("Fingerprint"))
     except inputs.Invalid as e:
-        return redirect(request, "/setup/wealthfolio", e.text(language(request)), "error")
-    c = ctx.update(lambda c: setattr(c, "wealthfolio_url", url))
-    if no_password:
-        ctx.vault.update(lambda d: d.pop("wealthfolio_password", None))
-    elif password:
-        ctx.vault.update(lambda d: d.__setitem__("wealthfolio_password", password))
-    ctx.vault.update(lambda d: d.__setitem__("wealthfolio_checked", False))
-    accounts, error = ctx.wf_accounts(c, fresh=True)
+        return _wealthfolio_form(request, ctx, url, fingerprint, error=e.text(language(request)), status=422)
+    secret = None if no_password else (password or ctx.vault.load().get("wealthfolio_password"))
+    try:  # "Nur testen" (#95): with what was typed, nothing saved
+        with connect(ctx.make_wf, url, secret, pin) as wf:
+            accounts = [a for a in wf.list_accounts() if a.is_active]
+    except WealthfolioError as e:
+        offer = ""
+        if url.startswith("https://") and is_certificate_error(e):
+            with contextlib.suppress(OSError, ValueError):
+                offer = server_fingerprint(url)
+        if test or offer:
+            return _wealthfolio_form(request, ctx, url, fingerprint, offer=offer, status=422,
+                                     error=tr(request, "Verbindung fehlgeschlagen: {error}", error=e))
+        accounts, error = [], str(e)
+    else:
+        error = ""
+    if test:
+        request.session["flash"] = {"text": tr(request, "Test erfolgreich - {n} Konten gefunden. Noch nichts "
+                                                        "gespeichert.", n=len(accounts)), "level": "ok"}
+        return _wealthfolio_form(request, ctx, url, fingerprint)
+
+    def change(c) -> None:
+        c.wealthfolio_url, c.wealthfolio_fingerprint = url, pin
+
+    c = ctx.update(change)
+
+    def store(d: dict) -> None:
+        if no_password:
+            d.pop("wealthfolio_password", None)
+        elif password:
+            d["wealthfolio_password"] = password
+        d["wealthfolio_checked"] = not error
+
+    ctx.vault.update(store)
+    ctx.event(request, "wealthfolio", detail=urlsplit(url).hostname or "")
     if error:
         return redirect(request, "/setup/wealthfolio", tr(request, "Verbindung fehlgeschlagen: {error}", error=error),
                         "error")
-    ctx.vault.update(lambda d: d.__setitem__("wealthfolio_checked", True))
+    ctx.wf_accounts(c, fresh=True)
     return redirect(request, "/brokers", tr(request, "Verbunden - {n} Konten in Wealthfolio gefunden.",
                                             n=len(accounts)))
 

@@ -28,7 +28,7 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
    ```
 
    Es erscheint der bekannte Assistent der Community-Skripte. *Default Settings* wählen – die Standardwerte passen: 1 CPU, 512 MB RAM, 2 GB Disk, Debian 13, unprivilegiert. Der Kopf zeigt dabei „Scripts fork: waldonso2/wealthfolio-broker-sync-service“; das ist richtig, der Dienst kommt aus diesem Repository und nicht aus der offiziellen Sammlung.
-3. **Öffnen.** Am Ende zeigt die Installation die Adresse der Weboberfläche an, z. B. `https://192.168.1.51:8443`. Diese im Browser öffnen. Das Zertifikat stellt der Container mit einer eigenen Zertifizierungsstelle (CA) aus. Beim ersten Mal die Warnung des Browsers bestätigen, dann auf der Seite *Sicherheit* das CA-Zertifikat herunterladen und einmal importieren (Anleitung für Windows, macOS, Firefox, iPhone und Android steht dort). Danach zeigt der Browser die Verbindung als sicher, auch nach jeder Erneuerung. Alte Adressen mit `http://…:8090` leiten dorthin weiter.
+3. **Öffnen.** Am Ende zeigt die Installation die Adresse der Weboberfläche an, z. B. `https://192.168.1.51:8443`. Diese im Browser öffnen. Das Zertifikat stellt der Container mit einer eigenen Zertifizierungsstelle (CA) aus. Beim ersten Mal die Warnung des Browsers bestätigen, dann auf der Seite *Sicherheit* das CA-Zertifikat herunterladen und einmal importieren (Anleitung für Windows, macOS, Firefox, iPhone und Android steht dort). Danach zeigt der Browser die Verbindung als sicher, auch nach jeder Erneuerung. Die CA kann nur diesen Container bestätigen – seinen Namen und seine Adressen –, keinen Router und kein anderes Gerät; bekommt der Container eine neue Adresse, entsteht eine neue CA, die du einmal neu importierst. Das Zertifikat erneuert sich täglich von selbst. Weitere Namen oder Adressen (etwa eine Tailscale-Adresse) gehören, eine pro Zeile, in `/etc/wealthfolio-broker-sync/tls/extra-names`. Alte Adressen mit `http://…:8090` leiten dorthin weiter.
 
 **Aktualisieren:** In Proxmox die Konsole des Containers öffnen und `update` eingeben. Einstellungen und Zugangsdaten bleiben erhalten; vorher wird eine Sicherung der verschlüsselten Daten unter `/opt/wealthfolio-broker-sync/backup-*.tar.gz` angelegt (die letzten drei bleiben). Installation und Update prüfen jede heruntergeladene Datei gegen die Prüfsummen (`SHA256SUMS`), die der Release-Workflow mit dem Release veröffentlicht. Passt eine nicht oder ist eine zu viel, brechen sie ab, und die bisherige Version läuft weiter. Eine bestimmte Version, auch eine ältere: `VERSION=0.19.0 update`. Ohne `VERSION` geht das Update nie auf eine ältere Version zurück.
 
@@ -48,7 +48,7 @@ Danach zeigt die Übersicht eine Checkliste mit dem, was noch zu tun ist: Wealth
 
 ### 2. Wealthfolio verbinden
 
-Die Adresse, unter der du Wealthfolio öffnest, und das Wealthfolio-Passwort. Nach dem Speichern wird die Verbindung sofort getestet.
+Die Adresse, unter der du Wealthfolio öffnest, und das Wealthfolio-Passwort. Nach dem Speichern wird die Verbindung sofort getestet; *Nur testen* prüft sie, ohne etwas zu speichern. Am besten per `https://`: Mit `http://` gehen Passwort und Buchungen unverschlüsselt durchs Netz. Hat dein Wealthfolio ein selbst ausgestelltes Zertifikat, zeigt die Seite dessen Fingerabdruck; stimmt er mit dem überein, den dein Browser bei Wealthfolio zeigt, vertraut der Dienst nach dem Speichern genau diesem Zertifikat.
 
 <img src="docs/screenshots/03-wealthfolio.png" width="560" alt="Wealthfolio verbinden">
 
@@ -175,7 +175,7 @@ Reine Hinweise (Order angelegt/storniert, Dokumente, Adressänderung …) und st
 
 ## Scalable Capital
 
-Der Dienst liest dein Scalable-Depot über **Scalables offizielles Kommandozeilenprogramm** [Scalable CLI](https://github.com/ScalableCapital/scalable-cli) (`sc`). Das ist eine von Scalable selbst angebotene Schnittstelle – kein Nachbau der Web-App. Installation und Update laden `sc` aus Scalables GitHub-Release und prüfen vorher Scalables Signatur und die Prüfsumme. Der Dienst nutzt nur lesende Befehle und meldet das CLI im Nur-Lese-Modus an (`--local-read-only`); Orders oder Sparpläne kann er nicht auslösen.
+Der Dienst liest dein Scalable-Depot über **Scalables offizielles Kommandozeilenprogramm** [Scalable CLI](https://github.com/ScalableCapital/scalable-cli) (`sc`). Das ist eine von Scalable selbst angebotene Schnittstelle – kein Nachbau der Web-App. Installation und Update laden `sc` aus Scalables GitHub-Release und prüfen vorher Scalables Signatur und die Prüfsumme. Der Dienst nutzt nur lesende Befehle und meldet das CLI im Nur-Lese-Modus an (`--local-read-only`); Orders oder Sparpläne kann er nicht auslösen. `sc` läuft abgeschottet (Landlock): Es sieht weder den Schlüssel noch die Daten des Dienstes und bekommt von dessen Umgebung nur die Sprache.
 
 > **Bitte beachten:** Das Scalable CLI ist laut Scalable noch in der Beta und ohne Support. Ändert Scalable es, klappt der Abruf bis zu einem Update des Dienstes nicht.
 
@@ -290,7 +290,22 @@ Was der Dienst speichert, ist verschlüsselt; die Seite **Sicherheit** zeigt jed
 
 **Master-Passphrase (wahlweise, Seite *Sicherheit*):** Ohne sie kann jemand, der den ganzen Container samt Schlüssel kopiert (z. B. ein Proxmox-Backup), die Daten entschlüsseln. Mit ihr nicht: Der Schlüssel entsteht erst aus Schlüssel des Dienstes **und** Passphrase (argon2id). Dafür musst du den Dienst nach jedem Neustart des Containers in der Oberfläche entsperren; bis dahin ruft er nichts ab und schickt eine ntfy-Nachricht. **Ohne die Passphrase sind die Daten verloren** – dann bleibt nur, den Dienst neu einzurichten. Setzen, Ändern und Entfernen der Passphrase (und der Schlüsseltausch beim Update) verschlüsseln alles neu: erst neben den alten Dateien, dann in einem Schritt umgeschaltet. Fällt dabei der Strom aus, bringt der nächste Start die Daten auf den alten oder den neuen Stand, nie auf eine Mischung.
 
-**Sicherungen:** `update` sichert `data/` vorher nach `/opt/wealthfolio-broker-sync/backup-*.tar.gz` – nur verschlüsselte Daten, ohne Schlüssel. Ältere Sicherungen, die noch den Schlüssel enthielten, ersetzt das Update durch eine verschlüsselte. Proxmox-Backups des Containers enthalten auch den Schlüssel: Sie gehören auf ein verschlüsseltes Ziel, oder du setzt die Master-Passphrase.
+**Ereignisse:** Die Seite *Sicherheit* listet Anmeldungen (auch fehlgeschlagene), Abmeldungen und Änderungen an Zugangsdaten, Passwort, Passphrase und Abrufmodus der letzten 180 Tage, mit der Adresse, von der sie kamen – ohne Passwörter oder Zugangsdaten. Meldet sich jemand von einer Adresse an, von der noch nie eine Anmeldung kam, schickt der Dienst eine ntfy-Nachricht.
+
+## Sichern und Wiederherstellen
+
+`update` sichert `data/` vorher nach `/opt/wealthfolio-broker-sync/backup-*.tar.gz` – nur verschlüsselte Daten, ohne Schlüssel. Ältere Sicherungen, die noch den Schlüssel enthielten, ersetzt das Update durch eine verschlüsselte. Jederzeit geht es auch von Hand, in der Konsole des Containers:
+
+```
+(umask 077; brokersync-cli backup > /root/brokersync-$(date +%F).tar.gz)
+systemctl stop wealthfolio-broker-sync
+brokersync-cli restore < /root/brokersync-2026-10-15.tar.gz
+systemctl start wealthfolio-broker-sync
+```
+
+`restore` prüft zuerst, ob sich die Sicherung mit dem Schlüssel dieses Containers (und der Master-Passphrase, falls gesetzt) öffnen lässt; sonst ändert es nichts. Der bisherige Stand bleibt als `data/before-restore-*.tar.gz` liegen. Das geht auch mit den Sicherungen von `update`.
+
+**Vollständig** ist eine Sicherung nur mit dem Schlüssel aus `/etc/wealthfolio-broker-sync`: Ohne ihn ist `data/` wertlos. Am einfachsten ist deshalb das Proxmox-Backup des ganzen Containers. Es enthält Schlüssel und Daten und gehört auf ein verschlüsseltes Ziel – oder du setzt die Master-Passphrase.
 
 **Abrufmodus (Seite *Sicherheit*):**
 - **Automatisch** (Standard): Die Anmeldungen bei Brokern und Banken bleiben gespeichert, der Abruf läuft jeden Morgen von selbst.

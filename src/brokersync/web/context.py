@@ -26,7 +26,7 @@ from ..notify import Notifier
 from ..state import State
 from ..sync import Syncer
 from ..vault import Vault, session_tag, verify_password
-from ..wealthfolio import WealthfolioClient, WealthfolioError
+from ..wealthfolio import WealthfolioClient, WealthfolioError, connect
 from .gate import Gate, Throttle
 from .i18n import N_, translate
 
@@ -109,17 +109,22 @@ class AppContext:
             "reauth": not recent(request), **ctx,
         })
 
+    def event(self, request: Request, event: str, *, ok: bool = True, broker: str = "", detail: str = "") -> None:
+        """One entry of the event log on *Sicherheit* (#102); ``event`` a key of ``EVENTS``. Never a secret."""
+        self.state.add_event(event, client=client_of(request), ok=ok, broker=broker, detail=detail)
+
     def reconfirm(self, request: Request, password: str) -> str | None:
         """For a sensitive action (#96): None when the password was entered within ``REAUTH_SECONDS`` or is
         right now, else the error text for the page."""
         if recent(request):
             return None
-        client = request.client.host if request.client else "?"
+        client = client_of(request)
         with self.throttle.attempt(client) as a:
             if a.refused:
                 text, params = self.throttle.message(a)
                 return tr(request, text, **params)
             a.ok = verify_password(password, self.vault.load().get("ui_password_hash"))
+        self.event(request, "reauth", ok=a.ok)
         if not a.ok:
             return tr(request, "Das Passwort der Oberfläche stimmt nicht.")
         request.session["auth"] = int(time.time())
@@ -141,7 +146,8 @@ class AppContext:
         return config_mod.update(self.data_dir, change)
 
     def wf_client(self, c: config_mod.Config) -> WealthfolioClient:
-        return self.make_wf(c.wealthfolio_url, self.vault.load().get("wealthfolio_password"))
+        return connect(self.make_wf, c.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
+                       c.wealthfolio_fingerprint)
 
     def wf_accounts(self, c: config_mod.Config, fresh: bool = False):
         """Wealthfolio's active accounts, kept for ``ACCOUNTS_SECONDS`` (#104) unless ``fresh``."""
@@ -171,6 +177,19 @@ class AppContext:
     def finish_login(self, key: str, adapter: BrokerAdapter) -> None:
         adapter.close()
         self.vault.store_session(key, adapter)
+
+
+# The event log's entries (#102): key → what the page *Sicherheit* says.
+EVENTS = {"login": N_("Anmeldung"), "logout": N_("Abmeldung"), "setup_password": N_("Erstes Passwort festgelegt"),
+          "password": N_("Passwort geändert"), "sessions": N_("Alle anderen Sitzungen beendet"),
+          "credentials": N_("Zugangsdaten geändert"), "wealthfolio": N_("Wealthfolio-Adresse gespeichert"),
+          "passphrase": N_("Master-Passphrase geändert"), "mode": N_("Abrufmodus geändert"),
+          "reset": N_("Neu aufgesetzt"), "lock": N_("Gesperrt"), "unlock": N_("Entsperrt"),
+          "reauth": N_("Passwort für eine Aktion bestätigt")}
+
+
+def client_of(request: Request) -> str:
+    return request.client.host if request.client else "?"
 
 
 def sign_in(request: Request, secrets_: dict) -> None:

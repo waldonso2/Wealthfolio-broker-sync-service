@@ -614,10 +614,6 @@ EN: dict[str, str] = {
     "Passphrase entfernen": "Remove the passphrase",
     "Jetzt sperren": "Lock now",
     "Dem Zertifikat vertrauen": "Trust the certificate",
-    "Einmal auf dem Gerät importiert, verschwindet „Nicht sicher“ – auch nach jeder Erneuerung. Gilt nur für Namen "
-    "im lokalen Netz.":
-        "Imported once on the device, “Not secure” disappears – also after every renewal. Only valid for names on "
-        "the local network.",
     "CA-Zertifikat herunterladen": "Download the CA certificate",
     "SHA-256 zum Vergleich:": "SHA-256 to compare:",
     "So importierst du es": "How to import it",
@@ -661,10 +657,6 @@ EN: dict[str, str] = {
         "Every fetch starts with your login (app approval, TAN, device code), right after it the service logs out "
         "again. The daily run doesn't fetch, it reminds you via ntfy. Applies to all brokers.",
     "Prüfungen": "Checks",
-    "<strong>{fine} von {total}</strong> in Ordnung. Zugangsdaten, Sitzungen und Einstellungen mit AES-256-GCM, die "
-    "Datenbank mit SQLCipher verschlüsselt, der Schlüssel liegt nicht bei den Daten.":
-        "<strong>{fine} of {total}</strong> fine. Credentials, sessions and settings encrypted with AES-256-GCM, the "
-        "database with SQLCipher, the key is not kept with the data.",
     "Hinweis": "Note",
     "Verbindung zu Wealthfolio": "Connection to Wealthfolio",
     "Wealthfolio wird per HTTP angesprochen; das Wealthfolio-Passwort geht unverschlüsselt durchs Netz. Wenn möglich, "
@@ -673,8 +665,6 @@ EN: dict[str, str] = {
         "Wealthfolio reachable via HTTPS.",
     "In Ordnung ({n})": "Fine ({n})",
     "Schlüssel des Dienstes": "Key of the service",
-    "Mit systemd-creds verschlüsselt außerhalb von data/; der Dienst bekommt ihn nur beim Start.":
-        "Encrypted with systemd-creds outside data/; the service only gets it at start.",
     "Außerhalb von data/, nur für root lesbar; der Dienst bekommt ihn beim Start (systemd-creds konnte hier nicht "
     "verschlüsseln).":
         "Outside data/, readable by root only; the service gets it at start (systemd-creds could not encrypt here).",
@@ -848,4 +838,108 @@ EN: dict[str, str] = {
         "Transfer patterns",
     "Aktion":
         "Action",
+    # 0.22.0
+    "Mit systemd-creds und dem TPM verschlüsselt außerhalb von data/; eine Kopie des Containers allein "
+    "öffnet ihn nicht.":
+        "Encrypted with systemd-creds and the TPM outside data/; a copy of the container alone doesn't open "
+        "it.",
+    "Mit systemd-creds verschlüsselt außerhalb von data/, mit dem Host-Secret des Containers (kein TPM); "
+    "der Dienst bekommt ihn nur beim Start.":
+        "Encrypted with systemd-creds outside data/, with the container's host secret (no TPM); the service "
+        "gets it only at start.",
+    "Scalable CLI":
+        "Scalable CLI",
+    "Läuft in einer Sandbox (Landlock): kein Zugriff auf data/ und den Schlüssel.":
+        "Runs in a sandbox (Landlock): no access to data/ and the key.",
+    "Ohne Sandbox: Der Kernel kann kein Landlock. sc bekommt trotzdem weder Schlüssel noch Einstellungen "
+    "des Dienstes.":
+        "Without a sandbox: the kernel has no Landlock. sc still gets neither the key nor the service's "
+        "settings.",
+    "Nicht gesetzt, und ohne TPM: Ein Backup des Containers enthält Schlüssel und Daten. "
+    "Master-Passphrase setzen oder die Backups verschlüsseln.":
+        "Not set, and no TPM: a backup of the container holds key and data. Set a master passphrase or "
+        "encrypt the backups.",
+    "Abmeldung":
+        "Sign-out",
+    "Erstes Passwort festgelegt":
+        "First password set",
+    "Passwort geändert":
+        "Password changed",
+    "Alle anderen Sitzungen beendet":
+        "All other sessions ended",
+    "Zugangsdaten geändert":
+        "Credentials changed",
+    "Wealthfolio-Adresse gespeichert":
+        "Wealthfolio address saved",
+    "Master-Passphrase geändert":
+        "Master passphrase changed",
+    "Abrufmodus geändert":
+        "Fetch mode changed",
+    "Neu aufgesetzt":
+        "Started over",
+    "Entsperrt":
+        "Unlocked",
+    "Passwort für eine Aktion bestätigt":
+        "Password confirmed for an action",
+    "{label}: 64 Hex-Zeichen (SHA-256), mit oder ohne Doppelpunkte.":
+        "{label}: 64 hex characters (SHA-256), with or without colons.",
+    "Test erfolgreich - {n} Konten gefunden. Noch nichts gespeichert.":
+        "Test passed - {n} accounts found. Nothing saved yet.",
+    "Fingerprint":
+        "Fingerprint",
+    "Mit http:// gehen das Wealthfolio-Passwort und die Buchungen unverschlüsselt durchs Netz. Wenn "
+    "Wealthfolio HTTPS kann – auch mit eigenem Zertifikat –, besser https:// nehmen.":
+        "With http:// the Wealthfolio password and the bookings cross the network unencrypted. If Wealthfolio "
+        "speaks HTTPS – with a certificate of its own too –, better use https://.",
+    "Wealthfolio zeigt ein Zertifikat, dem kein bekannter Herausgeber vertraut. Sein Fingerabdruck "
+    "(SHA-256): <code>{fp}</code>. Vergleiche ihn mit dem deines Wealthfolio (z. B. im Browser über das "
+    "Schloss-Symbol); stimmt er, mit „Speichern“ vertrauen.":
+        "Wealthfolio shows a certificate no known issuer vouches for. Its fingerprint (SHA-256): "
+        "<code>{fp}</code>. Compare it with your Wealthfolio's (e.g. in the browser via the lock icon); if it "
+        "matches, trust it with “Save”.",
+    "Eigenes Zertifikat von Wealthfolio":
+        "Wealthfolio's own certificate",
+    "Fingerabdruck (SHA-256)":
+        "Fingerprint (SHA-256)",
+    "Nur für ein Wealthfolio mit selbst ausgestelltem Zertifikat: Der Dienst vertraut dann genau diesem "
+    "Zertifikat, keinem anderen. Leer: die üblichen Zertifizierungsstellen.":
+        "Only for a Wealthfolio with a certificate of its own: the service then trusts exactly this "
+        "certificate, no other. Empty: the usual certificate authorities.",
+    "Nur testen":
+        "Test only",
+    "Einmal auf dem Gerät importiert, verschwindet „Nicht sicher“ – auch nach jeder Erneuerung. Die CA "
+    "kann nur diesen Container bestätigen: seinen Namen und seine Adressen, keinen Router und kein "
+    "anderes Gerät. Ändert sich der Name oder eine Adresse, entsteht eine neue CA, die du einmal neu "
+    "importierst.":
+        "Imported once on a device, “Not secure” disappears – also after every renewal. The CA can only vouch "
+        "for this container: its name and its addresses, no router and no other device. When the name or an "
+        "address changes, a new CA is made, which you import once more.",
+    "<strong>{fine} von {total}</strong> in Ordnung.":
+        "<strong>{fine} of {total}</strong> fine.",
+    "Zugangsdaten, Sitzungen und Einstellungen mit AES-256-GCM verschlüsselt.":
+        "Credentials, sessions and settings encrypted with AES-256-GCM.",
+    "Die Sync-Datenbank mit SQLCipher.":
+        "The sync database with SQLCipher.",
+    "Die Sync-Datenbank nicht: SQLCipher gibt es für diese Plattform nicht.":
+        "The sync database not: there is no SQLCipher for this platform.",
+    "Ereignisse ({n})":
+        "Events ({n})",
+    "Anmeldungen und Änderungen an Zugangsdaten, Passphrase und Abrufmodus der letzten 180 Tage, die "
+    "neuesten zuerst. Ohne Passwörter und Zugangsdaten.":
+        "Sign-ins and changes to credentials, passphrase and fetch mode of the last 180 days, newest first. "
+        "Without passwords and credentials.",
+    "Ereignisse":
+        "Events",
+    "Ereignis":
+        "Event",
+    "Von":
+        "From",
+    "Ergebnis":
+        "Result",
+    "abgelehnt":
+        "refused",
+    "Version {version} · Zugangsdaten und Einstellungen verschlüsselt, die Sync-Datenbank nicht · nur "
+    "lesender Zugriff auf die Broker":
+        "Version {version} · credentials and settings encrypted, the sync database not · read-only access to "
+        "the brokers",
 }

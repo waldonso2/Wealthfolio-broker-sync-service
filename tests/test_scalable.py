@@ -35,6 +35,8 @@ def fake_sc(tmp_path, monkeypatch):
     ctl.mkdir()
     monkeypatch.setenv("BROKERSYNC_SC", str(FAKE_SC))
     monkeypatch.setenv("FAKE_SC_DIR", str(ctl))
+    monkeypatch.setattr(sc_mod, "PASS_ENV", sc_mod.PASS_ENV + ("FAKE_SC_DIR",))
+    monkeypatch.setattr(sc_mod, "EXTRA_WRITE", (str(ctl),))
     monkeypatch.setattr(sc_mod, "CONFIRM_WAIT", 0.5)
     monkeypatch.setattr(sc_mod, "DETAIL_PAUSE", 0)
     rec = CASE["recording"]

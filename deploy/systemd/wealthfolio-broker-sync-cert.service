@@ -1,0 +1,34 @@
+[Unit]
+Description=Wealthfolio Broker Sync - certificate of the web UI for the current name and addresses
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Root: it writes /etc/wealthfolio-broker-sync/tls (root only) and restarts the web UI when the certificate changed.
+User=root
+ExecStart=/opt/wealthfolio-broker-sync/venv/bin/brokersync renew-cert
+Environment=BROKERSYNC_DATA=/opt/wealthfolio-broker-sync/data
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/etc/wealthfolio-broker-sync/tls
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+RemoveIPC=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
