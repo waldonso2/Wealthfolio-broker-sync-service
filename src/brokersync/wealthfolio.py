@@ -78,6 +78,7 @@ def normalize_fingerprint(value: str) -> str:
 
 def pinned_context(fingerprint: str) -> ssl.SSLContext:
     ctx = _Pinned(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE  # the fingerprint is the check
     ctx.pin = normalize_fingerprint(fingerprint)

@@ -57,6 +57,7 @@ def wealthfolio_tls(tmp_path):
 
     server = HTTPServer(("127.0.0.1", 0), Handler)
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.load_cert_chain(cert, key)
     server.socket = ctx.wrap_socket(server.socket, server_side=True)
     threading.Thread(target=server.serve_forever, daemon=True).start()
