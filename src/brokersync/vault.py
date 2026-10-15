@@ -220,9 +220,14 @@ def check_setup_code(vault: Vault, code: str) -> bool:
     from datetime import UTC, datetime
 
     entry = vault.load().get("setup_code") or {}
-    if not entry or datetime.fromisoformat(entry["expires"]) < datetime.now(UTC):
+    try:
+        expires = datetime.fromisoformat(entry["expires"])
+        expected = str(entry["sha256"])
+    except (KeyError, TypeError, ValueError):  # missing or damaged: like an expired code, never an error page
         return False
-    return hmac.compare_digest(_code_hash(code.strip()), entry["sha256"])
+    if expires < datetime.now(UTC):
+        return False
+    return hmac.compare_digest(_code_hash(code.strip()), expected)
 
 
 def _code_hash(code: str) -> str:

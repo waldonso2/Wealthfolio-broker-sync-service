@@ -12,8 +12,10 @@ FinTS banks share; a bank is a subclass that only sets its profile (see
 - **PIN safety:** after a rejected PIN the adapter never contacts the bank
   again until the credentials are saved anew - three wrong attempts lock the
   online banking.
-- **Session:** python-fints' state (system id, bank and user parameters, chosen
-  TAN method) is kept in the session, so a confirmed device stays known.
+- **Session:** python-fints' state (system id, bank and user parameters - the
+  latter with account numbers and names -, chosen TAN method and medium) is kept
+  in the session, so a confirmed device stays known. Never the PIN: python-fints
+  doesn't serialise it (``test_security`` pins the blob's keys).
 - **Product ID:** FinTS servers want a product ID registered with the Deutsche
   Kreditwirtschaft. Until this service has one, it is entered in the broker
   settings.
@@ -229,6 +231,10 @@ class FintsAdapter(BrokerAdapter):
                                "entsperren.") from e
         if isinstance(e, AuthRequired | AdapterError):
             raise e
+        if isinstance(e, OSError):  # also requests' ConnectionError and Timeout
+            # No answer (network, timeout): said in German, the technical text after it (UX-04).
+            raise AdapterError(f"{_cap(self.bank)} antwortet nicht (Netzwerk oder Zeitüberschreitung) - bitte später "
+                               f"erneut versuchen. ({name}: {e})") from e
         bank_says = _bank_messages(str(e))
         if bank_says:
             raise AdapterError(f"{self.label} (FinTS): {_cap(self.bank)} meldet: {bank_says}") from e

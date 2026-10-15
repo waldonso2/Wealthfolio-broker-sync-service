@@ -4,6 +4,7 @@ between). With ``run`` the fetch follows the login; "Alle abrufen" chains the lo
 from __future__ import annotations
 
 import time
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -17,14 +18,18 @@ from .overview import start_run
 router = APIRouter()
 
 
-def _page(request: Request, ctx: AppContext, key: str, challenge, run: bool) -> HTMLResponse:
+def _page(request: Request, ctx: AppContext, key: str, challenge, run: bool,
+          since: float | None = None) -> HTMLResponse:
+    # Until when this login waits for the user (UX-05): shown, so an expired one is no surprise.
+    left = PENDING_SECONDS - (time.monotonic() - since if since is not None else 0)
+    until = datetime.now(UTC) + timedelta(seconds=max(left, 0))
     queue = request.session.get("run_queue") or {}
     position = None  # "Anmeldung 2 von 3" during "Alle abrufen"
     if run and key in queue.get("todo", []):
         total = len(queue["login"])
         position = (total - len(queue["todo"]) + 1, total)
     return ctx.render(request, "broker_login.html", key=key, adapter=ctx.adapters[key], challenge=challenge,
-                      run=run, position=position, safe=ctx.cfg().safe_mode)
+                      run=run, position=position, safe=ctx.cfg().safe_mode, until=until)
 
 
 # An open login waits this long for its TAN or confirmation; then it is closed (and a typed PIN dropped).
@@ -40,7 +45,7 @@ def broker_login_page(request: Request, ctx: Ctx, key: str):
     run = request.query_params.get("run") == "1" or ctx.cfg().safe_mode
     adapter = _open_login(ctx, key)
     if adapter is not None:
-        return _page(request, ctx, key, adapter.ui_challenge, run)
+        return _page(request, ctx, key, adapter.ui_challenge, run, adapter.ui_since)
     return ctx.render(request, "broker_login_start.html", key=key, adapter=ctx.adapters[key], run=run)
 
 
@@ -76,7 +81,7 @@ def start_login(request: Request, ctx: AppContext, key: str, run: bool):
     if isinstance(outcome, AuthRequired):
         adapter.ui_challenge, adapter.ui_since = outcome.challenge, time.monotonic()
         ctx.pending[key] = adapter
-        return _page(request, ctx, key, outcome.challenge, run)
+        return _page(request, ctx, key, outcome.challenge, run, adapter.ui_since)
     if isinstance(outcome, AdapterError):
         ctx.finish_login(key, adapter)  # closed, then stored: e.g. a rejected PIN, so nothing retries it
         return _failed(request, ctx, key, outcome, run)
@@ -106,7 +111,7 @@ def broker_login_finish(request: Request, ctx: Ctx, key: str, code: str = Form("
     except AuthRequired as e:
         adapter.ui_challenge = e.challenge
         ctx.vault.store_session(key, adapter)  # a wrong TAN is counted at once, not only at the end
-        return _page(request, ctx, key, e.challenge, want_run)
+        return _page(request, ctx, key, e.challenge, want_run, adapter.ui_since)
     except AdapterError as e:
         ctx.pending.pop(key, None)
         ctx.finish_login(key, adapter)

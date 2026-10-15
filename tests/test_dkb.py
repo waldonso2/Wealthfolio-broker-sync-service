@@ -213,13 +213,22 @@ def test_a_temporarily_locked_access_is_never_tried_again(fake, monkeypatch):
 def test_other_bank_errors_are_adapter_errors_and_keep_the_pin(fake, monkeypatch):
     fake["sca"] = False
 
+    def broken(self):
+        raise RuntimeError("unexpected answer")
+
+    monkeypatch.setattr(FakeFinTS, "__enter__", broken)
+    a = DkbAdapter(CREDS)
+    with pytest.raises(AdapterError, match="DKB \\(FinTS\\): unexpected answer"):
+        a.login()
+    assert not a.session_state().get("pin_rejected")
+
     def down(self):
         raise ConnectionError("server unreachable")
 
     monkeypatch.setattr(FakeFinTS, "__enter__", down)
     a = DkbAdapter(CREDS)
-    with pytest.raises(AdapterError, match="DKB \\(FinTS\\): server unreachable"):
-        a.login()
+    with pytest.raises(AdapterError, match=r"^Die DKB antwortet nicht .*\(ConnectionError: server unreachable\)"):
+        a.login()  # no answer: said in German, the technical text kept (UX-04)
     assert not a.session_state().get("pin_rejected")
 
 

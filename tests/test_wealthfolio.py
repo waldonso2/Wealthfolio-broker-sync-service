@@ -66,11 +66,13 @@ def test_create_reports_duplicates_and_errors():
     respx.post(f"{BASE}/api/v1/activities").mock(side_effect=[
         httpx.Response(200, json=rec("activity_created.json")),
         httpx.Response(409, json=rec("duplicate.json")),
+        httpx.Response(409, json={"code": 409, "message": "Conflict: duplicate of an existing activity"}),
         httpx.Response(400, json={"code": 400, "message": "Invalid data: Account not found"}),
     ])
     wf = WealthfolioClient(BASE, "pw")
     assert wf.create_activity({"activityType": "DEPOSIT"})["id"] == "8f1c2d3e-0000-4000-8000-000000000001"
     assert isinstance(wf.create_activity({"activityType": "DEPOSIT"}), Duplicate)
+    assert isinstance(wf.create_activity({"activityType": "DEPOSIT"}), Duplicate)  # another wording (SEC-09)
     with pytest.raises(WealthfolioError, match="Account not found"):
         wf.create_activity({"activityType": "DEPOSIT"})
 

@@ -260,10 +260,10 @@ Ein Stromausfall an beliebiger Stelle lässt die Daten so vollständig auf dem a
 
 | Datei | Inhalt | Format |
 |---|---|---|
-| `secrets.enc` | Wealthfolio-Passwort, logo.dev-Schlüssel, Zugangsdaten und Sessions der Broker, argon2id-Hash des UI-Passworts, Signierschlüssel der UI-Session | AES-256-GCM, `vault.py`, atomar und mit Lock |
+| `secrets.enc` | Wealthfolio-Passwort, logo.dev-Schlüssel, Zugangsdaten und Sessions der Broker (bei FinTS der Zustand von python-fints: System-ID, Bank- und Nutzerparameter samt Kontonummern, TAN-Verfahren – nie die PIN, `test_security` prüft die Schlüssel des Blobs), argon2id-Hash des UI-Passworts, Signierschlüssel der UI-Session | AES-256-GCM, `vault.py`, atomar und mit Lock |
 | `config.enc` | Wealthfolio-URL, je Broker Konten, `enabled`, `start_date`, Wertpapier-Zuordnungen, Übertrags-Muster, Logos an/aus | AES-256-GCM, `config.py` |
 | `notify.enc` | ntfy-Server, -Topic, -Token, Details an/aus, öffentliche URL | AES-256-GCM, Host-Stufe |
-| `state.db` | siehe unten | SQLCipher (AES-256); nur ohne SQLCipher-Wheel (nicht x86-64) unverschlüsselt, die Seite *Sicherheit* sagt es |
+| `state.db` | siehe unten | SQLCipher (AES-256); nur ohne SQLCipher-Wheel (weder x86-64 noch ARM64) unverschlüsselt; eine unverschlüsselte Datei verschlüsselt der nächste Start mit SQLCipher (`encrypt_plain`), die Seite *Sicherheit* sagt es |
 | `keyring.json` | Parameter der Master-Passphrase | Klartext, nichts Geheimes |
 | `*.lock` | Sperrdateien | — |
 

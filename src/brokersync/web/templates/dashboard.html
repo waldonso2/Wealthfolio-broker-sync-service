@@ -71,7 +71,7 @@
     {%- else %}{{ text }}{% endif %}</li>{% endfor %}</ul>
   {% endif %}
   {% if b.last and b.last.message and b.last.status != "ok" %}
-  <details><summary>{{ _("Meldung des letzten Abrufs") }}</summary><pre class="muted">{{ b.last.message | redact }}</pre></details>
+  <details><summary>{{ _("Meldung des letzten Abrufs") }}</summary><pre class="muted">{{ b.last.message | known | redact }}</pre></details>
   {% endif %}
   {% if b.reconcile and b.reconcile.deviations %}
   <details><summary>{{ _("Abweichungen zu Wealthfolio ({n})", n=b.reconcile.deviations | length) }}</summary>

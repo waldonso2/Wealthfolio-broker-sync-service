@@ -46,8 +46,10 @@ def test_assistant_from_first_visit_to_first_sync(tmp_path):
                                              "password2": "Kiefer-Ozelot-9182"})
     assert "Einrichtungscode stimmt nicht" in r.text
     code = new_setup_code(Vault(tmp_path))
-    r = client.post("/setup-password", data={"csrf": token, "code": code, "password": "short", "password2": "short"})
-    assert "mindestens 12 Zeichen" in r.text and f'value="{code}"' in r.text  # the code stays filled in
+    r = client.post("/setup-password", data={"csrf": token, "code": code, "password": "short", "password2": "short"},
+                    follow_redirects=False)
+    assert r.status_code == 422 and "mindestens 12 Zeichen" in r.text
+    assert f'value="{code}"' in r.text and "location" not in r.headers  # the code stays filled in, in no URL (V-01)
     r = first_password(client)
     assert "setup_code" not in Vault(tmp_path).load()  # used up
     # A checklist of what is left to set up (#110).
@@ -340,5 +342,40 @@ def test_showing_the_login_page_asks_the_broker_nothing_and_shows_an_open_login_
     token = csrf(client, "/brokers/fake/login")
     client.post("/brokers/fake/login/start", data={"csrf": token})
     first = client.app.inner.state.ctx.pending["fake"]
-    assert "Bestätigungscode" in client.get("/brokers/fake/login").text
+    page = client.get("/brokers/fake/login").text
+    assert "Bestätigungscode" in page
+    # UX-05: until when it waits, and a way to start over.
+    assert "Diese Anmeldung wartet bis" in page and "Anmeldung neu starten" in page
     assert client.app.inner.state.ctx.pending["fake"] is first  # the same login, no new challenge
+
+
+def test_a_challenge_shows_only_an_embedded_picture(tmp_path):
+    """SEC-08: a TAN graphic is shown only as a data: URL - never a picture from another host (it would tell
+    that host the user's address)."""
+    from brokersync.adapters.base import Challenge
+
+    client, _, _ = make(tmp_path)
+    first_password(client)
+    Vault(tmp_path).set_broker_credentials("fake", {"username": "test"})
+    token = csrf(client, "/brokers/fake/login")
+    client.post("/brokers/fake/login/start", data={"csrf": token})
+    pending = client.app.inner.state.ctx.pending["fake"]
+    pending.ui_challenge = Challenge("code", "TAN", image="https://tracker.example/pixel.png")
+    assert "tracker.example" not in client.get("/brokers/fake/login").text
+    pending.ui_challenge = Challenge("code", "TAN", image="data:image/png;base64,iVBORw0KGgo=")
+    assert 'src="data:image/png;base64,iVBORw0KGgo="' in client.get("/brokers/fake/login").text
+
+
+def test_a_run_aborted_by_a_restart_reads_in_the_pages_language(tmp_path):
+    """V-04: the service's own stored run texts follow the language; foreign texts stay as they are."""
+    from brokersync.state import State
+
+    from .test_safe_mode import make as make_with_broker
+
+    client, _, token = make_with_broker(tmp_path, safe=False)
+    st = State(tmp_path)
+    st.start_run("fake")
+    st.abort_stale_runs()
+    client.post("/appearance", data={"csrf": token, "language": "en"})
+    page = client.get("/").text
+    assert "Aborted - the service was stopped during the fetch" in page and "Abgebrochen - der Dienst" not in page

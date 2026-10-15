@@ -82,7 +82,7 @@ def status(data_dir: Path, *, secure: bool) -> list[Check]:
     db = d / "state.db"
     if not state_mod.ENCRYPTED:
         out.append(Check(N_("Sync-Datenbank"), False, N_("Unverschlüsselt: SQLCipher gibt es für diese Plattform "
-                                                         "nicht (nur x86-64).")))
+                                                         "nicht (nur x86-64 und ARM64).")))
     else:
         plain = state_mod.is_plain(db)
         out.append(Check(N_("Sync-Datenbank"), not plain, N_("Mit SQLCipher verschlüsselt (AES-256).") if not plain

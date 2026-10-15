@@ -22,7 +22,7 @@ from pathlib import Path
 
 from . import crypto, meta_keys, redact
 
-try:  # SQLCipher: wheels for x86-64; elsewhere the database stays plain SQLite (shown on the page Sicherheit)
+try:  # SQLCipher: wheels for x86-64 and ARM64; elsewhere the database stays plain SQLite (page Sicherheit)
     import sqlcipher3 as sqlcipher
 except ImportError:  # pragma: no cover - depends on the platform
     sqlcipher = None
@@ -230,6 +230,12 @@ def _connect(path: Path, key: bytes):
     return db
 
 
+def masked(row: dict) -> dict:
+    """A gap or deviation as stored: IBANs and long numbers out of its texts (SEC-04, like ``add_unknown``) -
+    ids, amounts, ISINs and dates stay, *Wieder anlegen* and the comparison need them."""
+    return {k: redact.mask_numbers(v) if k in ("label", "name") else v for k, v in row.items()}
+
+
 def is_plain(path: Path) -> bool:
     if not path.exists() or path.stat().st_size == 0:
         return False
@@ -395,7 +401,7 @@ class State:
         with self._writing():
             self.db.execute("DELETE FROM gaps WHERE broker = ?", (broker,))
             self.db.executemany("INSERT OR REPLACE INTO gaps VALUES (?, ?, ?, ?, ?)",
-                                [(broker, g["kind"], g["ref"], g["occurred_at"], json.dumps(g)) for g in gaps])
+                                [(broker, g["kind"], g["ref"], g["occurred_at"], json.dumps(masked(g))) for g in gaps])
 
     def gaps(self, broker: str) -> list[dict]:
         rows = self.db.execute("SELECT kind, payload FROM gaps WHERE broker = ? ORDER BY occurred_at", (broker,))
@@ -505,7 +511,8 @@ class State:
         keep = notified if notified is not None else (old or {}).get("notified", [])
         with self._writing():
             self.db.execute("INSERT OR REPLACE INTO reconcile VALUES (?, ?, ?, ?)",
-                            (broker, json.dumps(deviations), json.dumps(keep), now()))
+                            (broker, json.dumps([masked(d) for d in deviations]),
+                             json.dumps([masked(d) for d in keep]), now()))
 
     def clear_reconcile(self, broker: str) -> None:
         """Forget the last check (out of date, e.g. after removing duplicates); the next run recomputes it."""

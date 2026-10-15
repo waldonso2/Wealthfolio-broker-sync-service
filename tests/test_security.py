@@ -783,3 +783,46 @@ def test_the_access_log_stays_off_the_setup_code_can_be_in_a_url():
 
     serve = (Path(__file__).parent.parent / "src" / "brokersync" / "web" / "serve.py").read_text()
     assert serve.count("access_log=False") == 2
+
+
+def test_the_fints_session_blob_never_holds_the_pin():
+    """SEC-02: what close() stores (python-fints' deconstruct with private data) is system id, bank and user
+    parameters and the TAN choice - never the PIN. The keys are pinned, so a pytr-like update of python-fints
+    that starts storing more fails here."""
+    import zlib
+
+    from fints.client import FinTS3PinTanClient
+
+    client = FinTS3PinTanClient("12030000", "max.muster", "Geh3im-Broker-PIN", "https://fints.example/x",
+                                product_id="TEST")
+    blob = client.deconstruct(including_private=True)
+    data = json.loads(zlib.decompress(blob.split(b";", 3)[3]))
+    assert "Geh3im-Broker-PIN" not in json.dumps(data)
+    assert set(data) == {"system_id", "bpd_bin", "bpa_bin", "bpd_version", "upd_bin", "upa_bin", "upd_version",
+                         "selected_security_function", "selected_tan_medium", "allowed_security_functions"}
+
+
+def test_gaps_and_deviations_are_stored_without_ibans_or_long_numbers(tmp_path):
+    """SEC-04: their texts are masked like an unknown event's payload; ids, amounts and ISINs stay."""
+    st = State(tmp_path)
+    st.set_gaps("dkb", [{"kind": "missing", "ref": "tx-1", "occurred_at": "2026-01-05T00:00:00+00:00",
+                         "label": "Überweisung an DE89370400440532013000", "name": "Konto 1234567890",
+                         "amount": "12.50", "currency": "EUR", "tx_id": "tx-1"}])
+    [g] = st.gaps("dkb")
+    assert (g["label"], g["name"]) == ("Überweisung an ***", "Konto ***")
+    assert (g["ref"], g["tx_id"], g["amount"]) == ("tx-1", "tx-1", "12.50")
+    st.set_reconcile("dkb", [{"kind": "position", "key": "DE000A0TGJ55", "name": "Anleihe 1234567890",
+                              "broker": "3", "wealthfolio": "2"}])
+    [d] = st.reconcile("dkb")["deviations"]
+    assert (d["key"], d["name"]) == ("DE000A0TGJ55", "Anleihe ***")
+
+
+def test_a_damaged_setup_code_is_like_an_expired_one(tmp_path):
+    """V-02: a setup code entry without expiry or with a broken one: no error page."""
+    from brokersync.vault import check_setup_code, new_setup_code
+
+    vault = Vault(tmp_path)
+    code = new_setup_code(vault)
+    for broken in ({"sha256": "x"}, {"expires": "not a date", "sha256": "x"}, {"expires": None}, "garbage"):
+        vault.update(lambda d, b=broken: d.update(setup_code=b))
+        assert check_setup_code(vault, code) is False
