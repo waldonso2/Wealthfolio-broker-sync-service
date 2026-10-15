@@ -28,9 +28,9 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
    ```
 
    Es erscheint der bekannte Assistent der Community-Skripte. *Default Settings* wählen – die Standardwerte passen: 1 CPU, 512 MB RAM, 2 GB Disk, Debian 13, unprivilegiert. Der Kopf zeigt dabei „Scripts fork: waldonso2/wealthfolio-broker-sync-service“; das ist richtig, der Dienst kommt aus diesem Repository und nicht aus der offiziellen Sammlung.
-3. **Öffnen.** Am Ende zeigt die Installation die Adresse der Weboberfläche an, z. B. `https://192.168.1.51:8443`. Diese im Browser öffnen. Das Zertifikat stellt der Container mit einer eigenen Zertifizierungsstelle (CA) aus. Beim ersten Mal die Warnung des Browsers bestätigen, dann auf der Seite *Sicherheit* das CA-Zertifikat herunterladen und einmal importieren (Anleitung für Windows, macOS, Firefox, iPhone und Android steht dort). Danach zeigt der Browser die Verbindung als sicher, auch nach jeder Erneuerung. Die CA kann nur diesen Container bestätigen – seinen Namen und seine Adressen –, keinen Router und kein anderes Gerät; bekommt der Container eine neue Adresse, entsteht eine neue CA, die du einmal neu importierst. Das Zertifikat erneuert sich täglich von selbst. Weitere Namen oder Adressen (etwa eine Tailscale-Adresse) gehören, eine pro Zeile, in `/etc/wealthfolio-broker-sync/tls/extra-names`. Alte Adressen mit `http://…:8090` leiten dorthin weiter.
+3. **Öffnen.** Am Ende zeigt die Installation die Adresse der Weboberfläche an, z. B. `https://192.168.1.51:8443`. Diese im Browser öffnen. Das Zertifikat stellt der Container mit einer eigenen Zertifizierungsstelle (CA) aus. Beim ersten Mal die Warnung des Browsers bestätigen, dann auf der Seite *Sicherheit* das CA-Zertifikat herunterladen und einmal importieren (Anleitung für Windows, macOS, Firefox, iPhone und Android steht dort). Danach zeigt der Browser die Verbindung als sicher, auch nach jeder Erneuerung. Die CA kann nur diesen Container bestätigen – seinen Namen und seine Adressen –, keinen Router und kein anderes Gerät; bekommt der Container eine neue Adresse, entsteht eine neue CA, die du einmal neu importierst. Das Zertifikat erneuert sich täglich von selbst. Weitere Namen oder Adressen (etwa eine Tailscale-Adresse) gehören, eine pro Zeile, in `/etc/wealthfolio-broker-sync/tls/extra-names`. Aufrufe über `http://…:8090` leiten dorthin weiter.
 
-**Aktualisieren:** In Proxmox die Konsole des Containers öffnen und `update` eingeben. Einstellungen und Zugangsdaten bleiben erhalten; vorher wird eine Sicherung der verschlüsselten Daten unter `/opt/wealthfolio-broker-sync/backup-*.tar.gz` angelegt (die letzten drei bleiben). Installation und Update prüfen jede heruntergeladene Datei gegen die Prüfsummen (`SHA256SUMS`), die der Release-Workflow mit dem Release veröffentlicht. Passt eine nicht oder ist eine zu viel, brechen sie ab, und die bisherige Version läuft weiter. Eine bestimmte Version, auch eine ältere: `VERSION=0.19.0 update`. Ohne `VERSION` geht das Update nie auf eine ältere Version zurück.
+**Aktualisieren:** In Proxmox die Konsole des Containers öffnen und `update` eingeben. Einstellungen und Zugangsdaten bleiben erhalten; vorher wird eine Sicherung der verschlüsselten Daten unter `/opt/wealthfolio-broker-sync/backup-*.tar.gz` angelegt (die letzten drei bleiben). Installation und Update prüfen jede heruntergeladene Datei gegen die Prüfsummen (`SHA256SUMS`), die der Release-Workflow mit dem Release veröffentlicht. Passt eine nicht oder ist eine zu viel, brechen sie ab, und die bisherige Version läuft weiter. Eine bestimmte Version, auch eine ältere: `VERSION=<Version> update`. Ohne `VERSION` geht das Update nie auf eine ältere Version zurück.
 
 > **PVE Scripts Local:** Der Dienst erscheint dort (noch) nicht. PVE Scripts Local zeigt nur Skripte aus der offiziellen Sammlung von community-scripts.org an; ein unter *Repositories* eingetragenes eigenes Repo bringt keine neuen Skripte in den Katalog. Die Aufnahme in die offizielle Sammlung ist geplant, sobald echte Broker angebunden sind.
 
@@ -162,16 +162,16 @@ Der Dienst liest deine Trade-Republic-Timeline über die inoffizielle Schnittste
 | Dividende, Ausschüttung | eine Dividende mit Nettobetrag und Quellensteuer, Geld per Übertrag aufs Verrechnungskonto |
 | Saveback | Bonus (CREDIT/BONUS) auf dem Depotkonto, der den Kauf bezahlt – ohne Abbuchung vom Verrechnungskonto |
 | Zinsen | Zinsen (INTEREST) mit Steuer |
-| Vorabpauschale / Steuerkorrektur | Steuer (TAX) / Steuererstattung (CREDIT/TAX_REFUND) |
+| Vorabpauschale / Steuerkorrektur | Steuer (TAX) / Steuererstattung (CREDIT/TAX_REFUND); eine Steuerkorrektur, die Geld abbucht, als Steuer (TAX) |
+| Empfehlungsbonus | Bonus (CREDIT/BONUS) auf dem Verrechnungskonto |
+| Wertlos ausgebucht | Verkauf zu 0 auf dem Depotkonto, ohne Geldbewegung |
 | Einzahlung, Kartenerstattung | Einzahlung (DEPOSIT) |
 | Kartenzahlung, Überweisung | Auszahlung (WITHDRAWAL) oder – mit passendem Übertragsmuster – Übertrag aufs eigene Konto |
-| Aktiensplit, Spin-off, Tausch, Depotübertrag, Private Markets | **nicht gebucht**, als unbekannt gemeldet – bitte von Hand oder per CSV-Import buchen |
+| Aktiensplit, Spin-off, Tausch, Reinvestition der Dividende, Depotübertrag, Private Markets | **nicht gebucht**, als unbekannt gemeldet – bitte von Hand oder per CSV-Import buchen |
 
 Reine Hinweise (Order angelegt/storniert, Dokumente, Adressänderung …) und stornierte Buchungen übernimmt der Dienst nicht.
 
 **CSV-Import und Dienst zusammen:** Was du schon per CSV importiert hast, erkennt der Dienst und legt es nicht noch einmal an: gleiche Art, gleicher Betrag, höchstens 36 Stunden auseinander, bei Käufen und Verkäufen dieselbe Stückzahl. Das Wertpapier darf dabei unter einem anderen Symbol stehen (beim Import zugeordneter Ticker, im Dienst die ISIN).
-
-**Duplikate aus Version 0.3.0/0.3.1:** Diese Versionen haben per CSV importierte Käufe, Verkäufe und Dividenden ein zweites Mal angelegt. Die Seite *Duplikate*, die sie fand, ist vorerst ausgeblendet; wer betroffen ist, findet die Kopien in Wealthfolio über den Kommentar `[SYNC tr:`.
 
 ## Scalable Capital
 
@@ -294,7 +294,7 @@ Was der Dienst speichert, ist verschlüsselt; die Seite **Sicherheit** zeigt jed
 
 ## Sichern und Wiederherstellen
 
-`update` sichert `data/` vorher nach `/opt/wealthfolio-broker-sync/backup-*.tar.gz` – nur verschlüsselte Daten, ohne Schlüssel. Ältere Sicherungen, die noch den Schlüssel enthielten, ersetzt das Update durch eine verschlüsselte. Jederzeit geht es auch von Hand, in der Konsole des Containers:
+`update` sichert `data/` vorher nach `/opt/wealthfolio-broker-sync/backup-*.tar.gz` – nur verschlüsselte Daten, ohne Schlüssel. Jederzeit geht es auch von Hand, in der Konsole des Containers:
 
 ```
 (umask 077; brokersync-cli backup > /root/brokersync-$(date +%F).tar.gz)

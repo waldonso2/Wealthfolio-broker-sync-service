@@ -81,6 +81,13 @@ def test_sell_and_dividend_sweep_everything_to_cash():
     assert cash_by_account(acts) == {"cash": D("1069.99")}
 
 
+def test_a_worthless_write_off_is_a_sale_at_zero_without_transfers():
+    gone = tx(id="w1", kind=Kind.SELL, net=D(0), gross=D(0), fee=D(0), shares=D("3"), label="Wertlos")
+    (a,) = to_activities(gone, "tr", ACC)  # as the addon's WORTHLESS: one SELL, nothing swept
+    assert (a["accountId"], a["activityType"], a["quantity"], a["unitPrice"], a["amount"]) == \
+        ("depot", "SELL", "3", "0", "0")
+
+
 def test_tax_refund_is_its_own_credit():
     div = tx(id="d2", kind=Kind.DIVIDEND, net=D("105"), shares=D("200"), gross=D("100"), fee=D(0), tax=D("-5"),
              label="Dividende")

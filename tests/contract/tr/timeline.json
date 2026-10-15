@@ -1,5 +1,5 @@
 {
- "description": "Timeline events in Trade Republic's format (structure from pytr's MIT-licensed test events, ids, dates and names replaced): deposit, buy, savings plan, sell, dividend, card payment and refund, outgoing transfer, interest, Saveback, Vorabpauschale, tax correction, split (unknown), address change (skipped), cancelled transfer (skipped)",
+ "description": "Timeline events in Trade Republic's format (structure from pytr's MIT-licensed test events, ids, dates and names replaced): deposit, buy, savings plan, sell, dividend, card payment and refund, outgoing transfer, interest, Saveback, Vorabpauschale, tax correction, split (unknown), tax correction that charges, referral bonus, dividend reinvestment (unknown), worthless write-off, address change (skipped), cancelled transfer (skipped)",
  "recording": {
   "events": [
    {
@@ -1945,6 +1945,213 @@
       }
      ]
     }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000016",
+    "timestamp": "2026-09-16T00:00:16.000+0000",
+    "title": "Steuerkorrektur",
+    "icon": "logos/timeline_person/v2",
+    "subtitle": null,
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000016"
+    },
+    "eventType": "ssp_tax_correction",
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000016",
+     "sections": [
+      {
+       "title": "Du hast 12,34 € gezahlt",
+       "data": {
+        "icon": "logos/timeline_person/v2",
+        "timestamp": "2025-01-01T00:00:00Z",
+        "status": "executed"
+       },
+       "type": "header"
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Event",
+         "detail": {
+          "text": "Steuerkorrektur",
+          "displayValue": {
+           "text": "Steuerkorrektur"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      }
+     ]
+    },
+    "amount": {
+     "currency": "EUR",
+     "value": -12.34,
+     "fractionDigits": 2
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000017",
+    "timestamp": "2026-09-17T10:00:00.000+0000",
+    "title": "Einladung erfolgreich",
+    "icon": "logos/timeline_person/v2",
+    "subtitle": "Empfehlungsbonus erhalten",
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000017"
+    },
+    "eventType": "REFERRAL_FIRST_TRADE_EXECUTED_INVITER",
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000017",
+     "sections": [
+      {
+       "title": "Einladung erfolgreich",
+       "data": {
+        "icon": "logos/timeline_person/v2",
+        "timestamp": "2025-01-01T00:00:00Z",
+        "status": "executed"
+       },
+       "type": "header"
+      }
+     ]
+    },
+    "amount": {
+     "currency": "EUR",
+     "value": 15.0,
+     "fractionDigits": 2
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000018",
+    "timestamp": "2026-09-18T09:30:00.000+0000",
+    "title": "Shell",
+    "icon": "logos/GB00BP6MXD84/v2",
+    "subtitle": "Reinvestition der Dividende",
+    "status": "EXECUTED",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000018"
+    },
+    "eventType": "SSP_CORPORATE_ACTION_INSTRUMENT",
+    "source": "timelineTransaction",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000018",
+     "sections": [
+      {
+       "title": "Du hast 0,25 Aktien erhalten",
+       "data": {
+        "icon": "logos/GB00BP6MXD84/v2",
+        "timestamp": "2025-01-01T00:00:00Z",
+        "status": "executed"
+       },
+       "type": "header",
+       "action": {
+        "payload": "GB00BP6MXD84",
+        "type": "instrumentDetail"
+       }
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Wertpapier",
+         "detail": {
+          "text": "Shell",
+          "displayValue": {
+           "text": "Shell"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Aktien",
+         "detail": {
+          "text": "0,25",
+          "displayValue": {
+           "text": "0,25"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      }
+     ]
+    },
+    "amount": {
+     "currency": "EUR",
+     "value": -7.5,
+     "fractionDigits": 2
+    }
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000019",
+    "timestamp": "2026-09-19T08:00:00.000+0000",
+    "title": "VARTA",
+    "icon": "logos/DE000A0TGJ55/v2",
+    "subtitle": "Wertlos",
+    "action": {
+     "type": "timelineDetail",
+     "payload": "00000000-0000-4000-8000-000000000019"
+    },
+    "eventType": "SSP_CORPORATE_ACTION_ACTIVITY",
+    "source": "timelineActivity",
+    "details": {
+     "id": "00000000-0000-4000-8000-000000000019",
+     "sections": [
+      {
+       "title": "Deine Aktien wurden ausgebucht",
+       "data": {
+        "icon": "logos/DE000A0TGJ55/v2",
+        "timestamp": "2025-01-01T00:00:00Z",
+        "status": "executed"
+       },
+       "type": "header",
+       "action": {
+        "payload": "DE000A0TGJ55",
+        "type": "instrumentDetail"
+       }
+      },
+      {
+       "title": "Übersicht",
+       "data": [
+        {
+         "title": "Wertpapier",
+         "detail": {
+          "text": "VARTA",
+          "displayValue": {
+           "text": "VARTA"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        },
+        {
+         "title": "Aktien entfernt",
+         "detail": {
+          "text": "3.000000",
+          "displayValue": {
+           "text": "3.000000"
+          },
+          "type": "text"
+         },
+         "style": "plain"
+        }
+       ],
+       "type": "table"
+      }
+     ]
+    }
    }
   ],
   "cash": [
@@ -2123,6 +2330,47 @@
    "net": "0",
    "label": "Aktiensplit",
    "raw_type": "SSP_CORPORATE_ACTION_INVOICE_SHARES (SPLIT)"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000016",
+   "kind": "TAX",
+   "datetime": "2026-09-16T00:00:16+00:00",
+   "currency": "EUR",
+   "net": "12.34",
+   "name": "Steuerkorrektur",
+   "label": "Steuerkorrektur",
+   "raw_type": "SSP_TAX_CORRECTION"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000017",
+   "kind": "BONUS",
+   "datetime": "2026-09-17T10:00:00+00:00",
+   "currency": "EUR",
+   "net": "15",
+   "label": "Empfehlungsbonus erhalten",
+   "raw_type": "REFERRAL_FIRST_TRADE_EXECUTED_INVITER"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000018",
+   "kind": "UNKNOWN",
+   "datetime": "2026-09-18T09:30:00+00:00",
+   "currency": "EUR",
+   "net": "0",
+   "label": "Reinvestition der Dividende",
+   "raw_type": "SSP_CORPORATE_ACTION_INSTRUMENT"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000019",
+   "kind": "SELL",
+   "datetime": "2026-09-19T08:00:00+00:00",
+   "currency": "EUR",
+   "net": "0",
+   "isin": "DE000A0TGJ55",
+   "name": "VARTA",
+   "shares": "3",
+   "gross": "0",
+   "label": "Wertlos",
+   "raw_type": "SSP_CORPORATE_ACTION_ACTIVITY"
   }
  ]
 }

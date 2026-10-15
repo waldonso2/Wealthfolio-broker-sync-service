@@ -10,9 +10,12 @@
   details, parsed by pytr's ``Event`` - the same parser pytr's own exports use.
   Events are mapped to the rules of the addon's CSV import (``transform.ts``):
   trades with fee and tax, dividends net with withholding tax, Saveback as a
-  bonus-funded buy, interest, Vorabpauschale, tax corrections, deposits, card
-  payments and transfers. Corporate actions, securities transfers and private
-  markets are reported as unknown: the CSV import handles them.
+  bonus-funded buy, interest, Vorabpauschale, tax corrections (refunds and
+  charges), referral bonuses, deposits, card payments and transfers; of the
+  corporate actions worthless write-offs (a sale at 0). Other corporate
+  actions (also dividend reinvestments: pytr reads no share count for them),
+  securities transfers and private markets are reported as unknown: the CSV
+  import handles them.
 - **Purely informational events** (orders created/cancelled, documents, ...),
   listed by pytr, are skipped silently; anything else pytr can't classify is
   reported.
@@ -72,13 +75,6 @@ def to_transactions(events: list[dict]) -> list[Transaction]:
             out.append(_unknown(raw, f"unreadable: {type(e).__name__}"))
             continue
         kind = ev.event_type
-        if kind is None:
-            if (event_type in events_known_ignored or raw.get("title") in events_known_ignored_title
-                    or raw.get("subtitle") in events_known_ignored_subtitle) or raw.get("amount") is None:
-                continue  # informational, no money or shares moved
-            out.append(_unknown(raw, event_type or raw.get("subtitle") or raw.get("title") or "?"))
-            continue
-
         value = _dec(ev.value) or Decimal(0)
         fees = abs(_dec(ev.fees) or Decimal(0))
         taxes = abs(_dec(ev.taxes) or Decimal(0))
@@ -87,16 +83,16 @@ def to_transactions(events: list[dict]) -> list[Transaction]:
         base = dict(id=raw["id"], datetime=ev.date.astimezone(UTC), currency=_currency(raw), label=_label(raw),
                     raw_type=event_type)
         security = dict(isin=ev.isin, name=ev.title or "", shares=shares)
+        if kind is None:
+            if (event_type in events_known_ignored or raw.get("title") in events_known_ignored_title
+                    or raw.get("subtitle") in events_known_ignored_subtitle) or raw.get("amount") is None:
+                continue  # informational, no money or shares moved
+            out.append(_unclassified(value, base)
+                       or _unknown(raw, event_type or raw.get("subtitle") or raw.get("title") or "?"))
+            continue
 
         if kind == ConditionalEventType.TRADE_INVOICE and not ev.shares2:
-            if value < 0:  # buy: paid = market value + fee + tax
-                out.append(Transaction(kind=Kind.BUY, net=-value, gross=-value - fees - taxes, fee=fees, tax=taxes,
-                                       **base, **security))
-            elif shares and value > 0:  # sell: received = market value - fee - tax
-                out.append(Transaction(kind=Kind.SELL, net=value, gross=value + fees + taxes, fee=fees, tax=taxes,
-                                       **base, **security))
-            else:  # e.g. "Wertlos" (worthless) - handled by the CSV import
-                out.append(_unknown(raw, f"{event_type} {raw.get('subtitle') or ''}".strip()))
+            out.append(_trade(raw, value, fees, taxes, base, security))
         elif kind == ConditionalEventType.SAVEBACK and value < 0:
             out.append(Transaction(kind=Kind.BUY, net=-value, gross=-value - fees, fee=fees, bonus_funded=True,
                                    **base, **security))
@@ -105,7 +101,7 @@ def to_transactions(events: list[dict]) -> list[Transaction]:
         elif kind == PPEventType.INTEREST and value > 0:
             out.append(Transaction(kind=Kind.INTEREST, net=value, gross=value + taxes, tax=taxes, **base,
                                    name=ev.title or ""))
-        elif kind == PPEventType.TAXES and value < 0:
+        elif kind in (PPEventType.TAXES, PPEventType.TAX_REFUND) and value < 0:  # a tax correction can charge
             out.append(Transaction(kind=Kind.TAX, net=-value, **base, name=_named(ev)))
         elif kind == PPEventType.TAX_REFUND and value > 0:
             out.append(Transaction(kind=Kind.TAX_REFUND, net=value, **base, name=_named(ev)))
@@ -121,6 +117,28 @@ def to_transactions(events: list[dict]) -> list[Transaction]:
             name = kind.name if hasattr(kind, "name") else str(kind)
             out.append(_unknown(raw, f"{event_type or name} ({name})"))
     return out
+
+
+def _trade(raw: dict, value: Decimal, fees: Decimal, taxes: Decimal, base: dict, security: dict) -> Transaction:
+    shares = security["shares"]
+    if value < 0:  # buy: paid = market value + fee + tax
+        return Transaction(kind=Kind.BUY, net=-value, gross=-value - fees - taxes, fee=fees, tax=taxes,
+                           **base, **security)
+    if shares and value > 0:  # sell: received = market value - fee - tax
+        return Transaction(kind=Kind.SELL, net=value, gross=value + fees + taxes, fee=fees, tax=taxes,
+                           **base, **security)
+    if shares and value == 0 and raw.get("subtitle") == "Wertlos":  # written off: a sale at 0, as the CSV import
+        return Transaction(kind=Kind.SELL, net=Decimal(0), gross=Decimal(0), **base, **security)
+    return _unknown(raw, f"{base['raw_type']} {raw.get('subtitle') or ''}".strip())
+
+
+def _unclassified(value: Decimal, base: dict) -> Transaction | None:
+    """Events pytr has no type for that the CSV import books (``transform.ts``); None: still unknown."""
+    event_type = base["raw_type"]
+    if event_type.startswith("REFERRAL_") and value > 0:  # the inviter's referral bonus
+        return Transaction(kind=Kind.BONUS, net=value, **base)
+    # A dividend reinvestment (SSP_CORPORATE_ACTION_INSTRUMENT) stays unknown: pytr reads no share count for it.
+    return None
 
 
 def portfolio_positions(portfolio: dict | None) -> list[dict]:

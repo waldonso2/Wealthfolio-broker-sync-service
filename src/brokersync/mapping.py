@@ -354,6 +354,8 @@ class _Booking:
         out.append(trade)
         if self.refund:
             out.append(self.refund_credit("sale"))
+        if not tx.net:  # written off as worthless: no money moves (as the addon)
+            return out
         self.sweep_to_cash(f"{tx.isin} ({tx.name}) sale")
         if tx.external_cash:
             out.append(self.cash(self.accounts.cash, "WITHDRAWAL", 3, tx.net,
