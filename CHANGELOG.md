@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.23.0
+
+Data and cleanup, with the addon's 3.9.4 (waldonso2/wealthfolio-importer-addon#121).
+
+- **Duplicate detection (#100):** of several activities that fit, the nearest in time is the one (then the closest amount) - two equal savings-plan deposits on two days each find their own, not the first in Wealthfolio's list. Two currencies never match. New shared cases in `contract/dedup/cases.json`, the addon applies the same rules.
+- **`Position.value` removed (#118):** read nowhere, and 100 times too high for bonds priced in per cent; MT535 reads only shares and currency.
+- **Simpler code (#80):** no C901 exception left; `mapping.to_activities`, `reconcile.compare`, `audit.check`, `assets.learn_from_imports`, `coverage.check`, the FinTS account lookup, `scalable._netted`, `mt535._holding` and `mt536.parse` split into named steps (activities, comments and ids unchanged); imports before the bank history and opening positions in `history.py`; the version only in `pyproject.toml`.
+- **Unofficial interface and FinTS product id (#112):** Trade Republic asks once in the broker settings that its note was read - without it no login starts; brokers set up before count as agreed. The FinTS product id field says to use only your own registered id.
+
 ## 0.22.0
 
 Transport, isolation, operation (waldonso2/wealthfolio-importer-addon#121).

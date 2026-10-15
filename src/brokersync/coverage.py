@@ -66,34 +66,32 @@ def check(broker: str, transactions: list[Transaction], synced: dict[str, tuple[
         m = SYNC_REF.search(a.get("comment") or "")
         if m and m.group(1) == broker:
             tagged[m.group(2)].append(a)
-
-    gaps: list[Gap] = []
-    listed: set[str] = set()
-    for tx in transactions:
-        listed.add(tx.id)
-        row = synced.get(tx.id)
-        if not row or tx.kind == Kind.UNKNOWN:
-            continue  # new: the run books it
-        status, ids = row
-        if status == "ignored":
-            gaps.append(_tx_gap(IGNORED, tx))
-            continue
-        ids = [i for i in ids if i]
-        present = {a["id"] for a in tagged.get(tx.id, [])} | {i for i in ids if i in by_id}
-        if not present:
-            gaps.append(_tx_gap(MISSING, tx))
-        elif status == "imported" and len(present) < len(ids):
-            gaps.append(_tx_gap(PARTIAL, tx))
-
+    gaps = [g for tx in transactions if (g := _gap(tx, synced.get(tx.id), tagged, by_id))]
     if full_history:
-        for tx_id, acts in tagged.items():
-            if tx_id in listed:
-                continue
-            for a in acts:
-                at = when(a.get("date") or "")
-                if since and at < since:
-                    continue  # before the start date: not fetched, so not comparable
-                amount = a.get("amount") or ""
-                gaps.append(Gap(ORPHAN, a["id"], at.isoformat(), a.get("activityType") or "",
-                                a.get("assetSymbol") or "", str(amount), a.get("currency") or "", tx_id))
+        listed = {tx.id for tx in transactions}
+        gaps += [_orphan(a, tx_id) for tx_id, acts in tagged.items() if tx_id not in listed for a in acts
+                 if not (since and when(a.get("date") or "") < since)]  # before the start date: not comparable
     return sorted(gaps, key=lambda g: g.occurred_at)
+
+
+def _gap(tx: Transaction, row: tuple[str, list[str]] | None, tagged: dict[str, list[dict]],
+         by_id: dict[str, dict]) -> Gap | None:
+    """What a transaction synced before lacks in Wealthfolio, if anything."""
+    if not row or tx.kind == Kind.UNKNOWN:
+        return None  # new: the run books it
+    status, ids = row
+    if status == "ignored":
+        return _tx_gap(IGNORED, tx)
+    ids = [i for i in ids if i]
+    present = {a["id"] for a in tagged.get(tx.id, [])} | {i for i in ids if i in by_id}
+    if not present:
+        return _tx_gap(MISSING, tx)
+    if status == "imported" and len(present) < len(ids):
+        return _tx_gap(PARTIAL, tx)
+    return None
+
+
+def _orphan(a: dict, tx_id: str) -> Gap:
+    """An activity of the sync whose transaction the broker no longer lists."""
+    return Gap(ORPHAN, a["id"], when(a.get("date") or "").isoformat(), a.get("activityType") or "",
+               a.get("assetSymbol") or "", str(a.get("amount") or ""), a.get("currency") or "", tx_id)

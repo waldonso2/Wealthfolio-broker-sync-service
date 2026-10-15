@@ -102,6 +102,10 @@ async def broker_save(request: Request, ctx: Ctx, key: str):
         creds[f.name] = v if v or not f.secret else old.get(f.name, "")
         if f.ask and form.get(f"forget_{f.name}"):
             creds[f.name] = ""  # typed at every login from now on, never stored (#85)
+    adapter = adapters[key]
+    b.consented = b.consented or form.get("consent") == "1"
+    if adapter.consent and not b.consented and any(creds.values()):
+        errors["consent"] = tr(request, "Bitte bestätige, dass du den Hinweis zur Schnittstelle gelesen hast.")
     if creds != old and (e := ctx.reconfirm(request, str(form.get("ui_password", "")))):
         errors["ui_password"] = e  # new credentials: the UI password again after a while (#96)
     if errors:  # checked completely before anything is saved: no half-saved form

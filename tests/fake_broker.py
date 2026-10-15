@@ -75,7 +75,7 @@ class FakeBroker(BrokerAdapter):
         return datetime.fromisoformat(self.session["anchor"])
 
     def get_positions(self) -> list[Position]:
-        return [Position(ISIN, NAME, Decimal("5"), "EUR", Decimal("510"))]
+        return [Position(ISIN, NAME, Decimal("5"), "EUR")]
 
     def get_transactions(self, since: datetime | None) -> list[Transaction]:
         return [t for t in transactions(self._anchor()) if since is None or t.datetime >= since]

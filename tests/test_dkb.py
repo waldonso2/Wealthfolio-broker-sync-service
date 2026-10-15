@@ -277,7 +277,7 @@ def test_positions_skip_accounts_without_a_depot(fake, monkeypatch):
     a = DkbAdapter(CREDS)
     a.login()
     [p] = a.get_positions()
-    assert (p.isin, str(p.shares), str(p.value)) == ("IE00B4L5Y983", "5.5", "550.0")
+    assert (p.isin, str(p.shares), p.currency) == ("IE00B4L5Y983", "5.5", "EUR")
 
 
 def test_close_survives_a_broken_connection(fake, monkeypatch):

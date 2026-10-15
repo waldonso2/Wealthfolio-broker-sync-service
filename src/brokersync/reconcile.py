@@ -65,7 +65,7 @@ def _is_security(h: dict) -> bool:
     return (h.get("holdingType") or "").lower() == "security" and not h.get("isClosed")
 
 
-def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: list[dict],  # noqa: C901 (#80)
+def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: list[dict],
             wf_portfolio: list[dict], symbol_of: dict[str, str],
             asset_of: dict[str, str] | None = None, *, wf_savings: list[dict] | None = None,
             savings_label: str = "") -> list[Deviation]:
@@ -75,6 +75,15 @@ def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: 
     see ``brokersync.assets``), else by the symbol it is booked under
     (``symbol_of``: ISIN → mapped symbol, else the ISIN).
     """
+    out = _cash_deviations(cash, wf_cash, wf_savings, savings_label)
+    out += _stray_cash(wf_cash, wf_portfolio)
+    if positions is not None:
+        out += _position_deviations(positions, wf_portfolio, symbol_of, asset_of or {})
+    return out
+
+
+def _cash_deviations(cash: list[CashBalance], wf_cash: list[dict], wf_savings: list[dict] | None,
+                     savings_label: str) -> list[Deviation]:
     out: list[Deviation] = []
     wf_cash_by_ccy = _cash(wf_cash)
     wf_savings_by_ccy = _cash(wf_savings or [])
@@ -91,6 +100,12 @@ def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: 
         have = wf_cash_by_ccy.get(c.currency, Decimal(0))
         if abs(have - c.amount) > CASH_TOLERANCE:
             out.append(Deviation("cash", c.currency, f"Cash {c.currency}", _fmt(c.amount), _fmt(have)))
+    return out
+
+
+def _stray_cash(wf_cash: list[dict], wf_portfolio: list[dict]) -> list[Deviation]:
+    """Cash on the securities account (must be 0) and ``$CASH`` positions on either account."""
+    out: list[Deviation] = []
     for ccy, have in _cash(wf_portfolio).items():
         if abs(have) > CASH_TOLERANCE:
             out.append(Deviation("cash", f"depot:{ccy}", f"Cash {ccy} im Depotkonto", "0", _fmt(have)))
@@ -102,16 +117,19 @@ def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: 
                 symbol = inst.get("symbol") or inst.get("id")
                 out.append(Deviation("position", f"{where}:{symbol}", f"Position {symbol} im {where}", "0",
                                      _fmt(_dec(h.get("quantity")))))
+    return out
 
-    if positions is None:
-        return out
+
+def _position_deviations(positions: list[Position], wf_portfolio: list[dict], symbol_of: dict[str, str],
+                         asset_of: dict[str, str]) -> list[Deviation]:
+    out: list[Deviation] = []
     # Per asset: (shares, name); found by asset id or by symbol.
     wf_shares: dict[str, tuple[Decimal, str]] = {}
     by_symbol: dict[str, str] = {}
     for h in wf_portfolio:
         inst = h.get("instrument") or {}
         if not _is_security(h) or is_cash_symbol(inst.get("symbol")) or is_cash_symbol(inst.get("id")):
-            continue  # $CASH positions are reported above
+            continue  # $CASH positions are reported by _stray_cash
         symbol = inst.get("symbol") or ""
         key = inst.get("id") or symbol
         qty, _ = wf_shares.get(key, (Decimal(0), ""))
@@ -119,7 +137,7 @@ def compare(cash: list[CashBalance], positions: list[Position] | None, wf_cash: 
         by_symbol.setdefault(symbol, key)
     seen: set[str] = set()
     for p in positions:
-        key = (asset_of or {}).get(p.isin)
+        key = asset_of.get(p.isin)
         if key not in wf_shares:
             symbol = symbol_of.get(p.isin, p.isin)
             key = by_symbol.get(symbol, symbol)

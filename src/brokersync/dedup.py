@@ -82,6 +82,8 @@ class ExistingIndex:
                 return False
             if e.get("activityType") != a["activityType"] or (e.get("subtype") or None) != a.get("subtype"):
                 return False
+            if e.get("currency") and a.get("currency") and e["currency"] != a["currency"]:
+                return False  # another currency is another booking (#100)
             if abs((_when(e["date"]) - when).total_seconds()) > MATCH_WINDOW_SECONDS:
                 return False
             existing_amount = _dec(e.get("amount"))
@@ -95,7 +97,15 @@ class ExistingIndex:
         def same_security(e: dict) -> bool:
             return is_cash or symbol in (e.get("assetSymbol"), e.get("assetId"))
 
-        candidates = [e for e in self.existing if same_substance(e)]
+        def amount_of(e: dict) -> Decimal:
+            existing_amount = _dec(e.get("amount"))
+            return existing_amount if existing_amount is not None else Decimal(0)
+
+        # The nearest in time first, then the closest amount (#100): two equal savings-plan deposits on two days
+        # must each find their own, not the first in Wealthfolio's list.
+        candidates = sorted((e for e in self.existing if same_substance(e)),
+                            key=lambda e: (abs((_when(e["date"]) - when).total_seconds()),
+                                           abs(amount_of(e) - amount)))
         # Same security first. The addon books a security under the ticker the
         # user mapped it to, the sync under the ISIN, so a different symbol is
         # still a match when nothing else is - for trades the share count and

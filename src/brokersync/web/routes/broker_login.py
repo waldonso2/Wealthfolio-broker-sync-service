@@ -53,6 +53,9 @@ def broker_login_start(request: Request, ctx: Ctx, key: str, run: str = Form("")
 
 def start_login(request: Request, ctx: AppContext, key: str, run: bool):
     """Log in at the broker - only from a POST (the button, *Jetzt abrufen*, the next of *Alle abrufen*)."""
+    if ctx.adapters[key].consent and not ctx.cfg().broker(key).consented:  # #112: never without the user's yes
+        return redirect(request, f"/brokers/{key}", tr(request, "Bitte bestätige, dass du den Hinweis zur "
+                                                               "Schnittstelle gelesen hast."), "error")
     old = ctx.pending.pop(key, None)
     if old is not None:
         ctx.finish_login(key, old)  # its counters (wrong TANs) are stored before the new login reads them

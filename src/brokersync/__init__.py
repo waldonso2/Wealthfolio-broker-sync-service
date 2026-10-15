@@ -1,3 +1,6 @@
 """Wealthfolio Broker Sync: broker transactions → self-hosted Wealthfolio."""
 
-__version__ = "0.22.0"
+from importlib.metadata import version
+
+# The version lives in pyproject.toml only (#80); the installed package knows it.
+__version__ = version("wealthfolio-broker-sync")

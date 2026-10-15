@@ -942,4 +942,11 @@ EN: dict[str, str] = {
     "lesender Zugriff auf die Broker":
         "Version {version} · credentials and settings encrypted, the sync database not · read-only access to "
         "the brokers",
+    # 0.23.0
+    "Bitte bestätige, dass du den Hinweis zur Schnittstelle gelesen hast.":
+        "Please confirm that you have read the note on the interface.",
+    "Hinweis zur Schnittstelle bestätigt.":
+        "Note on the interface confirmed.",
+    "Ich habe den Hinweis gelesen und möchte den Zugang trotzdem nutzen.":
+        "I have read the note and want to use the access anyway.",
 }

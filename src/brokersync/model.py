@@ -56,8 +56,6 @@ class Position:
     name: str
     shares: Decimal
     currency: str
-    # Market value as reported by the broker, if it reports one.
-    value: Decimal | None = None
     # Average purchase price per unit, if the broker reports one.
     cost: Decimal | None = None
 
