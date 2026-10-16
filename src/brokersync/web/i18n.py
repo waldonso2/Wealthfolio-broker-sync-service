@@ -46,7 +46,7 @@ def translate(text: str, lang: str | None, **params) -> str:
 
 def markup(text: str, lang: str | None, **params) -> Markup:
     """For templates: the key may hold our own inline HTML (``<strong>``, ``<a>``), the params are escaped."""
-    out = Markup(lookup(text, lang))  # keys and EN entries are our own source
+    out = Markup(lookup(text, lang))  # noqa: S704 - keys and EN entries are our own source
     return out.format(**params) if params else out
 
 

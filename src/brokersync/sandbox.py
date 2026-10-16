@@ -115,7 +115,7 @@ def main(argv: list[str]) -> None:
         restrict(read, write)
     except OSError as e:  # a kernel or seccomp profile that has Landlock but refuses it: run, and say so
         print(f"brokersync.sandbox: Landlock failed ({e}); running without", file=sys.stderr)
-    os.execv(program, [program, *args])
+    os.execv(program, [program, *args])  # noqa: S606 - replacing this process is the point
 
 
 if __name__ == "__main__":

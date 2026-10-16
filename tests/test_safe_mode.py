@@ -18,7 +18,7 @@ from .fake_fints import FakeFinTS
 from .fakes import PASSWORD, FakeWealthfolio
 from .helpers import first_password
 from .test_dkb import CREDS, RECORDING
-from .test_dkb import fake as fake  # noqa: F401 - the fake python-fints client
+from .test_dkb import fake as fake
 from .test_sync import RecordingNotifier, setup
 
 PIN = "4711-typed"
@@ -119,7 +119,7 @@ def test_switching_to_the_safe_mode_ends_every_saved_login(tmp_path):
 
 
 # ── FinTS: the PIN typed at every login ─────────────────────────────────────
-def test_fints_asks_for_the_pin_when_none_is_stored(fake):  # noqa: F811
+def test_fints_asks_for_the_pin_when_none_is_stored(fake):
     a = DkbAdapter({**CREDS, "pin": ""})
     with pytest.raises(AuthRequired) as e:
         a.login()
@@ -136,7 +136,7 @@ def test_fints_asks_for_the_pin_when_none_is_stored(fake):  # noqa: F811
     assert PIN not in redact.redact(f"error with {PIN}")
 
 
-def test_fints_pin_typed_in_the_ui_is_used_for_the_run_and_never_stored(tmp_path, fake, caplog):  # noqa: F811
+def test_fints_pin_typed_in_the_ui_is_used_for_the_run_and_never_stored(tmp_path, fake, caplog):
     import logging
 
     caplog.set_level(logging.DEBUG)
@@ -156,7 +156,7 @@ def test_fints_pin_typed_in_the_ui_is_used_for_the_run_and_never_stored(tmp_path
             assert PIN.encode() not in f.read_bytes()
 
 
-def test_a_stored_pin_can_be_dropped_in_the_broker_settings(tmp_path, fake):  # noqa: F811
+def test_a_stored_pin_can_be_dropped_in_the_broker_settings(tmp_path, fake):
     client, _, token = make(tmp_path, adapters={"dkb": DkbAdapter}, safe=False)
     Vault(tmp_path).set_broker_credentials("dkb", dict(CREDS))
     page = client.get("/brokers/dkb").text

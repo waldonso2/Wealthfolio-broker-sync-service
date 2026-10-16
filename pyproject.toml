@@ -50,14 +50,19 @@ line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP", "C901"]
+select = ["E", "F", "W", "I", "B", "UP", "C901", "S", "SIM", "PERF", "C4", "RUF"]
+ignore = [
+    "RUF001", "RUF002", "RUF003",  # German texts use typographic characters on purpose
+    "S603", "S607",  # subprocess with fixed argument lists, never a shell (sc, systemctl, hostname)
+    "C408",  # dict(key=...) reads as a record here
+]
 
 [tool.ruff.lint.mccabe]
 # New code stays below this; the few older functions above it are marked (noqa: C901) and listed in #80.
 max-complexity = 15
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["C901"]
+"tests/*" = ["C901", "S", "RUF012", "RUF043", "RUF059"]  # asserts, fabricated secrets; fakes and unpacked fixtures
 
 [tool.mypy]
 ignore_missing_imports = true

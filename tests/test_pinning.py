@@ -42,7 +42,7 @@ def wealthfolio_tls(tmp_path):
     seen = []
 
     class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):  # noqa: N802
+        def do_GET(self):
             seen.append(self.path)
             body = json.dumps([{"id": "a", "name": "Cash", "currency": "EUR", "accountType": "CASH",
                                 "isActive": True}]).encode()

@@ -184,7 +184,7 @@ class GiroAndDepot(FakeFinTS):
         depot = fints_mod._Account("DE00000000000000000000")
         depot.iban = None
         savings = fints_mod._Account("DE12100700000000303031")  # listed before the giro account, as at the bank
-        return [depot, savings] + super().get_sepa_accounts()
+        return [depot, savings, *super().get_sepa_accounts()]
 
     def get_information(self):
         return {"bank": {"supported_operations": {Op("GET_TRANSACTIONS"): True, Op("GET_HOLDINGS"): True}},

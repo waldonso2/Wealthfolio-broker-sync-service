@@ -158,7 +158,7 @@ def ensure_certificate(directory: Path, hosts: list[str], ips: list[str]) -> str
     os.chmod(directory, 0o700)
     cert_file, key_file = directory / "cert.pem", directory / "key.pem"
     hosts = [h.lower() for h in dict.fromkeys(h for h in hosts if h)] or ["localhost"]
-    ips = sorted({p for p in (_private_ip(i) for i in ips + ["127.0.0.1"]) if p})
+    ips = sorted({p for p in (_private_ip(i) for i in [*ips, "127.0.0.1"]) if p})
     names = sorted(set(hosts) | {"localhost"})
     ca, ca_key, new_ca = _ensure_ca(directory, [hosts[0], *names], ips)
     if cert_file.exists() and key_file.exists() and not new_ca:

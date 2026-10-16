@@ -139,14 +139,13 @@ def _check_amounts(tx: Transaction) -> None:
             raise MappingError(
                 f"Market value, fee and tax ({fmt(expected)}) don't add up to the booked amount ({fmt(tx.net)})."
             )
-    if tx.kind == Kind.DIVIDEND:
-        if not tx.isin or (tx.shares is not None and tx.shares <= 0):
-            raise MappingError("ISIN or share count missing.")
-    if tx.kind in (Kind.DIVIDEND, Kind.INTEREST) and tx.gross is not None:
-        if abs(tx.gross - tx.tax - tx.net) > TOLERANCE:
-            raise MappingError(
-                f"Gross income minus tax ({fmt(tx.gross - tx.tax)}) doesn't match the booked amount ({fmt(tx.net)})."
-            )
+    if tx.kind == Kind.DIVIDEND and (not tx.isin or (tx.shares is not None and tx.shares <= 0)):
+        raise MappingError("ISIN or share count missing.")
+    if (tx.kind in (Kind.DIVIDEND, Kind.INTEREST) and tx.gross is not None
+            and abs(tx.gross - tx.tax - tx.net) > TOLERANCE):
+        raise MappingError(
+            f"Gross income minus tax ({fmt(tx.gross - tx.tax)}) doesn't match the booked amount ({fmt(tx.net)})."
+        )
 
 
 # Cash-only kinds booked as one activity: Wealthfolio type, subtype, default label, whether the text is added.

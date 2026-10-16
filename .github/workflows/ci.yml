@@ -81,6 +81,19 @@ jobs:
           /tmp/venv/bin/pip check
           /tmp/venv/bin/brokersync --version
 
+  workflows:
+    # The workflows themselves: injection, permissions, cache poisoning (zizmor).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1
+        with:
+          version: 1.31.1
+          advanced-security: false
+          min-severity: medium
+
   secrets:
     runs-on: ubuntu-latest
     steps:

@@ -47,7 +47,7 @@ class FakeFinTS(ReplayClient):
 
     def send_tan(self, challenge, tan):
         self.polls += 1
-        if self.decoupled and self.polls < self.confirm_after or not self.decoupled and tan != self.tan:
+        if (self.decoupled and self.polls < self.confirm_after) or (not self.decoupled and tan != self.tan):
             return NeedTANResponse(self.decoupled)
         self.init_tan_response = None
         return "ok"

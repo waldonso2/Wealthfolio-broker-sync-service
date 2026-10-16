@@ -8,6 +8,9 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # A release must be a week old before it is proposed: time for a compromised one to be pulled.
+    cooldown:
+      default-days: 7
     ignore:
       - dependency-name: "pytr"
         update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
@@ -16,3 +19,5 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 7

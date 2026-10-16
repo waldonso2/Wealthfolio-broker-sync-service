@@ -56,6 +56,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import ClassVar
 from zoneinfo import ZoneInfo
 
 from .. import sandbox
@@ -542,7 +543,7 @@ class _Replay:
 class ScalableAdapter(BrokerAdapter):
     key = "scalable"
     label = "Scalable Capital"
-    credential_fields = [
+    credential_fields: ClassVar[list[CredentialField]] = [
         CredentialField("portfolio_id", "Depot-ID (optional)",
                         help="Nur nötig, wenn du mehrere Scalable-Depots hast: die portfolioId aus der Adresse der "
                              "Depot-Seite im Browser."),
