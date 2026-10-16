@@ -826,3 +826,24 @@ def test_a_damaged_setup_code_is_like_an_expired_one(tmp_path):
     for broken in ({"sha256": "x"}, {"expires": "not a date", "sha256": "x"}, {"expires": None}, "garbage"):
         vault.update(lambda d, b=broken: d.update(setup_code=b))
         assert check_setup_code(vault, code) is False
+
+
+def test_json_logs_are_redacted_like_the_plain_ones(monkeypatch, capsys):
+    """OPS-04: BROKERSYNC_LOG_FORMAT=json - one JSON object per line, IBANs masked as always."""
+    import logging
+
+    from brokersync import cli
+
+    root = logging.getLogger()
+    old = root.handlers[:]
+    root.handlers = []
+    try:
+        monkeypatch.setenv("BROKERSYNC_LOG_FORMAT", "json")
+        cli.setup_logging()
+        logging.getLogger("brokersync.test").warning("paid to %s", "DE89370400440532013000")
+        line = capsys.readouterr().err.strip().splitlines()[-1]
+        entry = json.loads(line)
+        assert (entry["level"], entry["logger"]) == ("WARNING", "brokersync.test")
+        assert "DE89" not in entry["message"] and entry["message"].startswith("paid to ")
+    finally:
+        root.handlers = old
