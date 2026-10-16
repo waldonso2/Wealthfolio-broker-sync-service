@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import html
 import logging
+import os
 import secrets
 import time
 from pathlib import Path
@@ -100,6 +101,8 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         # code (#89), so it isn't in PUBLIC.
         if path in PUBLIC or path == "/setup-password" or path.startswith("/static/"):
             return await call_next(request)
+        if path == "/metrics" and _metrics_token(request):  # a scraper without a UI login (OPS-04)
+            return await call_next(request)
         secrets_ = vault.load()
         if not secrets_.get("ui_password_hash"):
             return RedirectResponse("/setup-password", 303)
@@ -122,6 +125,13 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         app.include_router(router)
     _error_pages(app, ctx)
     return app
+
+
+def _metrics_token(request: Request) -> bool:
+    """``Authorization: Bearer <BROKERSYNC_METRICS_TOKEN>`` - only a token of at least 32 characters counts."""
+    token = os.environ.get("BROKERSYNC_METRICS_TOKEN", "")
+    given = request.headers.get("authorization", "")
+    return len(token) >= 32 and secrets.compare_digest(given.encode(), f"Bearer {token}".encode())
 
 
 ERROR_TITLES = {400: N_("Formular abgelaufen"), 403: N_("Nicht erlaubt"), 404: N_("Seite nicht gefunden"),

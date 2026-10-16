@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.26.0
+
+- **JSON logs and metrics (OPS-04 of #85):** `BROKERSYNC_LOG_FORMAT=json` writes one JSON object per log line, redacted like the plain lines. `GET /metrics` gives Prometheus text: fetches per broker and outcome, and the last fetch's time, duration, success and failed bookings - no amounts, no names. It needs the UI login, or for a scraper `Authorization: Bearer <BROKERSYNC_METRICS_TOKEN>` (at least 32 characters).
+- `.github/CODEOWNERS` for `ct/`, `install/`, `deploy/` and `.github/` (waldonso2/wealthfolio-importer-addon#88; takes effect with branch protection).
+
 ## 0.25.0
 
 Audit 2.0 (waldonso2/Wealthfolio-broker-sync-service#85), every finding checked against the code:

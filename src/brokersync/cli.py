@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+import os
 import sys
 
 from . import __version__, redact
@@ -217,8 +219,23 @@ COMMANDS = {"serve": _serve, "run": _run, "reset-ui-password": _setup_code, "set
             "rotate-key": _rotate_key, "security-status": _security_status, "backup": _backup, "restore": _restore}
 
 
+class JsonFormatter(logging.Formatter):
+    """One JSON object per line (``BROKERSYNC_LOG_FORMAT=json``, OPS-04 of #85) - already redacted by the
+    handler's filter, like the plain lines."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        out = {"time": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"), "level": record.levelname,
+               "logger": record.name, "message": record.getMessage()}
+        if record.exc_text:
+            out["exception"] = record.exc_text
+        return json.dumps(out, ensure_ascii=False)
+
+
 def setup_logging() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    if os.environ.get("BROKERSYNC_LOG_FORMAT", "").lower() == "json":
+        for handler in logging.getLogger().handlers:
+            handler.setFormatter(JsonFormatter())
     redact.install()
     # httpx logs every request with its full URL (query parameters included) on INFO; the service
     # logs what it does itself, so only their warnings.
