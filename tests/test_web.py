@@ -379,3 +379,29 @@ def test_a_run_aborted_by_a_restart_reads_in_the_pages_language(tmp_path):
     client.post("/appearance", data={"csrf": token, "language": "en"})
     page = client.get("/").text
     assert "Aborted - the service was stopped during the fetch" in page and "Abgebrochen - der Dienst" not in page
+
+
+def test_metrics_after_login_or_with_the_token_only(tmp_path, monkeypatch):
+    """OPS-04: Prometheus text with runs per broker and the last run - never without a login or the token."""
+    from brokersync.state import State
+
+    client, _, _ = make(tmp_path)
+    first_password(client)
+    st = State(tmp_path)
+    st.finish_run(st.start_run("fake"), "ok", created=2)
+    st.finish_run(st.start_run("fake"), "error", failed=1, message="DE89370400440532013000")
+    text = client.get("/metrics").text
+    assert 'brokersync_runs_total{broker="fake",status="ok"} 1' in text
+    assert 'brokersync_runs_total{broker="fake",status="error"} 1' in text
+    assert 'brokersync_last_run_ok{broker="fake"} 0' in text
+    assert 'brokersync_last_run_failed_bookings{broker="fake"} 1' in text
+    assert "brokersync_last_run_duration_seconds" in text and "DE89" not in text
+    client.post("/logout", data={"csrf": csrf(client, "/")})
+    assert client.get("/metrics", follow_redirects=False).status_code == 303  # to the login
+    token = "m" * 40
+    monkeypatch.setenv("BROKERSYNC_METRICS_TOKEN", token)
+    assert client.get("/metrics", headers={"Authorization": f"Bearer {token}"}).text.startswith("# HELP")
+    assert client.get("/metrics", headers={"Authorization": "Bearer wrong"}, follow_redirects=False).status_code == 303
+    monkeypatch.setenv("BROKERSYNC_METRICS_TOKEN", "short")  # too short to count
+    assert client.get("/metrics", headers={"Authorization": "Bearer short"},
+                      follow_redirects=False).status_code == 303

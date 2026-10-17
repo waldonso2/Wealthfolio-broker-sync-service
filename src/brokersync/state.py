@@ -609,6 +609,11 @@ class State:
         rows = self.db.execute(sql + " ORDER BY id DESC LIMIT ?", (*args, limit))
         return [Run(*r) for r in rows]
 
+    def run_counts(self) -> list[tuple[str, str, int]]:
+        """(broker, status, number of runs) - for the metrics (OPS-04)."""
+        return list(self.db.execute("SELECT broker, status, COUNT(*) FROM runs GROUP BY broker, status "
+                                    "ORDER BY broker, status"))
+
     def last_run(self, broker: str) -> Run | None:
         r = self.runs(broker, 1)
         return r[0] if r else None

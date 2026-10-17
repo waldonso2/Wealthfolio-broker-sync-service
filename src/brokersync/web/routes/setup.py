@@ -6,10 +6,11 @@ import logging
 import re
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 
 from ... import __version__
 from ... import security as security_mod
+from ...model import when
 from ...notify import Notifier
 from ...vault import check_setup_code, end_ui_sessions, hash_password, needs_rehash, verify_password, weak_password
 from ..context import Ctx, redirect, sign_in, tr
@@ -34,6 +35,30 @@ def ca_certificate():
 def healthz(request: Request):
     # The version only after the login (#107): it tells a scanner which fixes are missing.
     return {"ok": True, "version": __version__} if request.session.get("user") else {"ok": True}
+
+
+@router.get("/metrics", response_class=PlainTextResponse)
+def metrics(ctx: Ctx) -> str:
+    """Prometheus text format (OPS-04 of #85): runs per broker and outcome, the last run of each. After the UI
+    login, or with ``BROKERSYNC_METRICS_TOKEN`` as bearer token (``app.require_login``). No amounts, no names."""
+    counts = ctx.state.run_counts()
+    lines = ["# HELP brokersync_runs_total Fetches per broker and outcome.", "# TYPE brokersync_runs_total counter"]
+    lines += [f'brokersync_runs_total{{broker="{b}",status="{s}"}} {n}' for b, s, n in counts]
+    last = {b: r for b in sorted({b for b, _, _ in counts}) if (r := ctx.state.last_run(b))}
+    gauges = {
+        "last_run_timestamp_seconds": ("Start of the last fetch (Unix time).",
+                                       lambda r: when(r.started_at).timestamp()),
+        "last_run_duration_seconds": ("Duration of the last fetch.", lambda r: (
+            when(r.finished_at) - when(r.started_at)).total_seconds() if r.finished_at else None),
+        "last_run_ok": ("1 if the last fetch succeeded.", lambda r: int(r.status == "ok")),
+        "last_run_failed_bookings": ("Bookings the last fetch could not book.", lambda r: r.failed),
+    }
+    for name, (text, value) in gauges.items():
+        lines += [f"# HELP brokersync_{name} {text}", f"# TYPE brokersync_{name} gauge"]
+        lines += [f'brokersync_{name}{{broker="{b}"}} {v}' for b, r in last.items() if (v := value(r)) is not None]
+    lines += ["# HELP brokersync_unknown_events Unknown bookings waiting on the page Unbekannt.",
+              "# TYPE brokersync_unknown_events gauge", f"brokersync_unknown_events {ctx.state.unknown_count()}"]
+    return "\n".join(lines) + "\n"
 
 
 @router.get("/setup-password", response_class=HTMLResponse)

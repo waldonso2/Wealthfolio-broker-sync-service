@@ -1,0 +1,6 @@
+# Changes here run as root on the Proxmox host, install the service or build the release (#88 of
+# waldonso2/wealthfolio-importer-addon). Takes effect with branch protection that requires code owner review.
+/ct/ @waldonso2
+/install/ @waldonso2
+/deploy/ @waldonso2
+/.github/ @waldonso2
