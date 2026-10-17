@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.26.1
+
+- **Faster duplicate check:** matching against the activities already in Wealthfolio parses each one once and looks only at the same account, type and time window (36 h, settlements 6 days), instead of re-reading every activity for every booking. The rules and their order are unchanged (`contract/dedup/cases.json`). In the performance report, a run of 300 bookings against 3000 existing activities took 2.0 s instead of 3.7 s.
+- **Contrast in dark mode:** links had 4.4:1 on cards (WCAG AA asks 4.5:1); the dark accent is now `#66a0c8` (6.1:1).
+- CI: zizmor for the workflows, ruff with `S`/`SIM`/`PERF`/`C4`/`RUF`, every page checked in Chromium (axe-core, CSP, phone width), a performance report on the run's summary page that never fails a build, OpenSSF Scorecard, Dependabot cooldown of 7 days. `KENNZAHLEN.md` lists the KPIs with their reference standards.
+
 ## 0.26.0
 
 - **JSON logs and metrics (OPS-04 of #85):** `BROKERSYNC_LOG_FORMAT=json` writes one JSON object per log line, redacted like the plain lines. `GET /metrics` gives Prometheus text: fetches per broker and outcome, and the last fetch's time, duration, success and failed bookings - no amounts, no names. It needs the UI login, or for a scraper `Authorization: Bearer <BROKERSYNC_METRICS_TOKEN>` (at least 32 characters).

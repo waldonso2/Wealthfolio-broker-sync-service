@@ -167,15 +167,15 @@ def _scans(syncer, sql: str) -> bool:
 def test_dedup_index():
     base = datetime(2026, 1, 1, tzinfo=UTC)
     existing = [{"id": f"e{i}", "accountId": "acc-cash", "activityType": "DEPOSIT",
-                 "date": (base + timedelta(minutes=i)).isoformat(), "amount": str(1000 + i), "currency": "EUR",
+                 "date": (base + timedelta(hours=i)).isoformat(), "amount": str(1000 + i), "currency": "EUR",
                  "comment": "TEST Import"} for i in range(EXISTING)]
     index = ExistingIndex(existing)
     times = []
     for i in range(200):
         payload = {"accountId": "acc-cash", "activityType": "DEPOSIT", "amount": str(1000 + i), "currency": "EUR",
-                   "activityDate": (base + timedelta(minutes=i)).isoformat(), "comment": f"x [SYNC fake:{i}]"}
+                   "activityDate": (base + timedelta(hours=i)).isoformat(), "comment": f"x [SYNC fake:{i}]"}
         began = time.perf_counter()
         index.find(f"[SYNC fake:{i}]", [payload])
         times.append((time.perf_counter() - began) * 1000)
-    record("Duplikat-Erkennung", f"Suche je Buchung bei {EXISTING} vorhandenen", statistics.median(times), "ms",
-           10, "eigenes Budget")
+    record("Duplikat-Erkennung", f"Suche je Buchung bei {EXISTING} vorhandenen (stündlich, ~4 Monate)",
+           statistics.median(times), "ms", 10, "eigenes Budget")
