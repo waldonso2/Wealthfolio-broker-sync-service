@@ -72,7 +72,7 @@ jobs:
 
   dependency-review:
     # A pull request that adds a dependency with a known vulnerability is flagged.
-    uses: waldonso2/quality-kit/.github/workflows/dependency-review.yml@ff5dc4b499bff64e51c73a9ba940dadc5cfc988d # v1
+    uses: waldonso2/quality-kit/.github/workflows/dependency-review.yml@2070c7e1ee07901a7313f6a005be303aa44acc04 # v1
 
   scripts:
     runs-on: ubuntu-latest
@@ -96,11 +96,11 @@ jobs:
 
   workflows:
     # The workflows themselves: injection, permissions, cache poisoning (zizmor).
-    uses: waldonso2/quality-kit/.github/workflows/workflows.yml@ff5dc4b499bff64e51c73a9ba940dadc5cfc988d # v1
+    uses: waldonso2/quality-kit/.github/workflows/workflows.yml@2070c7e1ee07901a7313f6a005be303aa44acc04 # v1
 
   secrets:
     # gitleaks over the whole history; allowed test values in .gitleaks.toml.
-    uses: waldonso2/quality-kit/.github/workflows/secrets.yml@ff5dc4b499bff64e51c73a9ba940dadc5cfc988d # v1
+    uses: waldonso2/quality-kit/.github/workflows/secrets.yml@2070c7e1ee07901a7313f6a005be303aa44acc04 # v1
 
   contract:
     runs-on: ubuntu-latest
