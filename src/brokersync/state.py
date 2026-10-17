@@ -450,7 +450,7 @@ class State:
         with self._writing():
             for table in ("synced", "runs", "reconcile", "balances", "assets", "unknown_events", "gaps", "openings",
                           "statements"):
-                self.db.execute(f"DELETE FROM {table} WHERE broker = ?", (broker,))
+                self.db.execute(f"DELETE FROM {table} WHERE broker = ?", (broker,))  # noqa: S608 - fixed table names
             self._delete_broker_meta(broker)
         return created
 
@@ -461,7 +461,7 @@ class State:
         """
         with self._writing():
             for table in ("synced", "runs", "reconcile", "balances", "unknown_events", "gaps"):
-                self.db.execute(f"DELETE FROM {table} WHERE broker = ?", (broker,))
+                self.db.execute(f"DELETE FROM {table} WHERE broker = ?", (broker,))  # noqa: S608 - fixed table names
             self._delete_broker_meta(broker)
 
     def _delete_broker_meta(self, broker: str) -> None:

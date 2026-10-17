@@ -222,10 +222,8 @@ def test_inconsistent_transactions_fail_visibly(tmp_path):
 
 
 def test_only_one_run_at_a_time(tmp_path):
-    with run_lock(tmp_path):
-        with pytest.raises(AlreadyRunning):
-            with run_lock(tmp_path):
-                pass
+    with run_lock(tmp_path), pytest.raises(AlreadyRunning), run_lock(tmp_path):
+        pass
 
 
 def test_wealthfolio_unreachable_is_an_error_not_a_crash(tmp_path):

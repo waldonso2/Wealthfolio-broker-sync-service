@@ -19,7 +19,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-flip]) {
     --bg: #100f0f; --card: #1c1b1a; --line: #282726; --line-2: #343331; --text: #cecdc3; --muted: #878580;
-    --primary: #cecdc3; --on-primary: #100f0f; --accent: #4385be;
+    --primary: #cecdc3; --on-primary: #100f0f; --accent: #66a0c8;
     --ok: #879a39; --warn: #d0a215; --error: #e0614f; --grey: #7a7974;
     color-scheme: dark;
   }
@@ -27,7 +27,7 @@
 @media (prefers-color-scheme: light) {
   :root[data-flip] {
     --bg: #100f0f; --card: #1c1b1a; --line: #282726; --line-2: #343331; --text: #cecdc3; --muted: #878580;
-    --primary: #cecdc3; --on-primary: #100f0f; --accent: #4385be;
+    --primary: #cecdc3; --on-primary: #100f0f; --accent: #66a0c8;
     --ok: #879a39; --warn: #d0a215; --error: #e0614f; --grey: #7a7974;
     color-scheme: dark;
   }

@@ -148,9 +148,8 @@ def _lonely(depot: list[dict], cash: list[dict]) -> list[dict]:
             used.add(p["id"])
         else:
             lonely.append(a)
-    for a in cash:
-        if is_cash_transfer(a) and a["id"] not in used and "portfolio" in (a.get("comment") or "").lower():
-            lonely.append(a)
+    lonely.extend(a for a in cash
+                  if is_cash_transfer(a) and a["id"] not in used and "portfolio" in (a.get("comment") or "").lower())
     return sorted(lonely, key=_when)
 
 

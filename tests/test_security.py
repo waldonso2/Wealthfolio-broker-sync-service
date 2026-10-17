@@ -3,6 +3,7 @@ wrong passwords, the headers, the log redaction, TLS - and a scan of data/ after
 readable."""
 
 import base64
+import contextlib
 import json
 import logging
 import os
@@ -643,10 +644,8 @@ def test_a_passphrase_change_survives_a_crash_at_any_point(tmp_path, monkeypatch
 
     monkeypatch.setattr(security.os, "replace", crashing)
     monkeypatch.setattr(crypto.os, "replace", crashing)
-    try:
+    with contextlib.suppress(OSError):
         security.change_passphrase(data, new)
-    except OSError:
-        pass
     monkeypatch.setattr(security.os, "replace", real)
     monkeypatch.setattr(crypto.os, "replace", real)
     security.recover(data)

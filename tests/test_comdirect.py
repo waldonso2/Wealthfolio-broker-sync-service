@@ -280,7 +280,7 @@ def test_a_trade_without_giro_booking_is_reported_while_still_fetched():
     """It must turn UNKNOWN before it drops out of the sync's window (overlap of 7 days)."""
     from brokersync.sync import OVERLAP
 
-    assert cd.UNSETTLED_DAYS < OVERLAP.days
+    assert OVERLAP.days > cd.UNSETTLED_DAYS
 
 
 def test_a_reversed_dividend_is_reported():

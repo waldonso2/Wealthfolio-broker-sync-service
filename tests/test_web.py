@@ -292,7 +292,7 @@ def test_errors_are_pages_of_the_ui_and_odd_numbers_no_crash(tmp_path):
     for bad in ("Infinity", "NaN", "1e999999", "-0"):
         r = client.post("/check/fake/opening", data={"csrf": token, "isin": "DE0007164600", "day": "2026-01-02",
                                                      "shares": bad, "price": "10", "fee": "0"})
-        assert r.status_code == 200 and "Zahlen" in r.text or "größer 0" in r.text
+        assert (r.status_code == 200 and "Zahlen" in r.text) or "größer 0" in r.text
     for blob in (b"\x00;\x00\n\x00", b"\x81\x8d\x8f\x90\x9d"):
         with pytest.raises(ValueError):
             deutschebank_csv.parse(blob)

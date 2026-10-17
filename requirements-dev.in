@@ -1,9 +1,11 @@
 # Test and lint tools of the CI (scripts/lock.sh locks them into requirements-dev.txt, with hashes,
 # constrained to the runtime versions of requirements.txt). pip-audit checks requirements.txt for
-# known vulnerabilities.
+# known vulnerabilities. playwright + axe-playwright-python: the browser checks of the UI (test_ui_browser).
 pytest
 pytest-cov
 respx
 ruff
 mypy
 pip-audit
+playwright
+axe-playwright-python

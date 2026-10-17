@@ -41,7 +41,7 @@ import threading
 import time
 from collections import Counter
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -253,16 +253,12 @@ class FintsAdapter(BrokerAdapter):
     def close(self) -> None:
         if self._client is None:
             return
-        try:
+        with suppress(Exception):
             if self._open:
                 self._client.__exit__(None, None, None)
-        except Exception:
-            pass
         self._open = False
-        try:
+        with suppress(Exception):
             self.session["fints"] = base64.b64encode(self._client.deconstruct(including_private=True)).decode()
-        except Exception:
-            pass
 
     @classmethod
     def replay(cls, recording: dict) -> FintsAdapter:
@@ -286,10 +282,8 @@ class FintsAdapter(BrokerAdapter):
             return
         ops = _ops(info.get("bank", {}))
         depot_tx = False
-        try:
+        with suppress(Exception):
             depot_tx = bool(self._client.bpd.find_segment_first("HIWDUS"))
-        except Exception:
-            pass
         log.info("%s (FinTS): Umsätze %s, camt %s, Depotbestand %s, Depotumsätze %s", self.label,
                  _yes(ops.get("GET_TRANSACTIONS")), _yes(ops.get("GET_TRANSACTIONS_XML")),
                  _yes(ops.get("GET_HOLDINGS")), _yes(depot_tx))

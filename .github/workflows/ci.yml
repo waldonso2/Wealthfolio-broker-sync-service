@@ -33,10 +33,29 @@ jobs:
       - run: pip install --no-deps --no-build-isolation -e .
       - run: "pip install --require-hashes --only-binary :all: -r requirements-dev.txt"
       - run: pip check
+      # The browser for test_ui_browser (axe, CSP, phone width); the version matches the locked playwright.
+      - run: python -m playwright install --with-deps chromium
       - run: ruff check src tests
       - run: mypy src
       # The coverage of today (93 %) as the floor: it may rise, not erode.
       - run: pytest -q --cov=brokersync --cov-report=term:skip-covered --cov-fail-under=90
+
+  performance:
+    # Measured and reported on the run's summary page (KENNZAHLEN.md), never failing the build.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - run: "pip install --require-hashes --only-binary :all: -r requirements.txt"
+      - run: pip install --no-deps --no-build-isolation -e .
+      - run: "pip install --require-hashes --only-binary :all: -r requirements-dev.txt"
+      - run: python -m playwright install --with-deps chromium
+      - run: pytest tests/perf_service.py -q
+        continue-on-error: true
 
   audit:
     # Known vulnerabilities in the locked runtime versions: a finding fails the build.
@@ -80,6 +99,19 @@ jobs:
           /tmp/venv/bin/pip install --quiet --no-deps --no-build-isolation /tmp/rel/app
           /tmp/venv/bin/pip check
           /tmp/venv/bin/brokersync --version
+
+  workflows:
+    # The workflows themselves: injection, permissions, cache poisoning (zizmor).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1
+        with:
+          version: 1.31.1
+          advanced-security: false
+          min-severity: medium
 
   secrets:
     runs-on: ubuntu-latest

@@ -112,6 +112,6 @@ def install(directory: Path, *, http: httpx.Client | None = None, machine: str |
     Path(directory).mkdir(parents=True, exist_ok=True)
     tmp = binary.with_suffix(".new")
     tmp.write_bytes(data)
-    os.chmod(tmp, 0o755)
+    os.chmod(tmp, 0o755)  # noqa: S103 - a program, verified above; root-owned directory
     os.replace(tmp, binary)
     return tag, True

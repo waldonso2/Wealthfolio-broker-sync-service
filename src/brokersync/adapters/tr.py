@@ -30,9 +30,11 @@ from __future__ import annotations
 import asyncio
 import os
 import tempfile
+from contextlib import suppress
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import ClassVar
 
 from ..model import CashBalance, Kind, Position, Transaction
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
@@ -208,7 +210,7 @@ def _unknown(raw: dict, raw_type: str) -> Transaction:
 class TradeRepublicAdapter(BrokerAdapter):
     key = "tr"
     label = "Trade Republic"
-    credential_fields = [
+    credential_fields: ClassVar[list[CredentialField]] = [
         CredentialField("phone", "Telefonnummer", help="Mit Ländervorwahl, z. B. +4917612345678."),
         CredentialField("pin", "PIN", secret=True, help="Die 4-stellige PIN der Trade-Republic-App."),
     ]
@@ -297,10 +299,8 @@ class TradeRepublicAdapter(BrokerAdapter):
 
     def close(self) -> None:
         if self._api is not None and self._loop is not None:
-            try:
+            with suppress(Exception):
                 self._loop.run_until_complete(self._api.close())
-            except Exception:
-                pass
         if self._loop is not None:
             self._loop.close()
             self._loop = None

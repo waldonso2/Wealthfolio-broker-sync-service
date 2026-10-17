@@ -143,9 +143,8 @@ def _loose_permissions(d: Path) -> list[str]:
     loose = []
     if d.exists() and stat.S_IMODE(d.stat().st_mode) & 0o077:
         loose.append("data/")
-    for f in sorted(d.glob("*")) if d.exists() else []:
-        if f.is_file() and stat.S_IMODE(f.stat().st_mode) & 0o077:
-            loose.append(f.name)
+    loose.extend(f.name for f in (sorted(d.glob("*")) if d.exists() else [])
+                 if f.is_file() and stat.S_IMODE(f.stat().st_mode) & 0o077)
     return loose
 
 

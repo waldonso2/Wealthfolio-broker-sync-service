@@ -19,7 +19,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="cmd", required=True)
     serve_cmd = sub.add_parser("serve", help="run the web UI")
-    serve_cmd.add_argument("--host", default="0.0.0.0")
+    serve_cmd.add_argument("--host", default="0.0.0.0")  # noqa: S104 - the UI is for the LAN; gate.Hosts limits it
     serve_cmd.add_argument("--port", type=int, default=8090)
     serve_cmd.add_argument("--certfile", help="TLS certificate: serve HTTPS")
     serve_cmd.add_argument("--keyfile", help="TLS key")

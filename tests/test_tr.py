@@ -321,7 +321,7 @@ def test_a_csv_buy_under_a_ticker_is_recognised(tmp_path):
     syncer, wf, _ = setup_sync(tmp_path)
     add_csv_buy(wf)
     syncer.run()
-    buys = [a for a in wf.activities if a["activityType"] == "BUY" and "0.685102" == a["quantity"]]
+    buys = [a for a in wf.activities if a["activityType"] == "BUY" and a["quantity"] == "0.685102"]
     assert [b["assetSymbol"] for b in buys] == ["NVDA"]  # not booked a second time under the ISIN
 
 
