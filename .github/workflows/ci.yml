@@ -40,6 +40,23 @@ jobs:
       # The coverage of today (93 %) as the floor: it may rise, not erode.
       - run: pytest -q --cov=brokersync --cov-report=term:skip-covered --cov-fail-under=90
 
+  performance:
+    # Measured and reported on the run's summary page (KENNZAHLEN.md), never failing the build.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - run: "pip install --require-hashes --only-binary :all: -r requirements.txt"
+      - run: pip install --no-deps --no-build-isolation -e .
+      - run: "pip install --require-hashes --only-binary :all: -r requirements-dev.txt"
+      - run: python -m playwright install --with-deps chromium
+      - run: pytest tests/perf_service.py -q
+        continue-on-error: true
+
   audit:
     # Known vulnerabilities in the locked runtime versions: a finding fails the build.
     runs-on: ubuntu-latest

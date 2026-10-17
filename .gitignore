@@ -20,3 +20,4 @@ keyring.json
 state.db*
 backup-*.tar.gz
 .coverage
+perf-report.md
