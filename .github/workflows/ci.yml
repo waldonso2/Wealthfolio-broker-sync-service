@@ -33,6 +33,8 @@ jobs:
       - run: pip install --no-deps --no-build-isolation -e .
       - run: "pip install --require-hashes --only-binary :all: -r requirements-dev.txt"
       - run: pip check
+      # The browser for test_ui_browser (axe, CSP, phone width); the version matches the locked playwright.
+      - run: python -m playwright install --with-deps chromium
       - run: ruff check src tests
       - run: mypy src
       # The coverage of today (93 %) as the floor: it may rise, not erode.
