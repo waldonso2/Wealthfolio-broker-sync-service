@@ -52,4 +52,4 @@ entscheidend ist ihre Entwicklung von Lauf zu Lauf.
 | Lesende Wealthfolio-Aufrufe | kein Aufruf je Buchung (N+1) | eigenes Budget | Bericht |
 | SQL-Anweisungen je Buchung | ≤ 10 | eigenes Budget | Bericht |
 | Abfragen ohne Index | 0 | `EXPLAIN QUERY PLAN` | Bericht |
-| Duplikat-Erkennung je Buchung bei 3000 vorhandenen | ≤ 10 ms | eigenes Budget | Bericht |
+| Duplikat-Erkennung je Buchung bei 3000 vorhandenen (stündlich über ~4 Monate) | ≤ 10 ms | eigenes Budget | Bericht |
