@@ -55,6 +55,7 @@ flowchart TB
   sync --> retired["retired.py<br/>entfernte Broker aufräumen"]
   sync --> notify["notify.py<br/>ntfy"]
   sync --> logos["logos.py<br/>Logos von logo.dev (wahlweise)"]
+  sync --> updates["updates.py<br/>neues Release? (einmal am Tag)"]
   sync --> state["state.py"] & vault["vault.py"] & config["config.py"]
   web --> duplicates["duplicates.py<br/>Bereinigung"]
   subgraph adapters["adapters/"]

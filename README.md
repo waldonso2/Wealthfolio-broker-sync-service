@@ -32,6 +32,8 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 
 **Aktualisieren:** In Proxmox die Konsole des Containers öffnen und `update` eingeben. Einstellungen und Zugangsdaten bleiben erhalten; vorher wird eine Sicherung der verschlüsselten Daten unter `/opt/wealthfolio-broker-sync/backup-*.tar.gz` angelegt (die letzten drei bleiben). Installation und Update prüfen jede heruntergeladene Datei gegen die Prüfsummen (`SHA256SUMS`), die der Release-Workflow mit dem Release veröffentlicht. Passt eine nicht oder ist eine zu viel, brechen sie ab, und die bisherige Version läuft weiter. Eine bestimmte Version, auch eine ältere: `VERSION=<Version> update`. Ohne `VERSION` geht das Update nie auf eine ältere Version zurück.
 
+**Neue Version:** Einmal am Tag fragt der Dienst nach einem Abruf bei GitHub, welches Release das neueste ist (gelesen wird nur die Weiterleitung von `releases/latest`, mitgeschickt wird nichts). Ist es neuer als das installierte, steht das auf der Übersicht, und ntfy meldet es einmal. Installiert wird nichts von selbst – das bleibt `update`. Abschalten: `Environment=BROKERSYNC_UPDATE_CHECK=0` per `systemctl edit wealthfolio-broker-sync-run`.
+
 > **PVE Scripts Local:** Der Dienst erscheint dort (noch) nicht. PVE Scripts Local zeigt nur Skripte aus der offiziellen Sammlung von community-scripts.org an; ein unter *Repositories* eingetragenes eigenes Repo bringt keine neuen Skripte in den Katalog. Die Aufnahme in die offizielle Sammlung ist geplant, sobald echte Broker angebunden sind.
 
 ## Einrichtung im Browser

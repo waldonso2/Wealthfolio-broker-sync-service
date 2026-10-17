@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.27.0
+
+- **Hint at a new version:** after a fetch, at most once a day, the service asks GitHub which release is the newest (only the redirect of `releases/latest` is read; nothing is sent). A newer one is shown on the overview with a link to its notes, and ntfy tells it once. Installing stays `update` in the container's console. `BROKERSYNC_UPDATE_CHECK=0` turns the check off.
+
 ## 0.26.1
 
 - **Faster duplicate check:** matching against the activities already in Wealthfolio parses each one once and looks only at the same account, type and time window (36 h, settlements 6 days), instead of re-reading every activity for every booking. The rules and their order are unchanged (`contract/dedup/cases.json`). In the performance report, a run of 300 bookings against 3000 existing activities took 2.0 s instead of 3.7 s.

@@ -13,6 +13,13 @@
   </form>
 </div>
 {% endfor %}
+{% if update %}
+<div class="card" role="status">
+  <h2>{{ _("Update verfügbar: Version {new}", new=update) }}</h2>
+  <p>{{ _("Installiert ist {current}. Zum Aktualisieren in der Konsole des Containers <code>update</code> eingeben.", current=version) }}
+    <a href="{{ releases }}/tag/v{{ update }}">{{ _("Was ist neu?") }}</a></p>
+</div>
+{% endif %}
 
 <div class="card-head mt-s">
   <h1>{{ _("Übersicht") }}</h1>

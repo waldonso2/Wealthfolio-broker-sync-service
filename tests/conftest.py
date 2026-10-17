@@ -5,6 +5,7 @@ import pytest
 def _no_recalc_wait(monkeypatch):
     # The fake Wealthfolio has its holdings at once; don't wait for a recalculation.
     monkeypatch.setenv("BROKERSYNC_RECALC_WAIT", "0")
+    monkeypatch.setenv("BROKERSYNC_UPDATE_CHECK", "0")  # no test asks GitHub
 
 
 @pytest.fixture(autouse=True)
