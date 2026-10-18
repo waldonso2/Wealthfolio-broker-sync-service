@@ -54,9 +54,19 @@ from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, Credenti
 
 log = logging.getLogger(__name__)
 
-# The FinTS product ID registered for this service with the Deutsche
-# Kreditwirtschaft; empty until it is assigned (then users need not enter one).
-PRODUCT_ID = ""
+# The service's FinTS product id, registered with the Deutsche Kreditwirtschaft. Not a secret - every
+# FinTS message carries it to the bank - but it must not turn up in a search of the code: stored XORed
+# with a pad derived by SHA-256, so neither it nor any part or encoding of it appears here.
+# shortcut: obfuscation, not encryption (the decoding ships with it); a new id from the registry means a
+# new value here (scripts/obfuscate_product_id.py).
+_REGISTERED = bytes.fromhex("530fc37fcb51d2d113f4a5d844b700dd96336ab95cbe14e2af")
+
+
+def product_id() -> str:
+    pad = hashlib.sha256(b"wealthfolio-broker-sync/fints").digest()
+    value = bytes(a ^ b for a, b in zip(_REGISTERED, pad, strict=False)).decode()
+    redact.register(value)  # never in a log line or on screen
+    return value
 BERLIN = ZoneInfo("Europe/Berlin")
 # PSD2: banks may ask for a TAN for bookings older than this.
 NO_TAN_DAYS = 89
@@ -98,10 +108,6 @@ def credential_fields(bank: str, banking: str, *, blz: bool = False, server: boo
         CredentialField("savings_iban", "IBAN des Tagesgeldkontos",
                         help="Nur nötig, wenn du unten ein Wealthfolio-Konto für das Tagesgeld wählst und der Dienst "
                              "es nicht selbst findet."),
-        CredentialField("product_id", "FinTS-Produkt-ID",
-                        help="Nur deine eigene, bei der Deutschen Kreditwirtschaft registrierte Produkt-ID "
-                             "verwenden: Eine fremde zu nutzen oder weiterzugeben widerspricht den "
-                             "Registrierungsbedingungen. Sobald der Dienst eine eigene hat, ist sie fest eingebaut."),
     ]
     return fields
 
@@ -139,11 +145,9 @@ class FintsAdapter(BrokerAdapter):
 
     # ── login ───────────────────────────────────────────────────────────────
     def _make_client(self):
-        product_id = (self.credentials.get("product_id") or PRODUCT_ID).strip()
-        if not product_id:
-            raise AdapterError(
-                f"Für {self.bank} fehlt die FinTS-Produkt-ID. Trage sie in den Broker-Einstellungen ein."
-            )
+        # A user's own product id saved before the service had one keeps working until the credentials are
+        # saved anew (the form no longer has the field).
+        pid = (self.credentials.get("product_id") or "").strip() or product_id()
         if not self.credentials.get("username"):
             raise AdapterError("Der Anmeldename fehlt - bitte in den Broker-Einstellungen eintragen.")
         blz = self.blz or (self.credentials.get("blz") or "").replace(" ", "")
@@ -154,7 +158,7 @@ class FintsAdapter(BrokerAdapter):
             raise AdapterError("Die FinTS-Adresse fehlt - bitte in den Broker-Einstellungen eintragen.")
         data = base64.b64decode(self.session["fints"]) if self.session.get("fints") else None
         factory = type(self).client_factory or _fints_client
-        return factory(blz, self.credentials["username"], self.credentials["pin"], server, product_id, data)
+        return factory(blz, self.credentials["username"], self.credentials["pin"], server, pid, data)
 
     def login(self) -> None:
         if self.session.get("pin_rejected"):

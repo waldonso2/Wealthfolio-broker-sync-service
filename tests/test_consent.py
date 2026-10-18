@@ -1,9 +1,8 @@
-"""Agreeing to an unofficial interface before the first login (#112), and the FinTS product id's note."""
+"""Agreeing to an unofficial interface before the first login (#112)."""
 
 from fastapi.testclient import TestClient
 
 from brokersync import config as config_mod
-from brokersync.adapters.dkb import DkbAdapter
 from brokersync.adapters.tr import TradeRepublicAdapter
 from brokersync.sync import Syncer
 from brokersync.vault import Vault
@@ -45,7 +44,3 @@ def test_a_broker_set_up_before_counts_as_agreed(tmp_path):
     Syncer(tmp_path, adapters={"tr": TradeRepublicAdapter})
     assert config_mod.load(tmp_path).broker("tr").consented
 
-
-def test_the_product_id_field_says_whose_id_belongs_there():
-    field = next(f for f in DkbAdapter.credential_fields if f.name == "product_id")
-    assert "eigene, bei der Deutschen Kreditwirtschaft registrierte" in field.help

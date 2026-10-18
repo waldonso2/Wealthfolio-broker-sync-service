@@ -32,7 +32,8 @@ def fake(monkeypatch):
     opts = {}
 
     def factory(blz, user, pin, server, product_id, data):
-        assert (blz, server, product_id) == ("12030000", "https://fints.dkb.de/fints", "TESTPRODUCT")
+        assert (blz, server) == ("12030000", "https://fints.dkb.de/fints")
+        assert product_id in ("TESTPRODUCT", fints_mod.product_id())  # the web form stores none: built in
         return FakeFinTS(RECORDING, **opts)
 
     monkeypatch.setattr(DkbAdapter, "client_factory", staticmethod(factory))
@@ -76,11 +77,6 @@ def test_a_rejected_pin_is_never_tried_again(fake):
     with pytest.raises(AdapterError, match="nicht noch einmal"):
         DkbAdapter(CREDS, session).login()
     assert len(FakeFinTS.instances) == count  # the bank wasn't contacted
-
-
-def test_missing_product_id_is_explained():
-    with pytest.raises(AdapterError, match="Produkt-ID"):
-        DkbAdapter({**CREDS, "product_id": ""}).login()
 
 
 def test_fetches_without_tan_from_89_days_back_by_default(fake):
@@ -178,7 +174,7 @@ def test_web_login_with_app_confirmation_and_transfer_patterns(tmp_path, fake, h
     csrf = re.search(r'name="csrf" value="([^"]+)"', client.get("/").text).group(1)
     client.post("/setup/wealthfolio", data={"csrf": csrf, "url": "http://wf", "password": PASSWORD})
     page = client.get("/brokers/dkb").text
-    assert "FinTS-Produkt-ID" in page and "IBAN des Girokontos" in page
+    assert "FinTS-Produkt-ID" not in page and "IBAN des Girokontos" in page
     r = client.post("/brokers/dkb", data={"csrf": csrf, "cred_username": "max", "cred_pin": "1234",
                                           "cred_product_id": "TESTPRODUCT", "cred_iban": "", "enabled": "on",
                                           "cash_account_id": "acc-cash", "portfolio_account_id": "acc-depot"})

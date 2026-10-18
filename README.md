@@ -88,7 +88,6 @@ Der Dienst liest dein **DKB-Girokonto** per FinTS (HBCI), dieselbe Schnittstelle
 
 - **Anmeldename und PIN:** dieselben wie im DKB-Banking.
 - **IBAN des Girokontos:** nur nötig, wenn du bei der DKB mehrere Konten hast.
-- **FinTS-Produkt-ID:** Banken verlangen für FinTS eine bei der Deutschen Kreditwirtschaft registrierte Produkt-ID. Sobald dieser Dienst eine hat, ist sie fest eingebaut und das Feld entfällt. Bis dahin trägst du hier deine eigene registrierte Produkt-ID ein – eine fremde zu nutzen oder weiterzugeben widerspricht den Registrierungsbedingungen.
 - **Konten:** ein DKB-Verrechnungskonto und ein DKB-Depotkonto in Wealthfolio, wahlweise dazu ein **Tagesgeld-Konto** (siehe unten).
 
 **Freigabe in der DKB-App:** Bei der ersten Anmeldung und danach in Abständen (nach den PSD2-Regeln meist alle 90 Tage) will die DKB eine Bestätigung in der DKB-App. In der Oberfläche bestätigst du in der App und klickst dann *Ich habe in der App bestätigt*. Läuft gerade der tägliche Abruf, schickt der Dienst eine ntfy-Nachricht und wartet drei Minuten auf deine Freigabe.
@@ -124,7 +123,6 @@ Der Dienst liest dein **Deutsche-Bank-Girokonto** und den **Bestand deines maxbl
 - **Anmeldename:** deine Deutsche-Bank-ID oder Filialnummer und Kontonummer (zehnstellig, ggf. mit führenden Nullen), wie im Online-Banking. Dazu die **PIN**.
 - **Bankleitzahl:** die deines Kontos (sie hängt bei der Deutschen Bank von der Filiale ab, steht in deiner IBAN an Stelle 5 bis 12).
 - **IBAN des Girokontos:** nur nötig, wenn du mehrere Girokonten hast. Ohne IBAN nimmt der Dienst das Girokonto (nicht Spar- oder Depotkonto); welches, steht im Log.
-- **FinTS-Produkt-ID:** wie bei der DKB.
 - **Konten:** ein Deutsche-Bank-Verrechnungskonto und ein Depotkonto (maxblue) in Wealthfolio.
 
 **Freigabe mit BestSign:** Bei der ersten Anmeldung und danach in Abständen will die Deutsche Bank eine Bestätigung in der Deutsche Bank App (BestSign). In der Oberfläche bestätigst du und klickst *Ich habe in der App bestätigt*; beim täglichen Abruf schickt der Dienst eine ntfy-Nachricht und wartet drei Minuten. Mit photoTAN geht die Anmeldung nur in der Weboberfläche.
@@ -150,7 +148,7 @@ Die meisten deutschen Banken – Sparkassen, Volks- und Raiffeisenbanken, Sparda
 - **Anmeldename und PIN:** wie im Online-Banking deiner Bank.
 - **Bankleitzahl:** die deines Kontos (8 Ziffern).
 - **FinTS-Adresse:** die Adresse für FinTS (PIN/TAN) deiner Bank, beginnt mit `https://`. Sie steht auf der Website deiner Bank (Stichwort *FinTS* oder *HBCI*), oder du erfährst sie beim Kundenservice. Der Dienst schickt deine Zugangsdaten nur an diese Adresse.
-- **FinTS-Produkt-ID, IBAN, Konten:** wie bei der DKB.
+- **IBAN, Konten:** wie bei der DKB.
 
 Gebucht wird wie bei der DKB: Ausgaben als Auszahlung, Eingänge als Einzahlung, Zinsen und Gebühren für sich. Girobuchungen von Wertpapiergeschäften (Buchungstext mit *Wertpapier*, *Depot*, *Dividende* …) wartet der Dienst ab, bis die Wertpapierseite – etwa ein Import der Abrechnungen – in Wealthfolio steht. Meldet die Bank ein Depot, liest er dessen Bestand und vergleicht ihn; als vollständig gilt er erst, wenn die Bank bestätigt ist. Weichen die Buchungstexte deiner Bank ab oder klappt etwas nicht, melde es bitte als Issue – dann bekommt sie ein eigenes Profil.
 
@@ -284,7 +282,6 @@ Die Seite **Prüfung** zeigt außerdem, welche schon übernommenen Buchungen in 
 - **Ohne SQLCipher:** SQLCipher gibt es für x86-64 und ARM64. Auf anderen Plattformen (z. B. 32-Bit-ARM) liegt die Sync-Datenbank unverschlüsselt in `data/`. Zugangsdaten und Einstellungen bleiben verschlüsselt. Die Seite *Sicherheit* zeigt das an.
 - **Ohne TPM:** Den Schlüssel des Dienstes verschlüsselt `systemd-creds` mit dem Host-Secret des Containers (`/var/lib/systemd/credential.secret`); ein TPM nutzt ein Container nicht. Wer den ganzen Container kopiert, etwa als Backup, kann die Daten deshalb öffnen – außer mit Master-Passphrase. Wo `systemd-creds` nicht verschlüsseln kann, liegt der Schlüssel nur für root lesbar unter `/etc/wealthfolio-broker-sync/`.
 - **Trade Republic:** Eine offizielle Schnittstelle gibt es nicht. Der Dienst nutzt die der Web-App (über pytr); ändert Trade Republic sie, klappt der Abruf bis zu einem Update nicht.
-- **FinTS-Produkt-ID:** DKB und Deutsche Bank verlangen eine registrierte Produkt-ID, die du einträgst, bis der Dienst eine eigene hat.
 
 ## Sicherheit
 

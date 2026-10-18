@@ -82,14 +82,14 @@ def test_any_fints_bank_takes_its_code_and_address_as_credentials(opts):
     assert [a.key for a in BANKS] == ["fints1", "fints2", "fints3"]
     assert all(issubclass(a, FintsBankAdapter) and ADAPTERS[a.key] is a for a in BANKS)
     assert [f.name for f in FintsBankAdapter.credential_fields] == \
-        ["username", "pin", "blz", "server", "iban", "savings_iban", "product_id"]
+        ["username", "pin", "blz", "server", "iban", "savings_iban"]
     with pytest.raises(AdapterError, match="FinTS-Adresse fehlt"):
         BANKS[1]({**PROFILES[BANKS[0]], "server": " "}).login()
 
 
 def test_a_bank_code_per_branch_is_a_credential(opts):
     assert [f.name for f in ExampleBank.credential_fields] == \
-        ["username", "pin", "blz", "iban", "savings_iban", "product_id"]
+        ["username", "pin", "blz", "iban", "savings_iban"]
     assert "blz" not in [f.name for f in DkbAdapter.credential_fields]
     assert "blz" in [f.name for f in DeutscheBankAdapter.credential_fields]
     with pytest.raises(AdapterError, match="Bankleitzahl fehlt"):
@@ -313,3 +313,23 @@ def test_the_form_checks_bank_code_address_and_iban(tmp_path):
     client.post("/brokers/fints1", data=form)
     creds = Vault(tmp_path).broker("fints1")["credentials"]
     assert creds["blz"] == "10050000" and creds["server"] == "https://fints.example.invalid/fints30/"
+
+
+def test_the_services_product_id_is_built_in_and_in_no_file_in_plain_sight(opts):
+    import base64
+
+    from brokersync import redact
+
+    _, connected = opts
+    pid = fints_mod.product_id()
+    assert pid and not any(f.name == "product_id" for f in DkbAdapter.credential_fields)
+    with pytest.raises(AuthRequired):
+        DkbAdapter({"username": "max", "pin": "1234"}).login()
+    assert connected[-1][2] == pid
+    assert pid not in redact.redact(f"product {pid}")
+    root = Path(__file__).parents[1]
+    forms = {pid, pid.lower(), pid.encode().hex(), base64.b64encode(pid.encode()).decode(), pid[:12], pid[-12:]}
+    for path in root.rglob("*"):
+        if path.is_file() and not {".git", ".venv", "__pycache__"} & set(path.parts) and path.stat().st_size < 5e6:
+            text = path.read_bytes().decode("utf-8", "ignore")
+            assert not [f for f in forms if f in text], path
