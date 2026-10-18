@@ -2,6 +2,8 @@
 
 ## 0.27.0
 
+- **Any bank with FinTS (waldonso2/wealthfolio-importer-addon#136):** *Weitere Bank 1–3 (FinTS)* connect a bank without a profile of its own - Sparkasse, Volks- und Raiffeisenbank and most other German banks - with its bank code and FinTS address (https only) as credentials. Bookings as for DKB with the standard posting patterns; a reported depot's holdings are read but count as incomplete. Up to three such banks at once; each keeps its key for good.
+- The broker form now checks bank code (8 digits), FinTS address and IBANs on the server; a wrong one comes back at its field.
 - **Hint at a new version:** after a fetch, at most once a day, the service asks GitHub which release is the newest (only the redirect of `releases/latest` is read; nothing is sent). A newer one is shown on the overview with a link to its notes, and ntfy tells it once. Installing stays `update` in the container's console. `BROKERSYNC_UPDATE_CHECK=0` turns the check off.
 
 ## 0.26.1

@@ -1,0 +1,130 @@
+{
+  "description": "Fabricated Sparkasse-style giro account of a bank without a profile (#136): salary, card payment, direct debit, depot savings plan, account fee",
+  "recording": {
+    "iban": "",
+    "accounts": [
+      {
+        "iban": "DE27100777770209299700"
+      }
+    ],
+    "balance": {
+      "amount": "1229.80",
+      "currency": "EUR"
+    },
+    "transactions": [
+      {
+        "date": "2026-09-01",
+        "entry_date": "2026-09-01",
+        "amount": "1800.00",
+        "currency": "EUR",
+        "posting_text": "GUTSCHR. UEBERWEISUNG",
+        "purpose": "LOHN GEHALT 09/2026",
+        "applicant_name": "Beispiel AG",
+        "applicant_iban": "DE89370400440532013000"
+      },
+      {
+        "date": "2026-09-03",
+        "entry_date": "2026-09-04",
+        "amount": "-63.40",
+        "currency": "EUR",
+        "posting_text": "KARTENZAHLUNG",
+        "purpose": "girocard Tankstelle Musterdorf",
+        "applicant_name": "Tankstelle Musterdorf",
+        "applicant_iban": ""
+      },
+      {
+        "date": "2026-09-05",
+        "entry_date": "2026-09-05",
+        "amount": "-450.00",
+        "currency": "EUR",
+        "posting_text": "LASTSCHRIFT",
+        "purpose": "Miete Oktober Musterweg 1",
+        "applicant_name": "Hausverwaltung Muster",
+        "applicant_iban": "DE02500105170137075030"
+      },
+      {
+        "date": "2026-09-15",
+        "entry_date": "2026-09-15",
+        "amount": "-50.00",
+        "currency": "EUR",
+        "posting_text": "WERTPAPIERE",
+        "purpose": "Sparplan TEST ETF Welt",
+        "applicant_name": "",
+        "applicant_iban": ""
+      },
+      {
+        "date": "2026-09-30",
+        "entry_date": "2026-09-30",
+        "amount": "-6.80",
+        "currency": "EUR",
+        "posting_text": "ENTGELTABSCHLUSS",
+        "purpose": "Kontofuehrung 09/2026",
+        "applicant_name": "",
+        "applicant_iban": ""
+      }
+    ]
+  },
+  "since": null,
+  "expected": [
+    {
+      "id": "20260901-6a96b4ee2900d707-1",
+      "kind": "DEPOSIT",
+      "datetime": "2026-09-01T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "1800",
+      "label": "GUTSCHR. UEBERWEISUNG",
+      "counterparty": "Beispiel AG",
+      "counterparty_iban": "DE89370400440532013000",
+      "text": "LOHN GEHALT 09/2026",
+      "signed": "1800",
+      "raw_type": "GUTSCHR. UEBERWEISUNG"
+    },
+    {
+      "id": "20260904-eb14867205709800-1",
+      "kind": "WITHDRAWAL",
+      "datetime": "2026-09-04T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "63.4",
+      "label": "KARTENZAHLUNG",
+      "counterparty": "Tankstelle Musterdorf",
+      "text": "girocard Tankstelle Musterdorf",
+      "signed": "-63.4",
+      "raw_type": "KARTENZAHLUNG"
+    },
+    {
+      "id": "20260905-36a72cad471aa8cf-1",
+      "kind": "WITHDRAWAL",
+      "datetime": "2026-09-05T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "450",
+      "label": "LASTSCHRIFT",
+      "counterparty": "Hausverwaltung Muster",
+      "counterparty_iban": "DE02500105170137075030",
+      "text": "Miete Oktober Musterweg 1",
+      "signed": "-450",
+      "raw_type": "LASTSCHRIFT"
+    },
+    {
+      "id": "20260915-14d3ac847ad373f1-1",
+      "kind": "SECURITIES_CASH",
+      "datetime": "2026-09-15T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "50",
+      "label": "WERTPAPIERE",
+      "text": "Sparplan TEST ETF Welt",
+      "signed": "-50",
+      "raw_type": "WERTPAPIERE"
+    },
+    {
+      "id": "20260930-dcba99511e37866f-1",
+      "kind": "FEE",
+      "datetime": "2026-09-30T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "6.8",
+      "label": "ENTGELTABSCHLUSS",
+      "text": "Kontofuehrung 09/2026",
+      "signed": "-6.8",
+      "raw_type": "ENTGELTABSCHLUSS"
+    }
+  ]
+}

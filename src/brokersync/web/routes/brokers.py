@@ -24,6 +24,14 @@ from ..i18n import N_, translate
 log = logging.getLogger(__name__)
 router = APIRouter()
 
+# Credentials with a fixed form, by field name (the same in every adapter); the rest only by length.
+CREDENTIAL_CHECKS = {
+    "blz": inputs.blz,
+    "server": inputs.https_url,
+    "iban": lambda v, _label: inputs.iban(v),
+    "savings_iban": lambda v, _label: inputs.iban(v),
+}
+
 MAX_STATEMENT = 5 * 1024 * 1024
 STATEMENT_KINDS = [(Kind.DIVIDEND, N_("Dividenden")), (Kind.BUY, N_("Käufe/Einbuchungen")), (Kind.SELL, N_("Verkäufe")),
                    (Kind.UNKNOWN, N_("nicht automatisch buchbar"))]
@@ -93,15 +101,7 @@ async def broker_save(request: Request, ctx: Ctx, key: str):
                                                             "sein, nicht das Verrechnungs- oder Depotkonto.",
                                                    label=adapters[key].savings_label))
     old = ctx.vault.broker(key).get("credentials", {})
-    creds = {}
-    for f in adapters[key].credential_fields:
-        v = str(form.get(f"cred_{f.name}", ""))
-        if len(v) > inputs.MAX_TEXT:
-            errors[f"cred_{f.name}"] = tr(request, "{label}: höchstens {max_len} Zeichen.", label=f.label,
-                                          max_len=inputs.MAX_TEXT)
-        creds[f.name] = v if v or not f.secret else old.get(f.name, "")
-        if f.ask and form.get(f"forget_{f.name}"):
-            creds[f.name] = ""  # typed at every login from now on, never stored (#85)
+    creds = _credentials(request, adapters[key], form, old, errors)
     adapter = adapters[key]
     b.consented = b.consented or form.get("consent") == "1"
     if adapter.consent and not b.consented and any(creds.values()):
@@ -121,6 +121,25 @@ async def broker_save(request: Request, ctx: Ctx, key: str):
         request.session["flash"] = {"text": tr(request, "Gespeichert. Jetzt beim Broker anmelden."), "level": "ok"}
         return start_login(request, ctx, key, False)
     return redirect(request, "/", tr(request, "Gespeichert."))
+
+
+def _credentials(request: Request, adapter, form, old: dict, errors: dict[str, str]) -> dict:
+    """The form's credentials, checked; an empty secret keeps the stored one."""
+    creds = {}
+    for f in adapter.credential_fields:
+        v = str(form.get(f"cred_{f.name}", ""))
+        if len(v) > inputs.MAX_TEXT:
+            errors[f"cred_{f.name}"] = tr(request, "{label}: höchstens {max_len} Zeichen.", label=f.label,
+                                          max_len=inputs.MAX_TEXT)
+        elif v and f.name in CREDENTIAL_CHECKS:
+            try:
+                v = CREDENTIAL_CHECKS[f.name](v, f.label)
+            except inputs.Invalid as e:
+                errors[f"cred_{f.name}"] = e.text(language(request))
+        creds[f.name] = v if v or not f.secret else old.get(f.name, "")
+        if f.ask and form.get(f"forget_{f.name}"):
+            creds[f.name] = ""  # typed at every login from now on, never stored (#85)
+    return creds
 
 
 @router.post("/brokers/{key}/refetch")

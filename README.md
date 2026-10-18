@@ -9,7 +9,7 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 - **Keine Duplikate:** Was schon in Wealthfolio steht – auch aus einem früheren CSV- oder PDF-Import –, erkennt der Dienst und legt es nicht noch einmal an
 - **Prüft sich selbst:** Nach jedem Abruf vergleicht er Konto und Depot mit dem Broker und zeigt, wo etwas fehlt oder nicht aufgeht
 
-> **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS), **Scalable Capital** (über Scalables offizielles CLI), **comdirect** (Girokonto und Depot über die offizielle REST-API) und **Deutsche Bank** (Girokonto und maxblue-Depotbestand per FinTS; neu, noch nicht lange im Einsatz).
+> **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS), **Scalable Capital** (über Scalables offizielles CLI), **comdirect** (Girokonto und Depot über die offizielle REST-API) **Deutsche Bank** (Girokonto und maxblue-Depotbestand per FinTS; neu, noch nicht lange im Einsatz) und **jede andere Bank mit FinTS** – z. B. Sparkasse, Volks- und Raiffeisenbank (Girokonto; neu, je Bank noch ungeprüft).
 
 ## Was du brauchst
 
@@ -142,6 +142,17 @@ Der Dienst liest dein **Deutsche-Bank-Girokonto** und den **Bestand deines maxbl
 | Kapitaltransaktion, Ausgang, Eingang ohne Betrag | **nicht gebucht**, unter *Unbekannte Buchungen* – Kapitalmaßnahmen (z. B. eine Abspaltung) und Depotüberträge legst du auf der Seite *Prüfung* als Anfangsbestand an |
 
 **Zeitraum und Sicherheit** wie bei der DKB: ohne Startdatum die letzten 89 Tage; nach einer abgelehnten PIN kein weiterer Versuch, bis du die Zugangsdaten neu speicherst.
+
+## Andere Banken (FinTS)
+
+Die meisten deutschen Banken – Sparkassen, Volks- und Raiffeisenbanken, Sparda- und PSD-Banken und viele Direktbanken – bieten FinTS mit PIN/TAN an. Jede davon lässt sich unter *Broker → Weitere Bank 1 (FinTS)* einrichten, bis zu drei gleichzeitig (*Weitere Bank 2*, *3*).
+
+- **Anmeldename und PIN:** wie im Online-Banking deiner Bank.
+- **Bankleitzahl:** die deines Kontos (8 Ziffern).
+- **FinTS-Adresse:** die Adresse für FinTS (PIN/TAN) deiner Bank, beginnt mit `https://`. Sie steht auf der Website deiner Bank (Stichwort *FinTS* oder *HBCI*), oder du erfährst sie beim Kundenservice. Der Dienst schickt deine Zugangsdaten nur an diese Adresse.
+- **FinTS-Produkt-ID, IBAN, Konten:** wie bei der DKB.
+
+Gebucht wird wie bei der DKB: Ausgaben als Auszahlung, Eingänge als Einzahlung, Zinsen und Gebühren für sich. Girobuchungen von Wertpapiergeschäften (Buchungstext mit *Wertpapier*, *Depot*, *Dividende* …) wartet der Dienst ab, bis die Wertpapierseite – etwa ein Import der Abrechnungen – in Wealthfolio steht. Meldet die Bank ein Depot, liest er dessen Bestand und vergleicht ihn; als vollständig gilt er erst, wenn die Bank bestätigt ist. Weichen die Buchungstexte deiner Bank ab oder klappt etwas nicht, melde es bitte als Issue – dann bekommt sie ein eigenes Profil.
 
 ## Trade Republic
 

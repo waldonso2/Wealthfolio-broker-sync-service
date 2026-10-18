@@ -530,6 +530,9 @@ EN: dict[str, str] = {
     "{label}: bitte eine Adresse mit http:// oder https:// angeben.":
         "{label}: please give an address with http:// or https://.",
     "{label}: ohne Zugangsdaten, ? oder # in der Adresse.": "{label}: no credentials, ? or # in the address.",
+    "{label}: bitte eine Adresse mit https:// angeben.": "{label}: please enter an address starting with https://.",
+    "{label}: ohne Zugangsdaten oder # in der Adresse.": "{label}: no credentials or # in the address.",
+    "{label}: bitte 8 Ziffern angeben.": "{label}: please enter 8 digits.",
     "{label}: ungültiger Port.": "{label}: invalid port.",
     "{label}: bitte als Datum angeben (JJJJ-MM-TT).": "{label}: please give a date (YYYY-MM-DD).",
     "{label}: darf nicht in der Zukunft liegen.": "{label}: must not be in the future.",

@@ -62,6 +62,29 @@ def http_url(value: str, label: str, *, required: bool = True) -> str:
     return value
 
 
+def https_url(value: str, label: str) -> str:
+    """An https address with a host, without user info or fragment, kept as typed (a FinTS server's path matters)."""
+    value = text(value, label)
+    parsed = urlparse(value)
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise Invalid("{label}: bitte eine Adresse mit https:// angeben.", label=label)
+    if parsed.username or parsed.password or parsed.fragment:
+        raise Invalid("{label}: ohne Zugangsdaten oder # in der Adresse.", label=label)
+    try:
+        parsed.port  # noqa: B018 - raises for an invalid port
+    except ValueError as e:
+        raise Invalid("{label}: ungültiger Port.", label=label) from e
+    return value
+
+
+def blz(value: str, label: str) -> str:
+    """A German bank code: 8 digits, spaces allowed."""
+    value = text(value, label).replace(" ", "")
+    if not re.fullmatch(r"\d{8}", value):
+        raise Invalid("{label}: bitte 8 Ziffern angeben.", label=label)
+    return value
+
+
 def iso_date(value: str, label: str) -> str:
     value = text(value, label)
     if not value:

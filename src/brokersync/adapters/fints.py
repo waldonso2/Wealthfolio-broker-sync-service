@@ -76,8 +76,10 @@ SAVINGS_NAME = re.compile(r"tagesgeld|spar|festgeld|geldmarkt|zinskonto", re.IGN
 OWN_TRANSFER_DAYS = 3
 
 
-def credential_fields(bank: str, banking: str, *, blz: bool = False, username_help: str = "") -> list[CredentialField]:
-    """The usual FinTS credentials; ``blz`` for banks whose bank code differs per branch."""
+def credential_fields(bank: str, banking: str, *, blz: bool = False, server: bool = False,
+                      username_help: str = "") -> list[CredentialField]:
+    """The usual FinTS credentials; ``blz`` for banks whose bank code differs per branch, ``server`` for a
+    bank without a profile (its FinTS address, #136)."""
     fields = [
         CredentialField("username", "Anmeldename", help=username_help or f"Wie beim {banking} im Browser."),
         CredentialField("pin", "PIN / Passwort", secret=True, ask=True,
@@ -85,6 +87,11 @@ def credential_fields(bank: str, banking: str, *, blz: bool = False, username_he
     ]
     if blz:
         fields.append(CredentialField("blz", "Bankleitzahl", help="Die Bankleitzahl deines Kontos (8 Ziffern)."))
+    if server:
+        fields.append(CredentialField("server", "FinTS-Adresse",
+                                      help="Die Adresse für FinTS (PIN/TAN) deiner Bank, beginnt mit https://. Sie "
+                                           "steht auf der Website deiner Bank (Stichwort FinTS oder HBCI) oder du "
+                                           "erfährst sie beim Kundenservice."))
     fields += [
         CredentialField("iban", "IBAN des Girokontos",
                         help=f"Leer lassen, wenn du bei {bank} nur ein Konto hast."),
@@ -106,7 +113,7 @@ class FintsAdapter(BrokerAdapter):
     # ── bank profile ────────────────────────────────────────────────────────
     # Bank code; empty if it differs per branch (then it is a credential, "blz").
     blz: ClassVar[str] = ""
-    server: ClassVar[str] = ""
+    server: ClassVar[str] = ""  # empty: a credential, "server" (#136)
     # Names in messages: "Die DKB hat ... abgelehnt", "in der DKB-App", "im DKB-Banking".
     bank: ClassVar[str] = "die Bank"
     app: ClassVar[str] = "Banking-App"
@@ -142,9 +149,12 @@ class FintsAdapter(BrokerAdapter):
         blz = self.blz or (self.credentials.get("blz") or "").replace(" ", "")
         if not blz:
             raise AdapterError("Die Bankleitzahl fehlt - bitte in den Broker-Einstellungen eintragen.")
+        server = self.server or (self.credentials.get("server") or "").strip()
+        if not server:
+            raise AdapterError("Die FinTS-Adresse fehlt - bitte in den Broker-Einstellungen eintragen.")
         data = base64.b64decode(self.session["fints"]) if self.session.get("fints") else None
         factory = type(self).client_factory or _fints_client
-        return factory(blz, self.credentials["username"], self.credentials["pin"], self.server, product_id, data)
+        return factory(blz, self.credentials["username"], self.credentials["pin"], server, product_id, data)
 
     def login(self) -> None:
         if self.session.get("pin_rejected"):
