@@ -10,14 +10,16 @@ import time
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ... import __version__, crypto, meta_keys, redact, retired, updates
 from ... import config as config_mod
+from ...history import COMPLETION_KINDS
 from ...sync import AlreadyRunning, is_running
-from .. import views
+from .. import inputs, views
 from ..context import AppContext, Ctx, language, redirect, tr
 from ..i18n import N_, translate
 
@@ -202,7 +204,47 @@ def settings_page(request: Request, ctx: Ctx):
 
 @router.get("/unknown", response_class=HTMLResponse)
 def unknown_page(request: Request, ctx: Ctx):
-    return ctx.render(request, "unknown.html", events=ctx.state.unknown_events())
+    return ctx.render(request, "unknown.html", events=ctx.state.unknown_events(),
+                      completions={f"{b}:{t}": c for (b, t), c in ctx.state.completions().items()},
+                      kinds=COMPLETION_KINDS)
+
+
+# What each kind needs besides the ISIN (#132).
+_NEEDS = {"buy": ("shares", "amount"), "sell": ("shares", "amount"), "in": ("shares", "amount"),
+          "out": ("shares",), "split": ("ratio",)}
+
+
+@router.post("/unknown/complete")
+async def unknown_complete(request: Request, ctx: Ctx):
+    """An unknown booking the user completed (#132): the next run books it under the booking's own id."""
+    form = await request.form()
+    broker, tx_id = str(form.get("broker", "")), str(form.get("tx_id", ""))
+    event = next((e for e in ctx.state.unknown_events(broker) if e["tx_id"] == tx_id), None) if broker else None
+    if event is None:
+        return redirect(request, "/unknown", tr(request, "Diese Buchung ist nicht mehr offen."), "error")
+    if form.get("action") == "delete":
+        ctx.state.delete_completion(broker, tx_id)
+        return redirect(request, "/unknown", tr(request, "Zurückgenommen."))
+    kind = str(form.get("kind", ""))
+    try:
+        if kind not in _NEEDS:
+            raise inputs.Invalid(N_("Bitte wählen, was die Buchung ist."))
+        # shortcut: always EUR - unknown payloads rarely name a currency; a field for it once a broker needs one.
+        data: dict = {"kind": kind, "isin": inputs.isin(str(form.get("isin", ""))), "day": event["occurred_at"],
+                      "currency": "EUR", "name": inputs.text(str(form.get("name") or ""), N_("Name"), max_len=200)}
+        for field, label in (("shares", N_("Stückzahl")), ("amount", N_("Betrag")), ("fee", N_("Gebühr")),
+                             ("tax", N_("Steuer")), ("ratio", N_("Verhältnis"))):
+            raw = str(form.get(field) or "").strip()
+            if raw:
+                data[field] = str(inputs.decimal(raw, label, minimum=Decimal(0)))
+            elif field in _NEEDS[kind]:
+                raise inputs.Invalid("{label}: bitte angeben.", label=label)
+        if any(Decimal(data[f]) <= 0 for f in _NEEDS[kind]):
+            raise inputs.Invalid(N_("Stückzahl, Betrag und Verhältnis müssen größer 0 sein."))
+    except inputs.Invalid as e:
+        return redirect(request, "/unknown", e.text(language(request)), "error")
+    ctx.state.add_completion(broker, tx_id, data)
+    return redirect(request, "/unknown", tr(request, "Gespeichert - der nächste Abruf bucht es."))
 
 
 def _wf_done(secrets_: dict) -> bool:

@@ -158,9 +158,19 @@ def _events_table(db) -> None:
     db.execute("CREATE INDEX events_at ON events (at)")
 
 
+def _completions_table(db) -> None:
+    """3: unknown bookings the user completed on *Unbekannt* (#132): what they are, as JSON; each run books them."""
+    db.execute("""CREATE TABLE completions (
+      broker TEXT NOT NULL,
+      tx_id TEXT NOT NULL,
+      data TEXT NOT NULL,
+      at TEXT NOT NULL,
+      PRIMARY KEY (broker, tx_id))""")
+
+
 # Schema changes after SCHEMA (the state of 0.13.x), in order: MIGRATIONS[n] brings a database from
 # version n to n + 1 (``PRAGMA user_version``). Never edit or reorder one that shipped - append.
-MIGRATIONS = [_balances_account_column, _events_table]
+MIGRATIONS = [_balances_account_column, _events_table, _completions_table]
 SCHEMA_VERSION = len(MIGRATIONS)
 
 
@@ -377,6 +387,22 @@ class State:
         return [{"isin": i, "day": d, "name": n, "shares": s, "price": p, "fee": f, "currency": c}
                 for i, d, n, s, p, f, c in rows]
 
+    # ── completed unknown bookings (#132) ───────────────────────────────────
+    def add_completion(self, broker: str, tx_id: str, data: dict) -> None:
+        with self._writing():
+            self.db.execute("INSERT OR REPLACE INTO completions VALUES (?, ?, ?, ?)",
+                            (broker, tx_id, json.dumps(data), now()))
+
+    def delete_completion(self, broker: str, tx_id: str) -> None:
+        with self._writing():
+            self.db.execute("DELETE FROM completions WHERE broker = ? AND tx_id = ?", (broker, tx_id))
+
+    def completions(self, broker: str | None = None) -> dict[tuple[str, str], dict]:
+        sql, args = "SELECT broker, tx_id, data FROM completions", tuple[str, ...]()
+        if broker:
+            sql, args = sql + " WHERE broker = ?", (broker,)
+        return {(b, t): json.loads(d) for b, t, d in self.db.execute(sql, args)}
+
     def add_statement_rows(self, broker: str, rows: list[dict]) -> int:
         """Keep uploaded statement rows; returns how many were new. A row twice in one file stays twice."""
         seen: dict[str, int] = {}
@@ -449,7 +475,7 @@ class State:
             "SELECT activity_ids FROM synced WHERE broker = ? AND status = 'imported'", (broker,)))
         with self._writing():
             for table in ("synced", "runs", "reconcile", "balances", "assets", "unknown_events", "gaps", "openings",
-                          "statements"):
+                          "statements", "completions"):
                 self.db.execute(f"DELETE FROM {table} WHERE broker = ?", (broker,))  # noqa: S608 - fixed table names
             self._delete_broker_meta(broker)
         return created

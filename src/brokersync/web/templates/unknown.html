@@ -1,8 +1,9 @@
 {% extends "base.html" %}{% block title %}{{ _("Unbekannte Buchungen") }}{% endblock %}
 {% block content %}
+{% set KIND = {"buy": _("Kauf"), "sell": _("Verkauf"), "in": _("Einbuchung ohne Zahlung"), "out": _("Ausbuchung ohne Zahlung"), "split": _("Split / Reverse Split")} %}
 <div class="card">
   <h1>{{ _("Unbekannte Buchungen") }}</h1>
-  <p>{{ _("Diese Buchungen kennt der Dienst noch nicht. Sie wurden <strong>nicht</strong> nach Wealthfolio übernommen – trage sie bei Bedarf von Hand ein. Mit <em>Fehlerbericht auf GitHub</em> meldest du einen Typ, damit er künftig unterstützt wird: GitHub öffnet sich mit vorausgefülltem Text (IBANs und lange Nummern geschwärzt). Der Bericht ist öffentlich – prüfe ihn vor dem Absenden.") }}</p>
+  <p>{{ _("Diese Buchungen kennt der Dienst noch nicht. Sie wurden <strong>nicht</strong> nach Wealthfolio übernommen – vervollständige sie hier, dann bucht der nächste Abruf sie, oder trage sie von Hand ein. Mit <em>Fehlerbericht auf GitHub</em> meldest du einen Typ, damit er künftig unterstützt wird: GitHub öffnet sich mit vorausgefülltem Text (IBANs und lange Nummern geschwärzt). Der Bericht ist öffentlich – prüfe ihn vor dem Absenden.") }}</p>
   {% if events %}
   <div class="table"><table>
     <caption class="sr-only">{{ _("Unbekannte Buchungen") }}</caption>
@@ -16,7 +17,32 @@
       <td data-label="{{ _('Wertpapier') }}">{{ d.security }}{% if d.shares %} <span class="muted">{{ _("({n} Stück)", n=d.shares) }}</span>{% endif %}</td>
       <td data-label="{{ _('Text') }}">{{ d.text }}
         <details><summary class="muted">{{ _("Rohdaten") }}</summary><pre>{{ e.payload | tojson(indent=1) }}</pre></details>
-        {% if e.raw_type != UNMATCHED_SECURITIES %}<a class="button secondary report" href="{{ report_url(e, adapters[e.broker].label if e.broker in adapters else e.broker, version) }}" target="_blank" rel="noopener noreferrer">{{ _("Fehlerbericht auf GitHub") }}</a>{% endif %}</td></tr>
+        {% if e.raw_type != UNMATCHED_SECURITIES %}<a class="button secondary report" href="{{ report_url(e, adapters[e.broker].label if e.broker in adapters else e.broker, version) }}" target="_blank" rel="noopener noreferrer">{{ _("Fehlerbericht auf GitHub") }}</a>
+        {% set c = completions.get(e.broker ~ ":" ~ e.tx_id) %}
+        <details{% if c %} open{% endif %}><summary>{{ _("Vervollständigen und buchen") }}</summary>
+          {% if c %}
+          <p>{{ _("Vorgemerkt als {what} ({isin}) – der nächste Abruf bucht es.", what=KIND[c.kind], isin=c.isin) }}</p>
+          <form method="post" action="/unknown/complete" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="broker" value="{{ e.broker }}"><input type="hidden" name="tx_id" value="{{ e.tx_id }}"><button class="secondary" name="action" value="delete">{{ _("Zurücknehmen") }}</button></form>
+          {% else %}
+          <form method="post" action="/unknown/complete" class="inline-form">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="broker" value="{{ e.broker }}"><input type="hidden" name="tx_id" value="{{ e.tx_id }}">
+            <div class="row">
+              <label>{{ _("Was ist es?") }} <select name="kind" required>{% for k in kinds %}<option value="{{ k }}">{{ KIND[k] }}</option>{% endfor %}</select></label>
+              <label>ISIN <input type="text" name="isin" value="{{ e.payload.get('isin') or e.payload.get('ISIN') or '' }}" maxlength="12" required></label>
+              <label>{{ _("Name") }} <input type="text" name="name" value="{{ d.security }}" maxlength="200"></label>
+            </div>
+            <div class="row">
+              <label>{{ _("Stück") }} <input type="text" name="shares" value="{{ d.shares }}" inputmode="decimal"></label>
+              <label>{{ _("Betrag (EUR)") }} <input type="text" name="amount" inputmode="decimal"></label>
+              <label>{{ _("Gebühr") }} <input type="text" name="fee" inputmode="decimal"></label>
+              <label>{{ _("Steuer") }} <input type="text" name="tax" inputmode="decimal"></label>
+              <label>{{ _("Verhältnis (neue Stück je alte, 1:10 = 0,1)") }} <input type="text" name="ratio" inputmode="decimal"></label>
+            </div>
+            <p class="muted">{{ _("Kauf und Verkauf: Stück und Betrag (was vom bzw. aufs Konto ging). Einbuchung: Stück und Einstandswert. Ausbuchung: nur Stück. Split: nur das Verhältnis. Datum ist das der Buchung.") }}</p>
+            <div class="actions"><button>{{ _("Speichern") }}</button></div>
+          </form>
+          {% endif %}
+        </details>{% endif %}</td></tr>
     {% endfor %}
   </tbody></table></div>
   {% else %}<p class="muted">{{ _("Keine.") }}</p>{% endif %}

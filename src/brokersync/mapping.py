@@ -139,6 +139,8 @@ def _check_amounts(tx: Transaction) -> None:
             raise MappingError(
                 f"Market value, fee and tax ({fmt(expected)}) don't add up to the booked amount ({fmt(tx.net)})."
             )
+    if tx.kind == Kind.SPLIT and (not tx.isin or not tx.ratio or tx.ratio <= 0):
+        raise MappingError("ISIN or split ratio missing.")
     if tx.kind == Kind.DIVIDEND and (not tx.isin or (tx.shares is not None and tx.shares <= 0)):
         raise MappingError("ISIN or share count missing.")
     if (tx.kind in (Kind.DIVIDEND, Kind.INTEREST) and tx.gross is not None
@@ -222,7 +224,23 @@ class _Booking:
             return self.interest()
         if tx.kind == Kind.DIVIDEND:
             return self.dividend()
+        if tx.kind == Kind.SPLIT:
+            return [self.split()]
         return self.trade()
+
+    def split(self) -> dict:
+        tx, ratio = self.tx, self.tx.ratio or Decimal(0)  # checked > 0 in _check_amounts
+        return _clean({
+            "accountId": self.accounts.portfolio,
+            "activityType": "SPLIT",
+            "activityDate": iso(tx.datetime),
+            "currency": tx.currency,
+            "quantity": "0",
+            "unitPrice": "0",
+            "amount": fmt(ratio),
+            "comment": f"Split {fmt(ratio)} {tx.name}{self.ref}",
+            "asset": self.asset(),
+        })
 
     def own_transfer(self) -> list[dict]:
         tx, accounts, ref, gid = self.tx, self.accounts, self.ref, self.gid

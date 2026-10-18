@@ -276,13 +276,39 @@ EN: dict[str, str] = {
     # ── unknown ──
     "Unbekannte Buchungen": "Unknown bookings",
     "Diese Buchungen kennt der Dienst noch nicht. Sie wurden <strong>nicht</strong> nach Wealthfolio übernommen – "
-    "trage sie bei Bedarf von Hand ein. Mit <em>Fehlerbericht auf GitHub</em> meldest du einen Typ, damit er künftig "
+    "vervollständige sie hier, dann bucht der nächste Abruf sie, oder trage sie von Hand ein. Mit <em>Fehlerbericht "
+    "auf GitHub</em> meldest du einen Typ, damit er künftig "
     "unterstützt wird: GitHub öffnet sich mit vorausgefülltem Text (IBANs und lange Nummern geschwärzt). Der Bericht "
     "ist öffentlich – prüfe ihn vor dem Absenden.":
         "The service doesn't know these bookings yet. They were <strong>not</strong> transferred to Wealthfolio – "
-        "enter them by hand if needed. With <em>Report on GitHub</em> you report a type so it is supported in "
+        "complete them here and the next fetch books them, or enter them by hand. With <em>Report on GitHub</em> "
+        "you report a type so it is supported in "
         "future: GitHub opens with a pre-filled text (IBANs and long numbers blacked out, in German). The report is "
         "public – check it before you send it.",
+    "Kauf": "Buy",
+    "Verkauf": "Sale",
+    "Einbuchung ohne Zahlung": "Delivered in without payment",
+    "Ausbuchung ohne Zahlung": "Delivered out without payment",
+    "Split / Reverse Split": "Split / reverse split",
+    "Vervollständigen und buchen": "Complete and book",
+    "Vorgemerkt als {what} ({isin}) – der nächste Abruf bucht es.":
+        "Noted as {what} ({isin}) – the next fetch books it.",
+    "Zurücknehmen": "Withdraw",
+    "Was ist es?": "What is it?",
+    "Betrag (EUR)": "Amount (EUR)",
+    "Steuer": "Tax",
+    "Verhältnis (neue Stück je alte, 1:10 = 0,1)": "Ratio (new shares per old one, 1:10 = 0.1)",
+    "Kauf und Verkauf: Stück und Betrag (was vom bzw. aufs Konto ging). Einbuchung: Stück und Einstandswert. "
+    "Ausbuchung: nur Stück. Split: nur das Verhältnis. Datum ist das der Buchung.":
+        "Buy and sale: shares and amount (what left or reached the account). Delivered in: shares and cost basis. "
+        "Delivered out: shares only. Split: the ratio only. The date is the booking's.",
+    "Diese Buchung ist nicht mehr offen.": "This booking is no longer open.",
+    "Zurückgenommen.": "Withdrawn.",
+    "Bitte wählen, was die Buchung ist.": "Please choose what the booking is.",
+    "Verhältnis": "Ratio",
+    "{label}: bitte angeben.": "{label}: please enter it.",
+    "Stückzahl, Betrag und Verhältnis müssen größer 0 sein.": "Shares, amount and ratio must be greater than 0.",
+    "Gespeichert - der nächste Abruf bucht es.": "Saved – the next fetch books it.",
     "Wertpapier-Buchung ohne Gegenstück – die Wertpapierabrechnung (PDF) in Wealthfolio importieren, dann erkennt der "
     "nächste Abruf sie":
         "Securities booking without counterpart – import the securities statement (PDF) into Wealthfolio, then the "

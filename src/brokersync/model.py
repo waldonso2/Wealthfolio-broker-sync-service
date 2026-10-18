@@ -42,6 +42,8 @@ class Kind(StrEnum):
     # depot adapter) as a transfer pair, so the sync only checks that it is
     # there and reports it when it isn't - booking it again would count it twice.
     SECURITIES_CASH = "SECURITIES_CASH"
+    # A stock split or reverse split: ``ratio`` new shares per old share (1:10 reverse = 0.1); no money moves.
+    SPLIT = "SPLIT"
     # An event type the adapter doesn't know. It is never dropped: the sync
     # stores and reports it (AC 10), and nothing is booked for it.
     UNKNOWN = "UNKNOWN"
@@ -125,6 +127,8 @@ class Transaction:
     raw_type: str = ""
     # Original payload of an UNKNOWN event, stored for the report (never secrets).
     raw: dict = field(default_factory=dict, compare=False)
+    # A split's factor on the share count (Wealthfolio keeps it in the SPLIT activity's amount).
+    ratio: Decimal | None = None
 
 
 def to_dict(tx: Transaction) -> dict:

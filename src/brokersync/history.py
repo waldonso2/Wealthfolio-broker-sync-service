@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 from . import audit as audit_mod
 from . import coverage
 from .mapping import Accounts
-from .model import Kind, Transaction
+from .model import Kind, Transaction, when
 
 # Days and start dates are German days (#108).
 BERLIN = ZoneInfo("Europe/Berlin")
@@ -56,6 +56,36 @@ def _money_leg(a: dict, at: datetime, buy: bool) -> Transaction:
         net=abs(audit_mod._dec(a.get("amount"))),
         label=("Deposit for a buy before the bank history read" if buy
                else "Withdrawal after a sale before the bank history read"))
+
+
+# What the user can make of an unknown booking on *Unbekannt* (#132): a trade with the booking's money, a
+# security delivered in or out without money, or a split.
+COMPLETION_KINDS = ("buy", "sell", "in", "out", "split")
+
+
+def completion(tx_id: str, c: dict) -> Transaction:
+    """An unknown booking the user completed (``State.completions``), under its own id: a later adapter that
+    learns the type produces the same id, so it is never booked twice. Amounts as typed: ``amount`` is the
+    money that moved (a buy's cost, a sale's proceeds) or, for a delivery in, its cost basis."""
+    day = when(c["day"]).astimezone(BERLIN).date()  # the booking's German day (#108)
+    at = datetime(day.year, day.month, day.day, 12, tzinfo=BERLIN).astimezone(UTC)
+    shares, amount = Decimal(c.get("shares") or 0), Decimal(c.get("amount") or 0)
+    fee, tax = Decimal(c.get("fee") or 0), Decimal(c.get("tax") or 0)
+    common = {"id": tx_id, "datetime": at, "currency": c.get("currency") or "EUR", "isin": c["isin"],
+              "name": c.get("name") or c["isin"], "label": c.get("label") or ""}
+    kind = c["kind"]
+    if kind == "split":
+        return Transaction(kind=Kind.SPLIT, net=Decimal(0), ratio=Decimal(c["ratio"]), **common)
+    if kind == "buy":
+        return Transaction(kind=Kind.BUY, net=amount, shares=shares, gross=amount - fee - tax, fee=fee, tax=tax,
+                           **common)
+    if kind == "sell":
+        return Transaction(kind=Kind.SELL, net=amount, shares=shares, gross=amount + fee + tax, fee=fee, tax=tax,
+                           **common)
+    if kind == "in":  # delivered in without money from this account: like an opening position
+        return Transaction(kind=Kind.BUY, net=amount, shares=shares, gross=amount, external_cash=True, **common)
+    # "out": delivered out without money, booked as a sale at 0 (as a write-off)
+    return Transaction(kind=Kind.SELL, net=Decimal(0), shares=shares, gross=Decimal(0), **common)
 
 
 def openings(rows: list[dict]) -> list[Transaction]:
