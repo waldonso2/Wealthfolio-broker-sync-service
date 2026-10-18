@@ -9,7 +9,7 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 - **Keine Duplikate:** Was schon in Wealthfolio steht – auch aus einem früheren CSV- oder PDF-Import –, erkennt der Dienst und legt es nicht noch einmal an
 - **Prüft sich selbst:** Nach jedem Abruf vergleicht er Konto und Depot mit dem Broker und zeigt, wo etwas fehlt oder nicht aufgeht
 
-> **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS), **Scalable Capital** (über Scalables offizielles CLI), **comdirect** (Girokonto und Depot über die offizielle REST-API) **Deutsche Bank** (Girokonto und maxblue-Depotbestand per FinTS; neu, noch nicht lange im Einsatz) und **jede andere Bank mit FinTS** – z. B. Sparkasse, Volks- und Raiffeisenbank (Girokonto; neu, je Bank noch ungeprüft).
+> **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS), **Scalable Capital** (über Scalables offizielles CLI), **comdirect** (Girokonto und Depot über die offizielle REST-API), **Deutsche Bank** (Girokonto und maxblue-Depotbestand per FinTS; neu, noch nicht lange im Einsatz), **jede andere Bank mit FinTS** – z. B. Sparkasse, Volks- und Raiffeisenbank (Girokonto; neu, je Bank noch ungeprüft) – und **N26** (Hauptkonto über die Schnittstelle der N26-App; neu).
 
 ## Was du brauchst
 
@@ -151,6 +151,16 @@ Die meisten deutschen Banken – Sparkassen, Volks- und Raiffeisenbanken, Sparda
 - **IBAN, Konten:** wie bei der DKB.
 
 Gebucht wird wie bei der DKB: Ausgaben als Auszahlung, Eingänge als Einzahlung, Zinsen und Gebühren für sich. Girobuchungen von Wertpapiergeschäften (Buchungstext mit *Wertpapier*, *Depot*, *Dividende* …) wartet der Dienst ab, bis die Wertpapierseite – etwa ein Import der Abrechnungen – in Wealthfolio steht. Meldet die Bank ein Depot, liest er dessen Bestand und vergleicht ihn; als vollständig gilt er erst, wenn die Bank bestätigt ist. Weichen die Buchungstexte deiner Bank ab oder klappt etwas nicht, melde es bitte als Issue – dann bekommt sie ein eigenes Profil.
+
+## N26
+
+> **Bitte beachten:** N26 bietet Privatkunden keine offizielle Schnittstelle. Der Dienst nutzt die der N26-App, wie andere Finanzprogramme auch. N26 kann sie jederzeit ändern oder solche Zugriffe untersagen; dann klappt der Abruf nicht mehr. Deshalb bestätigst du in den Broker-Einstellungen einmal, dass du diesen Hinweis gelesen hast; vorher startet keine Anmeldung.
+
+**Einrichten** unter *Broker → N26*: E-Mail und Passwort deines N26-Kontos.
+
+**Anmelden:** Der Dienst meldet sich an, N26 schickt eine Bestätigung in die N26-App. Du bestätigst dort und klickst *Ich habe in der App bestätigt*. Danach ruft der Dienst ohne dich ab, solange N26 die Anmeldung verlängert. Läuft sie ab, meldet ntfy *Anmeldung nötig* – eine neue Anfrage in der App löst nur die Oberfläche aus, nie der tägliche Abruf. Lehnt N26 Passwort oder E-Mail ab, versucht der Dienst es nicht noch einmal, bis du die Zugangsdaten neu speicherst.
+
+**Was gebucht wird:** Eingänge als Einzahlung, Kartenzahlungen, Lastschriften und Überweisungen als Auszahlung; vorgemerkte Umsätze erst, wenn sie gebucht sind. Geld, das du in einen Space schiebst, erscheint als Auszahlung vom Hauptkonto – mit einem Muster auf der Seite *Überträge* (z. B. Stichwort des Space) wird es ein Übertrag auf ein eigenes Wealthfolio-Konto. Der Saldo des Hauptkontos wird nach jedem Abruf verglichen.
 
 ## Trade Republic
 
