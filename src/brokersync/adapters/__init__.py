@@ -6,6 +6,7 @@ from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, Credenti
 from .comdirect import ComdirectAdapter
 from .deutschebank import DeutscheBankAdapter
 from .dkb import DkbAdapter
+from .fintsbank import BANKS as FINTS_BANKS
 from .scalable import ScalableAdapter
 from .tr import TradeRepublicAdapter
 
@@ -15,6 +16,7 @@ ADAPTERS: dict[str, type[BrokerAdapter]] = {
     ScalableAdapter.key: ScalableAdapter,
     ComdirectAdapter.key: ComdirectAdapter,
     DeutscheBankAdapter.key: DeutscheBankAdapter,
+    **{a.key: a for a in FINTS_BANKS},
 }
 
 __all__ = [

@@ -150,6 +150,10 @@ EN: dict[str, str] = {
         "The test broker “{label}” no longer exists. Its {n} bookings stay in Wealthfolio until you delete them – "
         "search for <code>{search}</code> in the comment.",
     "Ausblenden": "Hide",
+    "Update verfügbar: Version {new}": "Update available: version {new}",
+    "Installiert ist {current}. Zum Aktualisieren in der Konsole des Containers <code>update</code> eingeben.":
+        "Installed is {current}. To update, type <code>update</code> in the container's console.",
+    "Was ist neu?": "What's new?",
     "Abruf läuft …": "Fetching …",
     "Alle abrufen": "Fetch all",
     "Sicherer Modus: Jeder Abruf beginnt mit deiner Anmeldung, danach meldet sich der Dienst ab.":
@@ -526,6 +530,9 @@ EN: dict[str, str] = {
     "{label}: bitte eine Adresse mit http:// oder https:// angeben.":
         "{label}: please give an address with http:// or https://.",
     "{label}: ohne Zugangsdaten, ? oder # in der Adresse.": "{label}: no credentials, ? or # in the address.",
+    "{label}: bitte eine Adresse mit https:// angeben.": "{label}: please enter an address starting with https://.",
+    "{label}: ohne Zugangsdaten oder # in der Adresse.": "{label}: no credentials or # in the address.",
+    "{label}: bitte 8 Ziffern angeben.": "{label}: please enter 8 digits.",
     "{label}: ungültiger Port.": "{label}: invalid port.",
     "{label}: bitte als Datum angeben (JJJJ-MM-TT).": "{label}: please give a date (YYYY-MM-DD).",
     "{label}: darf nicht in der Zukunft liegen.": "{label}: must not be in the future.",

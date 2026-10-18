@@ -14,8 +14,8 @@ from datetime import datetime
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from ... import __version__, crypto, meta_keys, redact, retired, updates
 from ... import config as config_mod
-from ... import crypto, meta_keys, redact, retired
 from ...sync import AlreadyRunning, is_running
 from .. import views
 from ..context import AppContext, Ctx, language, redirect, tr
@@ -44,6 +44,7 @@ def dashboard(request: Request, ctx: Ctx):
                       refresh=busy and not request.query_params.get("still"),
                       next_run=_next_timer_run(), runs=ctx.state.runs(limit=20),
                       retired_notices=retired.notices(ctx.state), safe_mode=c.safe_mode,
+                      update=updates.available(ctx.state, __version__), releases=updates.RELEASES,
                       checklist=_checklist(ctx, c, secrets_, brokers))
 
 

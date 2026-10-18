@@ -50,13 +50,24 @@ from zoneinfo import ZoneInfo
 
 from .. import redact
 from ..model import SAVINGS, CashBalance, Kind, Position, Transaction
+from . import institutes
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
 
 log = logging.getLogger(__name__)
 
-# The FinTS product ID registered for this service with the Deutsche
-# Kreditwirtschaft; empty until it is assigned (then users need not enter one).
-PRODUCT_ID = ""
+# The service's FinTS product id, registered with the Deutsche Kreditwirtschaft. Not a secret - every
+# FinTS message carries it to the bank - but it must not turn up in a search of the code: stored XORed
+# with a pad derived by SHA-256, so neither it nor any part or encoding of it appears here.
+# shortcut: obfuscation, not encryption (the decoding ships with it); a new id from the registry means a
+# new value here (scripts/obfuscate_product_id.py).
+_REGISTERED = bytes.fromhex("530fc37fcb51d2d113f4a5d844b700dd96336ab95cbe14e2af")
+
+
+def product_id() -> str:
+    pad = hashlib.sha256(b"wealthfolio-broker-sync/fints").digest()
+    value = bytes(a ^ b for a, b in zip(_REGISTERED, pad, strict=False)).decode()
+    redact.register(value)  # never in a log line or on screen
+    return value
 BERLIN = ZoneInfo("Europe/Berlin")
 # PSD2: banks may ask for a TAN for bookings older than this.
 NO_TAN_DAYS = 89
@@ -76,8 +87,10 @@ SAVINGS_NAME = re.compile(r"tagesgeld|spar|festgeld|geldmarkt|zinskonto", re.IGN
 OWN_TRANSFER_DAYS = 3
 
 
-def credential_fields(bank: str, banking: str, *, blz: bool = False, username_help: str = "") -> list[CredentialField]:
-    """The usual FinTS credentials; ``blz`` for banks whose bank code differs per branch."""
+def credential_fields(bank: str, banking: str, *, blz: bool = False, server: bool = False,
+                      username_help: str = "") -> list[CredentialField]:
+    """The usual FinTS credentials; ``blz`` for banks whose bank code differs per branch, ``server`` for a
+    bank without a profile (its FinTS address, #136)."""
     fields = [
         CredentialField("username", "Anmeldename", help=username_help or f"Wie beim {banking} im Browser."),
         CredentialField("pin", "PIN / Passwort", secret=True, ask=True,
@@ -85,16 +98,17 @@ def credential_fields(bank: str, banking: str, *, blz: bool = False, username_he
     ]
     if blz:
         fields.append(CredentialField("blz", "Bankleitzahl", help="Die Bankleitzahl deines Kontos (8 Ziffern)."))
+    if server:
+        fields.append(CredentialField("server", "FinTS-Adresse",
+                                      help="Leer lassen: Der Dienst kennt die Adresse deiner Bank aus der Liste der "
+                                           "Deutschen Kreditwirtschaft. Nur nötig, wenn sie dort fehlt - dann steht "
+                                           "sie auf der Website deiner Bank (Stichwort FinTS oder HBCI), beginnt mit https://."))
     fields += [
         CredentialField("iban", "IBAN des Girokontos",
                         help=f"Leer lassen, wenn du bei {bank} nur ein Konto hast."),
         CredentialField("savings_iban", "IBAN des Tagesgeldkontos",
                         help="Nur nötig, wenn du unten ein Wealthfolio-Konto für das Tagesgeld wählst und der Dienst "
                              "es nicht selbst findet."),
-        CredentialField("product_id", "FinTS-Produkt-ID",
-                        help="Nur deine eigene, bei der Deutschen Kreditwirtschaft registrierte Produkt-ID "
-                             "verwenden: Eine fremde zu nutzen oder weiterzugeben widerspricht den "
-                             "Registrierungsbedingungen. Sobald der Dienst eine eigene hat, ist sie fest eingebaut."),
     ]
     return fields
 
@@ -106,7 +120,7 @@ class FintsAdapter(BrokerAdapter):
     # ── bank profile ────────────────────────────────────────────────────────
     # Bank code; empty if it differs per branch (then it is a credential, "blz").
     blz: ClassVar[str] = ""
-    server: ClassVar[str] = ""
+    server: ClassVar[str] = ""  # empty: a credential, "server" (#136)
     # Names in messages: "Die DKB hat ... abgelehnt", "in der DKB-App", "im DKB-Banking".
     bank: ClassVar[str] = "die Bank"
     app: ClassVar[str] = "Banking-App"
@@ -132,19 +146,22 @@ class FintsAdapter(BrokerAdapter):
 
     # ── login ───────────────────────────────────────────────────────────────
     def _make_client(self):
-        product_id = (self.credentials.get("product_id") or PRODUCT_ID).strip()
-        if not product_id:
-            raise AdapterError(
-                f"Für {self.bank} fehlt die FinTS-Produkt-ID. Trage sie in den Broker-Einstellungen ein."
-            )
+        # A user's own product id saved before the service had one keeps working until the credentials are
+        # saved anew (the form no longer has the field).
+        pid = (self.credentials.get("product_id") or "").strip() or product_id()
         if not self.credentials.get("username"):
             raise AdapterError("Der Anmeldename fehlt - bitte in den Broker-Einstellungen eintragen.")
         blz = self.blz or (self.credentials.get("blz") or "").replace(" ", "")
         if not blz:
             raise AdapterError("Die Bankleitzahl fehlt - bitte in den Broker-Einstellungen eintragen.")
+        listed = institutes.lookup(blz)
+        server = self.server or (self.credentials.get("server") or "").strip() or (listed[1] if listed else "")
+        if not server:
+            raise AdapterError(f"Für die Bankleitzahl {blz} kennt der Dienst keine FinTS-Adresse - bitte in den "
+                               "Broker-Einstellungen eintragen.")
         data = base64.b64decode(self.session["fints"]) if self.session.get("fints") else None
         factory = type(self).client_factory or _fints_client
-        return factory(blz, self.credentials["username"], self.credentials["pin"], self.server, product_id, data)
+        return factory(blz, self.credentials["username"], self.credentials["pin"], server, pid, data)
 
     def login(self) -> None:
         if self.session.get("pin_rejected"):

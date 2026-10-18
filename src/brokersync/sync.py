@@ -28,9 +28,9 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
+from . import __version__, coverage, crypto, meta_keys, retired, updates
 from . import assets as assets_mod
 from . import config as config_mod
-from . import coverage, crypto, meta_keys, retired
 from . import history as history_mod
 from . import logos as logos_mod
 from . import repair as repair_mod
@@ -211,6 +211,7 @@ class Syncer:
                     results.append(self._run_broker(cfg, key))
                 self._progress = {}
                 self._update_logos(cfg)
+                self._check_update(cfg)
             finally:
                 self._pins = {}
                 self.state.delete_meta(meta_keys.PROGRESS())
@@ -264,6 +265,14 @@ class Syncer:
             return None
         finally:
             source.close()
+
+    def _check_update(self, cfg: config_mod.Config) -> None:
+        """Once a day: a newer release is shown on the overview and notified once (updates.py)."""
+        version = updates.check(self.state, __version__)
+        if version:
+            self.notifier(cfg).send("Update verfügbar", f"Version {version} ist erschienen (installiert: "
+                                    f"{__version__}). In der Konsole des Containers: update", link=updates.RELEASES,
+                                    tags="arrow_up")
 
     def cleanup(self) -> None:
         """Close runs a dead process left at 'running', unless a sync is in progress."""

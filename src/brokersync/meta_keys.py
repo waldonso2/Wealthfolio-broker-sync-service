@@ -41,7 +41,8 @@ LOGOS_LAST = MetaKey("logos:last", "json", False, "the result of the last logo p
 PROGRESS = MetaKey("progress", "json", False,
                    "the run going on: {broker, label, phase, n, m, since}, gone after it (overview, #104)")
 CHECKLIST_HIDDEN = MetaKey("checklist-hidden", "flag", False, "the setup checklist of the overview was hidden (#110)")
+UPDATE = MetaKey("update", "json", False, "the newest release GitHub named: {version, checked} (updates.py)")
 
 ALL = (ASSETS_LEARNED, CASH_ASSETS_REPAIRED, REFETCH, SAVINGS_ACCOUNT, DIVIDEND_TAX, HISTORY_START, POSITIONS,
-       RETIRED_NOTICE, LOGO, LOGOS_LAST, PROGRESS, CHECKLIST_HIDDEN)
+       RETIRED_NOTICE, LOGO, LOGOS_LAST, PROGRESS, CHECKLIST_HIDDEN, UPDATE)
 BROKER_KEYS = tuple(k for k in ALL if k.per_broker)

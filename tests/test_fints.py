@@ -16,6 +16,7 @@ from brokersync.adapters.base import AdapterError, AuthRequired
 from brokersync.adapters.deutschebank import DeutscheBankAdapter
 from brokersync.adapters.dkb import DkbAdapter
 from brokersync.adapters.fints import FintsAdapter, credential_fields
+from brokersync.adapters.fintsbank import BANKS, FintsBankAdapter
 from brokersync.model import Kind
 
 from .fake_fints import FakeFinTS
@@ -40,6 +41,8 @@ PROFILES = {
     DkbAdapter: {"username": "max", "pin": "1234", "product_id": "TESTPRODUCT"},
     ExampleBank: {"username": "max", "pin": "1234", "product_id": "TESTPRODUCT", "blz": "100 700 00"},
     DeutscheBankAdapter: {"username": "1234567890", "pin": "1234", "product_id": "TESTPRODUCT", "blz": "10070000"},
+    BANKS[0]: {"username": "max", "pin": "1234", "product_id": "TESTPRODUCT", "blz": "10050000",
+               "server": "https://fints.sparkasse.example.invalid/fints30"},
 }
 
 
@@ -71,12 +74,35 @@ def test_each_profile_connects_to_its_bank(opts):
             cls(creds).login()
     assert connected == [("12030000", "https://fints.dkb.de/fints", "TESTPRODUCT"),
                          ("10070000", "https://fints.example.invalid/", "TESTPRODUCT"),
-                         ("10070000", "https://fints.deutsche-bank.de/", "TESTPRODUCT")]
+                         ("10070000", "https://fints.deutsche-bank.de/", "TESTPRODUCT"),
+                         ("10050000", "https://fints.sparkasse.example.invalid/fints30", "TESTPRODUCT")]
+
+
+def test_any_fints_bank_takes_its_code_and_address_as_credentials(opts):
+    assert [a.key for a in BANKS] == ["fints1", "fints2", "fints3"]
+    assert all(issubclass(a, FintsBankAdapter) and ADAPTERS[a.key] is a for a in BANKS)
+    assert [f.name for f in FintsBankAdapter.credential_fields] == \
+        ["username", "pin", "blz", "server", "iban", "savings_iban"]
+    with pytest.raises(AdapterError, match="kennt der Dienst keine FinTS-Adresse"):
+        BANKS[1]({**PROFILES[BANKS[0]], "blz": "99999999", "server": " "}).login()
+
+
+def test_the_address_comes_from_the_masked_list_of_banks(opts):
+    from brokersync.adapters import institutes
+
+    _, connected = opts
+    name, url = institutes.lookup("120 300 00")
+    assert "DKB" in name and url.startswith("https://")
+    with pytest.raises(AuthRequired):
+        BANKS[0]({**PROFILES[BANKS[0]], "blz": "12030000", "server": ""}).login()
+    assert connected[-1][:2] == ("12030000", url)
+    raw = institutes.FILE.read_bytes()
+    assert not [w for w in (b"https", b"fints", b"Sparkasse", b"12030000", b"DKB") if w in raw]
 
 
 def test_a_bank_code_per_branch_is_a_credential(opts):
     assert [f.name for f in ExampleBank.credential_fields] == \
-        ["username", "pin", "blz", "iban", "savings_iban", "product_id"]
+        ["username", "pin", "blz", "iban", "savings_iban"]
     assert "blz" not in [f.name for f in DkbAdapter.credential_fields]
     assert "blz" in [f.name for f in DeutscheBankAdapter.credential_fields]
     with pytest.raises(AdapterError, match="Bankleitzahl fehlt"):
@@ -275,3 +301,48 @@ def test_the_python_fints_patches_of_two_threads_dont_mix():
     for t in threads:
         t.join()
     assert seen == [True, True, True] and fints.client.MT535_Miniparser is original
+
+
+def test_the_form_checks_bank_code_address_and_iban(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from brokersync.vault import Vault
+    from brokersync.web.app import create_app
+
+    from .helpers import first_password
+    from .test_web import csrf
+
+    client = TestClient(create_app(tmp_path, adapters={"fints1": BANKS[0]}, run_in_thread=False),
+                        base_url="http://sync.local:8090")
+    first_password(client)
+    form = {"csrf": csrf(client, "/brokers/fints1"), "cred_username": "max", "cred_pin": "",
+            "cred_blz": "1005", "cred_server": "http://fints.example.invalid/fints30",
+            "cred_iban": "DE00 1234", "cred_product_id": "TESTPRODUCT"}
+    r = client.post("/brokers/fints1", data=form)
+    assert r.status_code == 422 and not Vault(tmp_path).broker("fints1")
+    for field in ("cred_blz", "cred_server", "cred_iban"):
+        assert f'id="err-{field}"' in r.text
+    form.update(cred_blz="100 500 00", cred_server="https://fints.example.invalid/fints30/", cred_iban="")
+    client.post("/brokers/fints1", data=form)
+    creds = Vault(tmp_path).broker("fints1")["credentials"]
+    assert creds["blz"] == "10050000" and creds["server"] == "https://fints.example.invalid/fints30/"
+
+
+def test_the_services_product_id_is_built_in_and_in_no_file_in_plain_sight(opts):
+    import base64
+
+    from brokersync import redact
+
+    _, connected = opts
+    pid = fints_mod.product_id()
+    assert pid and not any(f.name == "product_id" for f in DkbAdapter.credential_fields)
+    with pytest.raises(AuthRequired):
+        DkbAdapter({"username": "max", "pin": "1234"}).login()
+    assert connected[-1][2] == pid
+    assert pid not in redact.redact(f"product {pid}")
+    root = Path(__file__).parents[1]
+    forms = {pid, pid.lower(), pid.encode().hex(), base64.b64encode(pid.encode()).decode(), pid[:12], pid[-12:]}
+    for path in root.rglob("*"):
+        if path.is_file() and not {".git", ".venv", "__pycache__"} & set(path.parts) and path.stat().st_size < 5e6:
+            text = path.read_bytes().decode("utf-8", "ignore")
+            assert not [f for f in forms if f in text], path
