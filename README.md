@@ -147,7 +147,7 @@ Die meisten deutschen Banken – Sparkassen, Volks- und Raiffeisenbanken, Sparda
 
 - **Anmeldename und PIN:** wie im Online-Banking deiner Bank.
 - **Bankleitzahl:** die deines Kontos (8 Ziffern).
-- **FinTS-Adresse:** die Adresse für FinTS (PIN/TAN) deiner Bank, beginnt mit `https://`. Sie steht auf der Website deiner Bank (Stichwort *FinTS* oder *HBCI*), oder du erfährst sie beim Kundenservice. Der Dienst schickt deine Zugangsdaten nur an diese Adresse.
+- **FinTS-Adresse:** leer lassen – der Dienst kennt die Adresse aus der Liste FinTS-fähiger Banken der Deutschen Kreditwirtschaft. Nur wenn deine Bank dort fehlt, trägst du sie ein (beginnt mit `https://`, steht auf der Website deiner Bank unter *FinTS* oder *HBCI*). Der Dienst schickt deine Zugangsdaten nur an diese Adresse.
 - **IBAN, Konten:** wie bei der DKB.
 
 Gebucht wird wie bei der DKB: Ausgaben als Auszahlung, Eingänge als Einzahlung, Zinsen und Gebühren für sich. Girobuchungen von Wertpapiergeschäften (Buchungstext mit *Wertpapier*, *Depot*, *Dividende* …) wartet der Dienst ab, bis die Wertpapierseite – etwa ein Import der Abrechnungen – in Wealthfolio steht. Meldet die Bank ein Depot, liest er dessen Bestand und vergleicht ihn; als vollständig gilt er erst, wenn die Bank bestätigt ist. Weichen die Buchungstexte deiner Bank ab oder klappt etwas nicht, melde es bitte als Issue – dann bekommt sie ein eigenes Profil.

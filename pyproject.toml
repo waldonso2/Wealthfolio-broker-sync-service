@@ -39,7 +39,7 @@ brokersync = "brokersync.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-brokersync = ["web/templates/*.html", "web/static/*", "web/static/fonts/*", "common-passwords.txt"]
+brokersync = ["web/templates/*.html", "web/static/*", "web/static/fonts/*", "common-passwords.txt", "adapters/fints_institutes.bin"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

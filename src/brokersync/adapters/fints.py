@@ -50,6 +50,7 @@ from zoneinfo import ZoneInfo
 
 from .. import redact
 from ..model import SAVINGS, CashBalance, Kind, Position, Transaction
+from . import institutes
 from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
 
 log = logging.getLogger(__name__)
@@ -99,9 +100,9 @@ def credential_fields(bank: str, banking: str, *, blz: bool = False, server: boo
         fields.append(CredentialField("blz", "Bankleitzahl", help="Die Bankleitzahl deines Kontos (8 Ziffern)."))
     if server:
         fields.append(CredentialField("server", "FinTS-Adresse",
-                                      help="Die Adresse für FinTS (PIN/TAN) deiner Bank, beginnt mit https://. Sie "
-                                           "steht auf der Website deiner Bank (Stichwort FinTS oder HBCI) oder du "
-                                           "erfährst sie beim Kundenservice."))
+                                      help="Leer lassen: Der Dienst kennt die Adresse deiner Bank aus der Liste der "
+                                           "Deutschen Kreditwirtschaft. Nur nötig, wenn sie dort fehlt - dann steht "
+                                           "sie auf der Website deiner Bank (Stichwort FinTS oder HBCI), beginnt mit https://."))
     fields += [
         CredentialField("iban", "IBAN des Girokontos",
                         help=f"Leer lassen, wenn du bei {bank} nur ein Konto hast."),
@@ -153,9 +154,11 @@ class FintsAdapter(BrokerAdapter):
         blz = self.blz or (self.credentials.get("blz") or "").replace(" ", "")
         if not blz:
             raise AdapterError("Die Bankleitzahl fehlt - bitte in den Broker-Einstellungen eintragen.")
-        server = self.server or (self.credentials.get("server") or "").strip()
+        listed = institutes.lookup(blz)
+        server = self.server or (self.credentials.get("server") or "").strip() or (listed[1] if listed else "")
         if not server:
-            raise AdapterError("Die FinTS-Adresse fehlt - bitte in den Broker-Einstellungen eintragen.")
+            raise AdapterError(f"Für die Bankleitzahl {blz} kennt der Dienst keine FinTS-Adresse - bitte in den "
+                               "Broker-Einstellungen eintragen.")
         data = base64.b64decode(self.session["fints"]) if self.session.get("fints") else None
         factory = type(self).client_factory or _fints_client
         return factory(blz, self.credentials["username"], self.credentials["pin"], server, pid, data)

@@ -83,8 +83,21 @@ def test_any_fints_bank_takes_its_code_and_address_as_credentials(opts):
     assert all(issubclass(a, FintsBankAdapter) and ADAPTERS[a.key] is a for a in BANKS)
     assert [f.name for f in FintsBankAdapter.credential_fields] == \
         ["username", "pin", "blz", "server", "iban", "savings_iban"]
-    with pytest.raises(AdapterError, match="FinTS-Adresse fehlt"):
-        BANKS[1]({**PROFILES[BANKS[0]], "server": " "}).login()
+    with pytest.raises(AdapterError, match="kennt der Dienst keine FinTS-Adresse"):
+        BANKS[1]({**PROFILES[BANKS[0]], "blz": "99999999", "server": " "}).login()
+
+
+def test_the_address_comes_from_the_masked_list_of_banks(opts):
+    from brokersync.adapters import institutes
+
+    _, connected = opts
+    name, url = institutes.lookup("120 300 00")
+    assert "DKB" in name and url.startswith("https://")
+    with pytest.raises(AuthRequired):
+        BANKS[0]({**PROFILES[BANKS[0]], "blz": "12030000", "server": ""}).login()
+    assert connected[-1][:2] == ("12030000", url)
+    raw = institutes.FILE.read_bytes()
+    assert not [w for w in (b"https", b"fints", b"Sparkasse", b"12030000", b"DKB") if w in raw]
 
 
 def test_a_bank_code_per_branch_is_a_credential(opts):
