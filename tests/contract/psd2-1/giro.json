@@ -1,0 +1,166 @@
+{
+  "description": "Fabricated PSD2 giro account through Enable Banking (#137): salary, card payment, transfer, depot savings plan, a pending booking (skipped), two pages",
+  "recording": {
+    "today": "2026-09-30",
+    "balances": [
+      {
+        "balance_type": "CLBD",
+        "balance_amount": {
+          "amount": "1404.73",
+          "currency": "EUR"
+        }
+      }
+    ],
+    "pages": [
+      [
+        {
+          "entry_reference": "fab-001",
+          "transaction_amount": {
+            "amount": "1650.00",
+            "currency": "EUR"
+          },
+          "credit_debit_indicator": "CRDT",
+          "status": "BOOK",
+          "booking_date": "2026-09-01",
+          "value_date": "2026-09-01",
+          "debtor": {
+            "name": "Beispiel GmbH"
+          },
+          "debtor_account": {
+            "iban": "DE89370400440532013000"
+          },
+          "remittance_information": [
+            "Gehalt 09/2026"
+          ],
+          "bank_transaction_code": {
+            "description": "Gutschrift"
+          }
+        },
+        {
+          "entry_reference": "fab-002",
+          "transaction_amount": {
+            "amount": "23.90",
+            "currency": "EUR"
+          },
+          "credit_debit_indicator": "DBIT",
+          "status": "BOOK",
+          "booking_date": "2026-09-03",
+          "creditor": {
+            "name": "Supermarkt Muster"
+          },
+          "remittance_information": [
+            "Mastercard Zahlung"
+          ],
+          "bank_transaction_code": {
+            "description": "Kartenzahlung"
+          }
+        }
+      ],
+      [
+        {
+          "entry_reference": "fab-003",
+          "transaction_amount": {
+            "amount": "200.00",
+            "currency": "EUR"
+          },
+          "credit_debit_indicator": "DBIT",
+          "status": "BOOK",
+          "booking_date": "2026-09-10",
+          "creditor": {
+            "name": "Erika Mustermann"
+          },
+          "creditor_account": {
+            "iban": "DE75512108001245126199"
+          },
+          "remittance_information": [
+            "Sparen"
+          ],
+          "bank_transaction_code": {
+            "description": "Überweisung"
+          }
+        },
+        {
+          "entry_reference": "fab-004",
+          "transaction_amount": {
+            "amount": "21.37",
+            "currency": "EUR"
+          },
+          "credit_debit_indicator": "DBIT",
+          "status": "BOOK",
+          "booking_date": "2026-09-15",
+          "remittance_information": [
+            "Sparplan TEST ETF Welt"
+          ],
+          "bank_transaction_code": {
+            "description": "Wertpapierkauf"
+          }
+        },
+        {
+          "entry_reference": "fab-005",
+          "transaction_amount": {
+            "amount": "9.99",
+            "currency": "EUR"
+          },
+          "credit_debit_indicator": "DBIT",
+          "status": "PDNG",
+          "booking_date": "2026-09-29",
+          "creditor": {
+            "name": "Streaming Muster"
+          }
+        }
+      ]
+    ]
+  },
+  "since": null,
+  "expected": [
+    {
+      "id": "20260901-fe1ee7b7cd456d50-1",
+      "kind": "DEPOSIT",
+      "datetime": "2026-09-01T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "1650",
+      "label": "Gutschrift",
+      "counterparty": "Beispiel GmbH",
+      "counterparty_iban": "DE89370400440532013000",
+      "text": "Gehalt 09/2026",
+      "signed": "1650",
+      "raw_type": "Gutschrift"
+    },
+    {
+      "id": "20260903-5b45e2b52d812a51-1",
+      "kind": "WITHDRAWAL",
+      "datetime": "2026-09-03T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "23.9",
+      "label": "Kartenzahlung",
+      "counterparty": "Supermarkt Muster",
+      "text": "Mastercard Zahlung",
+      "signed": "-23.9",
+      "raw_type": "Kartenzahlung"
+    },
+    {
+      "id": "20260910-b30c955577d1594b-1",
+      "kind": "WITHDRAWAL",
+      "datetime": "2026-09-10T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "200",
+      "label": "Überweisung",
+      "counterparty": "Erika Mustermann",
+      "counterparty_iban": "DE75512108001245126199",
+      "text": "Sparen",
+      "signed": "-200",
+      "raw_type": "Überweisung"
+    },
+    {
+      "id": "20260915-8eef03b6ae67bc8e-1",
+      "kind": "SECURITIES_CASH",
+      "datetime": "2026-09-15T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "21.37",
+      "label": "Wertpapierkauf",
+      "text": "Sparplan TEST ETF Welt",
+      "signed": "-21.37",
+      "raw_type": "Wertpapierkauf"
+    }
+  ]
+}

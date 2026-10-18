@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.28.0
+
+- **Banks over PSD2, e.g. N26 (waldonso2/wealthfolio-importer-addon#137):** *Bank über PSD2 1–3* read a giro account through Enable Banking, a licensed account information service, with the user's own app in its free restricted mode (only the user's own accounts). App id and private key are kept in the vault; every request is signed with the key. The login opens the bank's page; afterwards the user pastes the address the bank sent them to. The consent lasts as long as the bank allows; ntfy reminds 7 days and 1 day before it ends, and a scheduled run never starts a login by itself. Bookings as for FinTS banks; pending ones wait until they are booked. No depot over PSD2. The README says that the account data passes through Enable Banking.
+
 ## 0.27.0
 
 - **Any bank with FinTS (waldonso2/wealthfolio-importer-addon#136):** *Weitere Bank 1–3 (FinTS)* connect a bank without a profile of its own - Sparkasse, Volks- und Raiffeisenbank and most other German banks - with its bank code and FinTS address (https only) as credentials. Bookings as for DKB with the standard posting patterns; a reported depot's holdings are read but count as incomplete. Up to three such banks at once; each keeps its key for good.
