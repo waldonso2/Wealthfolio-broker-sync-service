@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.30.0
+
+- **N26 (waldonso2/wealthfolio-importer-addon#135):** the main account over the interface of the N26 app (unofficial; the broker settings ask for agreement first, as for Trade Republic). Login with e-mail and password, confirmed in the N26 app; afterwards the token is refreshed without the user, and a scheduled run never pushes a new login into the app. A rejected password stops every further attempt until the credentials are saved anew. Booked transactions only (pending ones wait), ids `n26-<id>`; the balance is compared after each run. Money moved to a Space is a withdrawal unless a transfer pattern books it as a transfer.
+
 ## 0.27.0
 
 - **Any bank with FinTS (waldonso2/wealthfolio-importer-addon#136):** *Weitere Bank 1–3 (FinTS)* connect a bank without a profile of its own - Sparkasse, Volks- und Raiffeisenbank and most other German banks - with its bank code and FinTS address (https only) as credentials. Bookings as for DKB with the standard posting patterns; a reported depot's holdings are read but count as incomplete. Up to three such banks at once; each keeps its key for good.
