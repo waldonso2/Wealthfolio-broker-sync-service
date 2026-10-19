@@ -41,6 +41,10 @@ class LogosUnsupported(WealthfolioError):
     """Wealthfolio before 3.8.0: no custom asset logos."""
 
 
+class SpendingUnsupported(WealthfolioError):
+    """Wealthfolio without the spending tracker."""
+
+
 @dataclass(frozen=True)
 class Duplicate:
     message: str
@@ -219,6 +223,19 @@ class WealthfolioClient:
                           json={"dataBase64": base64.b64encode(png).decode()})
         if r.status_code >= 400:
             raise WealthfolioError(f"Wealthfolio rejected the logo: {_detail(r)}")
+
+    def spending_settings(self) -> dict:
+        """``GET /spending/settings``: ``{enabled, accountIds, excludedCategoryIds}``; 404: no tracker."""
+        r = self._request("GET", "/spending/settings")
+        if r.status_code in (404, 405):
+            raise SpendingUnsupported("This Wealthfolio has no spending tracker.")
+        _raise(r)
+        return r.json()
+
+    def set_spending_accounts(self, account_ids: list[str]) -> None:
+        """Tracks exactly these accounts and turns the tracker on; Wealthfolio categorizes new ones itself."""
+        r = self._request("PUT", "/spending/settings", json={"enabled": True, "accountIds": account_ids})
+        _raise(r)
 
     def search_activities(self, account_ids: list[str], date_from: date, date_to: date,
                           page_size: int = 500) -> list[dict]:
