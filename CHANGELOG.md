@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.29.0
+## 0.28.0
 
 - **Complete unknown bookings (waldonso2/wealthfolio-importer-addon#132):** on *Unbekannte Buchungen*, each booking can be completed: buy or sale (shares and the money that moved, fee, tax), delivery in without payment (shares and cost basis), delivery out without payment, or a split. The next fetch books it by the booking model under the booking's own id, so it leaves the list and is never booked twice, even once the service learns the type itself. Until then it can be withdrawn. New table `completions` (state.db migration 3).
 - **Splits and reverse splits (#133):** booked as one SPLIT activity on the securities account with Wealthfolio's ratio (new shares per old one; a 1:10 reverse split is 0.1). Trade Republic's reverse splits (waldonso2/Wealthfolio-broker-sync-service#81, #82) and dividend reinvestments (#77) can be completed this way.
