@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.28.0
+
+- **Complete unknown bookings (waldonso2/wealthfolio-importer-addon#132):** on *Unbekannte Buchungen*, each booking can be completed: buy or sale (shares and the money that moved, fee, tax), delivery in without payment (shares and cost basis), delivery out without payment, or a split. The next fetch books it by the booking model under the booking's own id, so it leaves the list and is never booked twice, even once the service learns the type itself. Until then it can be withdrawn. New table `completions` (state.db migration 3).
+- **Splits and reverse splits (#133):** booked as one SPLIT activity on the securities account with Wealthfolio's ratio (new shares per old one; a 1:10 reverse split is 0.1). Trade Republic's reverse splits (waldonso2/Wealthfolio-broker-sync-service#81, #82) and dividend reinvestments (#77) can be completed this way.
+
 ## 0.27.0
 
 - **Any bank with FinTS (waldonso2/wealthfolio-importer-addon#136):** *Weitere Bank 1–3 (FinTS)* connect a bank without a profile of its own - Sparkasse, Volks- und Raiffeisenbank and most other German banks - with its bank code and FinTS address (https only) as credentials. Bookings as for DKB with the standard posting patterns; a reported depot's holdings are read but count as incomplete. Up to three such banks at once; each keeps its key for good.

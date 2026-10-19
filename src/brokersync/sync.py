@@ -402,7 +402,10 @@ class Syncer:
             run.tax_backfill = not self.state.flag(tax_flag(key))
             adapter.known_ids = {t for t, (status, _) in run.synced.items()
                                  if not (run.tax_backfill and status == "existing")}
-            run.transactions = adapter.get_transactions(run.since) + self._openings(key)
+            done = {t: history_mod.completion(t, c) for (_, t), c in self.state.completions(key).items()}
+            # A completed unknown booking replaces the adapter's own (same id).
+            run.transactions = ([t for t in adapter.get_transactions(run.since) if t.id not in done]
+                                + list(done.values()) + self._openings(key))
             run.history = self._history_start(key, adapter, run.bcfg)
             run.transactions += self._statements(key, adapter, run.history)
             run.cash = self._broker_cash(key, adapter)
