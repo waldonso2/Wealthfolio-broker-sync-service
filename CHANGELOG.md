@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.29.0
+
+- **Durchschau (waldonso2/wealthfolio-importer-addon#139):** a new page in the main menu shows what the depot really holds across all Wealthfolio accounts: every stock once with its share, value, country and sector and through which positions (a stock in three ETFs and held directly is one row) - top 50, top 100 or all; what the funds' holdings lists leave open as "nicht zugeordnet", never scaled up; the overlap of every two ETFs, each ETF's own contribution and the effective number of stocks. A position without a holdings list is one line of its own. New table `funds` (state.db migration 4).
+- **Holdings lists fetched or uploaded:** opt-in, after every fetch and at most weekly per ETF, the service gets the lists from Xtrackers (by ISIN) and iShares (built-in product ids for common funds, any other one from its product page saved once); only the ISIN or that page leaves the container, only these two hosts over https, answers capped at 20 MB, a list must look complete before it replaces the stored one. Any other issuer's list can be uploaded as CSV or XLSX.
+- **Cluster risks:** a single stock, a country, a sector, foreign currency, two strongly overlapping ETFs, too few effective stocks, and cash above the deposit guarantee on one account - limits on the page, each risk can be marked as intended, new ones are notified once via ntfy.
+- **Countries and sectors into Wealthfolio** (opt-in): each fund's weighted countries and GICS sectors go into Wealthfolio's taxonomies, so its own allocation views see through the funds instead of Yahoo's single country. Only Yahoo's automatic values are replaced, never the user's own; *Aus Wealthfolio entfernen* takes them out again.
+- **FIRE-Rechner:** how much wealth a life on the depot needs, in today's money, with the German flat tax, solidarity surcharge and church tax on the gain share only, the 30 % partial exemption, the saver's allowance, voluntary statutory health and care insurance (or a private premium) and the statutory pension from its start: lean, regular, fat and Barista FIRE, years to the goal, Coast FIRE. Wealth and gain share come from Wealthfolio unless typed. Values of 2026.
+- `scripts/lookthrough_probe.py` checks from the container which issuer sources answer.
+
 ## 0.28.0
 
 - **Complete unknown bookings (waldonso2/wealthfolio-importer-addon#132):** on *Unbekannte Buchungen*, each booking can be completed: buy or sale (shares and the money that moved, fee, tax), delivery in without payment (shares and cost basis), delivery out without payment, or a split. The next fetch books it by the booking model under the booking's own id, so it leaves the list and is never booked twice, even once the service learns the type itself. Until then it can be withdrawn. New table `completions` (state.db migration 3).

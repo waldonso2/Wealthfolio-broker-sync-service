@@ -253,6 +253,24 @@ Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in 
 
 Die Seite **Prüfung** zeigt außerdem, welche schon übernommenen Buchungen in Wealthfolio fehlen (*Wieder anlegen* oder *Ignorieren*), welche Buchungen des Dienstes es beim Broker nicht mehr gibt, wo im Depotkonto Bargeld stehen bleibt und welche Überträge kein Gegenstück haben.
 
+## Durchschau, Klumpenrisiken und FIRE
+
+Die Seite **Durchschau** im Hauptmenü zeigt, was in deinen ETFs steckt und wie es sich mit deinen übrigen Positionen addiert – über alle Konten in Wealthfolio:
+
+- **Aktien über alle Positionen:** jede Aktie einmal, mit ihrem Anteil am Depot, Wert, Land und Sektor und woher sie kommt („Apple 6,8 %: Nasdaq 100 2,8 % · MSCI World 2,1 % · direkt 1,9 %“) – Top 50, Top 100 oder alle. Was die Positionslisten der Fonds offen lassen, steht als „nicht zugeordnet“; hochgerechnet wird nichts.
+- **Wie sich die ETFs überschneiden:** je zwei ETFs der gemeinsame Anteil, je ETF der eigene Beitrag (was keine andere Position mitbringt) und die effektive Titelzahl des Depots.
+- **Klumpenrisiken:** eine Aktie über 5 %, ein Land über 60 %, ein Sektor über 30 %, Fremdwährung über 50 %, zwei ETFs mit über 50 % Überschneidung, weniger als 30 effektive Titel und mehr als 100.000 EUR Bargeld auf einem Konto (gesetzliche Einlagensicherung je Bank). Die Grenzen änderst du unter *Einstellungen der Durchschau*; was du bewusst so hältst, markierst du mit *So gewollt*. Neue Klumpenrisiken kommen einmal als ntfy-Nachricht.
+
+Die Positionslisten der ETFs holt der Dienst bei den Anbietern, wenn du es unter *Einstellungen der Durchschau* einschaltest – nach jedem Abruf, je ETF höchstens einmal in der Woche, *Positionslisten jetzt abrufen* sofort. Gesendet wird nur die ISIN:
+
+- **Xtrackers:** über die ISIN.
+- **iShares:** gängige ETFs kennt der Dienst; für jeden anderen trägst du unter *Quelle ändern oder Liste hochladen* einmal die Adresse seiner Produktseite ein.
+- **Alle anderen** (Amundi, Vanguard, SPDR, …): die Positionsliste von der Seite des Anbieters herunterladen und hochladen (CSV oder XLSX). Bei synthetischen ETFs (Swap) listen manche Anbieter den Sicherheitenkorb statt des Index – dann lieber die Index-Aufteilung des Anbieters nehmen.
+
+Wahlweise trägt der Dienst die Länder und Sektoren der ETFs auch **in Wealthfolio** ein (*Länder und Sektoren der ETFs in Wealthfolio eintragen*). Dann sehen Wealthfolios eigene Auswertungen und Zielallokationen durch die ETFs, statt jedem ETF ein einziges Land zuzuordnen. Ersetzt werden nur die automatischen Werte, die Wealthfolio von Yahoo holt; eigene Zuordnungen bleiben unangetastet. *Aus Wealthfolio entfernen* nimmt alles wieder heraus.
+
+Der **FIRE-Rechner** (Link oben auf der Durchschau) rechnet aus, wie viel Vermögen ein Leben vom Depot braucht, in heutigem Geld und mit deutschen Regeln: Abgeltungsteuer mit Solidaritätszuschlag und wahlweise Kirchensteuer nur auf den Gewinnanteil eines Verkaufs, 30 % Teilfreistellung für Aktienfonds, Sparerpauschbetrag, Kranken- und Pflegeversicherung als freiwillig gesetzlich Versicherter (oder ein privater Beitrag) und die gesetzliche Rente ab ihrem Beginn. Er zeigt Lean, regulär und Fat FIRE (75 %, 100 %, 150 % der Ausgaben), Barista FIRE mit Teilzeit-Einkommen bis zur Rente, wann du das Ziel erreichst und ab welchem Vermögen Coast FIRE gilt. Vermögen und Gewinnanteil kommen aus Wealthfolio; beides lässt sich überschreiben. Eine vereinfachte Modellrechnung mit den Werten von 2026 – keine Steuer- oder Anlageberatung.
+
 ## Im Alltag
 
 | Was passiert | Was du tust |
@@ -281,6 +299,7 @@ Die Seite **Prüfung** zeigt außerdem, welche schon übernommenen Buchungen in 
 
 - **Ohne SQLCipher:** SQLCipher gibt es für x86-64 und ARM64. Auf anderen Plattformen (z. B. 32-Bit-ARM) liegt die Sync-Datenbank unverschlüsselt in `data/`. Zugangsdaten und Einstellungen bleiben verschlüsselt. Die Seite *Sicherheit* zeigt das an.
 - **Ohne TPM:** Den Schlüssel des Dienstes verschlüsselt `systemd-creds` mit dem Host-Secret des Containers (`/var/lib/systemd/credential.secret`); ein TPM nutzt ein Container nicht. Wer den ganzen Container kopiert, etwa als Backup, kann die Daten deshalb öffnen – außer mit Master-Passphrase. Wo `systemd-creds` nicht verschlüsseln kann, liegt der Schlüssel nur für root lesbar unter `/etc/wealthfolio-broker-sync/`.
+- **Durchschau:** Länder- und Sektornamen stehen so, wie der Anbieter sie schreibt („USA“ und „United States“ zählen getrennt); ein währungsgesicherter ETF zählt noch als Fremdwährung; eine Firma, die zwei Anbieter verschieden benennen, kann zweimal erscheinen. Die Seiten der Anbieter sind keine offiziellen Schnittstellen: Ändert ein Anbieter sie, zeigt die Durchschau den Fehler beim ETF, und die Liste lässt sich hochladen.
 - **Trade Republic:** Eine offizielle Schnittstelle gibt es nicht. Der Dienst nutzt die der Web-App (über pytr); ändert Trade Republic sie, klappt der Abruf bis zu einem Update nicht.
 
 ## Sicherheit
