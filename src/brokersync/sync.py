@@ -285,7 +285,13 @@ class Syncer:
             with connect(self._wealthfolio, cfg.wealthfolio_url, secrets.get("wealthfolio_password"),
                          cfg.wealthfolio_fingerprint) as wf:
                 depot = lookthrough.read_depot(wf)
-            result = lookthrough.update(self.state, depot, sources, force=force) if cfg.lookthrough_enabled else None
+                result = lookthrough.update(self.state, depot, sources, force=force) if cfg.lookthrough_enabled \
+                    else None
+                if cfg.lookthrough_write:
+                    try:
+                        lookthrough.write_taxonomies(self.state, wf, depot)
+                    except WealthfolioError:
+                        log.exception("look-through: countries and sectors not written to Wealthfolio")
             found = xray.findings(lookthrough.holdings(self.state, depot), lookthrough.limits(cfg.xray_limits),
                                   depot.base, depot.cash)
             new = lookthrough.new_risks(self.state, found)
@@ -299,6 +305,14 @@ class Syncer:
             return None
         finally:
             sources.close()
+
+    def remove_taxonomies(self) -> int:
+        """*Aus Wealthfolio entfernen* on *Durchschau*: our countries and sectors out again (under the sync lock)."""
+        with run_lock(self.data_dir, wait=5):
+            cfg = config_mod.load(self.data_dir)
+            with connect(self._wealthfolio, cfg.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
+                         cfg.wealthfolio_fingerprint) as wf:
+                return lookthrough.remove_taxonomies(wf, lookthrough.read_depot(wf))
 
     def _check_update(self, cfg: config_mod.Config) -> None:
         """Once a day: a newer release is shown on the overview and notified once (updates.py)."""

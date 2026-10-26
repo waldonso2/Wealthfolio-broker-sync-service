@@ -86,6 +86,7 @@ def lookthrough_page(request: Request, ctx: Ctx, top: str = "50"):
         own={h.id: xray.own_share(h, holdings) for h in with_list},
         risks=[f for f in found if f.key not in accepted], accepted=[f for f in found if f.key in accepted],
         kind=KIND, cfg=c, limit_fields=LIMIT_FIELDS, limits=limits, base=depot.base,
+        written=json.loads(state.meta(meta_keys.TAXONOMIES_LAST()) or "null"),
         reading=ctx.running.is_set() and ctx.job in (N_("Durchschau"), N_("Positionslisten abrufen")),
         read_at=datetime.fromtimestamp(ctx.depot_at, UTC) if ctx.depot_at else None)
 
@@ -116,6 +117,7 @@ async def lookthrough_settings(request: Request, ctx: Ctx):
 
     def change(c) -> None:
         c.lookthrough_enabled = bool(form.get("enabled"))
+        c.lookthrough_write = bool(form.get("write"))
         c.xray_limits = saved
 
     ctx.update(change)
@@ -153,7 +155,8 @@ def lookthrough_source(request: Request, ctx: Ctx, asset_id: str = Form(...), ur
 @router.post("/lookthrough/fetch")
 def lookthrough_fetch(request: Request, ctx: Ctx):
     """*Jetzt abrufen*: every fund's holdings list now, in the background."""
-    if not ctx.cfg().lookthrough_enabled:
+    c = ctx.cfg()
+    if not c.lookthrough_enabled and not c.lookthrough_write:
         return redirect(request, "/lookthrough", tr(request, "Erst den automatischen Abruf einschalten."), "warn")
     from .overview import start_job
 
@@ -170,6 +173,25 @@ def lookthrough_fetch(request: Request, ctx: Ctx):
         return text, "warn" if result.errors else "ok"
 
     return start_job(request, ctx, N_("Positionslisten abrufen"), work, "/lookthrough")
+
+
+@router.post("/lookthrough/taxonomies/remove")
+def lookthrough_remove(request: Request, ctx: Ctx):
+    """Take the service's countries and sectors out of Wealthfolio again, and stop writing them."""
+    ctx.update(lambda c: setattr(c, "lookthrough_write", False))
+    from .overview import start_job
+
+    def work(lang: str) -> tuple[str, str]:
+        try:
+            n = ctx.syncer.remove_taxonomies()
+        except AlreadyRunning:
+            return translate("Ein Abruf läuft gerade - bitte gleich noch einmal.", lang), "warn"
+        except WealthfolioError as e:
+            return translate("Wealthfolio: {error}", lang, error=str(e)), "error"
+        ctx.state.delete_meta(meta_keys.TAXONOMIES_LAST())
+        return translate("{n} Zuordnungen aus Wealthfolio entfernt.", lang, n=n), "ok"
+
+    return start_job(request, ctx, N_("Zuordnungen entfernen"), work, "/lookthrough")
 
 
 @router.post("/lookthrough/upload")

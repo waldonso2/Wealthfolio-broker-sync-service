@@ -1082,4 +1082,16 @@ EN: dict[str, str] = {
         "Fetch the holdings lists from the issuers automatically (iShares, Xtrackers) – after every fetch, at most "
         "weekly per ETF. Only the ISIN or the product page is sent.",
     "Positionslisten jetzt abrufen": "Fetch holdings lists now",
+    # Taxonomien in Wealthfolio (#139)
+    "Zuordnungen entfernen": "Remove assignments",
+    "{n} Zuordnungen aus Wealthfolio entfernt.": "{n} assignments removed from Wealthfolio.",
+    "Länder und Sektoren der ETFs in Wealthfolio eintragen, damit seine eigenen Auswertungen durch die ETFs sehen. "
+    "Ersetzt nur Yahoos automatische Werte, nie deine eigenen Zuordnungen.":
+        "Enter the ETFs' countries and sectors in Wealthfolio, so its own analyses see through the ETFs. Replaces "
+        "only Yahoo's automatic values, never your own assignments.",
+    "Zuletzt in Wealthfolio eingetragen {when}: {written} geändert, {manual} mit deinen eigenen Zuordnungen "
+    "gelassen.":
+        "Last entered in Wealthfolio {when}: {written} changed, {manual} left with your own assignments.",
+    "Ohne passende Kategorie: {names}.": "Without a matching category: {names}.",
+    "Aus Wealthfolio entfernen": "Remove from Wealthfolio",
 }

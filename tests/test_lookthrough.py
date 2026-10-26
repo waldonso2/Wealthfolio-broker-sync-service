@@ -207,3 +207,61 @@ def test_after_a_run_the_funds_are_fetched_and_new_risks_notified(tmp_path):
     assert len(risks) == 1 and "neue Klumpenrisiken" in risks[0]
     syncer.run()
     assert len([t for t, _, _ in notifier.sent if t == "Klumpenrisiko"]) == 1  # told once
+
+
+# ── into Wealthfolio's taxonomies ────────────────────────────────────────────
+def _wf():
+    from brokersync.wealthfolio import WealthfolioClient
+
+    from .fakes import PASSWORD, FakeWealthfolio
+
+    fake = FakeWealthfolio()
+    return fake, WealthfolioClient("http://wf.local:8080", PASSWORD, transport=fake.transport())
+
+
+FUND_LINES = [["US0000000002", "A", "0.5", "USA", "Information Technology", "USD"],
+              ["DE0000000001", "B", "0.3", "Germany", "Industrials", "EUR"],
+              ["XX0000000001", "C", "0.15", "Narnia", "Software & Services", "EUR"]]
+
+
+def test_countries_and_sectors_go_into_wealthfolio_without_touching_the_users_own(tmp_path):
+    state = State(tmp_path)
+    state.set_fund("a-world", "World", FUND_LINES)
+    depot = Depot(positions=[{"id": "a-world", "isin": "", "name": "World", "currency": "EUR", "value": D(1)},
+                             {"id": "a-stock", "isin": "", "name": "Stock", "currency": "EUR", "value": D(1)}])
+    fake, wf = _wf()
+    fake.assignments.append({"id": "y1", "assetId": "a-world", "taxonomyId": "regions", "categoryId": "country_DE",
+                             "weight": 10000, "source": "AUTO"})  # Yahoo: only the domicile
+    r = lookthrough.write_taxonomies(state, wf, depot)
+    assert (r.written, r.manual) == (2, 0) and r.unmatched == ["Narnia", "Software & Services"]
+    mine = sorted((a["taxonomyId"], a["categoryId"], a["weight"]) for a in fake.assignments)
+    # A subcategory (Software & Services) is not a sector; Narnia has no country: both stay unassigned.
+    assert mine == [("industries_gics", "20", 3000), ("industries_gics", "45", 5000),
+                    ("regions", "country_DE", 3000), ("regions", "country_US", 5000)]
+    assert all(a["source"] == "BROKERSYNC" for a in fake.assignments)
+    assert lookthrough.write_taxonomies(state, wf, depot).written == 0  # unchanged: not written again
+    # The user sets the sector by hand: from now on it is left alone.
+    fake.assignments = [a for a in fake.assignments if a["taxonomyId"] != "industries_gics"]
+    fake.assignments.append({"id": "u1", "assetId": "a-world", "taxonomyId": "industries_gics", "categoryId": "45",
+                             "weight": 10000, "source": "MANUAL"})
+    state.set_fund("a-world", "World", [FUND_LINES[0], [*FUND_LINES[1][:2], "0.4", *FUND_LINES[1][3:]]])
+    r = lookthrough.write_taxonomies(state, wf, depot)
+    assert (r.written, r.manual) == (1, 1)
+    assert lookthrough.remove_taxonomies(wf, depot) == 2
+    assert [a["source"] for a in fake.assignments] == ["MANUAL"]
+
+
+def test_a_run_writes_the_taxonomies_when_turned_on(tmp_path):
+    from .fakes import FakeWealthfolio
+    from .test_sync import setup
+
+    wf = FakeWealthfolio()
+    syncer, _ = setup(tmp_path, wf)
+    syncer.run()
+    State(tmp_path).set_fund("IE00B4L5Y983", "World", FUND_LINES)
+    syncer.run()
+    assert wf.assignments == []  # off by default
+    config_mod.update(tmp_path, lambda c: setattr(c, "lookthrough_write", True))
+    syncer.run()
+    assert {a["categoryId"] for a in wf.assignments} == {"country_US", "country_DE", "45", "20"}
+    assert syncer.remove_taxonomies() == 4 and wf.assignments == []

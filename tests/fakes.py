@@ -41,6 +41,14 @@ class FakeWealthfolio:
         self.expire_next = False
         self.assets: list[dict] = []  # GET /assets
         self.logos: dict[str, str] | None = {}  # asset id -> base64 PNG; None: Wealthfolio before 3.8.0
+        # Taxonomies: a few of Wealthfolio's seeded categories, and the assignments made.
+        self.categories = {"regions": [{"id": "R20", "name": "Americas", "parentId": None},
+                                       {"id": "country_US", "name": "United States", "parentId": "R2010"},
+                                       {"id": "country_DE", "name": "Germany", "parentId": "R3010"}],
+                           "industries_gics": [{"id": "45", "name": "Information Technology", "parentId": None},
+                                               {"id": "4510", "name": "Software & Services", "parentId": "45"},
+                                               {"id": "20", "name": "Industrials", "parentId": None}]}
+        self.assignments: list[dict] = []
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -152,6 +160,27 @@ class FakeWealthfolio:
                 return httpx.Response(400, json={"code": 400, "message": "Logo image must be a PNG"})
             self.logos[asset_id] = data
             return httpx.Response(200, json={"assetId": asset_id})
+        if path.startswith("/api/v1/taxonomies/assignments/asset/") and request.method == "PUT":
+            _, asset_id, _, taxonomy_id = path.removeprefix("/api/v1/taxonomies/assignments/").split("/")
+            new = json.loads(request.content)
+            known = {c["id"] for c in self.categories[taxonomy_id]}
+            if any(not 1 <= a["weight"] <= 10000 or a["categoryId"] not in known for a in new):
+                return httpx.Response(400, json={"code": 400, "message": "invalid assignment"})
+            self.assignments = [a for a in self.assignments
+                                if not (a["assetId"] == asset_id and a["taxonomyId"] == taxonomy_id)]
+            self.assignments += [{**a, "id": str(uuid.uuid4())} for a in new]
+            return httpx.Response(200, json=new)
+        if path.startswith("/api/v1/taxonomies/assignments/asset/"):
+            asset_id = unquote(path.rsplit("/", 1)[1])
+            return httpx.Response(200, json=[a for a in self.assignments if a["assetId"] == asset_id])
+        if path.startswith("/api/v1/taxonomies/assignments/") and request.method == "DELETE":
+            gone = path.rsplit("/", 1)[1]
+            self.assignments = [a for a in self.assignments if a["id"] != gone]
+            return httpx.Response(204)
+        if path.startswith("/api/v1/taxonomies/"):
+            taxonomy_id = path.rsplit("/", 1)[1]
+            return httpx.Response(200, json={"taxonomy": {"id": taxonomy_id},
+                                             "categories": self.categories.get(taxonomy_id, [])})
         if path == "/api/v1/holdings":
             return httpx.Response(200, json=self.holdings(request.url.params["accountId"]))
         if path == "/api/v1/activities/search":

@@ -394,3 +394,83 @@ def new_risks(state: State, found: list[xray.Finding]) -> list[xray.Finding]:
     told = set(json.loads(state.meta(meta_keys.XRAY_NOTIFIED()) or "[]"))
     state.set_meta(meta_keys.XRAY_NOTIFIED(), json.dumps(sorted(f.key for f in current)))
     return [f for f in current if f.key not in told]
+
+
+# ── into Wealthfolio's taxonomies ────────────────────────────────────────────
+SOURCE = "BROKERSYNC"  # the assignments' source: ours; AUTO is Yahoo's, anything else the user's
+# The issuers' names that differ from Wealthfolio's category names (all lower case).
+ALIASES = {"usa": "united states", "united states of america": "united states", "us": "united states",
+           "uk": "united kingdom", "great britain": "united kingdom", "korea (south)": "south korea",
+           "korea, republic of": "south korea", "korea": "south korea", "netherlands (the)": "netherlands",
+           "russian federation": "russia", "taiwan, province of china": "taiwan", "hong kong sar": "hong kong",
+           "communication": "communication services", "telecommunication services": "communication services",
+           "telecommunications": "communication services", "it": "information technology"}
+# Taxonomy, the line's attribute, and which of its categories count (countries; the GICS sectors).
+TAXONOMIES = (("regions", "country", lambda c: str(c.get("id", "")).startswith("country_")),
+              ("industries_gics", "sector", lambda c: not c.get("parentId")))
+
+
+@dataclass
+class Written:
+    written: int = 0  # taxonomies of assets replaced
+    manual: int = 0  # left alone: the user assigned them
+    unmatched: list[str] = field(default_factory=list)  # names Wealthfolio has no category for
+
+
+def _bp(lines: list[list[str]], attr: int, categories: dict[str, str], unmatched: set[str]) -> list[tuple[str, int]]:
+    """Weight per category in basis points, rounded down; a name without a category stays out (unassigned)."""
+    out: dict[str, Decimal] = {}
+    for line in lines:
+        name = line[attr].strip().lower()
+        if not name:
+            continue
+        category = categories.get(ALIASES.get(name, name))
+        if category is None:
+            unmatched.add(line[attr].strip())
+            continue
+        out[category] = out.get(category, Decimal(0)) + Decimal(line[2])
+    return sorted((c, int(w * 10000)) for c, w in out.items() if int(w * 10000) >= 1)
+
+
+def write_taxonomies(state: State, wf, depot: Depot) -> Written:
+    """Countries and sectors of every fund with a holdings list into Wealthfolio, so its own allocation views
+    see through the funds. Only Yahoo's (``AUTO``) and our own assignments are replaced; unchanged ones are
+    not written again."""
+    result, unmatched = Written(), set[str]()
+    categories = {tax: {str(c.get("name", "")).lower(): c["id"] for c in wf.taxonomy_categories(tax) if counts(c)}
+                  for tax, _, counts in TAXONOMIES}
+    funds = state.funds()
+    for p in depot.positions:
+        fund = funds.get(p["id"])
+        if not fund:
+            continue
+        existing = wf.asset_assignments(p["id"])
+        for tax, attr, _ in TAXONOMIES:
+            new = _bp(fund["constituents"], 3 if attr == "country" else 4, categories[tax], unmatched)
+            current = [a for a in existing if a.get("taxonomyId") == tax]
+            if not new:
+                continue
+            if any(str(a.get("source", "")).upper() not in ("AUTO", SOURCE) for a in current):
+                result.manual += 1
+                continue
+            if sorted((a.get("categoryId"), a.get("weight")) for a in current) == new and all(
+                    a.get("source") == SOURCE for a in current):
+                continue
+            wf.replace_assignments(p["id"], tax, [{"assetId": p["id"], "taxonomyId": tax, "categoryId": c,
+                                                   "weight": w, "source": SOURCE} for c, w in new])
+            result.written += 1
+    result.unmatched = sorted(unmatched)[:20]
+    state.set_meta(meta_keys.TAXONOMIES_LAST(), json.dumps({"written": result.written, "manual": result.manual,
+                                                            "unmatched": result.unmatched, "at": now()}))
+    return result
+
+
+def remove_taxonomies(wf, depot: Depot) -> int:
+    """Take our assignments out of Wealthfolio again (Yahoo fills its own back in); returns how many."""
+    removed = 0
+    for p in depot.positions:
+        for a in wf.asset_assignments(p["id"]):
+            if a.get("source") == SOURCE:
+                wf.delete_assignment(a["id"])
+                removed += 1
+    return removed
