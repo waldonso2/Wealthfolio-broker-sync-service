@@ -8,6 +8,7 @@
 - **Countries and sectors into Wealthfolio** (opt-in): each fund's weighted countries and GICS sectors go into Wealthfolio's taxonomies, so its own allocation views see through the funds instead of Yahoo's single country. Only Yahoo's automatic values are replaced, never the user's own; *Aus Wealthfolio entfernen* takes them out again.
 - **FIRE-Rechner:** how much wealth a life on the depot needs, in today's money, with the German flat tax, solidarity surcharge and church tax on the gain share only, the 30 % partial exemption, the saver's allowance, voluntary statutory health and care insurance (or a private premium) and the statutory pension from its start: lean, regular, fat and Barista FIRE, years to the goal, Coast FIRE. Wealth and gain share come from Wealthfolio unless typed. Values of 2026.
 - `scripts/lookthrough_probe.py` checks from the container which issuer sources answer.
+
 ## 0.28.1
 
 - Security updates of two locked dependencies (CI job `audit`): certifi 2026.10.19 (PYSEC-2026-4320) and setuptools 84.1.0 (GHSA-xmj3-9gf7-h52w).
