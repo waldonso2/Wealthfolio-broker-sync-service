@@ -69,6 +69,8 @@ class Config:
     # Write the funds' countries and sectors into Wealthfolio's taxonomies (replaces only Yahoo's AUTO values).
     lookthrough_write: bool = False
     xray_limits: dict[str, str] = field(default_factory=dict)
+    # Page FIRE: the user's inputs as text (fire.Inputs' fields); empty capital / gain share: from Wealthfolio.
+    fire: dict[str, str] = field(default_factory=dict)
     # "auto": sessions are kept, the timer fetches. "safe": every fetch needs a fresh login in the UI, the
     # session is ended after it, the timer only reminds (#85). For all brokers.
     sync_mode: str = "auto"

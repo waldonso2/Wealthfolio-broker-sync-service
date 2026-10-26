@@ -266,9 +266,20 @@ def fetch(sources: Sources, isin: str, page: str = "") -> tuple[tuple[Constituen
 # ── the depot ────────────────────────────────────────────────────────────────
 @dataclass
 class Depot:
-    positions: list[dict] = field(default_factory=list)  # {id, isin, name, value} per asset, largest first
+    positions: list[dict] = field(default_factory=list)  # {id, isin, name, value, cost} per asset, largest first
     cash: dict[str, Decimal] = field(default_factory=dict)  # per account name, in the base currency
     base: str = "EUR"
+
+    @property
+    def total(self) -> Decimal:
+        return sum((p["value"] for p in self.positions), Decimal(0)) + sum(self.cash.values(), Decimal(0))
+
+    @property
+    def gain_share(self) -> Decimal | None:
+        """Part of the securities' value that is gain (for the tax of a sale), from Wealthfolio's cost basis."""
+        known = [p for p in self.positions if p.get("cost")]
+        value = sum((p["value"] for p in known), Decimal(0))
+        return max(Decimal(0), 1 - sum((p["cost"] for p in known), Decimal(0)) / value) if value else None
 
 
 def _dec(value) -> Decimal:
@@ -298,8 +309,10 @@ def read_depot(wf) -> Depot:
             isin = isins.get(inst["id"]) or isin_of({"instrumentSymbol": inst.get("symbol")}) or ""
             p = positions.setdefault(inst["id"], {"id": inst["id"], "isin": isin,
                                                   "name": inst.get("name") or inst.get("symbol") or inst["id"],
-                                                  "currency": h.get("localCurrency") or "", "value": Decimal(0)})
+                                                  "currency": h.get("localCurrency") or "", "value": Decimal(0),
+                                                  "cost": Decimal(0)})
             p["value"] += value
+            p["cost"] += _dec((h.get("costBasis") or {}).get("base"))
     depot.positions = sorted((p for p in positions.values() if p["value"] > 0), key=lambda p: -p["value"])
     return depot
 
