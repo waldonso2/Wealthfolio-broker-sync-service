@@ -19,6 +19,7 @@
   <nav class="main" aria-label="{{ _('Hauptmenü') }}">
     <a href="/"{% if path == "/" %} aria-current="page"{% endif %}>{{ icon("home") }}<span>{{ _("Übersicht") }}</span></a>
     <a href="/check"{% if path.startswith("/check") %} aria-current="page"{% endif %}>{{ icon("check") }}<span>{{ _("Prüfung") }}</span></a>
+    <a href="/lookthrough"{% if path.startswith("/lookthrough") %} aria-current="page"{% endif %}>{{ icon("layers") }}<span>{{ _("Durchschau") }}</span></a>
     <a href="/unknown"{% if path == "/unknown" %} aria-current="page"{% endif %}>{{ icon("unknown") }}<span>{{ _("Unbekannt") }}</span>{% if nav_unknown %} <span class="count" aria-label="{{ _('{n} offen', n=nav_unknown) }}">{{ nav_unknown }}</span>{% endif %}</a>
     <a href="/settings"{% if in_settings %} aria-current="page"{% endif %}>{{ icon("settings") }}<span>{{ _("Einstellungen") }}</span></a>
   </nav>

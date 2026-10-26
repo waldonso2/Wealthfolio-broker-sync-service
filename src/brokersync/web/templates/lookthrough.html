@@ -1,0 +1,81 @@
+{% extends "base.html" %}{% block title %}{{ _("Durchschau") }}{% endblock %}
+{% block head %}{% if reading %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
+{% block content %}
+{% macro pct(value) %}{{ (value * 100) | money }} %{% endmacro %}
+<div class="card">
+  <h1>{{ _("Durchschau") }}</h1>
+  <p>{{ _("Welche Aktien in deinen ETFs stecken und wie sie sich mit deinen anderen Positionen addieren. Lade für jeden ETF die Positionsliste seines Anbieters hoch (CSV, z. B. von der Produktseite bei iShares); ohne Liste zählt ein ETF als eine Position.") }}</p>
+  <form method="post" action="/lookthrough/refresh" class="actions">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <p class="muted grow" aria-live="polite">{% if reading %}{{ _("Die Positionen werden gerade aus Wealthfolio gelesen …") }}{% elif read_at %}{{ _("Positionen gelesen {when}.", when=read_at | local) }}{% endif %}</p>
+    <button class="secondary" {% if reading %}disabled{% endif %}>{{ _("Neu lesen") }}</button>
+  </form>
+  {% if wf_error %}<p class="error" role="alert">{{ wf_error | redact }}</p>{% endif %}
+  <details><summary>{{ _("Was wird berechnet?") }}</summary>
+    <p>{{ _("Anteil am Depot: Wert der Position mal Gewicht der Aktie im Fonds, über alle Positionen addiert. Was die Gewichte eines Fonds offen lassen, steht als „nicht zugeordnet“ – nichts wird hochgerechnet. Überschneidung zweier ETFs: Summe des jeweils kleineren Gewichts jeder Aktie, die beide halten. Eigener Beitrag: der Teil eines ETFs, den keine andere Position mitbringt. Effektive Titelzahl: so vielen gleich gewichteten Aktien entspricht das Depot.") }}</p>
+    <p class="muted">{{ _("Vereinfachte Modellrechnung, keine Anlageberatung.") }}</p>
+  </details>
+</div>
+
+<div class="card">
+  <h2>{{ _("Positionen und Positionslisten") }}</h2>
+  {% if positions %}
+  <div class="table"><table>
+    <caption class="sr-only">{{ _("Positionen und Positionslisten") }}</caption>
+    <thead><tr><th scope="col">{{ _("Position") }}</th><th scope="col">ISIN</th><th scope="col">{{ _("Anteil am Depot") }}</th><th scope="col">{{ _("Positionsliste") }}</th></tr></thead>
+    <tbody>
+    {% for p in positions %}{% set f = funds.get(p.id) %}
+    <tr><td data-label="{{ _('Position') }}">{{ p.name }}</td>
+      <td data-label="ISIN">{{ p.isin }}</td>
+      <td data-label="{{ _('Anteil am Depot') }}">{{ pct(p.value / total) }}</td>
+      <td data-label="{{ _('Positionsliste') }}">{% if f %}{{ _("{n} Positionen, hochgeladen {when}", n=f.constituents | length, when=f.at | local) }}{% else %}<span class="muted">{{ _("keine") }}</span>{% endif %}
+        <details><summary>{{ _("Positionsliste hochladen") }}</summary>
+          <form method="post" action="/lookthrough/upload" enctype="multipart/form-data" class="inline-form">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
+            <label>{{ _("CSV-Datei für {name}", name=p.name) }} <input type="file" name="file" accept=".csv,text/csv" required></label>
+            <div class="actions"><button>{{ _("Hochladen") }}</button></div>
+          </form>
+        </details></td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% elif not reading %}<p class="muted">{{ _("Keine Positionen in Wealthfolio.") }}</p>{% endif %}
+</div>
+
+{% if stocks %}
+<div class="card">
+  <h2>{{ _("Aktien über alle Positionen") }}</h2>
+  <p>{{ _("{n} Aktien, effektive Titelzahl {effective}.", n=count, effective=effective | round | int) }}{% if unassigned %} {{ _("Nicht zugeordnet: {share}.", share=pct(unassigned.share)) }}{% endif %}</p>
+  <nav class="actions" aria-label="{{ _('Anzahl') }}">{% for t in tops %}<a href="/lookthrough?top={{ t }}"{% if t == top %} aria-current="page"{% endif %}>{{ _("alle") if t == "all" else _("Top {n}", n=t) }}</a>{% endfor %}</nav>
+  <div class="table"><table>
+    <caption class="sr-only">{{ _("Aktien über alle Positionen") }}</caption>
+    <thead><tr><th scope="col">#</th><th scope="col">{{ _("Aktie") }}</th><th scope="col">{{ _("Land") }}</th><th scope="col">{{ _("Sektor") }}</th><th scope="col">{{ _("Anteil am Depot") }}</th><th scope="col">{{ _("Wert") }}</th><th scope="col">{{ _("davon über") }}</th></tr></thead>
+    <tbody>
+    {% for r in stocks %}
+    <tr><td data-label="#">{{ loop.index }}</td>
+      <td data-label="{{ _('Aktie') }}">{{ r.name }}{% if r.key != r.name | upper %} <span class="muted">{{ r.key }}</span>{% endif %}</td>
+      <td data-label="{{ _('Land') }}">{{ r.country }}</td>
+      <td data-label="{{ _('Sektor') }}">{{ r.sector }}</td>
+      <td data-label="{{ _('Anteil am Depot') }}">{{ pct(r.share) }}</td>
+      <td data-label="{{ _('Wert') }}">{{ r.value | money }}</td>
+      <td data-label="{{ _('davon über') }}">{% for id, share in r.via | dictsort(by="value", reverse=True) %}{{ names[id] }} {{ pct(share) }}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+    {% endfor %}
+    </tbody></table></div>
+</div>
+{% endif %}
+
+{% if fund_list %}
+<div class="card">
+  <h2>{{ _("Wie sich die ETFs überschneiden") }}</h2>
+  <div class="table"><table>
+    <caption class="sr-only">{{ _("Wie sich die ETFs überschneiden") }}</caption>
+    <thead><tr><th scope="col">{{ _("ETF") }}</th><th scope="col">{{ _("Eigener Beitrag") }}</th>{% for b in fund_list %}<th scope="col">{{ b.name }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for a in fund_list %}
+    <tr><td data-label="{{ _('ETF') }}">{{ a.name }}</td>
+      <td data-label="{{ _('Eigener Beitrag') }}">{{ pct(own[a.id]) }}</td>
+      {% for b in fund_list %}<td data-label="{{ b.name }}">{% if a.id == b.id %}–{% else %}{{ pct(overlap.get((a.id, b.id), overlap.get((b.id, a.id)))) }}{% endif %}</td>{% endfor %}</tr>
+    {% endfor %}
+    </tbody></table></div>
+</div>
+{% endif %}
+{% endblock %}

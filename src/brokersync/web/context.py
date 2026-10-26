@@ -88,6 +88,10 @@ class AppContext:
     audits_at: float = 0.0
     account_names: dict[str, str] = field(default_factory=dict)
     audit_error: str | None = None
+    # Look-through (*Durchschau*): the depot's positions, read in the background.
+    positions: list[dict] = field(default_factory=list)
+    positions_at: float = 0.0
+    positions_error: str | None = None
     _accounts: tuple[float, str, list] | None = None
 
     def render(self, request: Request, name: str, **ctx) -> HTMLResponse:

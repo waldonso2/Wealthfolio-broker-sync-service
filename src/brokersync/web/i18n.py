@@ -986,4 +986,51 @@ EN: dict[str, str] = {
         "Note on the interface confirmed.",
     "Ich habe den Hinweis gelesen und möchte den Zugang trotzdem nutzen.":
         "I have read the note and want to use the access anyway.",
+    # Durchschau (waldonso2/wealthfolio-importer-addon#139)
+    "Durchschau": "Look-through",
+    "{name}: {n} Positionen gelesen, zusammen {sum} % des Fonds.":
+        "{name}: {n} holdings read, {sum} % of the fund together.",
+    "Unbekannte Position - bitte die Seite neu laden.": "Unknown position - please reload the page.",
+    "Welche Aktien in deinen ETFs stecken und wie sie sich mit deinen anderen Positionen addieren. Lade für jeden "
+    "ETF die Positionsliste seines Anbieters hoch (CSV, z. B. von der Produktseite bei iShares); ohne Liste zählt "
+    "ein ETF als eine Position.":
+        "Which stocks your ETFs hold and how they add up with your other positions. Upload each ETF's holdings list "
+        "from its issuer (CSV, e.g. from the product page at iShares); without a list an ETF counts as one position.",
+    "Die Positionen werden gerade aus Wealthfolio gelesen …": "Reading the positions from Wealthfolio …",
+    "Positionen gelesen {when}.": "Positions read {when}.",
+    "Neu lesen": "Read again",
+    "Was wird berechnet?": "What is calculated?",
+    "Anteil am Depot: Wert der Position mal Gewicht der Aktie im Fonds, über alle Positionen addiert. Was die "
+    "Gewichte eines Fonds offen lassen, steht als „nicht zugeordnet“ – nichts wird hochgerechnet. Überschneidung "
+    "zweier ETFs: Summe des jeweils kleineren Gewichts jeder Aktie, die beide halten. Eigener Beitrag: der Teil "
+    "eines ETFs, den keine andere Position mitbringt. Effektive Titelzahl: so vielen gleich gewichteten Aktien "
+    "entspricht das Depot.":
+        "Share of the portfolio: value of the position times the stock's weight in the fund, added up over all "
+        "positions. What a fund's weights leave open is shown as \u201cunassigned\u201d - nothing is scaled up. "
+        "Overlap of two ETFs: sum of the smaller weight of each stock both hold. Own contribution: the part of an "
+        "ETF no other position brings. Effective number of stocks: as many equally weighted stocks as the portfolio "
+        "is worth.",
+    "Vereinfachte Modellrechnung, keine Anlageberatung.": "Simplified model calculation, not investment advice.",
+    "Positionen und Positionslisten": "Positions and holdings lists",
+    "Position": "Position",
+    "Anteil am Depot": "Share of the portfolio",
+    "Positionsliste": "Holdings list",
+    "{n} Positionen, hochgeladen {when}": "{n} holdings, uploaded {when}",
+    "keine": "none",
+    "Positionsliste hochladen": "Upload holdings list",
+    "CSV-Datei für {name}": "CSV file for {name}",
+    "Keine Positionen in Wealthfolio.": "No positions in Wealthfolio.",
+    "Aktien über alle Positionen": "Stocks across all positions",
+    "{n} Aktien, effektive Titelzahl {effective}.": "{n} stocks, effective number of stocks {effective}.",
+    "Nicht zugeordnet: {share}.": "Unassigned: {share}.",
+    "Anzahl": "Number",
+    "alle": "all",
+    "Top {n}": "Top {n}",
+    "Aktie": "Stock",
+    "Land": "Country",
+    "Sektor": "Sector",
+    "davon über": "of which through",
+    "Wie sich die ETFs überschneiden": "How the ETFs overlap",
+    "ETF": "ETF",
+    "Eigener Beitrag": "Own contribution",
 }

@@ -193,6 +193,8 @@ class FakeWealthfolio:
                 symbols.setdefault(asset, symbol)
         out = [{"holdingType": "cash", "localCurrency": c, "quantity": str(v), "instrument": {"symbol": c}}
                for c, v in cash.items()]
+        # Every share is worth 1 EUR here.
         out += [{"holdingType": "security", "localCurrency": "EUR", "quantity": str(q),
+                 "marketValue": {"local": str(q), "base": str(q)},
                  "instrument": {"id": i, "symbol": symbols[i], "name": symbols[i]}} for i, q in shares.items() if q]
         return out

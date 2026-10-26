@@ -168,9 +168,18 @@ def _completions_table(db) -> None:
       PRIMARY KEY (broker, tx_id))""")
 
 
+def _funds_table(db) -> None:
+    """4: a fund's constituents from its issuer's holdings file (waldonso2/wealthfolio-importer-addon#139)."""
+    db.execute("""CREATE TABLE funds (
+      asset_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      constituents TEXT NOT NULL,
+      at TEXT NOT NULL)""")
+
+
 # Schema changes after SCHEMA (the state of 0.13.x), in order: MIGRATIONS[n] brings a database from
 # version n to n + 1 (``PRAGMA user_version``). Never edit or reorder one that shipped - append.
-MIGRATIONS = [_balances_account_column, _events_table, _completions_table]
+MIGRATIONS = [_balances_account_column, _events_table, _completions_table, _funds_table]
 SCHEMA_VERSION = len(MIGRATIONS)
 
 
@@ -402,6 +411,17 @@ class State:
         if broker:
             sql, args = sql + " WHERE broker = ?", (broker,)
         return {(b, t): json.loads(d) for b, t, d in self.db.execute(sql, args)}
+
+    # ── funds' constituents (look-through, #139) ────────────────────────────
+    def set_fund(self, asset_id: str, name: str, constituents: list[list[str]]) -> None:
+        """A fund's lines as ``[key, name, weight, country, sector, currency]``; a new file replaces the old."""
+        with self._writing():
+            self.db.execute("INSERT OR REPLACE INTO funds VALUES (?, ?, ?, ?)",
+                            (asset_id, name, json.dumps(constituents, ensure_ascii=False), now()))
+
+    def funds(self) -> dict[str, dict]:
+        rows = self.db.execute("SELECT asset_id, name, constituents, at FROM funds")
+        return {a: {"name": n, "constituents": json.loads(c), "at": at} for a, n, c, at in rows}
 
     def add_statement_rows(self, broker: str, rows: list[dict]) -> int:
         """Keep uploaded statement rows; returns how many were new. A row twice in one file stays twice."""
