@@ -991,11 +991,6 @@ EN: dict[str, str] = {
     "{name}: {n} Positionen gelesen, zusammen {sum} % des Fonds.":
         "{name}: {n} holdings read, {sum} % of the fund together.",
     "Unbekannte Position - bitte die Seite neu laden.": "Unknown position - please reload the page.",
-    "Welche Aktien in deinen ETFs stecken und wie sie sich mit deinen anderen Positionen addieren. Lade für jeden "
-    "ETF die Positionsliste seines Anbieters hoch (CSV, z. B. von der Produktseite bei iShares); ohne Liste zählt "
-    "ein ETF als eine Position.":
-        "Which stocks your ETFs hold and how they add up with your other positions. Upload each ETF's holdings list "
-        "from its issuer (CSV, e.g. from the product page at iShares); without a list an ETF counts as one position.",
     "Die Positionen werden gerade aus Wealthfolio gelesen …": "Reading the positions from Wealthfolio …",
     "Positionen gelesen {when}.": "Positions read {when}.",
     "Neu lesen": "Read again",
@@ -1015,10 +1010,7 @@ EN: dict[str, str] = {
     "Position": "Position",
     "Anteil am Depot": "Share of the portfolio",
     "Positionsliste": "Holdings list",
-    "{n} Positionen, hochgeladen {when}": "{n} holdings, uploaded {when}",
     "keine": "none",
-    "Positionsliste hochladen": "Upload holdings list",
-    "CSV-Datei für {name}": "CSV file for {name}",
     "Keine Positionen in Wealthfolio.": "No positions in Wealthfolio.",
     "Aktien über alle Positionen": "Stocks across all positions",
     "{n} Aktien, effektive Titelzahl {effective}.": "{n} stocks, effective number of stocks {effective}.",
@@ -1033,4 +1025,61 @@ EN: dict[str, str] = {
     "Wie sich die ETFs überschneiden": "How the ETFs overlap",
     "ETF": "ETF",
     "Eigener Beitrag": "Own contribution",
+    # Klumpenrisiken und Abruf (#139)
+    "Einzelaktie": "Single stock",
+    "Fremdwährung": "Foreign currency",
+    "Überschneidung": "Overlap",
+    "Wenige Titel": "Few stocks",
+    "Bargeld über der Einlagensicherung": "Cash above the deposit guarantee",
+    "Einzelaktie über (%)": "Single stock above (%)",
+    "Land über (%)": "Country above (%)",
+    "Sektor über (%)": "Sector above (%)",
+    "Fremdwährung über (%)": "Foreign currency above (%)",
+    "Überschneidung zweier ETFs über (%)": "Overlap of two ETFs above (%)",
+    "Effektive Titelzahl unter": "Effective number of stocks below",
+    "Bargeld je Konto über (EUR)": "Cash per account above (EUR)",
+    "{fetched} Positionslisten geholt, {none} ohne Quelle (hochladen), {failed} fehlgeschlagen.":
+        "{fetched} holdings lists fetched, {none} without a source (upload), {failed} failed.",
+    "Positionslisten abrufen": "Fetch holdings lists",
+    "Meldung": "Finding",
+    "Das ist keine Produktseite von iShares (https://www.ishares.com/…/products/<Nummer>/<Name>).":
+        "That is not an iShares product page (https://www.ishares.com/…/products/<number>/<name>).",
+    "Erst den automatischen Abruf einschalten.": "Turn on automatic fetching first.",
+    "Die Positionslisten konnten nicht geholt werden - siehe Protokoll.":
+        "The holdings lists could not be fetched - see the log.",
+    "Welche Aktien in deinen ETFs stecken und wie sie sich mit deinen anderen Positionen addieren. Die "
+    "Positionslisten der ETFs holt der Dienst bei den Anbietern (unten einschalten) oder du lädst sie hoch; ohne "
+    "Liste zählt ein ETF als eine Position.":
+        "Which stocks your ETFs hold and how they add up with your other positions. The service fetches the ETFs' "
+        "holdings lists from their issuers (turn it on below), or you upload them; without a list an ETF counts as "
+        "one position.",
+    "Klumpenrisiken: eine Aktie, ein Land, ein Sektor oder Fremdwährung über ihrer Grenze, zwei ETFs, die sich "
+    "stark überschneiden, zu wenige effektive Titel, Bargeld über 100.000 EUR auf einem Konto (gesetzliche "
+    "Einlagensicherung je Bank). Land, Sektor und Währung stehen so, wie der Anbieter sie nennt; ein "
+    "währungsgesicherter ETF zählt noch als Fremdwährung. Bei synthetischen ETFs (Swap) listet der Anbieter oft den "
+    "Sicherheitenkorb statt des Index.":
+        "Cluster risks: a stock, a country, a sector or foreign currency above its limit, two ETFs that overlap a "
+        "lot, too few effective stocks, cash above 100,000 EUR on one account (statutory deposit guarantee per "
+        "bank). Country, sector and currency are as the issuer names them; a currency-hedged ETF still counts as "
+        "foreign currency. For synthetic ETFs (swap) the issuer often lists the collateral basket instead of the "
+        "index.",
+    "Klumpenrisiken": "Cluster risks",
+    "Was": "What",
+    "Grenze": "Limit",
+    "So gewollt": "Intended",
+    "Keine Klumpenrisiken über deinen Grenzen.": "No cluster risks above your limits.",
+    "So gewollt ({n})": "Intended ({n})",
+    "Wieder melden": "Report again",
+    "{n} Positionen von {source}, Stand {when}": "{n} holdings from {source}, as of {when}",
+    "keine Quelle gefunden – Positionsliste hochladen, falls es ein ETF ist":
+        "no source found – upload the holdings list if it is an ETF",
+    "Quelle ändern oder Liste hochladen": "Change source or upload a list",
+    "Produktseite bei iShares für {name}": "iShares product page for {name}",
+    "Positionsliste für {name} (CSV oder XLSX)": "Holdings list for {name} (CSV or XLSX)",
+    "Einstellungen der Durchschau": "Look-through settings",
+    "Positionslisten automatisch bei den Anbietern abrufen (iShares, Xtrackers) – nach jedem Abruf, je ETF "
+    "höchstens wöchentlich. Gesendet wird nur die ISIN bzw. die Produktseite.":
+        "Fetch the holdings lists from the issuers automatically (iShares, Xtrackers) – after every fetch, at most "
+        "weekly per ETF. Only the ISIN or the product page is sent.",
+    "Positionslisten jetzt abrufen": "Fetch holdings lists now",
 }

@@ -1,6 +1,18 @@
 from decimal import Decimal as D
 
-from brokersync.xray import UNASSIGNED, Constituent, Holding, effective_count, exposures, overlap, own_share, stock
+from brokersync.xray import (
+    LIMITS,
+    UNASSIGNED,
+    Constituent,
+    Holding,
+    effective_count,
+    exposures,
+    findings,
+    overlap,
+    own_share,
+    stock,
+    unify,
+)
 
 # Fabricated funds and weights (not real index data).
 EXA = "US0000000AA1"  # one example company in every fund
@@ -55,3 +67,36 @@ def test_effective_count():
     rows = exposures([fund("a", "100", ("A", "0.5"), ("B", "0.5"))])
     assert effective_count(rows) == 2
     assert effective_count([]) == 0
+
+
+def test_unify_gives_a_line_without_isin_the_isin_of_the_same_company_elsewhere():
+    ishares = Holding("i", "i", D("100"), (Constituent("AAA:NASDAQ", "EXAMPLE ONE INC", D("0.5")),
+                                           Constituent("BBB:XETRA", "EXAMPLE TWO AG", D("0.5"))))
+    other = Holding("o", "o", D("100"), (Constituent("US0000000AA1", "Example One, Inc.", D("1")),))
+    third = Holding("t", "t", D("100"), (Constituent("CCC:LSE", "Example Two AG Reg.", D("1")),))
+    a, b, c = unify([ishares, other, third])
+    assert [x.key for x in a.constituents] == ["US0000000AA1", "~EXAMPLE TWO"]
+    assert b == other
+    assert c.constituents[0].key == "~EXAMPLE TWO"
+    assert exposures([a, b, c])[0].value == 150
+
+
+def test_findings_name_each_cluster_over_its_limit():
+    us = fund("us", "9000", ("US0000000AA1", "0.10"), ("US0000000BB2", "0.90"))
+    us2 = Holding("us2", "us2", D("1000"), (Constituent("US0000000BB2", "Company BB2", D("1"), "US", "IT", "USD"),
+                                            Constituent("JP0000000CC3", "Company CC3", D("0"), "JP", "", "JPY")))
+    found = findings([us, us2], LIMITS, "EUR", {"Tagesgeld": D("150000"), "Giro": D("5000")})
+    kinds = {(f.kind, f.name) for f in found}
+    assert {f.key for f in found if f.kind == "stock"} == {"stock:US0000000BB2", "stock:US0000000AA1"}
+    assert ("country", "US") in kinds and ("sector", "IT") in kinds and ("currency", "EUR") in kinds
+    assert ("overlap", "us / us2") in kinds and ("effective", "") in kinds and ("cash", "Tagesgeld") in kinds
+    assert ("cash", "Giro") not in kinds
+    stock = next(f for f in found if f.key == "stock:US0000000BB2")
+    assert stock.value == D("0.91") and stock.limit == D("0.05")
+
+
+def test_no_findings_for_a_broad_depot():
+    lines = tuple((f"US{n:09d}0", "0.01") for n in range(100))
+    broad = Holding("b", "b", D("100"), tuple(Constituent(k, k, D(w), f"C{n % 10}", f"S{n % 5}", "EUR")
+                                             for n, (k, w) in enumerate(lines)))
+    assert findings([broad], LIMITS, "EUR") == []

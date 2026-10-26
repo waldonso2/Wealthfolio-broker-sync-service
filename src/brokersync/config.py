@@ -63,6 +63,10 @@ class Config:
     transfer_patterns: list[dict] = field(default_factory=list)
     # Logos from logo.dev by ISIN after every run (brokersync.logos); the key lives in the vault.
     logos_enabled: bool = False
+    # Look-through (*Durchschau*): fetch the funds' holdings lists from their issuers after a run
+    # (brokersync.lookthrough); off: upload only. Limits of the cluster risks, as text (xray.LIMITS' keys).
+    lookthrough_enabled: bool = False
+    xray_limits: dict[str, str] = field(default_factory=dict)
     # "auto": sessions are kept, the timer fetches. "safe": every fetch needs a fresh login in the UI, the
     # session is ended after it, the timer only reminds (#85). For all brokers.
     sync_mode: str = "auto"

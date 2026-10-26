@@ -11,13 +11,18 @@ single stock (itself at weight 1). From them:
 - ``effective_count``: 1 / sum of squared shares - how many equally weighted stocks the depot is worth.
 
 Companies are matched by ``Constituent.key`` (the ISIN, else what the source gives); lines of one fund
-with the same key (share classes) are added up.
+with the same key (share classes) are added up. ``unify`` first gives a line without an ISIN (iShares files
+have none) the ISIN of a line elsewhere with the same plain name. ``findings`` are the cluster risks over
+``LIMITS``: a single stock, a country, a sector, foreign currency, two overlapping funds, too few effective
+stocks, cash above the deposit guarantee on one account.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from decimal import Decimal
+from itertools import combinations
 
 UNASSIGNED = ""  # key of what the funds' weights leave open
 
@@ -101,3 +106,79 @@ def own_share(holding: Holding, others: list[Holding]) -> Decimal:
 def effective_count(rows: list[Exposure]) -> Decimal:
     squares = sum((r.share * r.share for r in rows if r.key != UNASSIGNED), Decimal(0))
     return 1 / squares if squares else Decimal(0)
+
+
+ISIN = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}\d$")
+# Legal forms and share classes: "APPLE INC" and "Apple Inc." are one company, "ALPHABET INC CLASS A" too.
+_FORMS = re.compile(r"\b(INC|INCORPORATED|CORP|CORPORATION|CO|COMPANY|LTD|LIMITED|PLC|AG|SA|SE|NV|AB|ASA|OYJ|"
+                    r"SPA|HOLDINGS?|GROUP|CLASS [A-Z]|CL [A-Z]|REG|REGISTERED|ADR|ORD|SHS)\b")
+
+
+def plain(name: str) -> str:
+    return " ".join(_FORMS.sub(" ", re.sub(r"[^A-Z0-9 ]", " ", name.upper())).split())
+
+
+def unify(holdings: list[Holding]) -> list[Holding]:
+    """Lines without an ISIN take the ISIN of a line with the same plain name; the rest meet by that name.
+    shortcut: names only - a company named differently by two issuers stays two rows; OpenFIGI if it matters."""
+    alias: dict[str, str] = {}
+    for h in holdings:
+        for c in h.constituents:
+            if ISIN.match(c.key):
+                alias.setdefault(plain(c.name), c.key)
+
+    def key(c: Constituent) -> str:
+        return c.key if ISIN.match(c.key) else alias.get(plain(c.name)) or f"~{plain(c.name) or c.key}"
+
+    return [Holding(h.id, h.name, h.value, tuple(Constituent(key(c), c.name, c.weight, c.country, c.sector,
+                                                             c.currency) for c in h.constituents))
+            for h in holdings]
+
+
+# Defaults of the page *Durchschau*; each can be changed there. Shares are of the depot, cash in EUR.
+LIMITS = {"stock": Decimal("0.05"), "country": Decimal("0.60"), "sector": Decimal("0.30"),
+          "currency": Decimal("0.50"), "overlap": Decimal("0.50"), "effective": Decimal(30),
+          "cash": Decimal(100000)}
+
+
+@dataclass(frozen=True)
+class Finding:
+    key: str  # what the user accepts, e.g. "country:United States"
+    kind: str  # a key of LIMITS
+    name: str
+    value: Decimal  # share of the depot, overlap, number of stocks or cash
+    limit: Decimal
+
+
+def _by(rows: list[Exposure], attr: str) -> dict[str, Decimal]:
+    out: dict[str, Decimal] = {}
+    for r in rows:
+        # shortcut: names as the issuers write them ("United States" vs. "USA" stay apart); a table if it matters.
+        if r.key != UNASSIGNED and (name := getattr(r, attr).strip()):
+            out[name] = out.get(name, Decimal(0)) + r.share
+    return out
+
+
+def findings(holdings: list[Holding], limits: dict[str, Decimal], base: str,
+             cash: dict[str, Decimal] | None = None) -> list[Finding]:
+    """Cluster risks over the limits, largest first within each kind. ``cash``: cash per account name."""
+    rows = exposures(holdings)
+    out = [Finding(f"stock:{r.key}", "stock", r.name, r.share, limits["stock"])
+           for r in rows if r.key != UNASSIGNED and r.share > limits["stock"]]
+    for kind in ("country", "sector"):
+        groups = sorted(_by(rows, kind).items(), key=lambda g: -g[1])
+        out += [Finding(f"{kind}:{name}", kind, name, share, limits[kind]) for name, share in groups
+                if share > limits[kind]]
+    # shortcut: a constituent's own currency; a currency-hedged tranche still counts as foreign.
+    foreign = sum((r.share for r in rows if r.currency and r.currency != base), Decimal(0))
+    if foreign > limits["currency"]:
+        out.append(Finding("currency", "currency", base, foreign, limits["currency"]))
+    funds = [h for h in holdings if len(h.constituents) > 1]
+    out += [Finding(f"overlap:{a.id}:{b.id}", "overlap", f"{a.name} / {b.name}", o, limits["overlap"])
+            for a, b in combinations(funds, 2) if (o := overlap(a, b)) > limits["overlap"]]
+    count = effective_count(rows)
+    if count and count < limits["effective"]:
+        out.append(Finding("effective", "effective", "", count, limits["effective"]))
+    out += [Finding(f"cash:{name}", "cash", name, amount, limits["cash"])
+            for name, amount in sorted((cash or {}).items()) if amount > limits["cash"]]
+    return out

@@ -18,7 +18,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from .. import __version__, redact
+from .. import __version__, lookthrough, redact
 from .. import config as config_mod
 from ..adapters import BrokerAdapter
 from ..mapping import Accounts
@@ -89,9 +89,9 @@ class AppContext:
     account_names: dict[str, str] = field(default_factory=dict)
     audit_error: str | None = None
     # Look-through (*Durchschau*): the depot's positions, read in the background.
-    positions: list[dict] = field(default_factory=list)
-    positions_at: float = 0.0
-    positions_error: str | None = None
+    depot: lookthrough.Depot = field(default_factory=lambda: lookthrough.Depot())
+    depot_at: float = 0.0
+    depot_error: str | None = None
     _accounts: tuple[float, str, list] | None = None
 
     def render(self, request: Request, name: str, **ctx) -> HTMLResponse:

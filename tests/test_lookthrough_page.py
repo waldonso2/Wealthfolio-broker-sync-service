@@ -39,7 +39,7 @@ def test_upload_a_holdings_file_and_see_the_stock_added_up_with_the_direct_posit
     assert "2 Positionen gelesen, zusammen 90,00 % des Fonds" in r.text
     assert State(tmp_path).funds()[FUND]["constituents"][0][:3] == [STOCK, "Example Inc", "0.2"]
     # 5 direct + 20 % of 5 in the fund = 6 of 10: the stock first, at 60 %, through both positions.
-    first = r.text.split("<tbody>")[2].split("</tr>")[0]
+    first = r.text.split("Aktien über alle Positionen</caption>")[1].split("<tbody>")[1].split("</tr>")[0]
     assert "Example Inc" in first and "60,00 %" in first and "10,00 %" in first and "50,00 %" in first
     assert "Nicht zugeordnet: 5,00 %" in r.text
 
@@ -63,3 +63,49 @@ def test_upload_is_refused_for_an_unknown_position_and_a_file_without_weights(tm
                     files={"file": ("h.csv", b"Ticker,Price\nA,1\n", "text/csv")})
     assert "Spalten für Name und Gewichtung fehlen" in r.text
     assert State(tmp_path).funds() == {}
+
+
+def _client(tmp_path):
+    from brokersync.web.app import create_app
+
+    from .fake_broker import FakeBroker
+
+    syncer, notifier = setup(tmp_path, FakeWealthfolio())
+    syncer.run()
+    app = create_app(tmp_path, wealthfolio=syncer._wealthfolio, adapters={"fake": FakeBroker}, run_in_thread=False)
+    client = TestClient(app, base_url="http://sync.local:8090")
+    first_password(client)
+    client.get("/lookthrough")
+    return client, csrf(client, "/lookthrough")
+
+
+def test_limits_are_checked_and_saved_and_a_risk_can_be_accepted(tmp_path):
+    from brokersync import config as config_mod
+
+    client, token = _client(tmp_path)
+    # One fund, nothing else: a single stock of 100 % and too few stocks.
+    page = client.get("/lookthrough").text
+    assert "Klumpenrisiken" in page and "So gewollt" in page and "100,00 %" in page
+    r = client.post("/lookthrough/settings", data={"csrf": token, "enabled": "on", "stock": "abc"})
+    assert "Zahl" in r.text and not config_mod.load(tmp_path).lookthrough_enabled
+    r = client.post("/lookthrough/settings", data={"csrf": token, "enabled": "on", "stock": "12,5", "effective": "1"})
+    c = config_mod.load(tmp_path)
+    assert c.lookthrough_enabled and c.xray_limits == {"stock": "0.125", "effective": "1"}
+    assert 'value="12,50"' in r.text
+    r = client.post("/lookthrough/accept", data={"csrf": token, "key": f"stock:{FUND}"})
+    assert "Keine Klumpenrisiken über deinen Grenzen." in r.text and "So gewollt (1)" in r.text
+    r = client.post("/lookthrough/accept", data={"csrf": token, "key": f"stock:{FUND}", "action": "undo"})
+    assert "So gewollt (1)" not in r.text
+
+
+def test_an_ishares_page_is_saved_only_when_it_is_one_and_fetching_needs_it_turned_on(tmp_path):
+    from brokersync import lookthrough
+
+    client, token = _client(tmp_path)
+    r = client.post("/lookthrough/source", data={"csrf": token, "asset_id": FUND, "url": "https://example.com/x"})
+    assert "keine Produktseite von iShares" in r.text
+    page = "https://www.ishares.com/de/privatanleger/de/produkte/251882/ishares-msci-world-ucits-etf-acc-fund"
+    client.post("/lookthrough/source", data={"csrf": token, "asset_id": FUND, "url": page})
+    assert lookthrough.status(State(tmp_path), FUND)["url"] == page
+    r = client.post("/lookthrough/fetch", data={"csrf": token})
+    assert "Erst den automatischen Abruf einschalten." in r.text

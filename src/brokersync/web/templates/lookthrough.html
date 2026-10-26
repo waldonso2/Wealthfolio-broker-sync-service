@@ -2,9 +2,10 @@
 {% block head %}{% if reading %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
 {% block content %}
 {% macro pct(value) %}{{ (value * 100) | money }} %{% endmacro %}
+{% macro amount(f, value) %}{% if f.kind == "effective" %}{{ value | round | int }}{% elif f.kind == "cash" %}{{ value | money }} EUR{% else %}{{ pct(value) }}{% endif %}{% endmacro %}
 <div class="card">
   <h1>{{ _("Durchschau") }}</h1>
-  <p>{{ _("Welche Aktien in deinen ETFs stecken und wie sie sich mit deinen anderen Positionen addieren. Lade für jeden ETF die Positionsliste seines Anbieters hoch (CSV, z. B. von der Produktseite bei iShares); ohne Liste zählt ein ETF als eine Position.") }}</p>
+  <p>{{ _("Welche Aktien in deinen ETFs stecken und wie sie sich mit deinen anderen Positionen addieren. Die Positionslisten der ETFs holt der Dienst bei den Anbietern (unten einschalten) oder du lädst sie hoch; ohne Liste zählt ein ETF als eine Position.") }}</p>
   <form method="post" action="/lookthrough/refresh" class="actions">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <p class="muted grow" aria-live="polite">{% if reading %}{{ _("Die Positionen werden gerade aus Wealthfolio gelesen …") }}{% elif read_at %}{{ _("Positionen gelesen {when}.", when=read_at | local) }}{% endif %}</p>
@@ -13,9 +14,34 @@
   {% if wf_error %}<p class="error" role="alert">{{ wf_error | redact }}</p>{% endif %}
   <details><summary>{{ _("Was wird berechnet?") }}</summary>
     <p>{{ _("Anteil am Depot: Wert der Position mal Gewicht der Aktie im Fonds, über alle Positionen addiert. Was die Gewichte eines Fonds offen lassen, steht als „nicht zugeordnet“ – nichts wird hochgerechnet. Überschneidung zweier ETFs: Summe des jeweils kleineren Gewichts jeder Aktie, die beide halten. Eigener Beitrag: der Teil eines ETFs, den keine andere Position mitbringt. Effektive Titelzahl: so vielen gleich gewichteten Aktien entspricht das Depot.") }}</p>
+    <p>{{ _("Klumpenrisiken: eine Aktie, ein Land, ein Sektor oder Fremdwährung über ihrer Grenze, zwei ETFs, die sich stark überschneiden, zu wenige effektive Titel, Bargeld über 100.000 EUR auf einem Konto (gesetzliche Einlagensicherung je Bank). Land, Sektor und Währung stehen so, wie der Anbieter sie nennt; ein währungsgesicherter ETF zählt noch als Fremdwährung. Bei synthetischen ETFs (Swap) listet der Anbieter oft den Sicherheitenkorb statt des Index.") }}</p>
     <p class="muted">{{ _("Vereinfachte Modellrechnung, keine Anlageberatung.") }}</p>
   </details>
 </div>
+
+{% if positions %}
+<div class="card">
+  <h2>{{ _("Klumpenrisiken") }}</h2>
+  {% if risks %}
+  <div class="table"><table>
+    <caption class="sr-only">{{ _("Klumpenrisiken") }}</caption>
+    <thead><tr><th scope="col">{{ _("Art") }}</th><th scope="col">{{ _("Was") }}</th><th scope="col">{{ _("Wert") }}</th><th scope="col">{{ _("Grenze") }}</th><th scope="col">{{ _("Aktion") }}</th></tr></thead>
+    <tbody>
+    {% for f in risks %}
+    <tr><td data-label="{{ _('Art') }}">{{ _(kind[f.kind]) }}</td>
+      <td data-label="{{ _('Was') }}">{{ f.name or "–" }}</td>
+      <td data-label="{{ _('Wert') }}"><strong>{{ amount(f, f.value) }}</strong></td>
+      <td data-label="{{ _('Grenze') }}">{{ amount(f, f.limit) }}</td>
+      <td data-label="{{ _('Aktion') }}"><form method="post" action="/lookthrough/accept" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="key" value="{{ f.key }}"><button class="secondary">{{ _("So gewollt") }}</button></form></td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% else %}<p>{{ _("Keine Klumpenrisiken über deinen Grenzen.") }}</p>{% endif %}
+  {% if accepted %}
+  <details><summary>{{ _("So gewollt ({n})", n=accepted | length) }}</summary>
+    <ul>{% for f in accepted %}<li>{{ _(kind[f.kind]) }}: {{ f.name or "–" }} {{ amount(f, f.value) }} <form method="post" action="/lookthrough/accept" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="key" value="{{ f.key }}"><button class="secondary" name="action" value="undo">{{ _("Wieder melden") }}</button></form></li>{% endfor %}</ul>
+  </details>{% endif %}
+</div>
+{% endif %}
 
 <div class="card">
   <h2>{{ _("Positionen und Positionslisten") }}</h2>
@@ -24,15 +50,21 @@
     <caption class="sr-only">{{ _("Positionen und Positionslisten") }}</caption>
     <thead><tr><th scope="col">{{ _("Position") }}</th><th scope="col">ISIN</th><th scope="col">{{ _("Anteil am Depot") }}</th><th scope="col">{{ _("Positionsliste") }}</th></tr></thead>
     <tbody>
-    {% for p in positions %}{% set f = funds.get(p.id) %}
+    {% for p in positions %}{% set f = funds.get(p.id) %}{% set st = status[p.id] %}
     <tr><td data-label="{{ _('Position') }}">{{ p.name }}</td>
       <td data-label="ISIN">{{ p.isin }}</td>
       <td data-label="{{ _('Anteil am Depot') }}">{{ pct(p.value / total) }}</td>
-      <td data-label="{{ _('Positionsliste') }}">{% if f %}{{ _("{n} Positionen, hochgeladen {when}", n=f.constituents | length, when=f.at | local) }}{% else %}<span class="muted">{{ _("keine") }}</span>{% endif %}
-        <details><summary>{{ _("Positionsliste hochladen") }}</summary>
+      <td data-label="{{ _('Positionsliste') }}">{% if f %}{{ _("{n} Positionen von {source}, Stand {when}", n=f.constituents | length, source=st.source or "Upload", when=f.at | local) }}{% elif st.status == "none" %}<span class="muted">{{ _("keine Quelle gefunden – Positionsliste hochladen, falls es ein ETF ist") }}</span>{% else %}<span class="muted">{{ _("keine") }}</span>{% endif %}
+        {% if st.status == "error" %}<p class="error">{{ st.error | redact }}</p>{% endif %}
+        <details><summary>{{ _("Quelle ändern oder Liste hochladen") }}</summary>
+          <form method="post" action="/lookthrough/source" class="inline-form">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
+            <label>{{ _("Produktseite bei iShares für {name}", name=p.name) }} <input type="url" name="url" value="{{ st.url or '' }}" maxlength="300" placeholder="https://www.ishares.com/de/privatanleger/de/produkte/…"></label>
+            <div class="actions"><button class="secondary">{{ _("Speichern") }}</button></div>
+          </form>
           <form method="post" action="/lookthrough/upload" enctype="multipart/form-data" class="inline-form">
             <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
-            <label>{{ _("CSV-Datei für {name}", name=p.name) }} <input type="file" name="file" accept=".csv,text/csv" required></label>
+            <label>{{ _("Positionsliste für {name} (CSV oder XLSX)", name=p.name) }} <input type="file" name="file" accept=".csv,.xlsx,text/csv" required></label>
             <div class="actions"><button>{{ _("Hochladen") }}</button></div>
           </form>
         </details></td></tr>
@@ -52,7 +84,7 @@
     <tbody>
     {% for r in stocks %}
     <tr><td data-label="#">{{ loop.index }}</td>
-      <td data-label="{{ _('Aktie') }}">{{ r.name }}{% if r.key != r.name | upper %} <span class="muted">{{ r.key }}</span>{% endif %}</td>
+      <td data-label="{{ _('Aktie') }}">{{ r.name }}{% if r.key[:1] != "~" and r.key != r.name | upper %} <span class="muted">{{ r.key }}</span>{% endif %}</td>
       <td data-label="{{ _('Land') }}">{{ r.country }}</td>
       <td data-label="{{ _('Sektor') }}">{{ r.sector }}</td>
       <td data-label="{{ _('Anteil am Depot') }}">{{ pct(r.share) }}</td>
@@ -78,4 +110,19 @@
     </tbody></table></div>
 </div>
 {% endif %}
+
+<div class="card">
+  <h2>{{ _("Einstellungen der Durchschau") }}</h2>
+  <form method="post" action="/lookthrough/settings">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="check"><input type="checkbox" name="enabled"{% if cfg.lookthrough_enabled %} checked{% endif %}> {{ _("Positionslisten automatisch bei den Anbietern abrufen (iShares, Xtrackers) – nach jedem Abruf, je ETF höchstens wöchentlich. Gesendet wird nur die ISIN bzw. die Produktseite.") }}</label>
+    <div class="row">
+      {% for key, label, percent in limit_fields %}<label>{{ _(label) }} <input type="text" name="{{ key }}" inputmode="decimal" value="{{ (limits[key] * 100) | money if percent else limits[key] | int }}"></label>{% endfor %}
+    </div>
+    <div class="actions"><button>{{ _("Speichern") }}</button></div>
+  </form>
+  {% if cfg.lookthrough_enabled %}
+  <form method="post" action="/lookthrough/fetch" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary" {% if reading %}disabled{% endif %}>{{ _("Positionslisten jetzt abrufen") }}</button></form>
+  {% endif %}
+</div>
 {% endblock %}

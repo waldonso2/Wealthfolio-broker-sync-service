@@ -5,15 +5,33 @@ weights in percent, no ISIN), or any list with a name and a weight column, in En
 ``,``/``;``/tab and decimal point or comma. Each line becomes a ``xray.Constituent``; its key is the ISIN
 when there is a valid one, else ticker and exchange, else the name. Weights are a share of the fund
 (0..1); what they leave open stays open (``xray.UNASSIGNED``).
+
+``fetch`` gets the file itself (opt-in, ``Config.lookthrough_enabled``; ``Syncer.update_funds`` after a run,
+at most every ``REFRESH_DAYS`` per fund): Xtrackers by ISIN (an XLSX, read without a library), iShares by
+its product id - built in for common funds (``ISHARES``), else from the product page's address the user
+saves. Only the ISIN or that address leaves the container; only ``HOSTS`` are asked, answers are read up to
+``MAX_BYTES`` and must look like a holdings list. Amundi and Vanguard: upload only for now (their
+interfaces are unverified, and a swap ETF's list would be its collateral basket, not the index).
 """
 
 from __future__ import annotations
 
 import csv
 import io
+import json
+import re
+import zipfile
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
+from xml.etree import ElementTree
 
+import httpx
+
+from . import meta_keys, xray
 from .assets import valid_isin
+from .logos import isin_of
+from .state import State, now
 from .xray import Constituent
 
 WEIGHT = ("weight (%)", "gewichtung (%)", "weighting", "gewichtung", "weight", "anteil (%)", "% of net assets")
@@ -90,3 +108,289 @@ def parse(data: bytes) -> tuple[Constituent, ...]:
     scale = Decimal(100) if sum(w for _, _, w, _ in found) > Decimal("1.5") else Decimal(1)
     return tuple(Constituent(key, label, w / scale, cell(row, country), cell(row, sector), cell(row, currency))
                  for key, label, w, row in found)
+
+
+# ── fetching ─────────────────────────────────────────────────────────────────
+HOSTS = ("www.ishares.com", "etf.dws.com")
+BROWSER = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+MAX_BYTES = 20 * 1024 * 1024
+REFRESH_DAYS = 7
+NONE_DAYS = 30  # an ISIN no source knows is asked again after this
+DWS = "https://etf.dws.com/etfdata/export/GBR/ENG/excel/product/constituent/{isin}/"
+# The UK site's CSV export; its last path part is a constant of the domain, not of the fund.
+ISHARES_CSV = ("https://www.ishares.com/uk/individual/en/products/{id}/{slug}/1506575576011.ajax"
+               "?fileType=csv&fileName=holdings&dataType=fund")
+ISHARES_PAGE = re.compile(r"^https://www\.ishares\.com/[a-z]{2}/[a-z-]+/[a-z]{2}/(?:products|produkte)/(\d{4,8})/"
+                          r"([a-z0-9-]{3,120})/?(?:[?#].*)?$")
+# Product ids can't be derived from an ISIN. The first three are confirmed by another project's live check
+# (dmxch/openfolio, 2026-06); the others are best guesses - a wrong one shows as an error on the page.
+ISHARES = {
+    "IE00B4L5Y983": ("251882", "ishares-msci-world-ucits-etf-acc-fund"),
+    "IE00BKM4GZ66": ("264659", "ishares-msci-emerging-markets-imi-ucits-etf"),
+    "IE00B5BMR087": ("253743", "ishares-sp-500-b-ucits-etf-acc-fund"),
+    "IE00B53SZB19": ("253741", "ishares-nasdaq-100-ucits-etf"),
+    "IE00B6R52259": ("251850", "ishares-msci-acwi-ucits-etf"),
+}
+
+
+class SourceError(Exception):
+    """The source answered, but not with a usable holdings list; the text is shown on the page."""
+
+
+class NoSource(Exception):
+    """No source knows this ISIN (a stock, or a fund of another issuer): upload only."""
+
+
+def ishares_page(url: str) -> tuple[str, str] | None:
+    """Product id and name in the address of an iShares product page, if it is one."""
+    m = ISHARES_PAGE.match(url.strip())
+    return (m.group(1), m.group(2)) if m else None
+
+
+def xlsx_rows(data: bytes) -> list[list[str]]:
+    """The first sheet of an XLSX as rows of text - enough for a holdings export, no styles or formulas."""
+    try:
+        book = zipfile.ZipFile(io.BytesIO(data))
+        if sum(i.file_size for i in book.infolist()) > 10 * MAX_BYTES:  # a zip bomb, not a holdings list
+            raise SourceError("Die XLSX-Datei ist zu groß.")
+        names = book.namelist()
+        shared: list[str] = []
+        if "xl/sharedStrings.xml" in names:
+            # Python's expat refuses entity expansion attacks; ElementTree resolves no external entities.
+            root = ElementTree.fromstring(book.read("xl/sharedStrings.xml"))  # noqa: S314 - see above
+            shared = ["".join(t.text or "" for t in si.iter() if t.tag.endswith("}t")) for si in root
+                      if si.tag.endswith("}si")]
+        sheet = next((n for n in sorted(names) if n.startswith("xl/worksheets/sheet")), None)
+        if sheet is None:
+            raise SourceError("Die XLSX-Datei enthält keine Tabelle.")
+        root = ElementTree.fromstring(book.read(sheet))  # noqa: S314 - see above
+    except (zipfile.BadZipFile, ElementTree.ParseError, KeyError) as e:
+        raise SourceError("Keine lesbare XLSX-Datei.") from e
+    rows = []
+    for row in (e for e in root.iter() if e.tag.endswith("}row")):
+        cells: dict[int, str] = {}
+        for c in (e for e in row if e.tag.endswith("}c")):
+            column = 0
+            for ch in re.match(r"[A-Z]*", c.get("r", "")).group(0):  # type: ignore[union-attr]
+                column = column * 26 + ord(ch) - 64
+            value = next((v.text or "" for v in c.iter() if v.tag.endswith("}v")), "")
+            if c.get("t") == "s":
+                value = shared[int(value)] if value.isdigit() and int(value) < len(shared) else ""
+            elif c.get("t") == "inlineStr":
+                value = "".join(t.text or "" for t in c.iter() if t.tag.endswith("}t"))
+            cells[(column or len(cells) + 1) - 1] = value
+        rows.append([cells.get(i, "") for i in range(max(cells) + 1)] if cells else [])
+    return rows
+
+
+def parse_file(data: bytes) -> tuple[Constituent, ...]:
+    """A holdings file as CSV or XLSX."""
+    if data[:2] != b"PK":
+        return parse(data)
+    out = io.StringIO()
+    csv.writer(out).writerows(xlsx_rows(data))
+    return parse(out.getvalue().encode())
+
+
+def _usable(lines: tuple[Constituent, ...], source: str) -> tuple[Constituent, ...]:
+    total = sum((c.weight for c in lines), Decimal(0))
+    if len(lines) < 5 or not Decimal("0.5") <= total <= Decimal("1.1"):
+        raise SourceError(f"{source}: unvollständige Positionsliste ({len(lines)} Zeilen, {total * 100:.0f} %).")
+    return lines
+
+
+def _only_sources(request: httpx.Request) -> None:
+    if request.url.scheme != "https" or request.url.host not in HOSTS:
+        raise httpx.UnsupportedProtocol(f"Anfrage an {request.url.host} abgelehnt")
+
+
+class Sources:
+    def __init__(self, *, transport: httpx.BaseTransport | None = None, timeout: float = 60.0):
+        # Redirects only to the sources themselves; a browser's name, or the issuers' CDN refuses.
+        self._http = httpx.Client(timeout=timeout, transport=transport, follow_redirects=True,
+                                  headers={"User-Agent": BROWSER, "Accept": "*/*"},
+                                  event_hooks={"request": [_only_sources]})
+
+    def close(self) -> None:
+        self._http.close()
+
+    def _get(self, url: str, source: str) -> bytes | None:
+        """The body, or None for 404; read no more than ``MAX_BYTES``."""
+        try:
+            with self._http.stream("GET", url) as r:
+                if r.status_code == 404:
+                    return None
+                if r.status_code >= 400:
+                    raise SourceError(f"{source}: HTTP {r.status_code}")
+                data = b""
+                for chunk in r.iter_bytes():
+                    data += chunk
+                    if len(data) > MAX_BYTES:
+                        raise SourceError(f"{source}: Antwort größer als {MAX_BYTES // 1024 // 1024} MB")
+                return data
+        except httpx.HTTPError as e:
+            raise SourceError(f"{source} ist nicht erreichbar ({type(e).__name__}).") from e
+
+    def ishares(self, product: str, slug: str) -> tuple[Constituent, ...]:
+        data = self._get(ISHARES_CSV.format(id=product, slug=slug), "iShares")
+        # The export answers a wrong id with an HTML page and status 200.
+        if not data or data.lstrip()[:1] == b"<":
+            raise SourceError("iShares: keine Positionsliste unter dieser Produktseite.")
+        try:
+            return _usable(parse(data), "iShares")
+        except ValueError as e:
+            raise SourceError(f"iShares: {e}") from e
+
+    def xtrackers(self, isin: str) -> tuple[Constituent, ...] | None:
+        data = self._get(DWS.format(isin=isin), "Xtrackers")
+        if not data or data[:2] != b"PK":  # no XLSX: not one of theirs
+            return None
+        try:
+            return _usable(parse_file(data), "Xtrackers")
+        except ValueError as e:
+            raise SourceError(f"Xtrackers: {e}") from e
+
+
+def fetch(sources: Sources, isin: str, page: str = "") -> tuple[tuple[Constituent, ...], str]:
+    """The holdings of the fund with ``isin`` (or at the iShares product ``page``) and the source's name."""
+    product = ishares_page(page) if page else ISHARES.get(isin)
+    if product:
+        return sources.ishares(*product), "iShares"
+    if isin:
+        lines = sources.xtrackers(isin)
+        if lines:
+            return lines, "Xtrackers"
+    raise NoSource(isin)
+
+
+# ── the depot ────────────────────────────────────────────────────────────────
+@dataclass
+class Depot:
+    positions: list[dict] = field(default_factory=list)  # {id, isin, name, value} per asset, largest first
+    cash: dict[str, Decimal] = field(default_factory=dict)  # per account name, in the base currency
+    base: str = "EUR"
+
+
+def _dec(value) -> Decimal:
+    try:
+        number = Decimal(str(value))
+    except InvalidOperation:
+        return Decimal(0)
+    return number if number.is_finite() else Decimal(0)
+
+
+def read_depot(wf) -> Depot:
+    """Every open position of every Wealthfolio account, added up per asset, values in the base currency."""
+    depot = Depot()
+    isins = {a.get("id"): isin_of(a) or "" for a in wf.list_assets()}
+    positions: dict[str, dict] = {}
+    for account in wf.list_accounts():
+        for h in wf.holdings(account.id):
+            inst = h.get("instrument") or {}
+            value = _dec((h.get("marketValue") or {}).get("base"))
+            depot.base = h.get("baseCurrency") or depot.base
+            kind = (h.get("holdingType") or "").lower()
+            if kind == "cash":
+                amount = value or _dec(h.get("quantity"))
+                depot.cash[account.name] = depot.cash.get(account.name, Decimal(0)) + amount
+            if kind != "security" or h.get("isClosed") or not inst.get("id"):
+                continue
+            isin = isins.get(inst["id"]) or isin_of({"instrumentSymbol": inst.get("symbol")}) or ""
+            p = positions.setdefault(inst["id"], {"id": inst["id"], "isin": isin,
+                                                  "name": inst.get("name") or inst.get("symbol") or inst["id"],
+                                                  "currency": h.get("localCurrency") or "", "value": Decimal(0)})
+            p["value"] += value
+    depot.positions = sorted((p for p in positions.values() if p["value"] > 0), key=lambda p: -p["value"])
+    return depot
+
+
+# ── after a run ──────────────────────────────────────────────────────────────
+PER_RUN = 30
+
+
+@dataclass
+class Result:
+    fetched: int = 0
+    none: int = 0
+    errors: list[str] = field(default_factory=list)
+
+
+def status(state: State, asset_id: str) -> dict:
+    """Where an asset's holdings come from: {status: ok|upload|none|error, source, url, at, error, lines}."""
+    return json.loads(state.meta(meta_keys.FUND(asset_id)) or "{}")
+
+
+def set_status(state: State, asset_id: str, **values) -> None:
+    state.set_meta(meta_keys.FUND(asset_id), json.dumps({**status(state, asset_id), **values, "at": now()}))
+
+
+def _days(at: str | None) -> float:
+    return (datetime.now(UTC) - datetime.fromisoformat(at)).total_seconds() / 86400 if at else 1e9
+
+
+def update(state: State, depot: Depot, sources: Sources, *, force: bool = False) -> Result:
+    """Fetch the holdings of the depot's positions that are due; an uploaded file is kept unless the user
+    saved an iShares page for the fund. ``force``: everything now (the button on *Durchschau*)."""
+    result = Result()
+    for p in depot.positions[:PER_RUN]:
+        st = status(state, p["id"])
+        if not (p["isin"] or st.get("url")) or (st.get("status") == "upload" and not st.get("url")):
+            continue
+        due = {"ok": REFRESH_DAYS, "none": NONE_DAYS, "error": 1}.get(st.get("status", ""), 0)
+        if not force and _days(st.get("at")) < due:
+            continue
+        try:
+            lines, source = fetch(sources, p["isin"], st.get("url", ""))
+        except NoSource:
+            set_status(state, p["id"], status="none", source="", error="")
+            result.none += 1
+        except SourceError as e:
+            set_status(state, p["id"], status="error", error=str(e))
+            result.errors.append(f"{p['name']}: {e}")
+        else:
+            state.set_fund(p["id"], p["name"], rows(lines))
+            set_status(state, p["id"], status="ok", source=source, error="", lines=len(lines))
+            result.fetched += 1
+    return result
+
+
+def rows(lines: tuple[Constituent, ...]) -> list[list[str]]:
+    return [[c.key, c.name, str(c.weight), c.country, c.sector, c.currency] for c in lines]
+
+
+def holdings(state: State, depot: Depot) -> list[xray.Holding]:
+    """The depot for ``xray``: a position with a holdings list is a fund, any other one stock of its own."""
+    funds = state.funds()
+    out = []
+    for p in depot.positions:
+        f = funds.get(p["id"])
+        if f:
+            lines = tuple(Constituent(k, n, Decimal(w), co, se, cu) for k, n, w, co, se, cu in f["constituents"])
+            out.append(xray.Holding(p["id"], p["name"], p["value"], lines))
+        else:
+            out.append(xray.stock(p["id"], p["isin"] or p["id"], p["name"], p["value"], currency=p["currency"]))
+    return xray.unify(out)
+
+
+def limits(saved: dict[str, str]) -> dict[str, Decimal]:
+    out = dict(xray.LIMITS)
+    for k, v in saved.items():
+        if k in out:
+            try:
+                out[k] = Decimal(v)
+            except InvalidOperation:
+                continue
+    return out
+
+
+def accepted(state: State) -> set[str]:
+    return set(json.loads(state.meta(meta_keys.XRAY_ACCEPTED()) or "[]"))
+
+
+def new_risks(state: State, found: list[xray.Finding]) -> list[xray.Finding]:
+    """The risks neither accepted nor notified before; remembers the current ones as notified (one that goes
+    away and comes back is new again)."""
+    current = [f for f in found if f.key not in accepted(state)]
+    told = set(json.loads(state.meta(meta_keys.XRAY_NOTIFIED()) or "[]"))
+    state.set_meta(meta_keys.XRAY_NOTIFIED(), json.dumps(sorted(f.key for f in current)))
+    return [f for f in current if f.key not in told]
