@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.28.1
+
+- Security updates of two locked dependencies (CI job `audit`): certifi 2026.10.19 (PYSEC-2026-4320) and setuptools 84.1.0 (GHSA-xmj3-9gf7-h52w).
+
 ## 0.28.0
 
 - **Complete unknown bookings (waldonso2/wealthfolio-importer-addon#132):** on *Unbekannte Buchungen*, each booking can be completed: buy or sale (shares and the money that moved, fee, tax), delivery in without payment (shares and cost basis), delivery out without payment, or a split. The next fetch books it by the booking model under the booking's own id, so it leaves the list and is never booked twice, even once the service learns the type itself. Until then it can be withdrawn. New table `completions` (state.db migration 3).
