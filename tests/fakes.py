@@ -41,6 +41,7 @@ class FakeWealthfolio:
         self.expire_next = False
         self.assets: list[dict] = []  # GET /assets
         self.logos: dict[str, str] | None = {}  # asset id -> base64 PNG; None: Wealthfolio before 3.8.0
+        self.spending: dict | None = {"enabled": False, "accountIds": [], "excludedCategoryIds": []}  # None: no tracker
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -152,6 +153,10 @@ class FakeWealthfolio:
                 return httpx.Response(400, json={"code": 400, "message": "Logo image must be a PNG"})
             self.logos[asset_id] = data
             return httpx.Response(200, json={"assetId": asset_id})
+        if self.spending is not None and path == "/api/v1/spending/settings":
+            if request.method == "PUT":
+                self.spending.update(json.loads(request.content))
+            return httpx.Response(200, json=self.spending)
         if path == "/api/v1/holdings":
             return httpx.Response(200, json=self.holdings(request.url.params["accountId"]))
         if path == "/api/v1/activities/search":

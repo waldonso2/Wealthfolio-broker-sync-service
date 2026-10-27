@@ -28,7 +28,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-from . import __version__, coverage, crypto, meta_keys, retired, updates
+from . import __version__, coverage, crypto, meta_keys, retired, spending, updates
 from . import assets as assets_mod
 from . import config as config_mod
 from . import history as history_mod
@@ -211,6 +211,7 @@ class Syncer:
                     results.append(self._run_broker(cfg, key))
                 self._progress = {}
                 self._update_logos(cfg)
+                self._update_spending(cfg)
                 self._check_update(cfg)
             finally:
                 self._pins = {}
@@ -265,6 +266,15 @@ class Syncer:
             return None
         finally:
             source.close()
+
+    def _update_spending(self, cfg: config_mod.Config) -> None:
+        """The banks' cash accounts in Wealthfolio's spending tracker (#134); never touches a broker's result."""
+        try:
+            with connect(self._wealthfolio, cfg.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
+                         cfg.wealthfolio_fingerprint) as wf:
+                spending.update(self.state, wf, cfg)
+        except Exception:
+            log.exception("spending tracker not updated")
 
     def _check_update(self, cfg: config_mod.Config) -> None:
         """Once a day: a newer release is shown on the overview and notified once (updates.py)."""
