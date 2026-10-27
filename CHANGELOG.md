@@ -3,6 +3,7 @@
 ## 0.34.2
 
 - **The automatic update works:** the updater's unit sets `TERM=xterm`. Without it, the install engine's `clear` failed ("TERM environment variable not set") and every automatic update stopped before it started. A container on 0.34.0/0.34.1 still has the old unit: update it once by hand (`update`).
+- **The program stays readable for the service after an automatic update:** the updater ran with `UMask=0077`, so the new program files were root-only. The service (user `brokersync`) couldn't start (`203/EXEC`), and migrating the data failed. The unit now uses 0022, like the console, and `setup.sh` sets `umask 022` itself. Repair after such an update: `chmod -R u=rwX,go=rX /opt/wealthfolio-broker-sync/venv /opt/wealthfolio-broker-sync/app /opt/wealthfolio-broker-sync/bin`, then `brokersync-cli migrate` and `systemctl restart wealthfolio-broker-sync`.
 
 ## 0.34.1
 

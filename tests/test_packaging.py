@@ -94,6 +94,8 @@ def test_the_updater_is_installed_and_runs_the_consoles_update_unattended():
     assert "OnUnitInactiveSec=60s" in timer
     service = (ROOT / "deploy" / "systemd" / "wealthfolio-broker-sync-update.service").read_text()
     assert "Environment=TERM=" in service  # the engine's `clear` fails without one (0.34.0)
+    # 0077 left the new program root-only and the service unable to start (203/EXEC, 0.34.0).
+    assert "UMask=0022" in service and "\numask 022\n" in setup
 
 
 def test_the_cli_wrapper_runs_commands_like_the_web_service():
