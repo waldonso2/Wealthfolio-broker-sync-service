@@ -9,7 +9,7 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 - **Keine Duplikate:** Was schon in Wealthfolio steht – auch aus einem früheren CSV- oder PDF-Import –, erkennt der Dienst und legt es nicht noch einmal an
 - **Prüft sich selbst:** Nach jedem Abruf vergleicht er Konto und Depot mit dem Broker und zeigt, wo etwas fehlt oder nicht aufgeht
 
-> **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS), **Scalable Capital** (über Scalables offizielles CLI), **comdirect** (Girokonto und Depot über die offizielle REST-API) **Deutsche Bank** (Girokonto und maxblue-Depotbestand per FinTS; neu, noch nicht lange im Einsatz) und **jede andere Bank mit FinTS** – z. B. Sparkasse, Volks- und Raiffeisenbank (Girokonto; neu, je Bank noch ungeprüft).
+> **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS), **Scalable Capital** (über Scalables offizielles CLI), **comdirect** (Girokonto und Depot über die offizielle REST-API), **Deutsche Bank** (Girokonto und maxblue-Depotbestand per FinTS; neu, noch nicht lange im Einsatz), **jede andere Bank mit FinTS** – z. B. Sparkasse, Volks- und Raiffeisenbank (Girokonto; neu, je Bank noch ungeprüft) – **N26** (Hauptkonto über die Schnittstelle der N26-App; neu) und **jede Bank mit PSD2-Schnittstelle** (Girokonto über Enable Banking; neu).
 
 ## Was du brauchst
 
@@ -152,6 +152,38 @@ Die meisten deutschen Banken – Sparkassen, Volks- und Raiffeisenbanken, Sparda
 
 Gebucht wird wie bei der DKB: Ausgaben als Auszahlung, Eingänge als Einzahlung, Zinsen und Gebühren für sich. Girobuchungen von Wertpapiergeschäften (Buchungstext mit *Wertpapier*, *Depot*, *Dividende* …) wartet der Dienst ab, bis die Wertpapierseite – etwa ein Import der Abrechnungen – in Wealthfolio steht. Meldet die Bank ein Depot, liest er dessen Bestand und vergleicht ihn; als vollständig gilt er erst, wenn die Bank bestätigt ist. Weichen die Buchungstexte deiner Bank ab oder klappt etwas nicht, melde es bitte als Issue – dann bekommt sie ein eigenes Profil.
 
+## Banken über PSD2 (z. B. N26)
+
+Jede Bank in der EU muss Kontodaten über eine Schnittstelle nach der Zahlungsdiensterichtlinie (PSD2) herausgeben – auch Banken ohne FinTS wie N26. Lesen dürfen dort nur zugelassene Kontoinformationsdienste. Der Dienst nutzt dafür **Enable Banking**: **Deine Kontodaten laufen dabei über Enable Banking** (ein zugelassener Anbieter aus Finnland), nicht direkt von der Bank zum Dienst. Wer das nicht möchte, bleibt bei FinTS oder dem Import.
+
+**Eigene App bei Enable Banking (einmalig):**
+
+1. Im Kontrollzentrum von Enable Banking ein Konto anlegen und eine App im Produktivbetrieb registrieren. Ohne Vertrag läuft sie im eingeschränkten Modus: kostenlos, aber nur für deine eigenen, verknüpften Konten.
+2. Als **Redirect-URL** die Adresse dieses Dienstes mit einem beliebigen Pfad eintragen, z. B. `https://<Adresse des Dienstes>:8443/psd2`.
+3. Den beim Anlegen erzeugten **privaten Schlüssel** (.pem-Datei) aufheben.
+4. Dein Konto bei der Bank mit der App verknüpfen, wie es das Kontrollzentrum beschreibt.
+
+**Einrichten** unter *Broker → Bank über PSD2 1* (bis zu drei Banken: *2*, *3*):
+
+- **Bank:** der Name, wie Enable Banking ihn führt, z. B. `N26`. Bei einem Tippfehler nennt der Dienst ähnliche Namen.
+- **Land:** leer für Deutschland, sonst der Ländercode.
+- **Application-ID** und **privater Schlüssel:** aus Schritt 1 und 3; der Schlüssel liegt nur verschlüsselt im Tresor.
+- **IBAN:** nur nötig, wenn die Bank mehrere Konten freigibt; sonst nimmt der Dienst das Girokonto.
+
+**Anmelden:** Der Dienst zeigt einen Link zu deiner Bank. Dort meldest du dich an und gibst den Zugriff frei. Danach landest du auf der Redirect-URL – die Seite muss nicht laden. Kopiere ihre Adresse aus der Adresszeile in das Feld des Dienstes. Die Freigabe gilt so lange, wie die Bank es erlaubt (meist 90 oder 180 Tage); 7 Tage und 1 Tag vor dem Ende erinnert ntfy daran, dich neu anzumelden.
+
+**Was gebucht wird:** wie bei der DKB – Ausgaben als Auszahlung, Eingänge als Einzahlung, Zinsen und Gebühren für sich; vorgemerkte Umsätze erst, wenn sie gebucht sind. PSD2 deckt nur Zahlungskonten ab, **kein Depot**: Girobuchungen von Wertpapiergeschäften wartet der Dienst ab, bis die Wertpapierseite in Wealthfolio steht.
+
+## N26
+
+> **Bitte beachten:** N26 bietet Privatkunden keine offizielle Schnittstelle. Der Dienst nutzt die der N26-App, wie andere Finanzprogramme auch. N26 kann sie jederzeit ändern oder solche Zugriffe untersagen; dann klappt der Abruf nicht mehr. Deshalb bestätigst du in den Broker-Einstellungen einmal, dass du diesen Hinweis gelesen hast; vorher startet keine Anmeldung.
+
+**Einrichten** unter *Broker → N26*: E-Mail und Passwort deines N26-Kontos.
+
+**Anmelden:** Der Dienst meldet sich an, N26 schickt eine Bestätigung in die N26-App. Du bestätigst dort und klickst *Ich habe in der App bestätigt*. Danach ruft der Dienst ohne dich ab, solange N26 die Anmeldung verlängert. Läuft sie ab, meldet ntfy *Anmeldung nötig* – eine neue Anfrage in der App löst nur die Oberfläche aus, nie der tägliche Abruf. Lehnt N26 Passwort oder E-Mail ab, versucht der Dienst es nicht noch einmal, bis du die Zugangsdaten neu speicherst.
+
+**Was gebucht wird:** Eingänge als Einzahlung, Kartenzahlungen, Lastschriften und Überweisungen als Auszahlung; vorgemerkte Umsätze erst, wenn sie gebucht sind. Geld, das du in einen Space schiebst, erscheint als Auszahlung vom Hauptkonto – mit einem Muster auf der Seite *Überträge* (z. B. Stichwort des Space) wird es ein Übertrag auf ein eigenes Wealthfolio-Konto. Der Saldo des Hauptkontos wird nach jedem Abruf verglichen.
+
 ## Trade Republic
 
 Der Dienst liest deine Trade-Republic-Timeline über die inoffizielle Schnittstelle der App, mit dem Open-Source-Projekt [pytr](https://github.com/pytr-org/pytr). Er liest nur; Orders oder Auszahlungen kann er nicht auslösen.
@@ -287,6 +319,7 @@ Der **FIRE-Rechner** (Link oben auf der Durchschau) rechnet aus, wie viel Vermö
 | Push-Nachricht „Abweichung zu Wealthfolio“ | Eine schon übernommene Buchung fehlt in Wealthfolio (gelöscht?), oder eine Buchung des Dienstes gibt es beim Broker nicht mehr (z. B. storniert). Seite *Prüfung* öffnen: Fehlende mit *Wieder anlegen* zurückholen oder *Ignorieren*, wenn sie zu Recht fehlen; Stornierte in Wealthfolio löschen |
 | Wertpapier soll in Wealthfolio unter seinem Ticker statt der ISIN laufen | Unter *Wertpapiere* die Zuordnung ISIN → Symbol eintragen |
 | Ausgaben eines Kontos in Wealthfolio auswerten | In den Einstellungen des Brokers *Ausgaben auswerten* einschalten. Nach dem nächsten Abruf steht das Verrechnungskonto in Wealthfolios Ausgaben-Tracker (das Konto muss dort vom Typ Bargeld sein). Kategorien vergibt Wealthfolio mit seinen Regeln unter *Ausgaben → Regeln* anhand von Empfänger und Verwendungszweck; an den Buchungen ändert sich nichts. Eigene Überträge und Wertpapierabrechnungen zählen dort als Sparen, nicht als Ausgabe. Ausgeschaltet nimmt der Dienst das Konto wieder heraus – außer du hattest es in Wealthfolio schon selbst ausgewählt |
+| Wertpapiere in Wealthfolio ohne ISIN | Nichts zu tun: Nach jedem Abruf trägt der Dienst die ISIN bei den Wertpapieren nach, die er kennt und denen sie in Wealthfolio fehlt. Wealthfolio erkennt Importe, Kurse und Anleihen dann daran, und die Logos finden sie. Alles andere am Wertpapier bleibt, eine vorhandene ISIN wird nie ersetzt, eine von dir gelöschte nicht wieder eingetragen |
 | Wertpapiere in Wealthfolio ohne Logo | Unter *Logos* einschalten und einen (kostenlosen) Schlüssel von logo.dev eintragen. Nach jedem Abruf holt der Dienst die Logos per ISIN und setzt sie in Wealthfolio (ab 3.8.0). Nur die ISINs gehen an logo.dev; eigene Logos bleiben, ein entferntes Logo kommt nicht wieder |
 | Oberfläche lieber auf Englisch | *Einstellungen → Darstellung*: Sprache (Deutsch, English) |
 | Hell statt dunkel (oder umgekehrt) | Die Oberfläche startet in den Farben des Geräts; das Symbol oben rechts (halber Kreis) schaltet um – auf allen Seiten, bis du dich abmeldest |

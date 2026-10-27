@@ -150,6 +150,7 @@ EN: dict[str, str] = {
         "The test broker “{label}” no longer exists. Its {n} bookings stay in Wealthfolio until you delete them – "
         "search for <code>{search}</code> in the comment.",
     "Ausblenden": "Hide",
+    "Adresse der Seite nach der Anmeldung": "Address of the page after signing in",
     "Update verfügbar: Version {new}": "Update available: version {new}",
     "Installiert ist {current}. Zum Aktualisieren in der Konsole des Containers <code>update</code> eingeben.":
         "Installed is {current}. To update, type <code>update</code> in the container's console.",

@@ -48,10 +48,12 @@ XRAY_NOTIFIED = MetaKey("xray:notified", "json", False, "cluster risks notified 
 TAXONOMIES_LAST = MetaKey("taxonomies:last", "json", False,
                           "look-through: the last write of countries and sectors to Wealthfolio: {written, manual, at}")
 UPDATE = MetaKey("update", "json", False, "the newest release GitHub named: {version, checked} (updates.py)")
+ISIN = MetaKey("isin", "text", False,
+               "the ISIN the sync set on a Wealthfolio asset, once (assets.complete_isins, #140)")
 SPENDING = MetaKey("spending", "json", False,
                    "cash accounts the sync put into Wealthfolio's spending tracker: [account id] (spending.py, #134)")
 
 ALL = (ASSETS_LEARNED, CASH_ASSETS_REPAIRED, REFETCH, SAVINGS_ACCOUNT, DIVIDEND_TAX, HISTORY_START, POSITIONS,
        RETIRED_NOTICE, LOGO, LOGOS_LAST, PROGRESS, CHECKLIST_HIDDEN, UPDATE, FUND, XRAY_ACCEPTED, XRAY_NOTIFIED,
-       TAXONOMIES_LAST, SPENDING)
+       TAXONOMIES_LAST, SPENDING, ISIN)
 BROKER_KEYS = tuple(k for k in ALL if k.per_broker)

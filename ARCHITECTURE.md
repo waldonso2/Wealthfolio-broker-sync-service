@@ -54,6 +54,7 @@ flowchart TB
   sync --> repair["repair.py<br/>$CASH-Asset entfernen (einmalig)"]
   sync --> retired["retired.py<br/>entfernte Broker aufräumen"]
   sync --> notify["notify.py<br/>ntfy"]
+  sync --> isins["assets.complete_isins<br/>fehlende ISINs nachtragen"]
   sync --> logos["logos.py<br/>Logos von logo.dev (wahlweise)"]
   sync --> spending["spending.py<br/>Ausgaben-Tracker je Bank (wahlweise)"]
   sync --> updates["updates.py<br/>neues Release? (einmal am Tag)"]
@@ -64,7 +65,7 @@ flowchart TB
   sync --> state["state.py"] & vault["vault.py"] & config["config.py"]
   web --> duplicates["duplicates.py<br/>Bereinigung"]
   subgraph adapters["adapters/"]
-    base["base.py<br/>BrokerAdapter"] --- fints["fints.py<br/>FintsAdapter"] & tr["tr.py"] & scalable["scalable.py"] & comdirect["comdirect.py"]
+    base["base.py<br/>BrokerAdapter"] --- fints["fints.py<br/>FintsAdapter"] & tr["tr.py"] & scalable["scalable.py"] & comdirect["comdirect.py"] & n26["n26.py<br/>N26-App-Schnittstelle"]
     fints --- dkb["dkb.py<br/>Profil"] & deutschebank["deutschebank.py<br/>Profil"] & fintsbank["fintsbank.py<br/>jede andere Bank"]
   end
   adapters --> model["model.py<br/>Transaction, Kind, Position, CashBalance"]
@@ -189,7 +190,7 @@ Alle Adapter erben von `BrokerAdapter` (`adapters/base.py`) und **lesen nur**: S
 - In der Weboberfläche wirft der Adapter `AuthRequired(Challenge)`; die Oberfläche zeigt die Abfrage und ruft `complete_login(code)`.
 - Bei Timer-Läufen ist `on_user_action` gesetzt; der Adapter schickt eine ntfy-Nachricht und wartet selbst auf die Bestätigung.
 
-**Session.** `session_state()` wird nach jedem Lauf verschlüsselt gespeichert, auch nach Fehlern oder einem halben Login. Bei der DKB ist das der Zustand von python-fints, bei Trade Republic sind es die Cookies.
+**Session.** `session_state()` wird nach jedem Lauf verschlüsselt gespeichert, auch nach Fehlern oder einem halben Login. Bei der DKB ist das der Zustand von python-fints, bei Trade Republic sind es die Cookies, bei N26 Access-, Refresh- und Geräte-Token (#135; ein Lauf nach Zeitplan erneuert nur das Token und löst nie eine neue Anfrage in der N26-App aus).
 
 **Schutz vor Sperre.** Lehnt der Broker die PIN ab, setzt der Adapter `pin_rejected` und kontaktiert ihn nicht mehr, bis die Zugangsdaten neu gespeichert sind. Bei der DKB gilt das auch für eine vorübergehende Sperre. „Zu viele Versuche“ oder Netzfehler setzen das Flag nicht.
 
@@ -203,7 +204,7 @@ Alle Adapter erben von `BrokerAdapter` (`adapters/base.py`) und **lesen nur**: S
 
 Einen Test-Broker liefert der Dienst nicht aus; die Tests nutzen `tests/fake_broker.py`. Den früheren Test-Broker „Dummy“ (bis 0.3.6) räumt `retired.py` beim Start auf: Einstellungen, Zugangsdaten, Sync-Status, Läufe, unbekannte Buchungen und Abgleich werden gelöscht. Seine Buchungen in Wealthfolio bleiben; die Übersicht zeigt einmal, wie viele es sind und wie man sie findet (`[SYNC dummy:`).
 
-**FinTS-Banken** teilen sich `FintsAdapter` (`adapters/fints.py`): Login mit Freigabe in der App oder mit TAN-Eingabe, PIN-Schutz, Session, Abruf und die Einordnung der Giro-Buchungen. Eine Bank ist nur ein Profil (`dkb.py`, `deutschebank.py`): Bankleitzahl (fest oder als Zugangsfeld, wenn sie je Filiale verschieden ist), Server, Namen in den Meldungen und, falls die Buchungstexte abweichen, eigene Muster für Wertpapier, Zins und Gebühr. Die Ids hängen nur an der Buchung, nicht am Profil. Eine Bank ohne eigenes Profil nutzt `fintsbank.py` (#136): Bankleitzahl und FinTS-Adresse sind Zugangsfelder (die Adresse kommt sonst aus `institutes.lookup`: die Institutsliste der Deutschen Kreditwirtschaft, komprimiert und verschleiert in `fints_institutes.bin`), Standard-Muster; feste Plätze `fints1`…`fints3`, damit der Key einer eingerichteten Bank (Konfiguration, Tresor, Zustand, `[SYNC …]`) nie wechselt. Zugangsfelder mit fester Form (`blz`, `server` nur https, `iban`, `savings_iban`) prüft `routes/brokers.CREDENTIAL_CHECKS`. Den Depotbestand (HKWPD) liest `adapters/mt535.py` statt python-fints' eigenem Parser; gefragt werden nur Konten, für die die Bank einen Bestand anbietet, und das Log nennt je Depot die Zahl der Positionen bzw. bei leerer Antwort ihren Aufbau (nur Feldnamen).
+**FinTS-Banken** teilen sich `FintsAdapter` (`adapters/fints.py`): Login mit Freigabe in der App oder mit TAN-Eingabe, PIN-Schutz, Session, Abruf und die Einordnung der Giro-Buchungen. Eine Bank ist nur ein Profil (`dkb.py`, `deutschebank.py`): Bankleitzahl (fest oder als Zugangsfeld, wenn sie je Filiale verschieden ist), Server, Namen in den Meldungen und, falls die Buchungstexte abweichen, eigene Muster für Wertpapier, Zins und Gebühr. Die Ids hängen nur an der Buchung, nicht am Profil. Eine Bank ohne eigenes Profil nutzt `fintsbank.py` (#136): Bankleitzahl und FinTS-Adresse sind Zugangsfelder (die Adresse kommt sonst aus `institutes.lookup`: die Institutsliste der Deutschen Kreditwirtschaft, komprimiert und verschleiert in `fints_institutes.bin`), Standard-Muster; feste Plätze `fints1`…`fints3`, damit der Key einer eingerichteten Bank (Konfiguration, Tresor, Zustand, `[SYNC …]`) nie wechselt. Zugangsfelder mit fester Form (`blz`, `server` nur https, `iban`, `savings_iban`) prüft `routes/brokers.CREDENTIAL_CHECKS`. **Banken über PSD2** (`enablebanking.py`, #137) liest der Dienst über Enable Banking mit der eigenen App des Nutzers (Application-ID und privater Schlüssel im Tresor, jede Anfrage ein mit dem Schlüssel signiertes JWT): Die Anmeldung zeigt den Link zur Bank (`POST /auth`), der Nutzer fügt die Adresse ein, auf der die Bank ihn zurückschickt (Challenge `url`, `code` und `state` geprüft), daraus wird eine Sitzung (`POST /sessions`). Ein Lauf nach Zeitplan startet nie selbst eine Anmeldung und erinnert 7 und 1 Tag vor dem Ende der Freigabe. Die Umsätze laufen durch `fints.to_transactions` (gleiche Arten und Ids wie FinTS), vorgemerkte bleiben liegen; feste Plätze `psd2-1`…`psd2-3`. Den Depotbestand (HKWPD) liest `adapters/mt535.py` statt python-fints' eigenem Parser; gefragt werden nur Konten, für die die Bank einen Bestand anbietet, und das Log nennt je Depot die Zahl der Positionen bzw. bei leerer Antwort ihren Aufbau (nur Feldnamen).
 
 Jeder Adapter hat `replay(recording)` für Contract-Tests (`tests/contract/<adapter>/`). Er antwortet dann aus einer Aufzeichnung statt vom Broker.
 
@@ -401,7 +402,7 @@ Stockt es dazwischen, erledigt der nächste Start den Rest (siehe *Neu verschlü
 | `test_mapping.py` | Buchungsregeln (Zwei-Konten-Modell, Beträge, Überträge) |
 | `test_sync.py` | Ablauf, Wiederholung nach Teilfehlern, verlorener Status, CSV-/PDF-Importe (auch Steuer nachtragen), Sperre, Fehler eines Brokers, Reparatur alter `$CASH`-Überträge |
 | `test_fints.py` | was jedes FinTS-Profil bekommt, für DKB, Deutsche Bank und ein erfundenes Profil: Bankleitzahl, App-Freigabe, TAN-Eingabe, PIN-Schutz, Meldungen, Muster |
-| `test_dkb.py`, `test_tr.py` | Adapter gegen nachgebaute python-fints- bzw. pytr-Clients: Login, PIN-Schutz, Fehlerpfade, WebSocket-Paging, Abgleich, Duplikate |
+| `test_dkb.py`, `test_tr.py`, `test_n26.py` | Adapter gegen nachgebaute python-fints- bzw. pytr-Clients: Login, PIN-Schutz, Fehlerpfade, WebSocket-Paging, Abgleich, Duplikate |
 | `test_scalable.py` | Scalable gegen ein nachgebautes `sc` (`fixtures/scalable/fake_sc.py`): Gerätecode-Login, Sitzung im Tresor, abgelaufene Sitzung im Timer-Lauf, CLI nicht freigeschaltet, ganzer Abruf |
 | `test_comdirect.py` | comdirect gegen eine nachgebaute API: photoTAN-Push in Web-UI und Timer-Lauf, Refresh, Sperrschutz (offene Challenges, falsche TANs, abgelehnte PIN), mobileTAN, Zuordnung Trade ↔ Girobuchung |
 | `test_sc_install.py` | Installation von `sc`: Scalables echte Signatur, manipulierte Releases werden abgelehnt |

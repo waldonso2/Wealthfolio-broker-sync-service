@@ -147,6 +147,14 @@ class FakeWealthfolio:
                 self.activities.remove(a)
                 self.deleted.append(a["id"])
             return httpx.Response(200, json=gone[0])
+        if path.startswith("/api/v1/assets/profile/") and request.method == "PUT":
+            asset_id = unquote(path.rsplit("/", 1)[1])
+            found = [a for a in self.assets if a["id"] == asset_id]
+            if not found:
+                return httpx.Response(404, json={"code": 404, "message": "Asset not found"})
+            # Like Wealthfolio: name, displayCode, notes, metadata and providerConfig come from the payload as sent.
+            found[0].update(json.loads(request.content))
+            return httpx.Response(200, json=found[0])
         if path == "/api/v1/assets" and request.method == "GET":
             return httpx.Response(200, json=self.assets)
         if self.logos is not None and path == "/api/v1/assets/logos" and request.method == "GET":

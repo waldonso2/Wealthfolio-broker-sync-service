@@ -213,6 +213,7 @@ class Syncer:
                     self._progress = {"broker": key, "label": self.adapters[key].label, "n": n, "m": len(keys)}
                     results.append(self._run_broker(cfg, key))
                 self._progress = {}
+                self._complete_isins(cfg)  # before the logos: they look the ISIN up there first
                 self._update_logos(cfg)
                 self._update_funds(cfg)
                 self._update_spending(cfg)
@@ -247,6 +248,20 @@ class Syncer:
                     b["session"] = safety_state(session)
 
         self.vault.update(change)
+
+    def _complete_isins(self, cfg: config_mod.Config) -> None:
+        """Missing ISINs on the assets the sync knows (#140); never touches a broker's result."""
+        learned = {a["asset_id"]: isin for key in cfg.brokers for isin, a in self.state.assets(key).items()}
+        if not learned:
+            return
+        try:
+            with connect(self._wealthfolio, cfg.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
+                         cfg.wealthfolio_fingerprint) as wf:
+                done = assets_mod.complete_isins(self.state, wf, learned)
+            if done:
+                log.info("ISIN set on %d Wealthfolio assets", done)
+        except Exception:
+            log.exception("ISINs not completed")
 
     def update_logos(self) -> logos_mod.Result | None:
         """The button on the page *Logos*: one pass now (under the sync lock)."""
