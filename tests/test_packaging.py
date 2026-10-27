@@ -50,10 +50,13 @@ def test_units_and_setup_agree_on_paths():
     setup = (ROOT / "deploy" / "setup.sh").read_text()
     for unit in (ROOT / "deploy" / "systemd").iterdir():
         text = unit.read_text()
-        if unit.suffix == ".service":
+        if unit.name == "wealthfolio-broker-sync-update.service":
+            # Root on purpose: the updater runs the console's update (opt-in on the page Updates).
+            assert "User=root" in text and "ExecStart=/usr/local/bin/brokersync-autoupdate" in text
+        elif unit.suffix == ".service":
             assert "ExecStart=/opt/wealthfolio-broker-sync/venv/bin/brokersync" in text
             assert "BROKERSYNC_DATA=/opt/wealthfolio-broker-sync/data" in text
-            # Only the certificate's renewal is root: it writes /etc/wealthfolio-broker-sync/tls (#92).
+            # Else only the certificate's renewal is root: it writes /etc/wealthfolio-broker-sync/tls (#92).
             assert "User=brokersync" in text or ("User=root" in text and "renew-cert" in text)
     assert "USER_NAME=brokersync" in setup and 'BASE=/opt/wealthfolio-broker-sync' in setup
     ct = (ROOT / "ct" / f"{SLUG}.sh").read_text()
@@ -76,6 +79,19 @@ def test_setup_survives_its_own_pitfalls():
     # Steps that talk to systemd never hang an update forever, and a run by hand restarts the service.
     assert "timeout 900 /usr/local/bin/brokersync-cli migrate" in setup and "rotate-key" in setup
     assert "systemctl try-restart wealthfolio-broker-sync" in setup
+
+
+def test_the_updater_is_installed_and_runs_the_consoles_update_unattended():
+    setup = (ROOT / "deploy" / "setup.sh").read_text()
+    script = (ROOT / "deploy" / "brokersync-autoupdate").read_text()
+    timer = (ROOT / "deploy" / "systemd" / "wealthfolio-broker-sync-update.timer").read_text()
+    assert "/usr/local/bin/brokersync-autoupdate" in setup
+    assert "enable -q --now wealthfolio-broker-sync-update.timer" in setup
+    # The same, checked update as by hand; never while a fetch runs; nothing before the service says so.
+    assert "PHS_SILENT=1 /usr/bin/update" in script
+    assert "is-active --quiet wealthfolio-broker-sync-run.service" in script
+    assert script.index("update-due") < script.index("/usr/bin/update")
+    assert "OnUnitInactiveSec=60s" in timer
 
 
 def test_the_cli_wrapper_runs_commands_like_the_web_service():

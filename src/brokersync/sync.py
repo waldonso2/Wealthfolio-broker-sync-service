@@ -352,7 +352,7 @@ class Syncer:
     def _check_update(self, cfg: config_mod.Config) -> None:
         """Once a day: a newer release is shown on the overview and notified once (updates.py)."""
         version = updates.check(self.state, __version__)
-        if version:
+        if version and not cfg.auto_update:  # switched on, the updater installs it and says so itself
             self.notifier(cfg).send("Update verfügbar", f"Version {version} ist erschienen (installiert: "
                                     f"{__version__}). In der Konsole des Containers: update", link=updates.RELEASES,
                                     tags="arrow_up")

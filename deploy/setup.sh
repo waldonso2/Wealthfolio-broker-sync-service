@@ -133,8 +133,11 @@ done
 install -m 644 "$APP"/deploy/systemd/*.service "$APP"/deploy/systemd/*.timer /etc/systemd/system/
 install -m 755 "$APP/deploy/brokersync-cli" /usr/local/bin/brokersync-cli
 install -m 755 "$APP/deploy/brokersync-reset-password" /usr/local/bin/brokersync-reset-password
+install -m 755 "$APP/deploy/brokersync-autoupdate" /usr/local/bin/brokersync-autoupdate
 systemctl daemon-reload
 systemctl enable -q --now wealthfolio-broker-sync-cert.timer || true
+# Every minute; it installs nothing until the page Updates switches it on.
+systemctl enable -q --now wealthfolio-broker-sync-update.timer || true
 
 # Data of older versions: credentials, settings and database encrypted with the
 # key that now lives outside data/. Only then the old key file goes.

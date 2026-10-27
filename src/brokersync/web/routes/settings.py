@@ -1,15 +1,18 @@
-"""Settings pages without a broker of their own: Wealthfolio, notifications, securities, logos."""
+"""Settings pages without a broker of their own: Wealthfolio, notifications, securities, logos, updates."""
 
 from __future__ import annotations
 
 import contextlib
+import json
 import re
 import secrets
+from decimal import Decimal
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
+from ... import __version__, meta_keys, updates
 from ... import logos as logos_mod
 from ...notify import Notifier
 from ...sync import AlreadyRunning
@@ -234,3 +237,35 @@ def appearance_save(request: Request, ctx: Ctx, language: str = Form("de")):
 
     ctx.update(change)
     return redirect(request, "/appearance", tr(request, "Gespeichert."))  # already in the language just chosen
+
+
+# ── updates ─────────────────────────────────────────────────────────────────
+@router.get("/updates", response_class=HTMLResponse)
+def updates_page(request: Request, ctx: Ctx):
+    return ctx.render(request, "updates.html", cfg=ctx.cfg(), installed=__version__,
+                      newest=json.loads(ctx.state.meta(meta_keys.UPDATE()) or "{}").get("version"),
+                      last=json.loads(ctx.state.meta(meta_keys.AUTO_UPDATE()) or "null"),
+                      lowest=updates.MIN_INTERVAL, highest=updates.MAX_INTERVAL)
+
+
+@router.post("/updates")
+def updates_save(request: Request, ctx: Ctx, auto_update: str = Form(""), interval: str = Form(""),
+                 ui_password: str = Form("")):
+    """Whether the container installs a newer release by itself, and how often it asks GitHub (seconds)."""
+    try:
+        seconds = inputs.decimal(interval.strip(), N_("Wie oft nachsehen (Sekunden)"),
+                                 minimum=Decimal(updates.MIN_INTERVAL), maximum=Decimal(updates.MAX_INTERVAL))
+    except inputs.Invalid as e:
+        return redirect(request, "/updates", e.text(language(request)), "error")
+    if seconds != seconds.to_integral_value():
+        return redirect(request, "/updates", tr(request, "Bitte ganze Sekunden angeben."), "error")
+    on = bool(auto_update)
+    if on != ctx.cfg().auto_update and (error := ctx.reconfirm(request, ui_password)):
+        return redirect(request, "/updates", error, "error")
+
+    def change(c) -> None:
+        c.auto_update, c.update_interval = on, int(seconds)
+
+    ctx.update(change)
+    ctx.event(request, "auto_update", detail=f"{'on' if on else 'off'} {int(seconds)}s")
+    return redirect(request, "/updates", tr(request, "Gespeichert."))
