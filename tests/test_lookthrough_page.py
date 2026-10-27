@@ -151,3 +151,17 @@ def test_costs_need_a_ter_and_a_fee_model_and_go_into_the_fire_calculator(tmp_pa
     assert "Ohne Kosten" in page and "abgezogen von der Rendite" in page
     page = client.post("/lookthrough/fire", data={"csrf": token, "expenses": "30000", "costs": "0"}).text
     assert "Ohne Kosten" not in page  # overridden by the user
+
+
+def test_a_funds_largest_holdings_show_under_it_and_all_on_request(tmp_path):
+    client, token = _client(tmp_path)
+    many = "ISIN,Name,Weight (%)\n" + "".join(f",Example {n:02d} Inc,{(n + 1) / 100}\n" for n in range(60))
+    client.post("/lookthrough/upload", data={"csrf": token, "asset_id": FUND},
+                files={"file": ("holdings.csv", many.encode(), "text/csv")})
+    page = client.get("/lookthrough").text
+    assert "Die 50 größten von 60 Positionen im Fonds" in page and "Alle 60 anzeigen" in page
+    fund = page.split(f"<caption class=\"sr-only\">Positionen von {FUND}")[1]
+    assert fund.index("Example 59 Inc") < fund.index("Example 58 Inc")  # largest first
+    assert "Example 05 Inc" not in fund.split("Alle 60 anzeigen")[0]  # beyond the top 50
+    full = client.get(f"/lookthrough?full={FUND}").text
+    assert "Alle 60 Positionen im Fonds" in full and "Example 05 Inc" in full

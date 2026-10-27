@@ -123,7 +123,7 @@ HOSTS = ("www.ishares.com", "etf.dws.com")
 BROWSER = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 MAX_BYTES = 20 * 1024 * 1024
 MAX_COLUMN = 16384  # Excel's last column, XFD
-REFRESH_DAYS = 7
+REFRESH_DAYS = 0.75  # daily: the timer runs once a day, so the next day's run must find a list due
 NONE_DAYS = 30  # an ISIN no source knows is asked again after this
 DWS = "https://etf.dws.com/etfdata/export/GBR/ENG/excel/product/constituent/{isin}/"
 # The UK site's CSV export; its last path part is a constant of the domain, not of the fund.
@@ -415,19 +415,21 @@ def _days(at: str | None) -> float:
     return (datetime.now(UTC) - datetime.fromisoformat(at)).total_seconds() / 86400 if at else 1e9
 
 
-def update(state: State, depot: Depot, sources: Sources, *, force: bool = False, budget: float = BUDGET) -> Result:
+def update(state: State, depot: Depot, sources: Sources, *, force: bool = False, budget: float = BUDGET,
+           only: str = "") -> Result:
     """Fetch the holdings of the depot's positions that are due; an uploaded file is kept unless the user
-    saved an iShares page for the fund. ``force``: everything now (the button on *Durchschau*)."""
+    saved an iShares page for the fund. ``force``: everything now (the button on *Durchschau*); ``only``: just
+    this asset (its own button)."""
     result = Result()
     deadline = time.monotonic() + budget
-    for p in depot.positions[:PER_RUN]:
+    for p in [p for p in depot.positions if p["id"] == only] if only else depot.positions[:PER_RUN]:
         if time.monotonic() > deadline:  # the rest is due again next run
             log.info("look-through: time budget used up, the remaining funds next run")
             break
         st = status(state, p["id"])
         if not (p["isin"] or st.get("url")) or (st.get("status") == "upload" and not st.get("url")):
             continue
-        due = {"ok": REFRESH_DAYS, "none": NONE_DAYS, "error": 1}.get(st.get("status", ""), 0)
+        due = {"ok": REFRESH_DAYS, "none": NONE_DAYS, "error": REFRESH_DAYS}.get(st.get("status", ""), 0)
         if not force and _days(st.get("at")) < due:
             continue
         try:

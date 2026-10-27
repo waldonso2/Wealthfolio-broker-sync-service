@@ -200,6 +200,7 @@ class Syncer:
             cfg = config_mod.load(self.data_dir)
             if cfg.safe_mode and not manual:
                 self._remind(cfg)
+                self._update_funds(cfg)  # the issuers' lists are no broker: they stay daily in safe mode too
                 return []
             self._pins = dict(pins or {})
             # "Automatisch abrufen" off: the timer and the general button skip
@@ -270,12 +271,14 @@ class Syncer:
         finally:
             source.close()
 
-    def update_funds(self) -> lookthrough.Result | None:
-        """The button on *Durchschau*: fetch every fund's holdings now (under the sync lock)."""
+    def update_funds(self, only: str = "") -> lookthrough.Result | None:
+        """The buttons on *Durchschau*: fetch every fund's holdings now, or ``only`` this asset's (under the sync
+        lock)."""
         with run_lock(self.data_dir, wait=5):
-            return self._update_funds(config_mod.load(self.data_dir), force=True)
+            return self._update_funds(config_mod.load(self.data_dir), force=True, only=only)
 
-    def _update_funds(self, cfg: config_mod.Config, *, force: bool = False) -> lookthrough.Result | None:
+    def _update_funds(self, cfg: config_mod.Config, *, force: bool = False,
+                      only: str = "") -> lookthrough.Result | None:
         """Look-through after a run (#139): the funds' holdings if turned on, then new cluster risks via ntfy.
         Whatever goes wrong here never touches the brokers' results."""
         if not cfg.lookthrough_enabled and not self.state.funds():
@@ -286,8 +289,8 @@ class Syncer:
             with connect(self._wealthfolio, cfg.wealthfolio_url, secrets.get("wealthfolio_password"),
                          cfg.wealthfolio_fingerprint) as wf:
                 depot = lookthrough.read_depot(wf)
-                result = lookthrough.update(self.state, depot, sources, force=force) if cfg.lookthrough_enabled \
-                    else None
+                result = (lookthrough.update(self.state, depot, sources, force=force, only=only)
+                          if cfg.lookthrough_enabled else None)
                 if cfg.lookthrough_write:
                     try:
                         lookthrough.write_taxonomies(self.state, wf, depot)

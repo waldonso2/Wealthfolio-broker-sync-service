@@ -75,8 +75,11 @@ def _position(ctx: AppContext, asset_id: str) -> dict | None:
     return next((p for p in ctx.depot.positions if p["id"] == asset_id), None)
 
 
+FUND_TOP = 50  # a fund's largest positions shown under it; all of them with ?full=<asset id>
+
+
 @router.get("/lookthrough", response_class=HTMLResponse)
-def lookthrough_page(request: Request, ctx: Ctx, top: str = "50"):
+def lookthrough_page(request: Request, ctx: Ctx, top: str = "50", full: str = ""):
     if time.time() - ctx.depot_at > READ_SECONDS:
         from .overview import launch
 
@@ -97,7 +100,8 @@ def lookthrough_page(request: Request, ctx: Ctx, top: str = "50"):
         request, "lookthrough.html", wf_error=ctx.depot_error, positions=depot.positions, funds=funds,
         status={p["id"]: lookthrough.status(state, p["id"]) for p in depot.positions},
         total=sum((p["value"] for p in depot.positions), Decimal(0)), top=top, tops=list(TOPS),
-        stocks=stocks[:TOPS[top]] if TOPS[top] else stocks, count=len(stocks),
+        stocks=stocks[:TOPS[top]] if TOPS[top] else stocks, count=len(stocks), full=full, fund_top=FUND_TOP,
+        largest={k: sorted(f["constituents"], key=lambda c: -Decimal(c[2])) for k, f in funds.items()},
         unassigned=next((r for r in rows if r.key == xray.UNASSIGNED), None),
         names={h.id: h.name for h in holdings}, effective=xray.effective_count(rows), fund_list=with_list,
         overlap={(a.id, b.id): xray.overlap(a, b) for a, b in combinations(with_list, 2)},
@@ -208,16 +212,19 @@ def lookthrough_source(request: Request, ctx: Ctx, asset_id: str = Form(...), ur
 
 
 @router.post("/lookthrough/fetch")
-def lookthrough_fetch(request: Request, ctx: Ctx):
-    """*Jetzt abrufen*: every fund's holdings list now, in the background."""
+def lookthrough_fetch(request: Request, ctx: Ctx, asset_id: str = Form("")):
+    """*Jetzt abrufen*: every fund's holdings list now, or one position's (``asset_id``), in the background."""
     c = ctx.cfg()
     if not c.lookthrough_enabled and not c.lookthrough_write:
         return redirect(request, "/lookthrough", tr(request, "Erst den automatischen Abruf einschalten."), "warn")
+    if asset_id and _position(ctx, asset_id) is None:
+        return redirect(request, "/lookthrough", tr(request, "Unbekannte Position - bitte die Seite neu laden."),
+                        "error")
     from .overview import start_job
 
     def work(lang: str) -> tuple[str, str]:
         try:
-            result = ctx.syncer.update_funds()
+            result = ctx.syncer.update_funds(only=asset_id)
         except AlreadyRunning:
             return translate("Ein Abruf läuft gerade - bitte gleich noch einmal.", lang), "warn"
         ctx.depot_at = 0.0
