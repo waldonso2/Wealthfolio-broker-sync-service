@@ -10,7 +10,7 @@
 # core's moving main branch, and set every run (the `update` command keeps the URL of
 # the run that wrote it). .github/workflows/core-watch.yml reports newer commits.
 export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/waldonso2/wealthfolio-broker-sync-service/main}"
-export COMMUNITY_SCRIPTS_CORE_URL="https://raw.githubusercontent.com/community-scripts/core/2f446f0dfc33538a1e842a447100b86d8b6412f2"
+export COMMUNITY_SCRIPTS_CORE_URL="https://raw.githubusercontent.com/community-scripts/core/8354b069a5fce0ab074c15825fb24704387dde04"
 source <(curl -fsSL "$COMMUNITY_SCRIPTS_CORE_URL/core/build.func")
 # Copyright (c) 2026 waldonso2
 # License: MIT | https://github.com/waldonso2/wealthfolio-broker-sync-service/raw/main/LICENSE
@@ -111,5 +111,7 @@ echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 # network can choose the password before you do.
 SETUP_CODE="$(pct exec "$CTID" -- /usr/local/bin/brokersync-cli setup-code 2>/dev/null | sed -n 's/^Setup code.*: //p')"
 echo -e "${INFO}${YW}Open the web UI and choose its password (the certificate comes from the container's own CA: confirm the browser warning once, or import /ca.crt):${CL}"
-echo -e "${GATEWAY}${BGN}https://${IP}:8443/setup-password?code=${SETUP_CODE}${CL}"
+HOST="$IP"
+[[ "$HOST" == *:* ]] && HOST="[$HOST]"  # an IPv6 address goes in brackets in a URL
+echo -e "${GATEWAY}${BGN}https://${HOST}:8443/setup-password?code=${SETUP_CODE}${CL}"
 echo -e "${INFO}${YW}Setup code: ${SETUP_CODE:-run brokersync-cli setup-code in the container} (valid 24 h)${CL}"

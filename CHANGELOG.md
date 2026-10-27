@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.30.1
+
+- **Install engine moved to community-scripts/core `8354b06`** (#97), after reviewing its 51 commits. Nothing new is sent and no engine function the install uses changed. What changes for an install:
+  - Closing the console no longer aborts it.
+  - `update` cleans up (apt autoremove/clean) after a successful run.
+  - A failed update is deployed again by the next `update` instead of reporting "no update".
+  - When Proxmox' template catalog can't be reached, the engine takes Debian from images.linuxcontainers.org.
+- The closing message of the install puts an IPv6 address in brackets, so the link to the setup page works.
+
 ## 0.30.0
 
 - **Durchschau (waldonso2/wealthfolio-importer-addon#139):** a new page in the main menu shows what the depot really holds across all Wealthfolio accounts: every stock once with its share, value, country and sector and through which positions (a stock in three ETFs and held directly is one row) - top 50, top 100 or all; what the funds' holdings lists leave open as "nicht zugeordnet", never scaled up; the overlap of every two ETFs, each ETF's own contribution and the effective number of stocks. A position without a holdings list is one line of its own. New table `funds` (state.db migration 4).
