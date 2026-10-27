@@ -293,7 +293,7 @@ class Syncer:
                     except WealthfolioError:
                         log.exception("look-through: countries and sectors not written to Wealthfolio")
             found = xray.findings(lookthrough.holdings(self.state, depot), lookthrough.limits(cfg.xray_limits),
-                                  depot.base, depot.cash)
+                                  depot.base, depot.cash, lookthrough.cost(self.state, depot, cfg).rate)
             new = lookthrough.new_risks(self.state, found)
             if new:
                 names = ", ".join(f.name or f.kind for f in new[:5])

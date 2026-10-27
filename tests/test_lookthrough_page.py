@@ -128,3 +128,26 @@ def test_the_fire_page_takes_the_wealth_from_wealthfolio_and_reads_thousands(tmp
     assert saved["expenses"] == "30000" and saved["safe_rate"] == "0.035" and saved["joint"] == "0"
     assert "Ergebnis" in r.text and "Lean FIRE" in r.text and "Barista FIRE (mit Teilzeit" not in r.text
     assert 'value="30.000"' in r.text and 'value="3,50"' in r.text
+
+
+def test_costs_need_a_ter_and_a_fee_model_and_go_into_the_fire_calculator(tmp_path):
+    from brokersync import config as config_mod
+
+    client, token = _client(tmp_path)
+    page = client.get("/lookthrough").text
+    assert "Gesamtkostenquote unbekannt" in page and "nicht geschätzt" in page  # nothing guessed
+    r = client.post("/lookthrough/ter", data={"csrf": token, "asset_id": FUND, "ter": "9"})
+    assert "bitte als Zahl angeben" in r.text
+    r = client.post("/lookthrough/costs", data={"csrf": token, "fake:fixed": "abc"})
+    assert "bitte als Zahl angeben" in r.text and config_mod.load(tmp_path).cost_models == {}
+    client.post("/lookthrough/costs", data={"csrf": token, "fake:fixed": "1", "fake:spread": "0,05"})
+    assert config_mod.load(tmp_path).cost_models == {"fake": {"fixed": "1", "spread": "0.0005"}}
+    r = client.post("/lookthrough/ter", data={"csrf": token, "asset_id": FUND, "ter": "2,5"})
+    assert 'value="2,5"' in r.text and 'value="0,05"' in r.text and "von Hand" in r.text
+    assert "Gesamtkostenquote unbekannt" not in r.text and "Verkauf heute geschätzt 1,00 EUR" in r.text
+    risks = r.text.split("<caption class=\"sr-only\">Klumpenrisiken</caption>")[1].split("</table>")[0]
+    assert "Gesamtkostenquote" in risks  # 1 EUR fee on 5 EUR is far above 0.5 % a year
+    page = client.post("/lookthrough/fire", data={"csrf": token, "expenses": "30000"}).text
+    assert "Ohne Kosten" in page and "abgezogen von der Rendite" in page
+    page = client.post("/lookthrough/fire", data={"csrf": token, "expenses": "30000", "costs": "0"}).text
+    assert "Ohne Kosten" not in page  # overridden by the user

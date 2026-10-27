@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal as D
 
 import pytest
@@ -63,7 +64,7 @@ import zipfile  # noqa: E402
 import httpx  # noqa: E402
 
 from brokersync import config as config_mod  # noqa: E402
-from brokersync import lookthrough, meta_keys  # noqa: E402
+from brokersync import costs, lookthrough, meta_keys  # noqa: E402
 from brokersync.lookthrough import Depot, NoSource, SourceError, Sources, fetch, parse_file  # noqa: E402
 from brokersync.state import State  # noqa: E402
 
@@ -111,7 +112,7 @@ def test_xlsx_rows_turn_into_holdings():
 SCREENER = json.dumps({
     "251882": {"portfolioId": 251882, "isin": "IE00B4L5Y983", "fundName": "Example World",
                "productPageUrl": "/uk/individual/en/products/251882/ishares-msci-world-ucits-etf-acc-fund"},
-    "999999": {"portfolioId": 999999, "isin": "IE0000000017", "fundName": "Example Other",
+    "999999": {"portfolioId": 999999, "isin": "IE0000000017", "fundName": "Example Other", "ter": {"r": 0.07},
                "productPageUrl": "/uk/individual/en/products/999999/example-other-fund"},
     "broken": {"isin": None}, "list": [1, 2]}).encode()
 
@@ -300,3 +301,28 @@ def test_a_run_writes_the_taxonomies_when_turned_on(tmp_path):
     syncer.run()
     assert {a["categoryId"] for a in wf.assignments} == {"country_US", "country_DE", "45", "20"}
     assert syncer.remove_taxonomies() == 4 and wf.assignments == []
+
+
+def test_the_fund_finder_gives_the_ter_and_a_fetch_keeps_it_with_its_source(tmp_path):
+    assert lookthrough._ter({"fees": "0,20 %"}) == D("0.002")
+    assert lookthrough._ter({"ter": "n/a", "netExpenseRatio": 50}) is None  # not a plausible percentage
+    state = State(tmp_path)
+    depot = Depot(positions=[{"id": "a", "isin": "IE0000000017", "name": "Other", "currency": "EUR",
+                              "value": D(100)}])
+    lookthrough.update(state, depot, sources(lambda r: httpx.Response(200, content=ISHARES_FULL)))
+    st = lookthrough.status(state, "a")
+    assert lookthrough.ter(st) == (D("0.0007"), "iShares") and st["ter_at"]
+    lookthrough.set_status(state, "a", ter_manual="0.001")
+    assert lookthrough.ter(lookthrough.status(state, "a")) == (D("0.001"), "manual")  # the user's first
+
+
+def test_the_depot_reads_each_positions_trades_from_wealthfolio(tmp_path):
+    fake, wf = _wf()
+    fake.add_existing(accountId="acc-depot", activityType="BUY", date="2026-01-02T10:00:00Z", quantity="5",
+                      unitPrice="1", fee="1", tax="0", amount="6", currency="EUR", assetId="IE00B4L5Y983")
+    fake.add_existing(accountId="acc-depot", activityType="DEPOSIT", date="2026-01-02T10:00:00Z", amount="6",
+                      currency="EUR")
+    depot = lookthrough.read_depot(wf)
+    [p] = depot.positions
+    assert list(p["parts"]) == ["acc-depot"]
+    assert p["trades"] == [costs.Trade(date(2026, 1, 2), "BUY", D(5), D(1), D(0), "acc-depot")]

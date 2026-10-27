@@ -95,6 +95,12 @@ def test_findings_name_each_cluster_over_its_limit():
     assert stock.value == D("0.91") and stock.limit == D("0.05")
 
 
+def test_a_cost_rate_over_its_limit_is_a_finding():
+    us = fund("us", "100", ("US0000000AA1", "1"))
+    assert [f.key for f in findings([us], LIMITS, "EUR", cost=D("0.006")) if f.kind == "cost"] == ["cost"]
+    assert not [f for f in findings([us], LIMITS, "EUR", cost=D("0.004")) if f.kind == "cost"]
+
+
 def test_no_findings_for_a_broad_depot():
     lines = tuple((f"US{n:09d}0", "0.01") for n in range(100))
     broad = Holding("b", "b", D("100"), tuple(Constituent(k, k, D(w), f"C{n % 10}", f"S{n % 5}", "EUR")

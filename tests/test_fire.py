@@ -53,3 +53,10 @@ def test_years_to_fi_and_coast_fire():
     assert r.coast == pytest.approx(r.targets["regular"] / 1.05 ** 20)
     assert r.coast_reached == (r.coast <= 300000)
     assert r.fi_age == pytest.approx(40 + r.years["regular"])
+
+
+def test_costs_come_off_the_real_return():
+    base = dict(expenses=30000, capital=200000, savings=20000)
+    with_costs = fire.plan(Inputs(**base, real_return=0.05, costs=0.004))
+    assert with_costs.targets == fire.plan(Inputs(**base, real_return=0.046)).targets
+    assert with_costs.years["regular"] > fire.plan(Inputs(**base, real_return=0.05)).years["regular"]

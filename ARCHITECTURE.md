@@ -58,6 +58,7 @@ flowchart TB
   sync --> updates["updates.py<br/>neues Release? (einmal am Tag)"]
   sync --> lookthrough["lookthrough.py<br/>Positionslisten der ETFs, Taxonomien (wahlweise)"]
   lookthrough --> xray["xray.py<br/>Durchschau, Überschneidung, Klumpenrisiken"]
+  lookthrough --> costs["costs.py<br/>Kosten von Kauf bis Verkauf"]
   web --> fire["fire.py<br/>FIRE mit deutschen Netto-Werten"]
   sync --> state["state.py"] & vault["vault.py"] & config["config.py"]
   web --> duplicates["duplicates.py<br/>Bereinigung"]
@@ -344,11 +345,14 @@ Aufbau (#76): `web/app.py` baut die App (`create_app` mit Gate, Vorlagen und Fil
 | `/lookthrough`, `POST /lookthrough/refresh` | Durchschau (#139): Positionen aller Konten (im Hintergrund gelesen, 10 Minuten gemerkt), Klumpenrisiken, Positionslisten, Aktien über alle Positionen, Überschneidung der ETFs |
 | `POST /lookthrough/upload`, `…/source`, `…/fetch` | Positionsliste hochladen (CSV/XLSX), iShares-Produktseite speichern, Positionslisten jetzt abrufen (Hintergrundjob, `Syncer.update_funds`) |
 | `POST /lookthrough/settings`, `…/accept`, `…/taxonomies/remove` | Abruf und Eintragen in Wealthfolio an/aus, Grenzen der Klumpenrisiken; ein Risiko als gewollt markieren oder wieder melden; die Zuordnungen des Dienstes aus Wealthfolio entfernen |
-| `/lookthrough/fire` | FIRE-Rechner mit deutschen Netto-Werten (`fire.py`), Eingaben in `Config.fire` |
+| `POST /lookthrough/costs`, `…/ter` | Gebührenmodelle der Broker (`Config.cost_models`), TER einer Position von Hand (`meta` `fund:<asset id>`, `ter_manual`) |
+| `/lookthrough/fire` | FIRE-Rechner mit deutschen Netto-Werten (`fire.py`), Eingaben in `Config.fire`; Kosten vorbelegt aus der Durchschau |
 | `/unlock` | Entsperren mit der Master-Passphrase (nur solange gesperrt) |
 | `/retired/dismiss` | Hinweis zu einem entfernten Broker (z. B. dem Dummy) ausblenden |
 
 **Durchschau (#139).** `lookthrough.read_depot` liest alle offenen Positionen aller Konten (Wert in der Basiswährung, Einstandswert, Bargeld je Konto). Eine Position ist ein Fonds, sobald seine Positionsliste in `state.funds` liegt (Migration 4); sonst eine Zeile für sich. `xray.unify` gibt Zeilen ohne ISIN (iShares-Listen) die ISIN derselben Firma aus einer anderen Liste (bereinigter Name), `xray.exposures` rechnet jede Firma einmal mit „davon über“, `xray.findings` die Klumpenrisiken über den Grenzen (`xray.LIMITS`, `Config.xray_limits`). Nach jedem Lauf (`Syncer._update_funds`, nur mit Positionslisten oder eingeschaltetem Abruf): fällige Listen holen (`lookthrough.update`: Xtrackers per ISIN als XLSX, iShares per Produkt-ID aus dem Fondsfinder von iShares (`ISHARES_SCREENER`, einmal je Lauf, nach ISIN) oder der gespeicherten Produktseite als CSV; nur `HOSTS` über https, Antworten bis 20 MB, eine Liste muss vollständig wirken; eine hochgeladene bleibt), wahlweise Länder und GICS-Sektoren in Wealthfolios Taxonomien `regions`/`industries_gics` schreiben (`write_taxonomies`, Quelle `BROKERSYNC`, nur wo keine Zuordnung des Nutzers steht – Wealthfolios Yahoo-Klassifizierung lässt Nicht-`AUTO`-Zuordnungen ebenfalls stehen), dann neue Klumpenrisiken einmal per ntfy (`meta` `xray:notified`; gewollte in `xray:accepted`). Nichts davon ändert das Ergebnis eines Brokers.
+
+**Kosten (#142).** `read_depot` liest zusätzlich die BUY/SELL-Buchungen aller Konten (`search_activities`) und den Wert je Konto einer Position. `costs.py` (rein, ohne I/O) rechnet je Position Ordergebühren (`fee`), Spread, laufende Kosten (TER × Mittel aus Einstandswert und Wert × Jahre seit dem ersten Kauf), Depotgebühr (je Broker nach Wert verteilt), Verkauf (nur mit Gebührenmodell, sonst `None`) und Steuern (getrennt, nicht in der Quote); ohne TER keine Kostenquote. Die TER kommt aus dem iShares-Fondsfinder (`lookthrough.TER_FIELDS`, ungeprüfte Feldnamen; ein Lauf protokolliert die Feldnamen eines Produkts) oder von Hand, die vorgeht. Konten gehören über `Config.brokers` zu einem Broker; die Gesamtkostenquote ist die Klumpen-Regel `cost` und die Vorbelegung der Kosten im FIRE-Rechner (`fire.Inputs.costs`, von der Rendite abgezogen).
 
 ## Fehlerbehandlung
 

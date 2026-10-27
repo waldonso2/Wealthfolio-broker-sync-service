@@ -71,6 +71,8 @@ class Config:
     xray_limits: dict[str, str] = field(default_factory=dict)
     # Page FIRE: the user's inputs as text (fire.Inputs' fields); empty capital / gain share: from Wealthfolio.
     fire: dict[str, str] = field(default_factory=dict)
+    # Per broker key its fees as text (#142, costs.Model's fields: fixed, percent, spread, custody); empty: unknown.
+    cost_models: dict[str, dict[str, str]] = field(default_factory=dict)
     # "auto": sessions are kept, the timer fetches. "safe": every fetch needs a fresh login in the UI, the
     # session is ended after it, the timer only reminds (#85). For all brokers.
     sync_mode: str = "auto"

@@ -14,7 +14,7 @@ Companies are matched by ``Constituent.key`` (the ISIN, else what the source giv
 with the same key (share classes) are added up. ``unify`` first gives a line without an ISIN (iShares files
 have none) the ISIN of a line elsewhere with the same plain name. ``findings`` are the cluster risks over
 ``LIMITS``: a single stock, a country, a sector, foreign currency, two overlapping funds, too few effective
-stocks, cash above the deposit guarantee on one account.
+stocks, cash above the deposit guarantee on one account, a cost rate above its limit (#142).
 """
 
 from __future__ import annotations
@@ -138,7 +138,7 @@ def unify(holdings: list[Holding]) -> list[Holding]:
 # Defaults of the page *Durchschau*; each can be changed there. Shares are of the depot, cash in EUR.
 LIMITS = {"stock": Decimal("0.05"), "country": Decimal("0.60"), "sector": Decimal("0.30"),
           "currency": Decimal("0.50"), "overlap": Decimal("0.50"), "effective": Decimal(30),
-          "cash": Decimal(100000)}
+          "cash": Decimal(100000), "cost": Decimal("0.005")}
 
 
 @dataclass(frozen=True)
@@ -160,8 +160,9 @@ def _by(rows: list[Exposure], attr: str) -> dict[str, Decimal]:
 
 
 def findings(holdings: list[Holding], limits: dict[str, Decimal], base: str,
-             cash: dict[str, Decimal] | None = None) -> list[Finding]:
-    """Cluster risks over the limits, largest first within each kind. ``cash``: cash per account name."""
+             cash: dict[str, Decimal] | None = None, cost: Decimal | None = None) -> list[Finding]:
+    """Cluster risks over the limits, largest first within each kind. ``cash``: cash per account name;
+    ``cost``: the depot's cost rate a year (``costs.DepotCost.rate``)."""
     rows = exposures(holdings)
     out = [Finding(f"stock:{r.key}", "stock", r.name, r.share, limits["stock"])
            for r in rows if r.key != UNASSIGNED and r.share > limits["stock"]]
@@ -181,4 +182,6 @@ def findings(holdings: list[Holding], limits: dict[str, Decimal], base: str,
         out.append(Finding("effective", "effective", "", count, limits["effective"]))
     out += [Finding(f"cash:{name}", "cash", name, amount, limits["cash"])
             for name, amount in sorted((cash or {}).items()) if amount > limits["cash"]]
+    if cost is not None and cost > limits["cost"]:
+        out.append(Finding("cost", "cost", "", cost, limits["cost"]))
     return out

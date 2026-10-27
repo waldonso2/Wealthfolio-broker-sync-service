@@ -10,6 +10,7 @@ How much capital a life on the depot needs, in today's money (real returns):
 - **Pension** from its age: until then the depot pays the whole withdrawal (the bridge), after it only what
   the (net) pension leaves open. A part-time income until the pension is *Barista FIRE*.
 - **Capital** = present value of the bridge years + the rest as a perpetual withdrawal at the safe rate.
+- **Costs** of the depot (a year, #142) come off the real return: every figure is net of them.
 - **Years to FI** with today's capital and yearly savings; **Coast FIRE**: the capital that grows into the
   target by the retirement age without saving more.
 
@@ -58,6 +59,11 @@ class Inputs:
     gkv: bool = True  # voluntary statutory insurance; False: ``private`` a year
     childless: bool = False
     private: float = 0.0
+    costs: float = 0.0  # of the depot a year, off the real return
+
+    @property
+    def net_return(self) -> float:
+        return self.real_return - self.costs
 
 
 @dataclass
@@ -99,7 +105,7 @@ def capital_needed(i: Inputs, expenses: float, earned: float = 0.0) -> float:
     bridge = max(0, i.pension_age - i.retire_age)
     before = withdrawal(i, max(0.0, expenses - earned)).gross
     after = withdrawal(i, max(0.0, expenses - i.pension)).gross  # the part-time income ends with the pension
-    return _annuity(before, bridge, i.real_return) + after / i.safe_rate / (1 + i.real_return) ** bridge
+    return _annuity(before, bridge, i.net_return) + after / i.safe_rate / (1 + i.net_return) ** bridge
 
 
 def years_to(target: float, capital: float, savings: float, r: float) -> float | None:
@@ -130,8 +136,8 @@ def plan(i: Inputs) -> Result:
     targets = {k: capital_needed(i, v) for k, v in budgets.items()}
     if i.part_time:
         targets["barista"] = capital_needed(i, i.expenses, earned=i.part_time)
-    years = {k: years_to(t, i.capital, i.savings, i.real_return) for k, t in targets.items()}
-    coast = targets["regular"] / (1 + i.real_return) ** max(0, i.retire_age - i.age)
+    years = {k: years_to(t, i.capital, i.savings, i.net_return) for k, t in targets.items()}
+    coast = targets["regular"] / (1 + i.net_return) ** max(0, i.retire_age - i.age)
     fi = years["regular"]
     return Result(tax_rate(i.church), withdrawal(i, i.expenses), targets, years, coast, i.capital >= coast,
                   i.age + fi if fi is not None else None)

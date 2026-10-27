@@ -8,6 +8,7 @@ or uploaded; until then it is one line of its own, never guessed.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import re
@@ -39,10 +40,16 @@ LIMIT_FIELDS = [("stock", N_("Einzelaktie über (%)"), True), ("country", N_("La
                 ("sector", N_("Sektor über (%)"), True), ("currency", N_("Fremdwährung über (%)"), True),
                 ("overlap", N_("Überschneidung zweier ETFs über (%)"), True),
                 ("effective", N_("Effektive Titelzahl unter"), False),
-                ("cash", N_("Bargeld je Konto über (EUR)"), False)]
+                ("cash", N_("Bargeld je Konto über (EUR)"), False),
+                ("cost", N_("Gesamtkostenquote über (% im Jahr)"), True)]
 KIND = {"stock": N_("Einzelaktie"), "country": N_("Land"), "sector": N_("Sektor"), "currency": N_("Fremdwährung"),
         "overlap": N_("Überschneidung"), "effective": N_("Wenige Titel"),
-        "cash": N_("Bargeld über der Einlagensicherung")}
+        "cash": N_("Bargeld über der Einlagensicherung"), "cost": N_("Gesamtkostenquote")}
+# A broker's fee model (costs.Model): (field, label, a share in percent?, maximum)
+COST_FIELDS = [("fixed", N_("Ordergebühr je Verkauf (EUR)"), False, Decimal(1000)),
+               ("percent", N_("Ordergebühr je Verkauf (% des Werts)"), True, Decimal(10)),
+               ("spread", N_("Spread je Kauf und Verkauf (%)"), True, Decimal(10)),
+               ("custody", N_("Depotgebühr im Jahr (EUR)"), False, Decimal(100000))]
 
 
 def _read(ctx: AppContext, c) -> None:
@@ -53,6 +60,14 @@ def _read(ctx: AppContext, c) -> None:
     except WealthfolioError as e:
         depot, error = lookthrough.Depot(), str(e)
     ctx.depot, ctx.depot_error, ctx.depot_at = depot, error, time.time()
+
+
+def _typed(raw: str | None, percent: bool, lang: str) -> str:
+    """A saved number as the user typed it, without rounding (a TER of 0,075 stays 0,075)."""
+    if not raw:
+        return ""
+    text = format((Decimal(raw) * (100 if percent else 1)).normalize(), "f")
+    return text if lang == "en" else text.replace(".", ",")
 
 
 def _position(ctx: AppContext, asset_id: str) -> dict | None:
@@ -75,7 +90,8 @@ def lookthrough_page(request: Request, ctx: Ctx, top: str = "50"):
     with_list = [h for h in holdings if h.id in funds]
     limits = lookthrough.limits(c.xray_limits)
     accepted = lookthrough.accepted(state)
-    found = xray.findings(holdings, limits, depot.base, depot.cash)
+    cost = lookthrough.cost(state, depot, c)
+    found = xray.findings(holdings, limits, depot.base, depot.cash, cost.rate)
     return ctx.render(
         request, "lookthrough.html", wf_error=ctx.depot_error, positions=depot.positions, funds=funds,
         status={p["id"]: lookthrough.status(state, p["id"]) for p in depot.positions},
@@ -86,7 +102,10 @@ def lookthrough_page(request: Request, ctx: Ctx, top: str = "50"):
         overlap={(a.id, b.id): xray.overlap(a, b) for a, b in combinations(with_list, 2)},
         own={h.id: xray.own_share(h, holdings) for h in with_list},
         risks=[f for f in found if f.key not in accepted], accepted=[f for f in found if f.key in accepted],
-        kind=KIND, cfg=c, limit_fields=LIMIT_FIELDS, limits=limits, base=depot.base,
+        kind=KIND, cfg=c, limit_fields=LIMIT_FIELDS, limits=limits, base=depot.base, cost=cost,
+        ters={p["id"]: lookthrough.ter(lookthrough.status(state, p["id"])) for p in depot.positions},
+        cost_fields=COST_FIELDS, brokers=[k for k in c.brokers if k in ctx.adapters],
+        typed=lambda raw, percent: _typed(raw, percent, language(request)),
         written=json.loads(state.meta(meta_keys.TAXONOMIES_LAST()) or "null"),
         reading=ctx.running.is_set() and ctx.job in (N_("Durchschau"), N_("Positionslisten abrufen")),
         read_at=datetime.fromtimestamp(ctx.depot_at, UTC) if ctx.depot_at else None)
@@ -135,6 +154,40 @@ def lookthrough_accept(request: Request, ctx: Ctx, key: str = Form(...), action:
     keys = lookthrough.accepted(ctx.state)
     keys = keys - {key} if action == "undo" else keys | {key}
     ctx.state.set_meta(meta_keys.XRAY_ACCEPTED(), json.dumps(sorted(keys)))
+    return redirect(request, "/lookthrough", tr(request, "Gespeichert."))
+
+
+@router.post("/lookthrough/costs")
+async def lookthrough_costs(request: Request, ctx: Ctx):
+    """The brokers' fee models, the whole form checked before anything is saved; an empty field: unknown."""
+    form = await request.form()
+    c = ctx.cfg()
+    models: dict[str, dict[str, str]] = {}
+    try:
+        for key in (k for k in c.brokers if k in ctx.adapters):
+            for name, label, percent, high in COST_FIELDS:
+                value = _plain(str(form.get(f"{key}:{name}") or "").strip())
+                if value:
+                    number = inputs.decimal(value, label, minimum=Decimal(0), maximum=high)
+                    models.setdefault(key, {})[name] = str(number / 100 if percent else number)
+    except inputs.Invalid as e:
+        return redirect(request, "/lookthrough", e.text(language(request)), "error")
+    ctx.update(lambda c: setattr(c, "cost_models", models))
+    return redirect(request, "/lookthrough", tr(request, "Gespeichert."))
+
+
+@router.post("/lookthrough/ter")
+def lookthrough_ter(request: Request, ctx: Ctx, asset_id: str = Form(...), ter: str = Form("")):
+    """A position's TER typed by the user, used before the issuer's; empty: the issuer's again."""
+    if _position(ctx, asset_id) is None:
+        return redirect(request, "/lookthrough", tr(request, "Unbekannte Position - bitte die Seite neu laden."),
+                        "error")
+    try:
+        value = inputs.decimal(ter.strip(), N_("Laufende Kosten (TER, % im Jahr)"), minimum=Decimal(0),
+                               maximum=Decimal(5)) if ter.strip() else None
+    except inputs.Invalid as e:
+        return redirect(request, "/lookthrough", e.text(language(request)), "error")
+    lookthrough.set_status(ctx.state, asset_id, ter_manual=str(value / 100) if value is not None else "")
     return redirect(request, "/lookthrough", tr(request, "Gespeichert."))
 
 
@@ -236,6 +289,7 @@ FIRE_FIELDS = [
     ("part_time", N_("Teilzeit-Einkommen netto im Jahr bis zur Rente (EUR, Barista FIRE)"), "money", 0, 1_000_000,
      "0"),
     ("real_return", N_("Rendite nach Inflation (% im Jahr)"), "percent", -10, 20, "5"),
+    ("costs", N_("Kosten (% im Jahr, leer: aus der Durchschau)"), "percent", 0, 5, ""),
     ("safe_rate", N_("Entnahmerate (% im Jahr)"), "percent", 1, 10, "3,5"),
     ("gain_share", N_("Gewinnanteil eines Verkaufs (%, leer: aus Wealthfolio)"), "percent", 0, 100, ""),
     ("church", N_("Kirchensteuer (%: 0, 8 oder 9)"), "percent", 0, 9, "0"),
@@ -259,7 +313,7 @@ def _plain(value: str) -> str:
     return value
 
 
-def _fire_inputs(saved: dict[str, str], depot: lookthrough.Depot) -> fire.Inputs | None:
+def _fire_inputs(saved: dict[str, str], depot: lookthrough.Depot, cost: Decimal | None) -> fire.Inputs | None:
     if not saved.get("expenses"):
         return None
     values: dict = {}
@@ -270,6 +324,7 @@ def _fire_inputs(saved: dict[str, str], depot: lookthrough.Depot) -> fire.Inputs
         number = Decimal(raw)
         values[key] = int(number) if kind == "int" else float(number)
     values.setdefault("capital", float(depot.total))
+    values.setdefault("costs", float(cost or 0))
     if "gain_share" not in values and depot.gain_share is not None:
         values["gain_share"] = float(depot.gain_share)
     for key, _ in FIRE_FLAGS:
@@ -289,16 +344,19 @@ def fire_page(request: Request, ctx: Ctx):
     def shown(key: str, kind: str, default: str) -> str:
         raw = saved.get(key)
         if raw is None or raw == "":
-            return default if key not in ("capital", "gain_share") else ""
+            return default if key not in ("capital", "gain_share", "costs") else ""
         number = Decimal(raw) * (100 if kind == "percent" else 1)
         return str(int(number)) if kind == "int" else re.sub(r"[,.]00$", "", money(number, lang))
 
-    inputs_ = _fire_inputs(saved, ctx.depot)
+    cost = lookthrough.cost(ctx.state, ctx.depot, ctx.cfg()).rate
+    inputs_ = _fire_inputs(saved, ctx.depot, cost)
     return ctx.render(request, "fire.html", fields=[(k, label, kind, shown(k, kind, d)) for k, label, kind, _, _, d
                                                     in FIRE_FIELDS],
                       flags=[(k, label, saved.get(k, "1" if k in ("gkv", "equity_fund") else "") == "1")
                              for k, label in FIRE_FLAGS],
                       result=fire.plan(inputs_) if inputs_ else None, inputs=inputs_, labels=FIRE_TARGETS,
+                      free=fire.plan(dataclasses.replace(inputs_, costs=0)) if inputs_ and inputs_.costs else None,
+                      depot_cost=cost,
                       depot_total=ctx.depot.total, gain_share=ctx.depot.gain_share, wf_error=ctx.depot_error,
                       rules=fire)
 

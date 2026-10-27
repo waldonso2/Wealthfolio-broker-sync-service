@@ -20,20 +20,23 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
 import re
 import zipfile
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from xml.etree import ElementTree
 
 import httpx
 
-from . import meta_keys, xray
+from . import costs, meta_keys, xray
 from .assets import valid_isin
 from .logos import isin_of
 from .state import State, now
 from .xray import Constituent
+
+log = logging.getLogger(__name__)
 
 WEIGHT = ("weight (%)", "gewichtung (%)", "weighting", "gewichtung", "weight", "anteil (%)", "% of net assets")
 NAME = ("name", "bezeichnung", "emittent", "security name")
@@ -202,6 +205,25 @@ def _usable(lines: tuple[Constituent, ...], source: str) -> tuple[Constituent, .
     return lines
 
 
+# The fund finder's fields that may carry the TER (#142); unverified - a pass logs a product's field names.
+TER_FIELDS = ("ter", "fees", "ongoingCharges", "ongoingChargesRatio", "netExpenseRatio", "totalExpenseRatio")
+
+
+def _ter(row: dict) -> Decimal | None:
+    """The TER of a fund finder row as a share, if one of ``TER_FIELDS`` holds a plausible percentage."""
+    for key in TER_FIELDS:
+        value = row.get(key)
+        if isinstance(value, dict):  # {"r": 0.2, "d": "0.20"}: raw and display value
+            value = value.get("r", value.get("raw", value.get("d")))
+        try:
+            number = Decimal(str(value).replace("%", "").replace(",", ".").strip())
+        except InvalidOperation:
+            continue
+        if number.is_finite() and 0 <= number <= 3:
+            return number / 100
+    return None
+
+
 def _only_sources(request: httpx.Request) -> None:
     if request.url.scheme != "https" or request.url.host not in HOSTS:
         raise httpx.UnsupportedProtocol(f"Anfrage an {request.url.host} abgelehnt")
@@ -214,6 +236,7 @@ class Sources:
                                   headers={"User-Agent": BROWSER, "Accept": "*/*"},
                                   event_hooks={"request": [_only_sources]})
         self._ishares: dict[str, tuple[str, str]] | None = None
+        self._ter: dict[str, Decimal] = {}
         self.finder_down = False  # the fund finder failed this pass: an unknown ISIN may still be iShares'
 
     def ishares_product(self, isin: str) -> tuple[str, str] | None:
@@ -228,8 +251,17 @@ class Sources:
             for row in (rows or {}).values() if isinstance(rows, dict) else ():
                 m = PRODUCT_PATH.search(str(row.get("productPageUrl") or "")) if isinstance(row, dict) else None
                 if m and isinstance(row.get("isin"), str):
-                    self._ishares.setdefault(row["isin"].strip().upper(), (m.group(1), m.group(2)))
+                    if not self._ishares:  # names only, no values: which field holds the TER (#142)
+                        log.info("iShares fund finder: fields of a product: %s", ", ".join(sorted(map(str, row))))
+                    key = row["isin"].strip().upper()
+                    self._ishares.setdefault(key, (m.group(1), m.group(2)))
+                    if (ter := _ter(row)) is not None:
+                        self._ter.setdefault(key, ter)
         return self._ishares.get(isin) or (ISHARES.get(isin) if self.finder_down else None)
+
+    def ter(self, isin: str) -> Decimal | None:
+        """The TER the fund finder lists for ``isin`` (after ``ishares_product``)."""
+        return self._ter.get(isin)
 
     def close(self) -> None:
         self._http.close()
@@ -288,7 +320,9 @@ def fetch(sources: Sources, isin: str, page: str = "") -> tuple[tuple[Constituen
 # ── the depot ────────────────────────────────────────────────────────────────
 @dataclass
 class Depot:
-    positions: list[dict] = field(default_factory=list)  # {id, isin, name, value, cost} per asset, largest first
+    # {id, isin, name, currency, value, cost, parts: {account id: value}, trades: [costs.Trade]} per asset,
+    # largest first
+    positions: list[dict] = field(default_factory=list)
     cash: dict[str, Decimal] = field(default_factory=dict)  # per account name, in the base currency
     base: str = "EUR"
 
@@ -317,7 +351,8 @@ def read_depot(wf) -> Depot:
     depot = Depot()
     isins = {a.get("id"): isin_of(a) or "" for a in wf.list_assets()}
     positions: dict[str, dict] = {}
-    for account in wf.list_accounts():
+    accounts = wf.list_accounts()
+    for account in accounts:
         for h in wf.holdings(account.id):
             inst = h.get("instrument") or {}
             value = _dec((h.get("marketValue") or {}).get("base"))
@@ -332,10 +367,19 @@ def read_depot(wf) -> Depot:
             p = positions.setdefault(inst["id"], {"id": inst["id"], "isin": isin,
                                                   "name": inst.get("name") or inst.get("symbol") or inst["id"],
                                                   "currency": h.get("localCurrency") or "", "value": Decimal(0),
-                                                  "cost": Decimal(0)})
+                                                  "cost": Decimal(0), "parts": {}, "trades": []})
             p["value"] += value
+            p["parts"][account.id] = p["parts"].get(account.id, Decimal(0)) + value
             p["cost"] += _dec((h.get("costBasis") or {}).get("base"))
     depot.positions = sorted((p for p in positions.values() if p["value"] > 0), key=lambda p: -p["value"])
+    if depot.positions:
+        # shortcut: fees in the activity's currency, taken as the base currency; convert with fxRate if needed.
+        for a in wf.search_activities([acc.id for acc in accounts], date(1970, 1, 1), date(2100, 1, 1)):
+            held = positions.get(a.get("assetId") or "")
+            if held is not None and a.get("activityType") in ("BUY", "SELL") and a.get("date"):
+                held["trades"].append(costs.Trade(date.fromisoformat(str(a["date"])[:10]), a["activityType"],
+                                               _dec(a.get("quantity")) * _dec(a.get("unitPrice")),
+                                               _dec(a.get("fee")), _dec(a.get("tax")), a.get("accountId") or ""))
     return depot
 
 
@@ -384,9 +428,34 @@ def update(state: State, depot: Depot, sources: Sources, *, force: bool = False)
             result.errors.append(f"{p['name']}: {e}")
         else:
             state.set_fund(p["id"], p["name"], rows(lines))
-            set_status(state, p["id"], status="ok", source=source, error="", lines=len(lines))
+            ter = sources.ter(p["isin"]) if source == "iShares" else None
+            set_status(state, p["id"], status="ok", source=source, error="", lines=len(lines),
+                       **({"ter": str(ter), "ter_source": source, "ter_at": now()} if ter is not None else {}))
             result.fetched += 1
     return result
+
+
+def ter(st: dict) -> tuple[Decimal | None, str]:
+    """A position's TER and where it is from: the user's own first, then the issuer's."""
+    for key, source in (("ter_manual", "manual"), ("ter", st.get("ter_source", ""))):
+        if st.get(key) not in (None, ""):
+            return Decimal(st[key]), source
+    return None, ""
+
+
+def model(saved: dict[str, str]) -> costs.Model:
+    return costs.Model(*(Decimal(saved[k]) if saved.get(k) else None for k in ("fixed", "percent", "spread",
+                                                                                "custody")))
+
+
+def cost(state: State, depot: Depot, cfg) -> costs.DepotCost:
+    """The depot's costs from buy to sale, with the brokers' fee models (``Config.cost_models``)."""
+    broker = {a: key for key, b in cfg.brokers.items()
+              for a in (b.cash_account_id, b.portfolio_account_id, b.savings_account_id) if a}
+    positions = [costs.Position(p["id"], p["name"], p["value"], p["cost"], p.get("parts", {}),
+                                tuple(p.get("trades", ())), ter(status(state, p["id"]))[0]) for p in depot.positions]
+    return costs.depot(positions, datetime.now(UTC).date(), broker,
+                       {k: model(v) for k, v in cfg.cost_models.items()})
 
 
 def rows(lines: tuple[Constituent, ...]) -> list[list[str]]:

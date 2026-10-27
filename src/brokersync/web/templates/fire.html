@@ -4,7 +4,7 @@
   <h1>{{ _("FIRE-Rechner") }}</h1>
   <p>{{ _("Wie viel Vermögen ein Leben von deinem Depot braucht – mit deutscher Abgeltungsteuer, Teilfreistellung, Sparerpauschbetrag und Krankenversicherung, in heutigem Geld.") }} <a href="/lookthrough">{{ _("Zurück zur Durchschau") }}</a></p>
   {% if wf_error %}<p class="error" role="alert">{{ wf_error | redact }}</p>{% endif %}
-  <p class="muted">{{ _("Aus Wealthfolio: Vermögen {total} EUR.", total=depot_total | money) }}{% if gain_share is not none %} {{ _("Gewinnanteil der Wertpapiere {share} %.", share=(gain_share * 100) | money) }}{% endif %}</p>
+  <p class="muted">{{ _("Aus Wealthfolio: Vermögen {total} EUR.", total=depot_total | money) }}{% if gain_share is not none %} {{ _("Gewinnanteil der Wertpapiere {share} %.", share=(gain_share * 100) | money) }}{% endif %}{% if depot_cost is not none %} {{ _("Kosten des Depots {rate} % im Jahr.", rate=(depot_cost * 100) | money) }}{% endif %}</p>
   <p class="muted">{{ _("Vereinfachte Modellrechnung, keine Steuer- oder Anlageberatung. Rechtsstand {year}.", year=rules.RULES_YEAR) }}</p>
 </div>
 
@@ -13,15 +13,17 @@
   <h2>{{ _("Ergebnis") }}</h2>
   <div class="table"><table>
     <caption class="sr-only">{{ _("Ergebnis") }}</caption>
-    <thead><tr><th scope="col">{{ _("Ziel") }}</th><th scope="col">{{ _("Vermögen nötig") }}</th><th scope="col">{{ _("Erreicht in") }}</th><th scope="col">{{ _("Alter") }}</th></tr></thead>
+    <thead><tr><th scope="col">{{ _("Ziel") }}</th><th scope="col">{{ _("Vermögen nötig") }}</th><th scope="col">{{ _("Erreicht in") }}</th><th scope="col">{{ _("Alter") }}</th>{% if free %}<th scope="col">{{ _("Ohne Kosten") }}</th>{% endif %}</tr></thead>
     <tbody>
     {% for key, target in result.targets.items() %}{% set years = result.years[key] %}
     <tr><td data-label="{{ _('Ziel') }}">{{ _(labels[key]) }}</td>
       <td data-label="{{ _('Vermögen nötig') }}">{{ target | money }} EUR</td>
       <td data-label="{{ _('Erreicht in') }}">{% if years is none %}{{ _("nie bei dieser Sparrate") }}{% elif years == 0 %}{{ _("erreicht") }}{% else %}{{ _("{n} Jahren", n=years | money) }}{% endif %}</td>
-      <td data-label="{{ _('Alter') }}">{% if years is not none %}{{ (inputs.age + years) | round(1) }}{% else %}–{% endif %}</td></tr>
+      <td data-label="{{ _('Alter') }}">{% if years is not none %}{{ (inputs.age + years) | round(1) }}{% else %}–{% endif %}</td>
+      {% if free %}{% set y = free.years[key] %}<td data-label="{{ _('Ohne Kosten') }}">{{ free.targets[key] | money }} EUR, {% if y is none %}{{ _("nie bei dieser Sparrate") }}{% elif y == 0 %}{{ _("erreicht") }}{% else %}{{ _("{n} Jahren", n=y | money) }}{% endif %}</td>{% endif %}</tr>
     {% endfor %}
     </tbody></table></div>
+  {% if free %}<p>{{ _("Gerechnet mit {rate} % Kosten im Jahr, abgezogen von der Rendite nach Inflation.", rate=(inputs.costs * 100) | money) }}{% if free.years.regular is not none and result.years.regular is not none %} {{ _("Ohne Kosten wäre FIRE {n} Jahre früher erreicht.", n=(result.years.regular - free.years.regular) | money) }}{% endif %}</p>{% endif %}
   <p>{{ _("Coast FIRE: mit {coast} EUR heute wächst das Depot ohne weiteres Sparen bis zum Rückzug auf das FIRE-Ziel.", coast=result.coast | money) }} <strong>{% if result.coast_reached %}{{ _("Erreicht.") }}{% else %}{{ _("Noch nicht erreicht.") }}{% endif %}</strong></p>
   <h3>{{ _("Entnahme im Jahr bis zur Rente") }}</h3>
   <div class="table"><table>

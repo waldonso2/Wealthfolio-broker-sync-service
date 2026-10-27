@@ -1171,4 +1171,62 @@ EN: dict[str, str] = {
     "Mindest- und Höchstbemessung im Jahr": "Minimum and maximum basis a year",
     "FIRE-Rechner: wie viel Vermögen ein Leben vom Depot braucht":
         "FIRE calculator: how much wealth a life on the portfolio needs",
+    # Costs (waldonso2/wealthfolio-importer-addon#142)
+    "Gesamtkostenquote": "Total cost ratio",
+    "Gesamtkostenquote über (% im Jahr)": "Total cost ratio above (% a year)",
+    "Ordergebühr je Verkauf (EUR)": "Order fee per sale (EUR)",
+    "Ordergebühr je Verkauf (% des Werts)": "Order fee per sale (% of the value)",
+    "Spread je Kauf und Verkauf (%)": "Spread per buy and sale (%)",
+    "Depotgebühr im Jahr (EUR)": "Custody fee a year (EUR)",
+    "Kosten (% im Jahr, leer: aus der Durchschau)": "Costs (% a year, empty: from the look-through)",
+    "Laufende Kosten (TER, % im Jahr)": "Ongoing charges (TER, % a year)",
+    "Kosten des Depots {rate} % im Jahr.": "Depot costs {rate} % a year.",
+    "Ohne Kosten": "Without costs",
+    "Gerechnet mit {rate} % Kosten im Jahr, abgezogen von der Rendite nach Inflation.":
+        "Calculated with costs of {rate} % a year, taken off the return after inflation.",
+    "Ohne Kosten wäre FIRE {n} Jahre früher erreicht.": "Without costs FIRE would be reached {n} years earlier.",
+    "Laufende Kosten (TER, % im Jahr) für {name}, leer: vom Anbieter":
+        "Ongoing charges (TER, % a year) of {name}, empty: from the issuer",
+    "Kosten": "Costs",
+    "Gesamtkostenquote {rate} im Jahr": "Total cost ratio {rate} a year",
+    "Gesamtkostenquote unbekannt": "Total cost ratio unknown",
+    "({share} des Depots ohne bekannte Kostenquote)": "({share} of the depot without a known cost ratio)",
+    "Gewichtete TER {ter}.": "Weighted TER {ter}.",
+    "Laufend {yearly} EUR im Jahr, bisher angefallen {so_far} EUR.":
+        "Ongoing {yearly} EUR a year, incurred so far {so_far} EUR.",
+    "Verkauf: {n} Positionen nicht geschätzt (Gebührenmodell fehlt).":
+        "Sale: {n} positions not estimated (no fee model).",
+    "Verkauf heute geschätzt {exit} EUR.": "Sale today estimated at {exit} EUR.",
+    "Steuern (nicht in der Kostenquote): {tax} EUR.": "Taxes (not in the cost ratio): {tax} EUR.",
+    "Kosten je Position": "Costs per position",
+    "Gehalten": "Held",
+    "Ordergebühren": "Order fees",
+    "Spread (geschätzt)": "Spread (estimated)",
+    "TER": "TER",
+    "Laufende Kosten bisher": "Ongoing charges so far",
+    "Depotgebühr bisher": "Custody fee so far",
+    "Kosten bisher": "Costs so far",
+    "Verkauf (geschätzt)": "Sale (estimated)",
+    "Steuern": "Taxes",
+    "Kostenquote im Jahr": "Cost ratio a year",
+    "{n} Jahre": "{n} years",
+    "von Hand": "by hand",
+    "unbekannt": "unknown",
+    "nicht geschätzt": "not estimated",
+    "Kostenquote unbekannt": "Cost ratio unknown",
+    "Ordergebühren und Steuern stehen so in den Buchungen in Wealthfolio. Geschätzt sind: der Spread (dein "
+    "Prozentsatz auf den Wert jedes Kaufs und Verkaufs), die laufenden Kosten (TER mal Mittel aus Einstandswert und "
+    "heutigem Wert mal Haltedauer seit dem ersten Kauf) und der Verkauf (dein Gebührenmodell auf den heutigen "
+    "Wert). Die Depotgebühr wird nach Wert auf die Positionen des Brokers verteilt. Ohne TER hat eine Position "
+    "keine Kostenquote – bei einer Einzelaktie trägst du 0 ein. Die Kostenquote ist alles bisher Angefallene "
+    "geteilt durch den mittleren Wert und die Jahre; Steuern zählen nicht dazu. Die Tracking-Differenz fehlt, weil "
+    "keine Quelle sie liefert.":
+        "Order fees and taxes are as booked in Wealthfolio. Estimated are: the spread (your percentage of the value "
+        "of every buy and sale), the ongoing charges (TER times the mean of cost basis and today's value times the "
+        "years held since the first buy) and the sale (your fee model on today's value). The custody fee is shared "
+        "by value among the broker's positions. Without a TER a position has no cost ratio - for a single stock "
+        "enter 0. The cost ratio is everything incurred so far divided by the mean value and the years; taxes are "
+        "not part of it. The tracking difference is missing because no source provides it.",
+    "Gebühren der Broker": "The brokers' fees",
+    "Leer heißt unbekannt: dann wird nichts geschätzt.": "Empty means unknown: then nothing is estimated.",
 }
