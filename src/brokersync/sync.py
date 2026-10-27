@@ -43,6 +43,7 @@ from .mapping import Accounts, MappingError, SecurityMapping, TransferPattern, t
 from .model import CashBalance, Kind, Position, Transaction, when
 from .notify import Notifier
 from .reconcile import compare
+from .redact import redact
 from .state import State, masked
 from .vault import Vault
 from .wealthfolio import Duplicate, WealthfolioClient, WealthfolioError, connect
@@ -249,9 +250,13 @@ class Syncer:
 
         self.vault.update(change)
 
+    def learned_isins(self, cfg: config_mod.Config) -> dict[str, str]:
+        """Asset id -> ISIN of every position the sync learned (assets.py)."""
+        return {a["asset_id"]: isin for key in cfg.brokers for isin, a in self.state.assets(key).items()}
+
     def _complete_isins(self, cfg: config_mod.Config) -> None:
         """Missing ISINs on the assets the sync knows (#140); never touches a broker's result."""
-        learned = {a["asset_id"]: isin for key in cfg.brokers for isin, a in self.state.assets(key).items()}
+        learned = self.learned_isins(cfg)
         if not learned:
             return
         try:
@@ -301,7 +306,7 @@ class Syncer:
         try:
             with connect(self._wealthfolio, cfg.wealthfolio_url, secrets.get("wealthfolio_password"),
                          cfg.wealthfolio_fingerprint) as wf:
-                depot = lookthrough.read_depot(wf)
+                depot = lookthrough.read_depot(wf, self.learned_isins(cfg))
                 result = lookthrough.update(self.state, depot, sources, force=force, only=only)
                 if cfg.lookthrough_write:
                     try:
@@ -320,8 +325,9 @@ class Syncer:
                 self.notifier(cfg).send("Klumpenrisiko", f"{len(new)} neue Klumpenrisiken in X-Ray: {names}",
                                         link=self.link(cfg, "/lookthrough"), tags="warning")
             return result
-        except Exception:
+        except Exception as e:
             log.exception("look-through not updated")
+            lookthrough.record(self.state, error=redact(f"{type(e).__name__}: {e}"))  # shown on X-Ray
             return None
         finally:
             sources.close()

@@ -42,7 +42,7 @@ def test_upload_a_holdings_file_and_see_the_stock_added_up_with_the_direct_posit
     first = r.text.split("Aktien über alle Positionen</caption>")[1].split("<tbody>")[1].split("</tr>")[0]
     assert "Example Inc" in first and "60,00 %" in first and "<strong>6,00</strong>" in first
     assert '">1,00</td>' in first and 'data-label="direkt">5,00</td>' in first
-    assert "Nicht zugeordnet: 5,00 %" in r.text
+    assert "Nicht zugeordnet (Bargeld, Derivate, Rest der Gewichte): 5,00 %" in r.text
 
 
 def test_upload_is_refused_for_an_unknown_position_and_a_file_without_weights(tmp_path):
@@ -143,6 +143,8 @@ def test_costs_need_a_ter_and_a_fee_model_and_go_into_the_fire_calculator(tmp_pa
     assert "bitte als Zahl angeben" in r.text and config_mod.load(tmp_path).cost_models == {}
     client.post("/lookthrough/costs", data={"csrf": token, "fake:fixed": "1", "fake:spread": "0,05"})
     assert config_mod.load(tmp_path).cost_models == {"fake": {"fixed": "1", "spread": "0.0005"}}
+    page = "https://www.ishares.com/de/privatanleger/de/produkte/123456/example-etf"
+    client.post("/lookthrough/source", data={"csrf": token, "asset_id": FUND, "url": page})  # shown: iShares'
     r = client.post("/lookthrough/ter", data={"csrf": token, "asset_id": FUND, "ter": "2,5"})
     assert 'value="2,5"' in r.text and 'value="0,05"' in r.text and "von Hand" in r.text
     assert "Gesamtkostenquote unbekannt" not in r.text and "Verkauf heute geschätzt 1,00 EUR" in r.text
@@ -166,3 +168,24 @@ def test_a_funds_top_25_show_under_it_and_the_rest_folded(tmp_path):
     assert "Example 34 Inc" in rest.split("Einstellungen dieses ETFs")[0]  # folded, on the same page
     assert "<h1>X-Ray</h1>" in page and "Gesamt: Aktien über alle Positionen" in page
     assert "/lookthrough/upload" not in page and "Xtrackers" not in page  # only iShares for now (#144)
+    matrix = client.get("/lookthrough?top=50").text.split("Weitere Aktien über alle Positionen")[0]
+    assert '<strong aria-current="page">Top 50</strong>' in matrix and "Example 10 Inc" in matrix  # 50th of 60
+
+
+def test_only_ishares_funds_are_shown_with_the_reason_a_list_is_missing(tmp_path):
+    from brokersync import lookthrough
+
+    client, token = _client(tmp_path)
+    page = client.get("/lookthrough").text
+    assert "0 iShares-ETFs durchleuchtet · 0 ohne Positionsliste · 1 weitere Positionen ausgeblendet" in page
+    assert f"<h2>{FUND}" not in page and "Kein iShares-ETF in Wealthfolio gefunden." in page
+    state = State(tmp_path)
+    lookthrough.set_status(state, FUND, url="https://www.ishares.com/uk/a/en/products/123456/x-etf", status="error",
+                           error="iShares: HTTP 403")
+    lookthrough.record(state, fetched=0, none=0, failed=1, finder="iShares-Fondsfinder: HTTP 403")
+    page = client.get("/lookthrough").text
+    assert "0 iShares-ETFs durchleuchtet · 1 ohne Positionsliste · 0 weitere" in page
+    assert "Abruf fehlgeschlagen" in page and "iShares: HTTP 403" in page and "Fondsfinder: HTTP 403" in page
+    assert "0 Positionslisten geholt, 1 fehlgeschlagen" in page
+    lookthrough.record(state, error="RuntimeError: kaputt")
+    assert "Der Abruf ist abgebrochen: RuntimeError: kaputt" in client.get("/lookthrough").text
