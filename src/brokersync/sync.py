@@ -296,16 +296,13 @@ class Syncer:
                       only: str = "") -> lookthrough.Result | None:
         """Look-through after a run (#139): the funds' holdings if turned on, then new cluster risks via ntfy.
         Whatever goes wrong here never touches the brokers' results."""
-        if not cfg.lookthrough_enabled and not self.state.funds():
-            return None
         secrets = self.vault.load()
         sources = self._fund_sources()
         try:
             with connect(self._wealthfolio, cfg.wealthfolio_url, secrets.get("wealthfolio_password"),
                          cfg.wealthfolio_fingerprint) as wf:
                 depot = lookthrough.read_depot(wf)
-                result = (lookthrough.update(self.state, depot, sources, force=force, only=only)
-                          if cfg.lookthrough_enabled else None)
+                result = lookthrough.update(self.state, depot, sources, force=force, only=only)
                 if cfg.lookthrough_write:
                     try:
                         lookthrough.write_taxonomies(self.state, wf, depot)
@@ -313,12 +310,14 @@ class Syncer:
                         log.exception("look-through: countries and sectors not written to Wealthfolio")
             if not depot.positions and not depot.cash:  # Wealthfolio answered nothing: keep what was notified
                 return result
+            if not self.state.funds():  # no list yet: every ETF would count as one stock, a false alarm
+                return result
             found = xray.findings(lookthrough.holdings(self.state, depot), lookthrough.limits(cfg.xray_limits),
                                   depot.base, depot.cash, lookthrough.cost(self.state, depot, cfg).rate)
             new = lookthrough.new_risks(self.state, found)
             if new:
                 names = ", ".join(f.name or f.kind for f in new[:5])
-                self.notifier(cfg).send("Klumpenrisiko", f"{len(new)} neue Klumpenrisiken in der Durchschau: {names}",
+                self.notifier(cfg).send("Klumpenrisiko", f"{len(new)} neue Klumpenrisiken in X-Ray: {names}",
                                         link=self.link(cfg, "/lookthrough"), tags="warning")
             return result
         except Exception:

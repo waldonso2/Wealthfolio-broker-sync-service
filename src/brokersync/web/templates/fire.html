@@ -2,7 +2,7 @@
 {% block content %}
 <div class="card">
   <h1>{{ _("FIRE-Rechner") }}</h1>
-  <p>{{ _("Wie viel Vermögen ein Leben von deinem Depot braucht – mit deutscher Abgeltungsteuer, Teilfreistellung, Sparerpauschbetrag und Krankenversicherung, in heutigem Geld.") }} <a href="/lookthrough">{{ _("Zurück zur Durchschau") }}</a></p>
+  <p>{{ _("Wie viel Vermögen ein Leben von deinem Depot braucht – mit deutscher Abgeltungsteuer, Teilfreistellung, Sparerpauschbetrag und Krankenversicherung, in heutigem Geld.") }} <a href="/lookthrough">{{ _("Zurück zu X-Ray") }}</a></p>
   {% if wf_error %}<p class="error" role="alert">{{ wf_error | redact }}</p>{% endif %}
   <p class="muted">{{ _("Aus Wealthfolio: Vermögen {total} EUR.", total=depot_total | money) }}{% if gain_share is not none %} {{ _("Gewinnanteil der Wertpapiere {share} %.", share=(gain_share * 100) | money) }}{% endif %}{% if depot_cost is not none %} {{ _("Kosten des Depots {rate} % im Jahr.", rate=(depot_cost * 100) | money) }}{% endif %}</p>
   <p class="muted">{{ _("Vereinfachte Modellrechnung, keine Steuer- oder Anlageberatung. Rechtsstand {year}.", year=rules.RULES_YEAR) }}</p>

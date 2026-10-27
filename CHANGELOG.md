@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.33.0
+
+- **X-Ray (waldonso2/wealthfolio-importer-addon#144):** the look-through is redone as the page *X-Ray*.
+  - **Fetching:** iShares holdings lists are fetched automatically every morning, with no switch. *Jetzt abrufen* per ETF fetches one list, *Alle Positionslisten jetzt abrufen* fetches all.
+  - **Overall matrix at the top:** every stock with its EUR through each of the 4 largest ETFs, the other ETFs together, held directly, total and share of the depot. The top 25 are shown, the rest is folded.
+  - **One card per ETF:** its top 25 holdings with weight in the ETF and the EUR in your depot; all holdings folded.
+  - Cluster risks, costs, overlap and settings are folded at the bottom.
+  - For now only iShares: Xtrackers is no longer asked (DWS no longer learns the depot's ISINs), and the upload is hidden.
+  - Cluster risks are notified only once at least one ETF has a list, so an ETF without one doesn't raise a false single-stock alarm.
+
 ## 0.32.0
 
 - **Banks over PSD2, e.g. N26 (waldonso2/wealthfolio-importer-addon#137):** *Bank über PSD2 1–3* read a giro account through Enable Banking, a licensed account information service, with the user's own app in its free restricted mode (only the user's own accounts). App id and private key are kept in the vault; every request is signed with the key. The login opens the bank's page; afterwards the user pastes the address the bank sent them to. The consent lasts as long as the bank allows; ntfy reminds 7 days and 1 day before it ends, and a scheduled run never starts a login by itself. Bookings as for FinTS banks; pending ones wait until they are booked. No depot over PSD2. The README says that the account data passes through Enable Banking.

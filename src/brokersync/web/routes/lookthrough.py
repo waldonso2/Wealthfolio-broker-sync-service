@@ -1,4 +1,4 @@
-"""The page *Durchschau* (waldonso2/wealthfolio-importer-addon#139): every stock across the depot's funds,
+"""The page *X-Ray* (waldonso2/wealthfolio-importer-addon#139): every stock across the depot's funds,
 how the funds overlap, and the cluster risks over the user's limits.
 
 The positions of all Wealthfolio accounts are read in the background (#104) and kept for ``READ_SECONDS``.
@@ -35,7 +35,6 @@ router = APIRouter()
 
 READ_SECONDS = 10 * 60
 MAX_FILE = 5 * 1024 * 1024
-TOPS = {"50": 50, "100": 100, "all": 0}
 # The limits' form fields: (key of xray.LIMITS, label, a share in percent?)
 LIMIT_FIELDS = [("stock", N_("Einzelaktie über (%)"), True), ("country", N_("Land über (%)"), True),
                 ("sector", N_("Sektor über (%)"), True), ("currency", N_("Fremdwährung über (%)"), True),
@@ -75,23 +74,37 @@ def _position(ctx: AppContext, asset_id: str) -> dict | None:
     return next((p for p in ctx.depot.positions if p["id"] == asset_id), None)
 
 
-FUND_TOP = 50  # a fund's largest positions shown under it; all of them with ?full=<asset id>
+TOP = 25  # rows shown at first, in the overall matrix and under each fund; the rest folded
+COLUMNS = 4  # the largest funds get a column of the matrix of their own, the others share "weitere ETFs"
+
+
+def _matrix(rows: list[xray.Exposure], funds: list[xray.Holding], total: Decimal) -> list[tuple]:
+    """Per stock: its row, EUR through each of the ``COLUMNS`` largest funds, through the other funds, and held
+    directly (single stocks and funds without a list)."""
+    columns = [h.id for h in funds[:COLUMNS]]
+    others = {h.id for h in funds[COLUMNS:]}
+    out = []
+    for r in rows:
+        via = {k: share * total for k, share in r.via.items()}
+        out.append((r, [via.get(k) for k in columns], sum((v for k, v in via.items() if k in others), Decimal(0)),
+                    sum((v for k, v in via.items() if k not in others and k not in columns), Decimal(0))))
+    return out
 
 
 @router.get("/lookthrough", response_class=HTMLResponse)
-def lookthrough_page(request: Request, ctx: Ctx, top: str = "50", full: str = ""):
+def lookthrough_page(request: Request, ctx: Ctx):
     if time.time() - ctx.depot_at > READ_SECONDS:
         from .overview import launch
 
-        launch(ctx, N_("Durchschau"), lambda lang: _read(ctx, ctx.cfg()), language(request))
+        launch(ctx, N_("X-Ray"), lambda lang: _read(ctx, ctx.cfg()), language(request))
     c = ctx.cfg()
-    top = top if top in TOPS else "50"
     depot, state = ctx.depot, ctx.state
     funds = state.funds()
     holdings = lookthrough.holdings(state, depot)
     rows = xray.exposures(holdings)
     stocks = [r for r in rows if r.key != xray.UNASSIGNED]
-    with_list = [h for h in holdings if h.id in funds]
+    with_list = sorted((h for h in holdings if h.id in funds), key=lambda h: -h.value)
+    total = sum((p["value"] for p in depot.positions), Decimal(0))
     limits = lookthrough.limits(c.xray_limits)
     accepted = lookthrough.accepted(state)
     cost = lookthrough.cost(state, depot, c)
@@ -99,8 +112,8 @@ def lookthrough_page(request: Request, ctx: Ctx, top: str = "50", full: str = ""
     return ctx.render(
         request, "lookthrough.html", wf_error=ctx.depot_error, positions=depot.positions, funds=funds,
         status={p["id"]: lookthrough.status(state, p["id"]) for p in depot.positions},
-        total=sum((p["value"] for p in depot.positions), Decimal(0)), top=top, tops=list(TOPS),
-        stocks=stocks[:TOPS[top]] if TOPS[top] else stocks, count=len(stocks), full=full, fund_top=FUND_TOP,
+        total=total, top=TOP, matrix=_matrix(stocks, with_list, total), columns=with_list[:COLUMNS],
+        more_funds=len(with_list) > COLUMNS, count=len(stocks),
         largest={k: sorted(f["constituents"], key=lambda c: -Decimal(c[2])) for k, f in funds.items()},
         unassigned=next((r for r in rows if r.key == xray.UNASSIGNED), None),
         names={h.id: h.name for h in holdings}, effective=xray.effective_count(rows), fund_list=with_list,
@@ -112,7 +125,7 @@ def lookthrough_page(request: Request, ctx: Ctx, top: str = "50", full: str = ""
         cost_fields=COST_FIELDS, brokers=[k for k in c.brokers if k in ctx.adapters],
         typed=lambda raw, percent: _typed(raw, percent, language(request)),
         written=json.loads(state.meta(meta_keys.TAXONOMIES_LAST()) or "null"),
-        reading=ctx.running.is_set() and ctx.job in (N_("Durchschau"), N_("Positionslisten abrufen")),
+        reading=ctx.running.is_set() and ctx.job in (N_("X-Ray"), N_("Positionslisten abrufen")),
         read_at=datetime.fromtimestamp(ctx.depot_at, UTC) if ctx.depot_at else None)
 
 
@@ -121,12 +134,13 @@ def lookthrough_refresh(request: Request, ctx: Ctx):
     from .overview import start_job
 
     ctx.depot_at = 0.0
-    return start_job(request, ctx, N_("Durchschau"), lambda lang: _read(ctx, ctx.cfg()), "/lookthrough")
+    return start_job(request, ctx, N_("X-Ray"), lambda lang: _read(ctx, ctx.cfg()), "/lookthrough")
 
 
 @router.post("/lookthrough/settings")
 async def lookthrough_settings(request: Request, ctx: Ctx):
-    """Fetching on or off, and the limits of the cluster risks - the whole form checked before anything is saved."""
+    """Writing into Wealthfolio on or off, and the limits of the cluster risks - the whole form checked before
+    anything is saved."""
     form = await request.form()
     saved: dict[str, str] = {}
     try:
@@ -141,7 +155,6 @@ async def lookthrough_settings(request: Request, ctx: Ctx):
         return redirect(request, "/lookthrough", e.text(language(request)), "error")
 
     def change(c) -> None:
-        c.lookthrough_enabled = bool(form.get("enabled"))
         c.lookthrough_write = bool(form.get("write"))
         c.xray_limits = saved
 
@@ -214,9 +227,6 @@ def lookthrough_source(request: Request, ctx: Ctx, asset_id: str = Form(...), ur
 @router.post("/lookthrough/fetch")
 def lookthrough_fetch(request: Request, ctx: Ctx, asset_id: str = Form("")):
     """*Jetzt abrufen*: every fund's holdings list now, or one position's (``asset_id``), in the background."""
-    c = ctx.cfg()
-    if not c.lookthrough_enabled and not c.lookthrough_write:
-        return redirect(request, "/lookthrough", tr(request, "Erst den automatischen Abruf einschalten."), "warn")
     if asset_id and _position(ctx, asset_id) is None:
         return redirect(request, "/lookthrough", tr(request, "Unbekannte Position - bitte die Seite neu laden."),
                         "error")
@@ -297,7 +307,7 @@ FIRE_FIELDS = [
     ("part_time", N_("Teilzeit-Einkommen netto im Jahr bis zur Rente (EUR, Barista FIRE)"), "money", 0, 1_000_000,
      "0"),
     ("real_return", N_("Rendite nach Inflation (% im Jahr)"), "percent", -10, 20, "5"),
-    ("costs", N_("Kosten (% im Jahr, leer: aus der Durchschau)"), "percent", 0, 5, ""),
+    ("costs", N_("Kosten (% im Jahr, leer: aus X-Ray)"), "percent", 0, 5, ""),
     ("safe_rate", N_("Entnahmerate (% im Jahr)"), "percent", 1, 10, "3,5"),
     ("gain_share", N_("Gewinnanteil eines Verkaufs (%, leer: aus Wealthfolio)"), "percent", 0, 100, ""),
     ("church", N_("Kirchensteuer (%: 0, 8 oder 9)"), "percent", 0, 9, "0"),
@@ -346,7 +356,7 @@ def fire_page(request: Request, ctx: Ctx):
     if time.time() - ctx.depot_at > READ_SECONDS:
         from .overview import launch
 
-        launch(ctx, N_("Durchschau"), lambda lang: _read(ctx, ctx.cfg()), language(request))
+        launch(ctx, N_("X-Ray"), lambda lang: _read(ctx, ctx.cfg()), language(request))
     saved = ctx.cfg().fire
     lang = language(request)
 

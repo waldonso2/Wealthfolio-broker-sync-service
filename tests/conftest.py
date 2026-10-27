@@ -9,6 +9,18 @@ def _no_recalc_wait(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_issuer_requests(monkeypatch):
+    # X-Ray fetches iShares' lists after every run; no test reaches iShares (they answer "not found").
+    import httpx
+
+    from brokersync import lookthrough
+
+    real = lookthrough.Sources
+    monkeypatch.setattr(lookthrough, "Sources",
+                        lambda: real(transport=httpx.MockTransport(lambda request: httpx.Response(404))))
+
+
+@pytest.fixture(autouse=True)
 def _no_scalable_pause(monkeypatch):
     # The pause between Scalable detail queries is for the real rate limit only.
     from brokersync.adapters import scalable

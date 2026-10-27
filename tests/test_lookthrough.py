@@ -147,7 +147,7 @@ def test_the_fund_finder_gives_every_ishares_fund_and_its_outage_is_retried_soon
         fetch(down, "US0378331005")  # not "no source" for 30 days: maybe an iShares fund
 
 
-def test_fetch_asks_ishares_by_its_product_id_and_xtrackers_by_isin():
+def test_fetch_asks_ishares_by_its_product_id_and_nothing_else_for_now():
     asked = []
 
     def answer(request: httpx.Request) -> httpx.Response:
@@ -162,8 +162,9 @@ def test_fetch_asks_ishares_by_its_product_id_and_xtrackers_by_isin():
     s = sources(answer)
     lines, source = fetch(s, "IE00B4L5Y983")
     assert source == "iShares" and len(lines) == 5 and "/products/251882/" in asked[0]
-    lines, source = fetch(s, "IE00BJ0KDQ92")
-    assert source == "Xtrackers" and lines[0].key == "US0000000002"
+    with pytest.raises(NoSource):
+        fetch(s, "IE00BJ0KDQ92")  # Xtrackers: hidden for now (#144), DWS is not asked
+    assert not any("dws" in url for url in asked)
     lines, _ = fetch(s, "IE00XXXXXXXX", "https://www.ishares.com/de/privatanleger/de/produkte/123456/example-etf")
     assert "/products/123456/example-etf/" in asked[-1]
     with pytest.raises(NoSource):
@@ -234,8 +235,8 @@ def test_after_a_run_the_funds_are_fetched_and_new_risks_notified(tmp_path):
     wf = FakeWealthfolio()
     syncer, notifier = setup(tmp_path, wf)
     syncer.run()
-    assert not any(t == "Klumpenrisiko" for t, _, _ in notifier.sent)  # off by default, nothing stored
-    config_mod.update(tmp_path, lambda c: setattr(c, "lookthrough_enabled", True))
+    assert not any(t == "Klumpenrisiko" for t, _, _ in notifier.sent)  # no list yet: no false alarm
+    State(tmp_path).delete_meta(meta_keys.FUND("IE00B4L5Y983"))  # iShares had no list: due again
     syncer._fund_sources = lambda: sources(lambda r: httpx.Response(200, content=ISHARES_FULL))
     syncer.run()
     assert len(State(tmp_path).funds()["IE00B4L5Y983"]["constituents"]) == 5
@@ -406,8 +407,10 @@ def test_safe_mode_still_refreshes_the_lists_but_contacts_no_broker(tmp_path):
 
     wf = FakeWealthfolio()
     syncer, _ = setup(tmp_path, wf)
+    syncer._fund_sources = lambda: sources(lambda r: httpx.Response(404))
     syncer.run()
-    config_mod.update(tmp_path, lambda c: (setattr(c, "lookthrough_enabled", True), setattr(c, "sync_mode", "safe")))
+    State(tmp_path).delete_meta(meta_keys.FUND("IE00B4L5Y983"))  # due again
+    config_mod.update(tmp_path, lambda c: setattr(c, "sync_mode", "safe"))
     syncer._fund_sources = lambda: sources(lambda r: httpx.Response(200, content=ISHARES_FULL))
     created = len(wf.created)
     assert syncer.run() == []  # no broker in safe mode
