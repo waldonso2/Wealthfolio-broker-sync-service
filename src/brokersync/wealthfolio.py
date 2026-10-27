@@ -229,6 +229,16 @@ class WealthfolioClient:
         _raise(r)
         return r.json()
 
+    def update_asset_profile(self, asset: dict, metadata: dict) -> None:
+        """``PUT /assets/profile/{id}`` with new ``metadata`` and every other field as read: Wealthfolio sets
+        name, display code, notes and provider config from the payload, so an omitted one would be cleared."""
+        fields = ("name", "displayCode", "kind", "quoteMode", "quoteCcy", "instrumentType", "instrumentSymbol",
+                  "instrumentExchangeMic", "providerConfig")
+        payload = {k: asset.get(k) for k in fields} | {"notes": asset.get("notes") or "", "metadata": metadata}
+        r = self._request("PUT", f"/assets/profile/{quote(asset['id'], safe='')}", json=payload)
+        if r.status_code >= 400:
+            raise WealthfolioError(f"Wealthfolio rejected the asset profile: {_detail(r)}")
+
     def asset_logos(self) -> set[str]:
         """Ids of the assets that have a custom logo (Wealthfolio 3.8.0 and later)."""
         r = self._request("GET", "/assets/logos")

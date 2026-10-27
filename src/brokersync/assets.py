@@ -28,10 +28,11 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from . import meta_keys
 from .mapping import Accounts, SecurityMapping, is_cash_symbol
 from .model import Kind, Transaction, when
 from .state import State
-from .wealthfolio import WealthfolioClient
+from .wealthfolio import WealthfolioClient, WealthfolioError
 
 log = logging.getLogger(__name__)
 
@@ -249,3 +250,27 @@ def _explain(broker: str, wanted: set[str], trades: list, known: dict, exact: di
 def mappings(state: State, broker: str) -> dict[str, SecurityMapping]:
     return {isin: SecurityMapping(a["symbol"], a["exchange_mic"], a["name"], a["asset_id"])
             for isin, a in state.assets(broker).items()}
+
+
+def complete_isins(state: State, wf: WealthfolioClient, learned: dict[str, str]) -> int:
+    """The ISIN into ``metadata.identifiers.isin`` of every asset the sync knows (``learned``: asset id ->
+    ISIN) that has none (#140): Wealthfolio matches imports, quotes and bonds by it. An ISIN already there is
+    never replaced, and one the sync set is set once - removed by the user, it stays removed. Returns how
+    many were set; an asset Wealthfolio refuses is skipped."""
+    done = 0
+    for asset in wf.list_assets():
+        isin = learned.get(asset.get("id", ""))
+        if not isin or not valid_isin(isin) or state.meta(meta_keys.ISIN(asset["id"])):
+            continue
+        metadata = asset.get("metadata") or {}
+        identifiers = metadata.get("identifiers") or {}
+        if identifiers.get("isin"):
+            continue
+        try:  # Wealthfolio replaces the whole metadata: send all of it, the ISIN added
+            wf.update_asset_profile(asset, {**metadata, "identifiers": {**identifiers, "isin": isin}})
+        except WealthfolioError:
+            log.exception("ISIN of %s not set", asset["id"])
+            continue
+        state.set_meta(meta_keys.ISIN(asset["id"]), isin)
+        done += 1
+    return done
