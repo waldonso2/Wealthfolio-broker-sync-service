@@ -1123,6 +1123,12 @@ EN: dict[str, str] = {
     "Private Krankenversicherung im Jahr (EUR)": "Private health insurance a year (EUR)",
     "Zusammenveranlagt (2.000 EUR Sparerpauschbetrag)": "Joint assessment (2,000 EUR saver's allowance)",
     "Freiwillig gesetzlich versichert (sonst privat)": "Voluntarily insured in the statutory scheme (else private)",
+    "Positionsliste von {name} jetzt abrufen": "Fetch the holdings list of {name} now",
+    "Alle {n} Positionen im Fonds": "All {n} holdings of the fund",
+    "Die {top} größten von {n} Positionen im Fonds": "The {top} largest of the fund's {n} holdings",
+    "Positionen von {name}": "Holdings of {name}",
+    "Gewicht": "Weight",
+    "Alle {n} anzeigen": "Show all {n}",
     "Unbekannte Zeichenkodierung - bitte die CSV-Datei des Anbieters hochladen.":
         "Unknown character encoding - please upload the issuer's CSV file.",
     "Keine Positionsliste: Spalten für Name und Gewichtung fehlen.":

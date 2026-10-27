@@ -383,3 +383,32 @@ def test_a_pass_stops_when_its_time_is_up(tmp_path):
     asked: list[str] = []
     result = lookthrough.update(State(tmp_path), depot, sources(lambda r: asked.append(str(r.url))), budget=-1)
     assert (result.fetched, result.none, asked) == (0, 0, [])
+
+
+def test_one_position_can_be_fetched_alone_and_lists_are_due_again_the_next_day(tmp_path):
+    depot = Depot(positions=[{"id": i, "isin": i, "name": i, "currency": "EUR", "value": D(1)}
+                             for i in ("IE00B4L5Y983", "IE0000000017")])
+    asked: list[str] = []
+
+    def answer(request):
+        asked.append(request.url.path)
+        return httpx.Response(200, content=ISHARES_FULL)
+
+    state = State(tmp_path)
+    assert lookthrough.update(state, depot, sources(answer), force=True, only="IE0000000017").fetched == 1
+    assert len(asked) == 1 and "999999" in asked[0]  # only that fund's list was asked for
+    assert lookthrough.REFRESH_DAYS < 1  # the daily timer finds yesterday's list due
+
+
+def test_safe_mode_still_refreshes_the_lists_but_contacts_no_broker(tmp_path):
+    from .fakes import FakeWealthfolio
+    from .test_sync import setup
+
+    wf = FakeWealthfolio()
+    syncer, _ = setup(tmp_path, wf)
+    syncer.run()
+    config_mod.update(tmp_path, lambda c: (setattr(c, "lookthrough_enabled", True), setattr(c, "sync_mode", "safe")))
+    syncer._fund_sources = lambda: sources(lambda r: httpx.Response(200, content=ISHARES_FULL))
+    created = len(wf.created)
+    assert syncer.run() == []  # no broker in safe mode
+    assert len(wf.created) == created and "IE00B4L5Y983" in State(tmp_path).funds()

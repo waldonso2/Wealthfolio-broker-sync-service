@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.31.0
+
+- **Durchschau: holdings lists every day, one button per position.**
+  - The ETFs' holdings lists are fetched again every day with the morning run instead of weekly, in the safe fetch mode too (then without contacting any broker).
+  - Each position has its own *Jetzt abrufen*, which fetches just its list in the background.
+  - Under each fund with a list, its 50 largest holdings are shown with weight, country and sector; *Alle n anzeigen* shows the full list.
+
 ## 0.30.0
 
 - **Durchschau (waldonso2/wealthfolio-importer-addon#139):** a new page in the main menu shows what the depot really holds across all Wealthfolio accounts: every stock once with its share, value, country and sector and through which positions (a stock in three ETFs and held directly is one row) - top 50, top 100 or all; what the funds' holdings lists leave open as "nicht zugeordnet", never scaled up; the overlap of every two ETFs, each ETF's own contribution and the effective number of stocks. A position without a holdings list is one line of its own. New table `funds` (state.db migration 4).
