@@ -107,8 +107,43 @@ def test_xlsx_rows_turn_into_holdings():
     assert len(lines) == 5 and lines[0].key == "US0000000002" and lines[0].weight == D("0.19")  # a share
 
 
+# Fabricated, in the layout of iShares' fund finder data (product-screener-v3.1.jsn).
+SCREENER = json.dumps({
+    "251882": {"portfolioId": 251882, "isin": "IE00B4L5Y983", "fundName": "Example World",
+               "productPageUrl": "/uk/individual/en/products/251882/ishares-msci-world-ucits-etf-acc-fund"},
+    "999999": {"portfolioId": 999999, "isin": "IE0000000017", "fundName": "Example Other",
+               "productPageUrl": "/uk/individual/en/products/999999/example-other-fund"},
+    "broken": {"isin": None}, "list": [1, 2]}).encode()
+
+
 def sources(handler) -> Sources:
-    return Sources(transport=httpx.MockTransport(handler))
+    def answer(request: httpx.Request) -> httpx.Response:
+        if "product-screener" in request.url.path:
+            return httpx.Response(200, content=SCREENER)
+        return handler(request)
+
+    return Sources(transport=httpx.MockTransport(answer))
+
+
+def test_the_fund_finder_gives_every_ishares_fund_and_its_outage_is_retried_soon():
+    asked = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked.append(request.url.path)
+        if "product-screener" in request.url.path:
+            return httpx.Response(200, content=SCREENER)
+        return httpx.Response(200, content=ISHARES_FULL) if "ishares" in request.url.host else httpx.Response(404)
+
+    s = Sources(transport=httpx.MockTransport(answer))
+    lines, source = fetch(s, "IE0000000017")  # in no built-in list: found by the fund finder
+    assert source == "iShares" and "/products/999999/example-other-fund/" in asked[-1]
+    fetch(s, "IE00B4L5Y983")
+    assert sum("product-screener" in a for a in asked) == 1  # read once per pass
+    down = Sources(transport=httpx.MockTransport(lambda r: httpx.Response(503) if "product-screener" in r.url.path
+                                                 else answer(r)))
+    assert fetch(down, "IE00B4L5Y983")[1] == "iShares"  # a confirmed id while the finder is down
+    with pytest.raises(SourceError, match="Fondsfinder"):
+        fetch(down, "US0378331005")  # not "no source" for 30 days: maybe an iShares fund
 
 
 def test_fetch_asks_ishares_by_its_product_id_and_xtrackers_by_isin():

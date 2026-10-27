@@ -264,7 +264,7 @@ Die Seite **Durchschau** im Hauptmenü zeigt, was in deinen ETFs steckt und wie 
 Die Positionslisten der ETFs holt der Dienst bei den Anbietern, wenn du es unter *Einstellungen der Durchschau* einschaltest – nach jedem Abruf, je ETF höchstens einmal in der Woche, *Positionslisten jetzt abrufen* sofort. Gesendet wird nur die ISIN:
 
 - **Xtrackers:** über die ISIN.
-- **iShares:** gängige ETFs kennt der Dienst; für jeden anderen trägst du unter *Quelle ändern oder Liste hochladen* einmal die Adresse seiner Produktseite ein.
+- **iShares:** über die ISIN – der Dienst sucht den ETF im Fondsfinder von iShares. Findet er ihn dort nicht, trägst du unter *Quelle ändern oder Liste hochladen* einmal die Adresse seiner Produktseite ein.
 - **Alle anderen** (Amundi, Vanguard, SPDR, …): die Positionsliste von der Seite des Anbieters herunterladen und hochladen (CSV oder XLSX). Bei synthetischen ETFs (Swap) listen manche Anbieter den Sicherheitenkorb statt des Index – dann lieber die Index-Aufteilung des Anbieters nehmen.
 
 Wahlweise trägt der Dienst die Länder und Sektoren der ETFs auch **in Wealthfolio** ein (*Länder und Sektoren der ETFs in Wealthfolio eintragen*). Dann sehen Wealthfolios eigene Auswertungen und Zielallokationen durch die ETFs, statt jedem ETF ein einziges Land zuzuordnen. Ersetzt werden nur die automatischen Werte, die Wealthfolio von Yahoo holt; eigene Zuordnungen bleiben unangetastet. *Aus Wealthfolio entfernen* nimmt alles wieder heraus.

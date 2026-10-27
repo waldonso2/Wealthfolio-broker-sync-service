@@ -8,8 +8,9 @@ when there is a valid one, else ticker and exchange, else the name. Weights are 
 
 ``fetch`` gets the file itself (opt-in, ``Config.lookthrough_enabled``; ``Syncer.update_funds`` after a run,
 at most every ``REFRESH_DAYS`` per fund): Xtrackers by ISIN (an XLSX, read without a library), iShares by
-its product id - built in for common funds (``ISHARES``), else from the product page's address the user
-saves. Only the ISIN or that address leaves the container; only ``HOSTS`` are asked, answers are read up to
+its product id - from iShares' fund finder (``ISHARES_SCREENER``, every product with its ISIN, read once per
+pass), from the product page's address the user saves, or, while the fund finder is down, ``ISHARES``. Only
+the ISIN or that address leaves the container; only ``HOSTS`` are asked, answers are read up to
 ``MAX_BYTES`` and must look like a holdings list. Amundi and Vanguard: upload only for now (their
 interfaces are unverified, and a swap ETF's list would be its collateral basket, not the index).
 """
@@ -120,16 +121,18 @@ DWS = "https://etf.dws.com/etfdata/export/GBR/ENG/excel/product/constituent/{isi
 # The UK site's CSV export; its last path part is a constant of the domain, not of the fund.
 ISHARES_CSV = ("https://www.ishares.com/uk/individual/en/products/{id}/{slug}/1506575576011.ajax"
                "?fileType=csv&fileName=holdings&dataType=fund")
+# The fund finder's data: {portfolioId: {isin, productPageUrl, fundName, ...}} for every iShares product.
+ISHARES_SCREENER = ("https://www.ishares.com/uk/individual/en/product-screener/product-screener-v3.1.jsn"
+                    "?dcrPath=/templatedata/config/product-screener-v3/data/en/uk/product-screener/"
+                    "ishares-product-screener-backend-config&siteEntryPassthrough=true")
+PRODUCT_PATH = re.compile(r"/(?:products|produkte)/(\d{4,8})/([a-z0-9-]{3,120})")
 ISHARES_PAGE = re.compile(r"^https://www\.ishares\.com/[a-z]{2}/[a-z-]+/[a-z]{2}/(?:products|produkte)/(\d{4,8})/"
                           r"([a-z0-9-]{3,120})/?(?:[?#].*)?$")
-# Product ids can't be derived from an ISIN. The first three are confirmed by another project's live check
-# (dmxch/openfolio, 2026-06); the others are best guesses - a wrong one shows as an error on the page.
+# Only while the fund finder is down: product ids confirmed by another project's live check (dmxch/openfolio,
+# 2026-06). Never a guess - a wrong id can be another fund's list.
 ISHARES = {
     "IE00B4L5Y983": ("251882", "ishares-msci-world-ucits-etf-acc-fund"),
     "IE00BKM4GZ66": ("264659", "ishares-msci-emerging-markets-imi-ucits-etf"),
-    "IE00B5BMR087": ("253743", "ishares-sp-500-b-ucits-etf-acc-fund"),
-    "IE00B53SZB19": ("253741", "ishares-nasdaq-100-ucits-etf"),
-    "IE00B6R52259": ("251850", "ishares-msci-acwi-ucits-etf"),
 }
 
 
@@ -210,6 +213,23 @@ class Sources:
         self._http = httpx.Client(timeout=timeout, transport=transport, follow_redirects=True,
                                   headers={"User-Agent": BROWSER, "Accept": "*/*"},
                                   event_hooks={"request": [_only_sources]})
+        self._ishares: dict[str, tuple[str, str]] | None = None
+        self.finder_down = False  # the fund finder failed this pass: an unknown ISIN may still be iShares'
+
+    def ishares_product(self, isin: str) -> tuple[str, str] | None:
+        """Product id and page name of the iShares fund with ``isin``, from the fund finder (read once)."""
+        if self._ishares is None:
+            self._ishares = {}
+            try:
+                rows = json.loads(self._get(ISHARES_SCREENER, "iShares-Fondsfinder") or b"{}")
+            except (SourceError, ValueError):
+                rows = None
+            self.finder_down = not isinstance(rows, dict) or not rows
+            for row in (rows or {}).values() if isinstance(rows, dict) else ():
+                m = PRODUCT_PATH.search(str(row.get("productPageUrl") or "")) if isinstance(row, dict) else None
+                if m and isinstance(row.get("isin"), str):
+                    self._ishares.setdefault(row["isin"].strip().upper(), (m.group(1), m.group(2)))
+        return self._ishares.get(isin) or (ISHARES.get(isin) if self.finder_down else None)
 
     def close(self) -> None:
         self._http.close()
@@ -253,13 +273,15 @@ class Sources:
 
 def fetch(sources: Sources, isin: str, page: str = "") -> tuple[tuple[Constituent, ...], str]:
     """The holdings of the fund with ``isin`` (or at the iShares product ``page``) and the source's name."""
-    product = ishares_page(page) if page else ISHARES.get(isin)
+    product = ishares_page(page) if page else sources.ishares_product(isin) if isin else None
     if product:
         return sources.ishares(*product), "iShares"
     if isin:
         lines = sources.xtrackers(isin)
         if lines:
             return lines, "Xtrackers"
+    if sources.finder_down:  # maybe iShares' after all: try again tomorrow, not in NONE_DAYS
+        raise SourceError("Der iShares-Fondsfinder ist gerade nicht erreichbar.")
     raise NoSource(isin)
 
 
