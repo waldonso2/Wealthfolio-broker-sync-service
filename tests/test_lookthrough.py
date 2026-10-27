@@ -498,3 +498,38 @@ def test_a_product_address_without_the_pages_name_is_taken_and_the_german_site_i
     lines, source = fetch(Sources(transport=httpx.MockTransport(answer)), "IE00BJ5JNY98")
     assert source == "iShares" and "term=IE00BJ5JNY98" in asked[1] and "/de/privatanleger/de/" in asked[2]
     assert "/products/308858/holdings/1506575576011.ajax" in asked[-1]
+
+
+def test_only_ishares_funds_are_searched_a_429_stops_the_pass_and_a_found_product_is_kept(tmp_path):
+    state = State(tmp_path)
+    depot = Depot(positions=[
+        {"id": "a-stock", "isin": "US0378331005", "name": "Apple", "currency": "USD", "value": D(9)},
+        {"id": "a-etf", "isin": "IE00BJ5JNY98", "name": "iShares MSCI Europe SRI", "currency": "EUR", "value": D(8)},
+        {"id": "a-etf2", "isin": "IE00B5BMR087", "name": "iShares Core S&P 500", "currency": "EUR", "value": D(7)}])
+    asked = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked.append(str(request.url))
+        if "product-screener" in request.url.path:
+            return httpx.Response(404)
+        if "autoComplete" in request.url.path:
+            if "IE00B5BMR087" in str(request.url):
+                return httpx.Response(429)
+            return httpx.Response(200, json=[{"category": "productAutocomplete", "id": "/uk/a/en/products/308858/"}])
+        return httpx.Response(200, content=ISHARES_FULL)
+
+    r = lookthrough.update(state, depot, Sources(transport=httpx.MockTransport(answer)))
+    assert not any("US0378331005" in a for a in asked)  # a stock is never searched
+    assert r.fetched == 1 and lookthrough.status(state, "a-etf")["product"] == ["308858", "holdings"]
+    assert "HTTP 429" in lookthrough.status(state, "a-etf2")["error"]
+    asked.clear()
+    lookthrough.update(state, depot, Sources(transport=httpx.MockTransport(answer)), force=True, only="a-etf")
+    assert len(asked) == 1 and "/products/308858/holdings/" in asked[0]  # no finder, no search: the kept product
+
+    def limited(request: httpx.Request) -> httpx.Response:
+        asked.append(str(request.url))
+        return httpx.Response(429)
+
+    asked.clear()
+    lookthrough.update(state, depot, Sources(transport=httpx.MockTransport(limited)), force=True)
+    assert len(asked) == 1  # the first 429 ends the pass's requests
