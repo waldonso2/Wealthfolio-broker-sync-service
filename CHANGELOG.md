@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.33.2
+
+- **X-Ray finds iShares ETFs without the fund finder (waldonso2/wealthfolio-importer-addon#144):** iShares' fund finder answers 404 since 10/2026. While it fails, each ISIN is looked up in the iShares site's search (`autoComplete.search`); only an unambiguous product is taken, never a guess. The header shows the fund finder's failure as a note, no longer as an error.
+- A single stock the search couldn't check is no longer counted as a failed fetch (it isn't shown).
+
 ## 0.33.1
 
 - **X-Ray shows why a list is missing (waldonso2/wealthfolio-importer-addon#144):**

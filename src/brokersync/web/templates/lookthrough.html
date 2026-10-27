@@ -22,7 +22,7 @@
   {% if positions %}<p>{{ _("{funds} iShares-ETFs durchleuchtet · {open} ohne Positionsliste · {hidden} weitere Positionen ausgeblendet (zählen als je eine Position)", funds=fund_list | length, open=ishares | length - fund_list | length, hidden=hidden) }}</p>{% endif %}
   {% if last.at %}<p class="muted">{{ _("Letzter Abruf {when}: {fetched} Positionslisten geholt, {failed} fehlgeschlagen.", when=last.at | local, fetched=last.fetched or 0, failed=last.failed or 0) }}</p>{% endif %}
   {% if last.error %}<p class="error" role="alert">{{ _("Der Abruf ist abgebrochen: {error}", error=last.error | redact) }}</p>{% endif %}
-  {% if last.finder %}<p class="error" role="alert">{{ last.finder | redact }}</p>{% endif %}
+  {% if last.finder %}<p class="muted">{{ _("Der iShares-Fondsfinder ist nicht nutzbar ({error}); die ETFs werden über die Suche der iShares-Seite gefunden.", error=last.finder | redact) }}</p>{% endif %}
   <form method="post" action="/lookthrough/fetch" class="actions">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <p class="muted grow" aria-live="polite">{% if reading %}{{ _("Die Positionen werden gerade aus Wealthfolio gelesen …") }}{% elif read_at %}{{ _("Positionen gelesen {when}.", when=read_at | local) }}{% endif %}</p>

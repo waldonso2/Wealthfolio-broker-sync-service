@@ -1148,6 +1148,8 @@ EN: dict[str, str] = {
     "Letzter Abruf {when}: {fetched} Positionslisten geholt, {failed} fehlgeschlagen.":
         "Last fetch {when}: {fetched} holdings lists fetched, {failed} failed.",
     "Der Abruf ist abgebrochen: {error}": "The fetch stopped: {error}",
+    "Der iShares-Fondsfinder ist nicht nutzbar ({error}); die ETFs werden über die Suche der iShares-Seite gefunden.":
+        "The iShares fund finder can't be used ({error}); the ETFs are found through the iShares site's search.",
     "Zeigen:": "Show:",
     "Nicht zugeordnet (Bargeld, Derivate, Rest der Gewichte): {share}.":
         "Unassigned (cash, derivatives, rest of the weights): {share}.",
