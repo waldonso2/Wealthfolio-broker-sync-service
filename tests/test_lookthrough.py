@@ -544,14 +544,15 @@ def cell(value: str, kind: str = "String", index: int = 0) -> str:
 
 
 def workbook() -> bytes:
-    holdings = [
-        ["Fund Holdings as of"],
-        ["Ticker", "Name", "Sector", "Weight (%)", "Location", "Exchange"],
-        ["NVDA", "NVIDIA CORP", "IT", 24.5, "United States", "NASDAQ"],
-        ["AAPL", "APPLE INC", "IT", 20.1, "United States", "NASDAQ"],
-        ["MSFT", "MICROSOFT CORP", "IT", 18.0, "United States", "NASDAQ"],
-        ["ATT", "AT&T INC", "Telecom", 20.2, None, "NYSE"],
-        ["ASML", "ASML HOLDING NV", "IT", 16.9, "Netherlands", "Euronext"]]
+    holdings = [  # the real layout (10/2026): German columns, decimal comma, no location or exchange
+        ["All", "26.Okt.2026"],
+        ["Emittententicker", "Name", "Sektor", "Anlageklasse", "Marktwert", "Gewichtung (%)", "Nominalwert",
+         "Nominale", "Marktwährung"],
+        ["NVDA", "NVIDIA", "IT", "Aktien", "USD 2.000", "24,50", "2.000,00", "1.000", "USD"],
+        ["AAPL", "APPLE", "IT", "Aktien", "USD 1.600", "20,10", "1.600,00", "800", "USD"],
+        ["MSFT", "MICROSOFT", "IT", "Aktien", "USD 1.500", "18,00", "1.500,00", "700", "USD"],
+        ["T", "AT&T INC", "Kommunikation", "Aktien", None, "20,20", "1.700,00", "600", "USD"],
+        ["ASML", "ASML HOLDING NV", "IT", "Aktien", "EUR 1.400", "16,90", "1.400,00", "300", "EUR"]]
     rows = ""
     for values in holdings:
         cells, skip = "", False
@@ -577,8 +578,9 @@ def test_the_product_pages_download_is_read_from_its_holdings_sheet():
 
     lines = Sources(transport=httpx.MockTransport(answer)).ishares("308858", "holdings")
     assert asked == [lookthrough.ISHARES_DOC.format(id="308858")]
-    assert [c.key for c in lines][:2] == ["NVDA:NASDAQ", "AAPL:NASDAQ"] and lines[0].weight == D("0.245")
-    assert lines[3].name == "AT&T INC" and lines[3].country == "" and lines[3].key == "ATT:NYSE"  # & and ss:Index
+    assert [c.key for c in lines][:2] == ["NVDA:", "AAPL:"] and lines[0].weight == D("0.245")
+    assert lines[3].name == "AT&T INC" and lines[3].sector == "Kommunikation" and lines[3].weight == D("0.202")
+    assert lines[4].currency == "EUR"
     page = b"<!doctype html><html><title>iShares</title></html>"
     with pytest.raises(SourceError, match="keine Positionsliste zu Produkt 1"):
         Sources(transport=httpx.MockTransport(lambda r: httpx.Response(200, content=page))).ishares("1", "x")
