@@ -54,6 +54,7 @@ flowchart TB
   sync --> repair["repair.py<br/>$CASH-Asset entfernen (einmalig)"]
   sync --> retired["retired.py<br/>entfernte Broker aufräumen"]
   sync --> notify["notify.py<br/>ntfy"]
+  sync --> isins["assets.complete_isins<br/>fehlende ISINs nachtragen"]
   sync --> logos["logos.py<br/>Logos von logo.dev (wahlweise)"]
   sync --> spending["spending.py<br/>Ausgaben-Tracker je Bank (wahlweise)"]
   sync --> updates["updates.py<br/>neues Release? (einmal am Tag)"]

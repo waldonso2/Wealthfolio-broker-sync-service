@@ -4,6 +4,13 @@
 
 - **Banks over PSD2, e.g. N26 (waldonso2/wealthfolio-importer-addon#137):** *Bank über PSD2 1–3* read a giro account through Enable Banking, a licensed account information service, with the user's own app in its free restricted mode (only the user's own accounts). App id and private key are kept in the vault; every request is signed with the key. The login opens the bank's page; afterwards the user pastes the address the bank sent them to. The consent lasts as long as the bank allows; ntfy reminds 7 days and 1 day before it ends, and a scheduled run never starts a login by itself. Bookings as for FinTS banks; pending ones wait until they are booked. No depot over PSD2. The README says that the account data passes through Enable Banking.
 - **N26 (waldonso2/wealthfolio-importer-addon#135):** the main account over the interface of the N26 app (unofficial; the broker settings ask for agreement first, as for Trade Republic). Login with e-mail and password, confirmed in the N26 app; afterwards the token is refreshed without the user, and a scheduled run never pushes a new login into the app. A rejected password stops every further attempt until the credentials are saved anew. Booked transactions only (pending ones wait), ids `n26-<id>`; the balance is compared after each run. Money moved to a Space is a withdrawal unless a transfer pattern books it as a transfer.
+- **Missing ISINs completed in Wealthfolio (waldonso2/wealthfolio-importer-addon#140):** after every run, every asset the sync knows by ISIN whose ISIN is empty in Wealthfolio gets it (`metadata.identifiers.isin`), so Wealthfolio matches imports, quotes and bonds by it and the logos find it. Everything else of the asset - name, notes, profile, symbol, exchange - is sent back unchanged; an ISIN already there is never replaced, and one the sync set and the user removed stays removed.
+- **Install engine moved to community-scripts/core `8354b06`** (#97), after reviewing its 51 commits. Nothing new is sent and no engine function the install uses changed. What changes for an install:
+  - Closing the console no longer aborts it.
+  - `update` cleans up (apt autoremove/clean) after a successful run.
+  - A failed update is deployed again by the next `update` instead of reporting "no update".
+  - When Proxmox' template catalog can't be reached, the engine takes Debian from images.linuxcontainers.org.
+- The closing message of the install puts an IPv6 address in brackets, so the link to the setup page works.
 
 ## 0.31.0
 
