@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.34.2
+
+- **The automatic update works:** the updater's unit sets `TERM=xterm`. Without it, the install engine's `clear` failed ("TERM environment variable not set") and every automatic update stopped before it started. A container on 0.34.0/0.34.1 still has the old unit: update it once by hand (`update`).
+
 ## 0.34.1
 
 - **X-Ray: product addresses without the page's name are accepted (waldonso2/wealthfolio-importer-addon#144).**

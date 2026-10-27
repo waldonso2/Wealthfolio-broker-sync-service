@@ -10,4 +10,6 @@ Type=oneshot
 User=root
 UMask=0077
 ExecStart=/usr/local/bin/brokersync-autoupdate
+# The install engine calls `clear`, which fails without a terminal type - as a service there is none.
+Environment=TERM=xterm
 TimeoutStartSec=30min
