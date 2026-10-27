@@ -5,6 +5,9 @@
 # encrypted with systemd-creds where possible), creates the TLS certificate and
 # brings the data of older versions up to date (all of it encrypted).
 set -euo pipefail
+# The program (venv, app, bin) must be readable by the service user, whoever calls this: the console's root
+# has 022, a systemd unit may have less. Secrets get their modes explicitly (mktemp, chmod, install -m).
+umask 022
 
 BASE=/opt/wealthfolio-broker-sync
 APP="$BASE/app"

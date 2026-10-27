@@ -8,6 +8,9 @@ Type=oneshot
 # Root, without a sandbox: it runs the same update as `update` in the console (packages, units, the service's
 # key). It does nothing unless the page Updates switched it on; brokersync-autoupdate explains the steps.
 User=root
-UMask=0077
+# Like the console: the service user must read the program the update installs (0077 made it root-only).
+UMask=0022
 ExecStart=/usr/local/bin/brokersync-autoupdate
+# The install engine calls `clear`, which fails without a terminal type - as a service there is none.
+Environment=TERM=xterm
 TimeoutStartSec=30min
