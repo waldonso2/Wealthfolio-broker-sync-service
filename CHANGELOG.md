@@ -4,7 +4,7 @@
 
 - **X-Ray reads the holdings from iShares' new download:**
   - iShares rebuilt its site (10/2026): the fund finder answers 404, and the old CSV address answers with the product page.
-  - The holdings now come from the product page's own download ("Daten herunterladen"), an Excel 2003 XML workbook fetched from `www.blackrock.com` by product number. Its sheet "Holdings" is read: the same columns as before (name, weight, ticker, exchange, location, sector), and a bare `&` in a name is tolerated.
+  - The holdings now come from the product page's own download ("Daten herunterladen"), an Excel 2003 XML workbook fetched from `www.blackrock.com` by product number. Its sheet "Holdings" is read: German columns (Emittententicker, Name, Sektor, Gewichtung (%), Marktwährung) with decimal commas. This file names no location or exchange, so countries stay empty. A bare `&` in a name is tolerated.
   - A fund whose product number is known works again: a product page typed in under "Einstellungen dieses ETFs" (the address may end at the number), or a number found or kept before.
   - Finding the number from the ISIN alone follows.
 
