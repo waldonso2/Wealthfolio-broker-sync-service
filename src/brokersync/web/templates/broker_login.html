@@ -13,6 +13,10 @@
     <label for="code">{{ _("Code") }}</label>
     <input type="text" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required autofocus>
     <div class="actions"><button>{{ _("Bestätigen") }}</button></div>
+    {% elif challenge.kind == "url" %}
+    <label for="code">{{ _("Adresse der Seite nach der Anmeldung") }}</label>
+    <input type="url" id="code" name="code" inputmode="url" autocomplete="off" required autofocus>
+    <div class="actions"><button>{{ _("Bestätigen") }}</button></div>
     {% elif challenge.kind == "pin" %}
     <label for="code">PIN</label>
     <input type="password" id="code" name="code" autocomplete="off" required autofocus>

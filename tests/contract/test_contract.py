@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from brokersync.adapters import ADAPTERS
+from brokersync.adapters.enablebanking import BANKS as PSD2_BANKS
 from brokersync.adapters.fintsbank import BANKS
 from brokersync.mapping import Accounts, MappingError, to_activities
 from brokersync.model import Kind, to_dict
@@ -49,5 +50,5 @@ def test_every_recorded_transaction_can_be_booked(path):
 
 
 def test_every_adapter_has_a_contract_case():
-    # The FinTS bank slots are one adapter under several keys: the first one's case covers them.
-    assert {p.parent.name for p in CASES} >= set(ADAPTERS) - {a.key for a in BANKS[1:]}
+    # The FinTS and PSD2 bank slots are one adapter each under several keys: the first one's case covers them.
+    assert {p.parent.name for p in CASES} >= set(ADAPTERS) - {a.key for a in BANKS[1:] + PSD2_BANKS[1:]}
