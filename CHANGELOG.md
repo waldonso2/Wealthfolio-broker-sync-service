@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.28.2
+
+- Dependency updates: fastapi 0.143.3 and starlette 1.8.0 (runtime); ruff 0.17.1 and filelock 4.2.1 (CI tools - filelock fixes six advisories, CVE-2026-112906 and others); `actions/checkout` v7.0.1 and `actions/setup-python` v7.0.0 in the workflows. enum-tools stays at 0.12.0: python-fints requires a version below 0.13.
+
 ## 0.28.1
 
 - Security updates of two locked dependencies (CI job `audit`): certifi 2026.10.19 (PYSEC-2026-4320) and setuptools 84.1.0 (GHSA-xmj3-9gf7-h52w).
