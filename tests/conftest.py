@@ -16,6 +16,7 @@ def _no_issuer_requests(monkeypatch):
     from brokersync import lookthrough
 
     real = lookthrough.Sources
+    monkeypatch.setattr(lookthrough, "PAUSE", 0)
     monkeypatch.setattr(lookthrough, "Sources",
                         lambda: real(transport=httpx.MockTransport(lambda request: httpx.Response(404))))
 

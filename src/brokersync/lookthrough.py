@@ -126,6 +126,7 @@ MAX_BYTES = 20 * 1024 * 1024
 MAX_COLUMN = 16384  # Excel's last column, XFD
 REFRESH_DAYS = 0.75  # daily: the timer runs once a day, so the next day's run must find a list due
 NONE_DAYS = 30  # an ISIN no source knows is asked again after this
+PAUSE = 1.5  # seconds between two requests to an issuer: iShares answers a burst with HTTP 429
 DWS = "https://etf.dws.com/etfdata/export/GBR/ENG/excel/product/constituent/{isin}/"
 # The UK site's CSV export; its last path part is a constant of the domain, not of the fund.
 ISHARES_CSV = ("https://www.ishares.com/uk/individual/en/products/{id}/{slug}/1506575576011.ajax"
@@ -136,11 +137,14 @@ ISHARES_SCREENER = ("https://www.ishares.com/uk/individual/en/product-screener/p
                     "ishares-product-screener-backend-config&siteEntryPassthrough=true")
 # The site's search box: [{category, id, label}]; a product's id holds its page or its number. Used when the fund
 # finder fails - it answers per ISIN.
-ISHARES_SEARCH = ("https://www.ishares.com/uk/individual/en/autoComplete.search"
-                  "?type=autocomplete&siteEntryPassthrough=true&term={isin}")
-PRODUCT_PATH = re.compile(r"/(?:products|produkte)/(\d{4,8})/([a-z0-9-]{3,120})")
-ISHARES_PAGE = re.compile(r"^https://www\.ishares\.com/[a-z]{2}/[a-z-]+/[a-z]{2}/(?:products|produkte)/(\d{4,8})/"
-                          r"([a-z0-9-]{3,120})/?(?:[?#].*)?$")
+# The UK site's first, then the German one's (it lists funds the UK site doesn't); a product is the same number on both.
+ISHARES_SEARCH = tuple(f"https://www.ishares.com/{site}/autoComplete.search"
+                       "?type=autocomplete&siteEntryPassthrough=true&term={isin}"
+                       for site in ("uk/individual/en", "de/privatanleger/de"))
+# The page's name after the number is optional: links often end at the number (.../produkte/308858/).
+PRODUCT_PATH = re.compile(r"/(?:products|produkte)/(\d{4,8})(?:/([a-z0-9-]{3,120}))?")
+ISHARES_PAGE = re.compile(r"^https://www\.ishares\.com/[a-z]{2}/[a-z-]+/[a-z]{2}/(?:products|produkte)/(\d{4,8})"
+                          r"(?:/([a-z0-9-]{3,120}))?/?(?:[?#].*)?$")
 # Only while the fund finder is down: product ids confirmed by another project's live check (dmxch/openfolio,
 # 2026-06). Never a guess - a wrong id can be another fund's list.
 ISHARES = {
@@ -160,7 +164,12 @@ class NoSource(Exception):
 def ishares_page(url: str) -> tuple[str, str] | None:
     """Product id and name in the address of an iShares product page, if it is one."""
     m = ISHARES_PAGE.match(url.strip())
-    return (m.group(1), m.group(2)) if m else None
+    return _product(m) if m else None
+
+
+def _product(m: re.Match) -> tuple[str, str]:
+    # Any name serves: the export finds the list by the number (``holdings`` like the reference implementation).
+    return m.group(1), m.group(2) or "holdings"
 
 
 def xlsx_rows(data: bytes) -> list[list[str]]:
@@ -255,12 +264,15 @@ class Sources:
         self._ishares: dict[str, tuple[str, str]] | None = None
         self._ter: dict[str, Decimal] = {}
         self.finder_error = ""  # why the fund finder gave no products this pass: an unknown ISIN may still be iShares'
+        self.limited = ""  # iShares said "too many requests" (429): nothing more is asked this pass
+        self.last: tuple[str, str] | None = None  # the product the last fetch found, kept with the fund
+        self._sent = 0.0
 
     @property
     def finder_down(self) -> bool:
         return bool(self.finder_error)
 
-    def ishares_product(self, isin: str) -> tuple[str, str] | None:
+    def ishares_product(self, isin: str, *, search: bool = True) -> tuple[str, str] | None:
         """Product id and page name of the iShares fund with ``isin``, from the fund finder (read once)."""
         if self._ishares is None:
             self._ishares = {}
@@ -283,7 +295,7 @@ class Sources:
                     if not self._ishares:  # names only, no values: which field holds the TER (#142)
                         log.info("iShares fund finder: fields of a product: %s", ", ".join(sorted(map(str, row))))
                     key = code.strip().upper()
-                    self._ishares.setdefault(key, (m.group(1), m.group(2)))
+                    self._ishares.setdefault(key, _product(m))
                     if (ter := _ter(row)) is not None:
                         self._ter.setdefault(key, ter)
             if not self._ishares and not self.finder_error:
@@ -297,11 +309,27 @@ class Sources:
                                      f"({len(rows) if isinstance(rows, dict | list) else 0} Einträge).")
         if isin in self._ishares or not self.finder_down:
             return self._ishares.get(isin)
-        return ISHARES.get(isin) or self._search(isin)
+        return ISHARES.get(isin) or (self._search(isin) if search else None)
 
     def _search(self, isin: str) -> tuple[str, str] | None:
-        """The product of ``isin`` from the site's search box - only an unambiguous hit, never a guess."""
-        data = self._get(ISHARES_SEARCH.format(isin=quote(isin, safe="")), "iShares-Suche")
+        """The product of ``isin`` from the site's search box - only an unambiguous hit, never a guess. The UK
+        site first, then the German one; an error only when neither answered."""
+        error = None
+        for url in ISHARES_SEARCH:
+            try:
+                found = self._hits(url.format(isin=quote(isin, safe="")))
+            except SourceError as e:
+                error = e
+                continue
+            if found:
+                return found.pop() if len({p for p, _ in found}) == 1 else None
+            error = None
+        if error:
+            raise error
+        return None
+
+    def _hits(self, url: str) -> set[tuple[str, str]]:
+        data = self._get(url, "iShares-Suche")
         try:
             rows = json.loads(data or b"[]")
         except ValueError as e:
@@ -311,10 +339,10 @@ class Sources:
             if isinstance(row, dict) and row.get("category") == "productAutocomplete":
                 text = str(row.get("id") or "")
                 if m := PRODUCT_PATH.search(text):
-                    found.add((m.group(1), m.group(2)))
+                    found.add(_product(m))
                 elif re.fullmatch(r"\d{4,8}", text):
-                    found.add((text, "holdings"))  # the page's name is no part of the export's lookup
-        return found.pop() if len({p for p, _ in found}) == 1 else None
+                    found.add((text, "holdings"))
+        return found
 
     def ter(self, isin: str) -> Decimal | None:
         """The TER the fund finder lists for ``isin`` (after ``ishares_product``)."""
@@ -324,11 +352,20 @@ class Sources:
         self._http.close()
 
     def _get(self, url: str, source: str) -> bytes | None:
-        """The body, or None for 404; read no more than ``MAX_BYTES``."""
+        """The body, or None for 404; read no more than ``MAX_BYTES``. Requests are spaced by ``PAUSE``; after a
+        429 none is sent this pass."""
+        if self.limited:
+            raise SourceError(self.limited)
+        time.sleep(max(0.0, self._sent + PAUSE - time.monotonic()))
+        self._sent = time.monotonic()
         try:
             with self._http.stream("GET", url) as r:
                 if r.status_code == 404:
                     return None
+                if r.status_code == 429:
+                    self.limited = (f"{source}: zu viele Anfragen (HTTP 429) - iShares wird beim nächsten Abruf "
+                                    "wieder gefragt.")
+                    raise SourceError(self.limited)
                 if r.status_code >= 400:
                     raise SourceError(f"{source}: HTTP {r.status_code}")
                 data = b""
@@ -360,9 +397,14 @@ class Sources:
             raise SourceError(f"Xtrackers: {e}") from e
 
 
-def fetch(sources: Sources, isin: str, page: str = "") -> tuple[tuple[Constituent, ...], str]:
-    """The holdings of the fund with ``isin`` (or at the iShares product ``page``) and the source's name."""
-    product = ishares_page(page) if page else sources.ishares_product(isin) if isin else None
+def fetch(sources: Sources, isin: str, page: str = "", *, product: tuple[str, str] | None = None,
+          search: bool = True) -> tuple[tuple[Constituent, ...], str]:
+    """The holdings of the fund with ``isin`` (or at the iShares product ``page``, or the ``product`` found before)
+    and the source's name. ``search``: ask the site's search when the fund finder fails (only for iShares funds -
+    a search per stock costs requests and gets the pass refused)."""
+    product = product or (ishares_page(page) if page else
+                          sources.ishares_product(isin, search=search) if isin else None)
+    sources.last = product
     if product:
         return sources.ishares(*product), "iShares"
     # shortcut: only iShares for now (#144); Sources.xtrackers works - call it here again to bring Xtrackers back
@@ -488,7 +530,9 @@ def update(state: State, depot: Depot, sources: Sources, *, force: bool = False,
                     continue
                 raise SourceError("Wealthfolio kennt keine ISIN zu diesem ETF - trag unter „Einstellungen dieses "
                                   "ETFs“ seine Produktseite bei iShares ein.")
-            lines, source = fetch(sources, p["isin"], st.get("url", ""))
+            known = tuple(st["product"]) if st.get("product") and not st.get("url") else None
+            lines, source = fetch(sources, p["isin"], st.get("url", ""), product=known,
+                                  search=is_ishares(p, st))
         except NoSource:
             if is_ishares(p, st):
                 e = SourceError(f"iShares kennt die ISIN {p['isin']} nicht (Fondsfinder und Suche) - trag unter "
@@ -505,7 +549,7 @@ def update(state: State, depot: Depot, sources: Sources, *, force: bool = False,
         else:
             state.set_fund(p["id"], p["name"], rows(lines))
             ter = sources.ter(p["isin"]) if source == "iShares" else None
-            set_status(state, p["id"], status="ok", source=source, error="", lines=len(lines),
+            set_status(state, p["id"], status="ok", source=source, error="", lines=len(lines), product=sources.last,
                        **({"ter": str(ter), "ter_source": source, "ter_at": now()} if ter is not None else {}))
             result.fetched += 1
     record(state, fetched=result.fetched, none=result.none, failed=len(result.errors),

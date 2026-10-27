@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.34.1
+
+- **X-Ray: product addresses without the page's name are accepted (waldonso2/wealthfolio-importer-addon#144).**
+  - iShares links often end at the product number (`…/produkte/308858/`). Both the site search's hits and a product page typed in were refused because the pattern required a name after the number.
+  - The number alone now suffices, as in the reference implementation; the export finds the list by the number.
+- **The German site's search is asked too** when the UK site's search doesn't know the ISIN.
+- **No more HTTP 429 from iShares:**
+  - The site's search is asked only for iShares ETFs (by name, source or saved page), never for single stocks.
+  - Requests to iShares are spaced by 1.5 s.
+  - After a 429, nothing more is asked in that pass; the next run tries again.
+  - A product found once is kept with the fund (`product` in its status), so each ETF is searched only once.
+
 ## 0.34.0
 
 - **Automatic updates (opt-in, page *Updates* under *Einstellungen*):**
