@@ -35,3 +35,12 @@ def test_row_keeps_the_isin_apart_from_the_isin_column():
     line = probe.row("IE00B4L5Y983", {"source": "DWS xlsx", "status": 200, "kind": "csv", "isin": True})
     assert line.startswith("| IE00B4L5Y983 | DWS xlsx | 200 |")
     assert "| True |" in line
+
+
+def test_a_page_naming_a_ter_is_marked_and_the_fund_finder_gives_field_names_only():
+    assert probe.classify(b"<html>Gesamtkostenquote (TER) 0,20 %</html>", "text/html")["ter"] is True
+    assert probe.classify(ISHARES_CSV, "text/csv")["ter"] is False
+    finder = b'{"1": {"isin": "IE0000000017", "ter": {"r": 0.2}, "fundName": "Example"}, "2": {}}'
+    fields = probe.finder_fields(finder)
+    assert "TER fields: ['ter']" in fields and "fundName, isin, ter" in fields and "0.2" not in fields
+    assert probe.finder_fields(b"<html>") == "no JSON"

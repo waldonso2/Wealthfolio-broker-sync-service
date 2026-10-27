@@ -3,14 +3,20 @@
 Usage (in the container, no venv or key needed - only the standard library):
     python3 -I lookthrough_probe.py [ISIN ...]        # without ISINs: a list of common UCITS ETFs
 
-For each ISIN it asks every source that is keyed by ISIN (Xtrackers/DWS, Amundi) and iShares when the
-product id is known, plus Vanguard, OpenFIGI and GLEIF once, and prints one Markdown table row per
-request: HTTP status, redirect, type, size, rows, whether an ISIN column is there, and what the body is.
-Nothing but the ISINs is sent; nothing is written. Paste the table into the issue.
+For each ISIN it asks every source that is keyed by ISIN (Xtrackers/DWS, Amundi, Invesco, fundinfo, the
+Xtrackers product page) and iShares / SPDR when the product is known, plus iShares' fund finder, Vanguard,
+OpenFIGI and GLEIF once, and prints one Markdown table row per request: HTTP status, redirect, type, size,
+rows, whether an ISIN column is there, whether the body names a TER (#142), and what the body is. For the
+fund finder it prints the field names of one product (names only, no values). Nothing but the ISINs is
+sent; nothing is written. Paste the table into the issue.
+
+Sources marked "guess" are addresses that issuers' own pages use or used; none is an official interface,
+and none was reachable from the development environment - the table tells which hold.
 """
 
 import csv
 import json
+import re
 import sys
 import time
 import urllib.error
@@ -37,7 +43,17 @@ DEFAULT = [
     "IE000BI8OT95",  # Amundi Core MSCI World (physical)
     "IE00BK5BQT80",  # Vanguard FTSE All-World Acc
     "IE00BFY0GT14",  # SPDR MSCI World
+    "IE00B60SX394",  # Invesco MSCI World
+    "IE00BYX2JD69",  # iShares MSCI World SRI (not in ISHARES: found by the fund finder only)
 ]
+# SPDR files are named by ticker and exchange, not ISIN (guess, like the iShares ids above).
+SPDR = {"IE00BFY0GT14": "sppw-gy"}
+FINDER = ("https://www.ishares.com/uk/individual/en/product-screener/product-screener-v3.1.jsn?dcrPath=/templatedata"
+          "/config/product-screener-v3/data/en/uk/product-screener/ishares-product-screener-backend-config"
+          "&siteEntryPassthrough=true")
+# The fund finder's fields that may carry the TER (the service's lookthrough.TER_FIELDS).
+TER_FIELDS = ("ter", "fees", "ongoingCharges", "ongoingChargesRatio", "netExpenseRatio", "totalExpenseRatio")
+TER_WORDS = re.compile(rb"Gesamtkostenquote|Laufende Kosten|Ongoing charges|TER\b|Total expense ratio", re.I)
 SAMPLE_STOCK = "US0378331005"  # a constituent, for OpenFIGI and GLEIF
 
 
@@ -50,7 +66,14 @@ OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def classify(body: bytes, content_type: str) -> dict:
-    """What a body is: xlsx, json (non-empty?), csv (rows, ISIN column), html or other."""
+    """What a body is: xlsx, json (non-empty?), csv (rows, ISIN column), html or other; and whether it
+    names a TER."""
+    found = _classify(body, content_type)
+    found["ter"] = bool(body[:2] != b"PK" and TER_WORDS.search(body))
+    return found
+
+
+def _classify(body: bytes, content_type: str) -> dict:
     if body[:2] == b"PK":
         return {"kind": "xlsx/zip"}
     text = body.decode("utf-8-sig", errors="replace").lstrip()
@@ -74,7 +97,7 @@ def classify(body: bytes, content_type: str) -> dict:
             "header": ",".join(rows[0])[:120]}
 
 
-def probe(name: str, url: str, *, data: dict | None = None, agent: str = BROWSER) -> dict:
+def probe(name: str, url: str, *, data: dict | list | None = None, agent: str = BROWSER, keep: bool = False) -> dict:
     headers = {"User-Agent": agent, "Accept": "*/*"}
     body = json.dumps(data).encode() if data is not None else None
     if body is not None:
@@ -90,7 +113,28 @@ def probe(name: str, url: str, *, data: dict | None = None, agent: str = BROWSER
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         return {"source": name, "status": f"error: {getattr(e, 'reason', e)}"}
     return {"source": name, "status": status, "redirect": location, "type": ctype.split(";")[0],
-            "bytes": len(payload), "seconds": round(time.monotonic() - started, 1), **classify(payload, ctype)}
+            "bytes": len(payload), "seconds": round(time.monotonic() - started, 1), **classify(payload, ctype),
+            **({"body": payload} if keep else {})}
+
+
+def finder_fields(body: bytes) -> str:
+    """The field names of one product in iShares' fund finder, and which may carry the TER - no values."""
+    try:
+        rows = json.loads(body)
+    except ValueError:
+        return "no JSON"
+    product = next((r for r in rows.values() if isinstance(r, dict)), None) if isinstance(rows, dict) else None
+    if product is None:
+        return "no products"
+    names = sorted(map(str, product))
+    return f"{len(rows)} products; TER fields: {[n for n in TER_FIELDS if n in product]}; fields: {', '.join(names)}"
+
+
+def ishares_finder() -> dict:
+    result = probe("iShares fund finder", FINDER, keep=True)
+    if "body" in result:
+        result["header"] = finder_fields(result.pop("body"))
+    return result
 
 
 def ishares(isin: str) -> list[dict]:
@@ -105,7 +149,7 @@ def amundi(isin: str) -> dict:
         "context": {"countryCode": "FRA", "languageCode": "fr", "userProfileName": "RETAIL"},
         "productIds": [isin],
         "productType": "PRODUCT",
-        "characteristics": ["ISIN", "INDEX_BREAKDOWNS_AS_OF_DATE", "IS_NO_INDEX_BREAKDOWN"],
+        "characteristics": ["ISIN", "INDEX_BREAKDOWNS_AS_OF_DATE", "IS_NO_INDEX_BREAKDOWN", "TER"],
         "breakDown": {"aggregationFields": ["INDEX_COUNTRIES", "INDEX_SECTORS"]},
         "composition": {"compositionFields": ["date", "isin", "name", "weight", "currency", "sector", "country"]},
     })
@@ -114,12 +158,20 @@ def amundi(isin: str) -> dict:
 def checks(isin: str) -> list[dict]:
     found = ishares(isin) if isin in ISHARES else []
     found.append(probe("DWS xlsx", f"https://etf.dws.com/etfdata/export/GBR/ENG/excel/product/constituent/{isin}/"))
+    found.append(probe("DWS page (TER, guess)", f"https://etf.dws.com/de-de/{isin}/"))
     found.append(amundi(isin))
+    if isin in SPDR:
+        found.append(probe("SPDR xlsx (guess)", "https://www.ssga.com/library-content/products/fund-data/etfs/emea/"
+                                                f"holdings-daily-emea-en-{SPDR[isin]}.xlsx"))
+    found.append(probe("Invesco (guess)", f"https://dng-api.invesco.com/cache/v1/accounts/en_GB/shareclasses/{isin}"
+                                          "/holdings/index?idType=isin"))
+    found.append(probe("fundinfo (KID/EMT, guess)", f"https://www.fundinfo.com/en/LandingPage?query={isin}"))
     return found
 
 
 def once() -> list[dict]:
     return [
+        ishares_finder(),
         probe("Vanguard gpx", "https://www.vanguard.co.uk/gpx/graphql", data={"query": "{__typename}"}),
         probe("OpenFIGI", "https://api.openfigi.com/v3/mapping", data=[{"idType": "ID_ISIN", "idValue": SAMPLE_STOCK}]),
         probe("GLEIF", f"https://api.gleif.org/api/v1/lei-records?filter[isin]={SAMPLE_STOCK}",
@@ -127,7 +179,8 @@ def once() -> list[dict]:
     ]
 
 
-COLUMNS = ["isin", "source", "status", "redirect", "type", "bytes", "seconds", "kind", "rows", "isin_col", "header"]
+COLUMNS = ["isin", "source", "status", "redirect", "type", "bytes", "seconds", "kind", "rows", "isin_col", "ter",
+           "header"]
 
 
 def row(isin: str, result: dict) -> str:
