@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.30.1
+## 0.31.1
 
 - **Install engine moved to community-scripts/core `8354b06`** (#97), after reviewing its 51 commits. Nothing new is sent and no engine function the install uses changed. What changes for an install:
   - Closing the console no longer aborts it.
@@ -8,6 +8,13 @@
   - A failed update is deployed again by the next `update` instead of reporting "no update".
   - When Proxmox' template catalog can't be reached, the engine takes Debian from images.linuxcontainers.org.
 - The closing message of the install puts an IPv6 address in brackets, so the link to the setup page works.
+
+## 0.31.0
+
+- **Durchschau: holdings lists every day, one button per position.**
+  - The ETFs' holdings lists are fetched again every day with the morning run instead of weekly, in the safe fetch mode too (then without contacting any broker).
+  - Each position has its own *Jetzt abrufen*, which fetches just its list in the background.
+  - Under each fund with a list, its 50 largest holdings are shown with weight, country and sector; *Alle n anzeigen* shows the full list.
 
 ## 0.30.0
 

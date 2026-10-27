@@ -57,6 +57,22 @@
       <td data-label="{{ _('Anteil am Depot') }}">{{ pct(p.value / total) }}</td>
       <td data-label="{{ _('Positionsliste') }}">{% if f %}{{ _("{n} Positionen von {source}, Stand {when}", n=f.constituents | length, source=st.source or "Upload", when=f.at | local) }}{% elif st.status == "none" %}<span class="muted">{{ _("keine Quelle gefunden – Positionsliste hochladen, falls es ein ETF ist") }}</span>{% else %}<span class="muted">{{ _("keine") }}</span>{% endif %}
         {% if st.status == "error" %}<p class="error">{{ st.error | redact }}</p>{% endif %}
+        {% if cfg.lookthrough_enabled and (p.isin or st.url) %}
+        <form method="post" action="/lookthrough/fetch" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}"><button class="secondary" {% if reading %}disabled{% endif %} aria-label="{{ _('Positionsliste von {name} jetzt abrufen', name=p.name) }}">{{ _("Jetzt abrufen") }}</button></form>
+        {% endif %}
+        {% if f %}{% set lines = largest[p.id] %}{% set all = full == p.id %}
+        <details id="fund-{{ loop.index }}"{% if all %} open{% endif %}><summary>{% if all or lines | length <= fund_top %}{{ _("Alle {n} Positionen im Fonds", n=lines | length) }}{% else %}{{ _("Die {top} größten von {n} Positionen im Fonds", top=fund_top, n=lines | length) }}{% endif %}</summary>
+          <div class="table"><table>
+            <caption class="sr-only">{{ _("Positionen von {name}", name=p.name) }}</caption>
+            <thead><tr><th scope="col">{{ _("Name") }}</th><th scope="col">{{ _("Gewicht") }}</th><th scope="col">{{ _("Land") }}</th><th scope="col">{{ _("Sektor") }}</th></tr></thead>
+            <tbody>
+            {% for key, name, weight, country, sector, currency in (lines if all else lines[:fund_top]) %}
+            <tr><td data-label="{{ _('Name') }}">{{ name }}</td><td data-label="{{ _('Gewicht') }}">{{ pct(weight | float) }}</td><td data-label="{{ _('Land') }}">{{ country or "–" }}</td><td data-label="{{ _('Sektor') }}">{{ sector or "–" }}</td></tr>
+            {% endfor %}
+            </tbody></table></div>
+          {% if not all and lines | length > fund_top %}<p><a href="/lookthrough?full={{ p.id | urlencode }}#fund-{{ loop.index }}">{{ _("Alle {n} anzeigen", n=lines | length) }}</a></p>{% endif %}
+        </details>
+        {% endif %}
         <details><summary>{{ _("Quelle ändern oder Liste hochladen") }}</summary>
           <form method="post" action="/lookthrough/source" class="inline-form">
             <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
