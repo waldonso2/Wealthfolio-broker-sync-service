@@ -44,3 +44,9 @@ def test_the_depot_names_the_share_without_a_rate_and_shares_the_custody_fee():
     assert d.ter == (D("0.002") * 1800) / 2000 and d.exit == D(1) and d.tax == 5
     assert d.yearly == D("3.6") + 3
     assert d.rate == (by["f"].rate * 1800 + by["o"].rate * 200) / 2000
+
+
+def test_a_new_buy_spreads_its_fee_over_a_year_not_a_month():
+    p = costs.Position("n", "New", D(1000), D(1000), {"dep-a": D(1000)},
+                       (costs.Trade(TODAY, "BUY", D(1000), fee=D(1), account="dep-a"),), ter=D("0.002"))
+    assert costs.position(p, TODAY, BROKER, {}).rate == D("0.001")  # 1 EUR on 1000 over a year, not 1.2 %

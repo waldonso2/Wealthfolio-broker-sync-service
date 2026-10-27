@@ -1123,6 +1123,16 @@ EN: dict[str, str] = {
     "Private Krankenversicherung im Jahr (EUR)": "Private health insurance a year (EUR)",
     "Zusammenveranlagt (2.000 EUR Sparerpauschbetrag)": "Joint assessment (2,000 EUR saver's allowance)",
     "Freiwillig gesetzlich versichert (sonst privat)": "Voluntarily insured in the statutory scheme (else private)",
+    "Unbekannte Zeichenkodierung - bitte die CSV-Datei des Anbieters hochladen.":
+        "Unknown character encoding - please upload the issuer's CSV file.",
+    "Keine Positionsliste: Spalten für Name und Gewichtung fehlen.":
+        "Not a holdings list: columns for name and weight are missing.",
+    "Die Positionsliste enthält keine Zeile mit Gewichtung.": "The holdings list has no line with a weight.",
+    "Die XLSX-Datei ist zu groß.": "The XLSX file is too large.",
+    "Die XLSX-Datei enthält keine Tabelle.": "The XLSX file contains no sheet.",
+    "Keine lesbare XLSX-Datei.": "Not a readable XLSX file.",
+    "In der Rente pflichtversichert (KVdR): kein Beitrag auf Kapitalerträge":
+        "Compulsorily insured as a pensioner (KVdR): no contribution on capital income",
     "Kinderlos (höherer Pflegebeitrag)": "Childless (higher long-term care contribution)",
     "Aktienfonds (30 % Teilfreistellung)": "Equity funds (30 % partial exemption)",
     "{label}: bitte eintragen.": "{label}: please fill in.",

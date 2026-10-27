@@ -19,6 +19,7 @@ from itertools import combinations
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile as StarletteUpload
 
 from ... import fire, lookthrough, meta_keys, xray
@@ -264,9 +265,9 @@ async def lookthrough_upload(request: Request, ctx: Ctx):
     if len(data) > MAX_FILE:
         return redirect(request, "/lookthrough", tr(request, "Die Datei ist zu groß (höchstens 5 MB)."), "error")
     try:
-        lines = lookthrough.parse_file(data)
+        lines = await run_in_threadpool(lookthrough.parse_file, data)  # never on the event loop: the UI stays
     except (ValueError, lookthrough.SourceError) as e:
-        return redirect(request, "/lookthrough", str(e), "error")
+        return redirect(request, "/lookthrough", tr(request, str(e)), "error")
     ctx.state.set_fund(asset_id, position["name"], lookthrough.rows(lines))
     lookthrough.set_status(ctx.state, asset_id, status="upload", source="Upload", error="", lines=len(lines))
     total = sum((c.weight for c in lines), Decimal(0)) * 100
@@ -297,6 +298,7 @@ FIRE_FIELDS = [
 ]
 FIRE_FLAGS = [("joint", N_("Zusammenveranlagt (2.000 EUR Sparerpauschbetrag)")),
               ("gkv", N_("Freiwillig gesetzlich versichert (sonst privat)")),
+              ("kvdr", N_("In der Rente pflichtversichert (KVdR): kein Beitrag auf Kapitalerträge")),
               ("childless", N_("Kinderlos (höherer Pflegebeitrag)")),
               ("equity_fund", N_("Aktienfonds (30 % Teilfreistellung)"))]
 FIRE_TARGETS = {"lean": N_("Lean FIRE (75 % der Ausgaben)"), "regular": N_("FIRE"),

@@ -60,3 +60,16 @@ def test_costs_come_off_the_real_return():
     with_costs = fire.plan(Inputs(**base, real_return=0.05, costs=0.004))
     assert with_costs.targets == fire.plan(Inputs(**base, real_return=0.046)).targets
     assert with_costs.years["regular"] > fire.plan(Inputs(**base, real_return=0.05)).years["regular"]
+
+
+def test_the_minimum_health_insurance_only_in_bridge_years_without_other_income():
+    i = Inputs(expenses=20000, gain_share=0.2, retire_age=67, pension_age=67, pension=20000)
+    assert fire.capital_needed(i, 20000) == 0  # the pension pays everything: no minimum on nothing
+    i.pension = 15000
+    after = fire.withdrawal(i, 5000, floor=False)
+    assert after.health == pytest.approx(0.205 * 0.14 * after.gross, abs=0.01)  # on the gain only, no floor
+    i.kvdr = True
+    assert fire.capital_needed(i, 20000) == pytest.approx(5000 / 0.035)  # KVdR: nothing on capital income
+    # Barista: the part-time job is insured itself, the depot's share pays no minimum.
+    i.retire_age, i.part_time = 57, 10000
+    assert fire.withdrawal(i, 10000, floor=False).health < fire.withdrawal(i, 10000).health

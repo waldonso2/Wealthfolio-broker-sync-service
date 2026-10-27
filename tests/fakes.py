@@ -165,7 +165,8 @@ class FakeWealthfolio:
             _, asset_id, _, taxonomy_id = path.removeprefix("/api/v1/taxonomies/assignments/").split("/")
             new = json.loads(request.content)
             known = {c["id"] for c in self.categories[taxonomy_id]}
-            if any(not 1 <= a["weight"] <= 10000 or a["categoryId"] not in known for a in new):
+            if any(not 1 <= a["weight"] <= 10000 or a["categoryId"] not in known for a in new) or sum(
+                    a["weight"] for a in new) > 10000:  # like Wealthfolio's TaxonomyService
                 return httpx.Response(400, json={"code": 400, "message": "invalid assignment"})
             self.assignments = [a for a in self.assignments
                                 if not (a["assetId"] == asset_id and a["taxonomyId"] == taxonomy_id)]

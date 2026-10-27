@@ -22,6 +22,7 @@ import io
 import json
 import logging
 import re
+import time
 import zipfile
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -33,7 +34,10 @@ import httpx
 from . import costs, meta_keys, xray
 from .assets import valid_isin
 from .logos import isin_of
+from .model import when
 from .state import State, now
+from .wealthfolio import WealthfolioError
+from .web.i18n import N_
 from .xray import Constituent
 
 log = logging.getLogger(__name__)
@@ -54,7 +58,7 @@ def _text(data: bytes) -> str:
             return data.decode(encoding)
         except UnicodeDecodeError:
             continue
-    raise ValueError("Unbekannte Zeichenkodierung - bitte die CSV-Datei des Anbieters hochladen.")
+    raise ValueError(N_("Unbekannte Zeichenkodierung - bitte die CSV-Datei des Anbieters hochladen."))
 
 
 def _column(header: list[str], names: tuple[str, ...]) -> int | None:
@@ -87,7 +91,7 @@ def parse(data: bytes) -> tuple[Constituent, ...]:
     lines = text.splitlines()
     start = next((i for i, line in enumerate(lines) if _header(line)), None)
     if start is None:
-        raise ValueError("Keine Positionsliste: Spalten für Name und Gewichtung fehlen.")
+        raise ValueError(N_("Keine Positionsliste: Spalten für Name und Gewichtung fehlen."))
     delimiter, header = _header(lines[start]) or (",", [])
     weight, name = _column(header, WEIGHT), _column(header, NAME)
     isin, ticker, exchange = _column(header, ISIN), _column(header, TICKER), _column(header, EXCHANGE)
@@ -107,7 +111,7 @@ def parse(data: bytes) -> tuple[Constituent, ...]:
             f"{cell(row, ticker)}:{cell(row, exchange)}".upper() if cell(row, ticker) else cell(row, name).upper())
         found.append((key, cell(row, name), w, row))
     if not found:
-        raise ValueError("Die Positionsliste enthält keine Zeile mit Gewichtung.")
+        raise ValueError(N_("Die Positionsliste enthält keine Zeile mit Gewichtung."))
     # Weights in percent (iShares, most issuers) or already as a share.
     scale = Decimal(100) if sum(w for _, _, w, _ in found) > Decimal("1.5") else Decimal(1)
     return tuple(Constituent(key, label, w / scale, cell(row, country), cell(row, sector), cell(row, currency))
@@ -118,6 +122,7 @@ def parse(data: bytes) -> tuple[Constituent, ...]:
 HOSTS = ("www.ishares.com", "etf.dws.com")
 BROWSER = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 MAX_BYTES = 20 * 1024 * 1024
+MAX_COLUMN = 16384  # Excel's last column, XFD
 REFRESH_DAYS = 7
 NONE_DAYS = 30  # an ISIN no source knows is asked again after this
 DWS = "https://etf.dws.com/etfdata/export/GBR/ENG/excel/product/constituent/{isin}/"
@@ -157,8 +162,8 @@ def xlsx_rows(data: bytes) -> list[list[str]]:
     """The first sheet of an XLSX as rows of text - enough for a holdings export, no styles or formulas."""
     try:
         book = zipfile.ZipFile(io.BytesIO(data))
-        if sum(i.file_size for i in book.infolist()) > 10 * MAX_BYTES:  # a zip bomb, not a holdings list
-            raise SourceError("Die XLSX-Datei ist zu groß.")
+        if sum(i.file_size for i in book.infolist()) > 2 * MAX_BYTES:  # a zip bomb, not a holdings list
+            raise SourceError(N_("Die XLSX-Datei ist zu groß."))
         names = book.namelist()
         shared: list[str] = []
         if "xl/sharedStrings.xml" in names:
@@ -168,17 +173,19 @@ def xlsx_rows(data: bytes) -> list[list[str]]:
                       if si.tag.endswith("}si")]
         sheet = next((n for n in sorted(names) if n.startswith("xl/worksheets/sheet")), None)
         if sheet is None:
-            raise SourceError("Die XLSX-Datei enthält keine Tabelle.")
+            raise SourceError(N_("Die XLSX-Datei enthält keine Tabelle."))
         root = ElementTree.fromstring(book.read(sheet))  # noqa: S314 - see above
     except (zipfile.BadZipFile, ElementTree.ParseError, KeyError) as e:
-        raise SourceError("Keine lesbare XLSX-Datei.") from e
+        raise SourceError(N_("Keine lesbare XLSX-Datei.")) from e
     rows = []
     for row in (e for e in root.iter() if e.tag.endswith("}row")):
         cells: dict[int, str] = {}
         for c in (e for e in row if e.tag.endswith("}c")):
             column = 0
-            for ch in re.match(r"[A-Z]*", c.get("r", "")).group(0):  # type: ignore[union-attr]
+            for ch in re.match(r"[A-Z]*", c.get("r", "")).group(0)[:3]:  # type: ignore[union-attr]
                 column = column * 26 + ord(ch) - 64
+            if column > MAX_COLUMN:  # beyond Excel's last column: no list of ours, and a row that big is a bomb
+                continue
             value = next((v.text or "" for v in c.iter() if v.tag.endswith("}v")), "")
             if c.get("t") == "s":
                 value = shared[int(value)] if value.isdigit() and int(value) < len(shared) else ""
@@ -377,7 +384,7 @@ def read_depot(wf) -> Depot:
         for a in wf.search_activities([acc.id for acc in accounts], date(1970, 1, 1), date(2100, 1, 1)):
             held = positions.get(a.get("assetId") or "")
             if held is not None and a.get("activityType") in ("BUY", "SELL") and a.get("date"):
-                held["trades"].append(costs.Trade(date.fromisoformat(str(a["date"])[:10]), a["activityType"],
+                held["trades"].append(costs.Trade(when(a["date"]).date(), a["activityType"],
                                                _dec(a.get("quantity")) * _dec(a.get("unitPrice")),
                                                _dec(a.get("fee")), _dec(a.get("tax")), a.get("accountId") or ""))
     return depot
@@ -385,6 +392,7 @@ def read_depot(wf) -> Depot:
 
 # ── after a run ──────────────────────────────────────────────────────────────
 PER_RUN = 30
+BUDGET = 300  # seconds a pass may fetch; it runs under the sync lock, after the brokers
 
 
 @dataclass
@@ -407,11 +415,15 @@ def _days(at: str | None) -> float:
     return (datetime.now(UTC) - datetime.fromisoformat(at)).total_seconds() / 86400 if at else 1e9
 
 
-def update(state: State, depot: Depot, sources: Sources, *, force: bool = False) -> Result:
+def update(state: State, depot: Depot, sources: Sources, *, force: bool = False, budget: float = BUDGET) -> Result:
     """Fetch the holdings of the depot's positions that are due; an uploaded file is kept unless the user
     saved an iShares page for the fund. ``force``: everything now (the button on *Durchschau*)."""
     result = Result()
+    deadline = time.monotonic() + budget
     for p in depot.positions[:PER_RUN]:
+        if time.monotonic() > deadline:  # the rest is due again next run
+            log.info("look-through: time budget used up, the remaining funds next run")
+            break
         st = status(state, p["id"])
         if not (p["isin"] or st.get("url")) or (st.get("status") == "upload" and not st.get("url")):
             continue
@@ -533,7 +545,10 @@ def _bp(lines: list[list[str]], attr: int, categories: dict[str, str], unmatched
             unmatched.add(line[attr].strip())
             continue
         out[category] = out.get(category, Decimal(0)) + Decimal(line[2])
-    return sorted((c, int(w * 10000)) for c, w in out.items() if int(w * 10000) >= 1)
+    # Negative cash or derivative lines can push the rest above 100 %; Wealthfolio refuses more than 10000 bp.
+    total = sum(out.values(), Decimal(0))
+    scale = 1 / total if total > 1 else Decimal(1)
+    return sorted((c, int(w * scale * 10000)) for c, w in out.items() if int(w * scale * 10000) >= 1)
 
 
 def write_taxonomies(state: State, wf, depot: Depot) -> Written:
@@ -548,32 +563,44 @@ def write_taxonomies(state: State, wf, depot: Depot) -> Written:
         fund = funds.get(p["id"])
         if not fund:
             continue
-        existing = wf.asset_assignments(p["id"])
-        for tax, attr, _ in TAXONOMIES:
-            new = _bp(fund["constituents"], 3 if attr == "country" else 4, categories[tax], unmatched)
-            current = [a for a in existing if a.get("taxonomyId") == tax]
-            if not new:
-                continue
-            if any(str(a.get("source", "")).upper() not in ("AUTO", SOURCE) for a in current):
-                result.manual += 1
-                continue
-            if sorted((a.get("categoryId"), a.get("weight")) for a in current) == new and all(
-                    a.get("source") == SOURCE for a in current):
-                continue
-            wf.replace_assignments(p["id"], tax, [{"assetId": p["id"], "taxonomyId": tax, "categoryId": c,
-                                                   "weight": w, "source": SOURCE} for c, w in new])
-            result.written += 1
+        try:
+            _write_asset(wf, p["id"], fund["constituents"], categories, unmatched, result)
+        except WealthfolioError:  # one fund Wealthfolio refuses never keeps the others out
+            log.exception("look-through: countries and sectors of %s not written", p["id"])
     result.unmatched = sorted(unmatched)[:20]
     state.set_meta(meta_keys.TAXONOMIES_LAST(), json.dumps({"written": result.written, "manual": result.manual,
                                                             "unmatched": result.unmatched, "at": now()}))
     return result
 
 
-def remove_taxonomies(wf, depot: Depot) -> int:
-    """Take our assignments out of Wealthfolio again (Yahoo fills its own back in); returns how many."""
+def _write_asset(wf, asset_id: str, constituents: list[list[str]], categories: dict[str, dict[str, str]],
+                 unmatched: set[str], result: Written) -> None:
+    existing = wf.asset_assignments(asset_id)
+    for tax, attr, _ in TAXONOMIES:
+        new = _bp(constituents, 3 if attr == "country" else 4, categories[tax], unmatched)
+        current = [a for a in existing if a.get("taxonomyId") == tax]
+        if any(str(a.get("source", "")).upper() not in ("AUTO", SOURCE) for a in current):
+            result.manual += 1
+            continue
+        if not new:  # the list no longer names countries or sectors: ours go, Yahoo's stay
+            for a in current:
+                if a.get("source") == SOURCE:
+                    wf.delete_assignment(a["id"])
+            continue
+        if sorted((a.get("categoryId"), a.get("weight")) for a in current) == new and all(
+                a.get("source") == SOURCE for a in current):
+            continue
+        wf.replace_assignments(asset_id, tax, [{"assetId": asset_id, "taxonomyId": tax, "categoryId": c,
+                                                "weight": w, "source": SOURCE} for c, w in new])
+        result.written += 1
+
+
+def remove_taxonomies(wf) -> int:
+    """Take our assignments out of Wealthfolio again (Yahoo fills its own back in), also of assets sold
+    since; returns how many."""
     removed = 0
-    for p in depot.positions:
-        for a in wf.asset_assignments(p["id"]):
+    for asset in wf.list_assets():
+        for a in wf.asset_assignments(asset["id"]):
             if a.get("source") == SOURCE:
                 wf.delete_assignment(a["id"])
                 removed += 1

@@ -283,7 +283,8 @@ def test_countries_and_sectors_go_into_wealthfolio_without_touching_the_users_ow
     state.set_fund("a-world", "World", [FUND_LINES[0], [*FUND_LINES[1][:2], "0.4", *FUND_LINES[1][3:]]])
     r = lookthrough.write_taxonomies(state, wf, depot)
     assert (r.written, r.manual) == (1, 1)
-    assert lookthrough.remove_taxonomies(wf, depot) == 2
+    fake.assets = [{"id": "a-world"}, {"id": "a-stock"}]
+    assert lookthrough.remove_taxonomies(wf) == 2
     assert [a["source"] for a in fake.assignments] == ["MANUAL"]
 
 
@@ -295,6 +296,7 @@ def test_a_run_writes_the_taxonomies_when_turned_on(tmp_path):
     syncer, _ = setup(tmp_path, wf)
     syncer.run()
     State(tmp_path).set_fund("IE00B4L5Y983", "World", FUND_LINES)
+    wf.assets = [{"id": "IE00B4L5Y983"}]
     syncer.run()
     assert wf.assignments == []  # off by default
     config_mod.update(tmp_path, lambda c: setattr(c, "lookthrough_write", True))
@@ -326,3 +328,58 @@ def test_the_depot_reads_each_positions_trades_from_wealthfolio(tmp_path):
     [p] = depot.positions
     assert list(p["parts"]) == ["acc-depot"]
     assert p["trades"] == [costs.Trade(date(2026, 1, 2), "BUY", D(5), D(1), D(0), "acc-depot")]
+
+
+def test_weights_above_100_percent_are_scaled_down_and_a_refused_fund_stops_no_other(tmp_path):
+    state = State(tmp_path)
+    # A negative cash line leaves the stocks at 110 %: Wealthfolio refuses more than 10000 basis points.
+    state.set_fund("a-1", "One", [["US0000000002", "A", "0.6", "USA", "Industrials", "USD"],
+                                  ["DE0000000001", "B", "0.5", "Germany", "Industrials", "EUR"],
+                                  ["", "Cash", "-0.1", "", "", "EUR"]])
+    state.set_fund("a-2", "Two", FUND_LINES)
+    depot = Depot(positions=[{"id": "a-1", "isin": "", "name": "One", "currency": "EUR", "value": D(2)},
+                             {"id": "a-2", "isin": "", "name": "Two", "currency": "EUR", "value": D(1)}])
+    fake, wf = _wf()
+    assert lookthrough.write_taxonomies(state, wf, depot).written == 4
+    one = {(a["taxonomyId"], a["categoryId"]): a["weight"] for a in fake.assignments if a["assetId"] == "a-1"}
+    assert one == {("regions", "country_US"): 5454, ("regions", "country_DE"): 4545, ("industries_gics", "20"): 10000}
+    fake.assignments = []
+    real = wf.replace_assignments
+
+    def refuse_one(asset_id, *args):
+        if asset_id == "a-1":
+            raise lookthrough.WealthfolioError("refused")
+        real(asset_id, *args)
+
+    wf.replace_assignments = refuse_one  # type: ignore[method-assign]
+    assert lookthrough.write_taxonomies(state, wf, depot).written == 2
+    assert {a["assetId"] for a in fake.assignments} == {"a-2"}
+
+
+def test_our_assignments_go_when_the_list_no_longer_names_them_and_remove_finds_sold_funds(tmp_path):
+    state = State(tmp_path)
+    state.set_fund("a-world", "World", FUND_LINES)
+    depot = Depot(positions=[{"id": "a-world", "isin": "", "name": "World", "currency": "EUR", "value": D(1)}])
+    fake, wf = _wf()
+    lookthrough.write_taxonomies(state, wf, depot)
+    state.set_fund("a-world", "World", [[k, n, w, "", s, c] for k, n, w, _, s, c in FUND_LINES])  # no countries
+    lookthrough.write_taxonomies(state, wf, depot)
+    assert {a["taxonomyId"] for a in fake.assignments} == {"industries_gics"}
+    fake.assets = [{"id": "a-world"}]  # sold since: no position any more, our assignments still go
+    assert lookthrough.remove_taxonomies(wf) == 2 and fake.assignments == []
+
+
+def test_an_xlsx_cell_beyond_the_last_column_is_ignored():
+    data = io.BytesIO()
+    with zipfile.ZipFile(data, "w") as z:
+        z.writestr("xl/worksheets/sheet1.xml", f'<worksheet {NS}><sheetData><row r="1"><c r="A1" t="inlineStr">'
+                   '<is><t>Name</t></is></c><c r="ZZZZZZZZZZZZ1"><v>1</v></c></row></sheetData></worksheet>')
+    assert lookthrough.xlsx_rows(data.getvalue()) == [["Name"]]
+
+
+def test_a_pass_stops_when_its_time_is_up(tmp_path):
+    depot = Depot(positions=[{"id": "a", "isin": "IE00B4L5Y983", "name": "World", "currency": "EUR",
+                              "value": D(1)}])
+    asked: list[str] = []
+    result = lookthrough.update(State(tmp_path), depot, sources(lambda r: asked.append(str(r.url))), budget=-1)
+    assert (result.fetched, result.none, asked) == (0, 0, [])

@@ -6,7 +6,9 @@ How much capital a life on the depot needs, in today's money (real returns):
   sale is taxed, less the partial exemption of equity funds (``EXEMPTION``) and the saver's allowance;
   the rate is the flat tax with solidarity surcharge and church tax (with its deduction, ``tax_rate``).
 - **Health insurance** of a voluntary member of the statutory one (GKV): its rate on the taxable capital
-  income, at least on ``GKV_MIN`` and at most on ``GKV_MAX`` a year; or a private premium the user enters.
+  income, at most on ``GKV_MAX`` a year and at least on ``GKV_MIN`` in bridge years without a pension or a
+  part-time job (they are insured themselves); nothing from the pension on for a member of the pensioners'
+  insurance (``kvdr``); or a private premium the user enters.
 - **Pension** from its age: until then the depot pays the whole withdrawal (the bridge), after it only what
   the (net) pension leaves open. A part-time income until the pension is *Barista FIRE*.
 - **Capital** = present value of the bridge years + the rest as a perpetual withdrawal at the safe rate.
@@ -60,6 +62,7 @@ class Inputs:
     childless: bool = False
     private: float = 0.0
     costs: float = 0.0  # of the depot a year, off the real return
+    kvdr: bool = False  # statutory pensioners' insurance (KVdR) from the pension on: nothing on capital income
 
     @property
     def net_return(self) -> float:
@@ -74,8 +77,9 @@ class Withdrawal:
     need: float  # what the depot has to cover, net
 
 
-def withdrawal(i: Inputs, need: float) -> Withdrawal:
-    """The gross withdrawal whose net covers ``need`` plus the health insurance it causes itself."""
+def withdrawal(i: Inputs, need: float, *, floor: bool = True, insured: bool = True) -> Withdrawal:
+    """The gross withdrawal whose net covers ``need`` plus the health insurance it causes itself. ``floor``:
+    ``GKV_MIN`` applies (no other income covers it); ``insured``: capital income pays GKV at all."""
     rate = tax_rate(i.church)
     taxable_share = i.gain_share * (1 - EXEMPTION if i.equity_fund else 1)
     allowance = ALLOWANCE[i.joint]
@@ -83,7 +87,8 @@ def withdrawal(i: Inputs, need: float) -> Withdrawal:
     for _ in range(50):  # the insurance depends on the withdrawal: a fixed point, reached in a few steps
         income = taxable_share * gross
         tax = max(0.0, income - allowance) * rate
-        health = (GKV_RATE + CARE_RATE[i.childless]) * min(max(income, GKV_MIN), GKV_MAX) if i.gkv else i.private
+        base = min(max(income, GKV_MIN if floor else 0.0), GKV_MAX)
+        health = i.private if not i.gkv else (GKV_RATE + CARE_RATE[i.childless]) * base if insured else 0.0
         new = need + tax + health
         if abs(new - gross) < 0.005:
             break
@@ -103,8 +108,11 @@ def _annuity(amount: float, years: int, r: float) -> float:
 def capital_needed(i: Inputs, expenses: float, earned: float = 0.0) -> float:
     """Capital at the retirement age: the bridge to the pension, then the rest at the safe rate for good."""
     bridge = max(0, i.pension_age - i.retire_age)
-    before = withdrawal(i, max(0.0, expenses - earned)).gross
-    after = withdrawal(i, max(0.0, expenses - i.pension)).gross  # the part-time income ends with the pension
+    # A part-time job or the pension is insured itself: the minimum base applies only to bridge years
+    # without one. shortcut: after the pension the full rate on capital income up to GKV_MAX (voluntary
+    # member), not reduced by what the pension already pays - upgrade if pensions grow near GKV_MAX.
+    before = withdrawal(i, max(0.0, expenses - earned), floor=not earned).gross
+    after = withdrawal(i, max(0.0, expenses - i.pension), floor=not i.pension, insured=not i.kvdr).gross
     return _annuity(before, bridge, i.net_return) + after / i.safe_rate / (1 + i.net_return) ** bridge
 
 

@@ -24,7 +24,7 @@ from datetime import date
 from decimal import Decimal
 
 ZERO = Decimal(0)
-MIN_YEARS = Decimal("0.0833")  # a month: a rate over a few days held says nothing
+MIN_YEARS = Decimal(1)  # one-off fees spread over at least a year: a new buy is no cost alarm
 
 
 @dataclass(frozen=True)

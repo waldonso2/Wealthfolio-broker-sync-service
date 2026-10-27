@@ -293,6 +293,8 @@ class Syncer:
                         lookthrough.write_taxonomies(self.state, wf, depot)
                     except WealthfolioError:
                         log.exception("look-through: countries and sectors not written to Wealthfolio")
+            if not depot.positions and not depot.cash:  # Wealthfolio answered nothing: keep what was notified
+                return result
             found = xray.findings(lookthrough.holdings(self.state, depot), lookthrough.limits(cfg.xray_limits),
                                   depot.base, depot.cash, lookthrough.cost(self.state, depot, cfg).rate)
             new = lookthrough.new_risks(self.state, found)
@@ -313,7 +315,7 @@ class Syncer:
             cfg = config_mod.load(self.data_dir)
             with connect(self._wealthfolio, cfg.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
                          cfg.wealthfolio_fingerprint) as wf:
-                return lookthrough.remove_taxonomies(wf, lookthrough.read_depot(wf))
+                return lookthrough.remove_taxonomies(wf)
 
     def _update_spending(self, cfg: config_mod.Config) -> None:
         """The banks' cash accounts in Wealthfolio's spending tracker (#134); never touches a broker's result."""
