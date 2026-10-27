@@ -56,7 +56,7 @@ def _read(ctx: AppContext, c) -> None:
     error = None
     try:
         with ctx.wf_client(c) as wf:
-            depot = lookthrough.read_depot(wf)
+            depot = lookthrough.read_depot(wf, ctx.syncer.learned_isins(c))
     except WealthfolioError as e:
         depot, error = lookthrough.Depot(), str(e)
     ctx.depot, ctx.depot_error, ctx.depot_at = depot, error, time.time()
@@ -74,7 +74,8 @@ def _position(ctx: AppContext, asset_id: str) -> dict | None:
     return next((p for p in ctx.depot.positions if p["id"] == asset_id), None)
 
 
-TOP = 25  # rows shown at first, in the overall matrix and under each fund; the rest folded
+TOP = 25  # rows shown at first under each fund; the rest folded
+TOPS = (25, 50, 100)  # the overall matrix: the user's choice
 COLUMNS = 4  # the largest funds get a column of the matrix of their own, the others share "weitere ETFs"
 
 
@@ -92,7 +93,7 @@ def _matrix(rows: list[xray.Exposure], funds: list[xray.Holding], total: Decimal
 
 
 @router.get("/lookthrough", response_class=HTMLResponse)
-def lookthrough_page(request: Request, ctx: Ctx):
+def lookthrough_page(request: Request, ctx: Ctx, top: int = TOPS[0]):
     if time.time() - ctx.depot_at > READ_SECONDS:
         from .overview import launch
 
@@ -109,10 +110,14 @@ def lookthrough_page(request: Request, ctx: Ctx):
     accepted = lookthrough.accepted(state)
     cost = lookthrough.cost(state, depot, c)
     found = xray.findings(holdings, limits, depot.base, depot.cash, cost.rate)
+    status = {p["id"]: lookthrough.status(state, p["id"]) for p in depot.positions}
+    # shortcut: only iShares for now (#144) - every other position is hidden, it still counts in the matrix
+    ishares = [p for p in depot.positions if p["id"] in funds or lookthrough.is_ishares(p, status[p["id"]])]
     return ctx.render(
         request, "lookthrough.html", wf_error=ctx.depot_error, positions=depot.positions, funds=funds,
-        status={p["id"]: lookthrough.status(state, p["id"]) for p in depot.positions},
-        total=total, top=TOP, matrix=_matrix(stocks, with_list, total), columns=with_list[:COLUMNS],
+        status=status, ishares=ishares, hidden=len(depot.positions) - len(ishares), last=lookthrough.last_pass(state),
+        total=total, top=TOP, tops=TOPS, matrix_top=top if top in TOPS else TOPS[0],
+        matrix=_matrix(stocks, with_list, total), columns=with_list[:COLUMNS],
         more_funds=len(with_list) > COLUMNS, count=len(stocks),
         largest={k: sorted(f["constituents"], key=lambda c: -Decimal(c[2])) for k, f in funds.items()},
         unassigned=next((r for r in rows if r.key == xray.UNASSIGNED), None),

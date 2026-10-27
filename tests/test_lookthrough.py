@@ -415,3 +415,28 @@ def test_safe_mode_still_refreshes_the_lists_but_contacts_no_broker(tmp_path):
     created = len(wf.created)
     assert syncer.run() == []  # no broker in safe mode
     assert len(wf.created) == created and "IE00B4L5Y983" in State(tmp_path).funds()
+
+
+def test_a_fund_finder_answer_without_products_is_an_error_with_its_reason():
+    for content, reason in [(b"<html>splash</html>", "kein JSON"), (json.dumps({"a": {"x": 1}}).encode(),
+                                                                    "ohne Produkte")]:
+        s = Sources(transport=httpx.MockTransport(lambda r, c=content: httpx.Response(200, content=c)))
+        with pytest.raises(SourceError, match=reason):
+            fetch(s, "IE0000000017")
+    raw = json.dumps({"1": {"isin": {"d": "IE0000000017"}, "productPageUrl": {"r": "/uk/a/en/products/123456/x-etf"}}})
+    s = Sources(transport=httpx.MockTransport(lambda r: httpx.Response(200, content=raw.encode())))
+    assert s.ishares_product("IE0000000017") == ("123456", "x-etf")  # values as {d, r} like its numbers
+
+
+def test_an_ishares_fund_without_a_list_gets_its_reason_and_the_pass_is_recorded(tmp_path):
+    state = State(tmp_path)
+    depot = Depot(positions=[
+        {"id": "a-unknown", "isin": "IE00B5BMR087", "name": "iShares Core S&P 500", "currency": "EUR", "value": D(9)},
+        {"id": "a-noisin", "isin": "", "name": "iShares Example", "currency": "EUR", "value": D(8)},
+        {"id": "a-other", "isin": "IE00BK5BQT80", "name": "Vanguard All-World", "currency": "EUR", "value": D(7)}])
+    r = lookthrough.update(state, depot, sources(lambda req: httpx.Response(404)))
+    assert (r.fetched, r.none, len(r.errors)) == (0, 1, 2)
+    assert "kennt die ISIN IE00B5BMR087 nicht" in lookthrough.status(state, "a-unknown")["error"]
+    assert "keine ISIN" in lookthrough.status(state, "a-noisin")["error"]
+    assert lookthrough.status(state, "a-other")["status"] == "none"
+    assert lookthrough.last_pass(state) | {"at": ""} == {"fetched": 0, "none": 1, "failed": 2, "finder": "", "at": ""}

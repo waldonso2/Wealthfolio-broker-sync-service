@@ -231,6 +231,11 @@ def _ter(row: dict) -> Decimal | None:
     return None
 
 
+def _raw(value):
+    """The fund finder's value: plain, or {"d": shown, "r": raw} like its numbers."""
+    return (value.get("r") or value.get("d")) if isinstance(value, dict) else value
+
+
 def _only_sources(request: httpx.Request) -> None:
     if request.url.scheme != "https" or request.url.host not in HOSTS:
         raise httpx.UnsupportedProtocol(f"Anfrage an {request.url.host} abgelehnt")
@@ -244,26 +249,47 @@ class Sources:
                                   event_hooks={"request": [_only_sources]})
         self._ishares: dict[str, tuple[str, str]] | None = None
         self._ter: dict[str, Decimal] = {}
-        self.finder_down = False  # the fund finder failed this pass: an unknown ISIN may still be iShares'
+        self.finder_error = ""  # why the fund finder gave no products this pass: an unknown ISIN may still be iShares'
+
+    @property
+    def finder_down(self) -> bool:
+        return bool(self.finder_error)
 
     def ishares_product(self, isin: str) -> tuple[str, str] | None:
         """Product id and page name of the iShares fund with ``isin``, from the fund finder (read once)."""
         if self._ishares is None:
             self._ishares = {}
+            rows: object = None
             try:
-                rows = json.loads(self._get(ISHARES_SCREENER, "iShares-Fondsfinder") or b"{}")
-            except (SourceError, ValueError):
-                rows = None
-            self.finder_down = not isinstance(rows, dict) or not rows
-            for row in (rows or {}).values() if isinstance(rows, dict) else ():
-                m = PRODUCT_PATH.search(str(row.get("productPageUrl") or "")) if isinstance(row, dict) else None
-                if m and isinstance(row.get("isin"), str):
+                data = self._get(ISHARES_SCREENER, "iShares-Fondsfinder")
+                rows = json.loads(data) if data is not None else None
+                if data is None:
+                    self.finder_error = "iShares-Fondsfinder: HTTP 404"
+            except SourceError as e:
+                self.finder_error = str(e)
+            except ValueError:
+                self.finder_error = "iShares-Fondsfinder: Antwort ist kein JSON (vermutlich eine Zwischenseite)."
+            for row in rows.values() if isinstance(rows, dict) else ():
+                if not isinstance(row, dict):
+                    continue
+                m = PRODUCT_PATH.search(str(_raw(row.get("productPageUrl")) or ""))
+                code = _raw(row.get("isin"))
+                if m and isinstance(code, str):
                     if not self._ishares:  # names only, no values: which field holds the TER (#142)
                         log.info("iShares fund finder: fields of a product: %s", ", ".join(sorted(map(str, row))))
-                    key = row["isin"].strip().upper()
+                    key = code.strip().upper()
                     self._ishares.setdefault(key, (m.group(1), m.group(2)))
                     if (ter := _ter(row)) is not None:
                         self._ter.setdefault(key, ter)
+            if not self._ishares and not self.finder_error:
+                # names and types only, never values: enough to see how iShares changed the layout
+                first = next(iter(rows.values()), None) if isinstance(rows, dict) else None
+                log.warning("iShares fund finder: no products; answer %s with %d entries, first %s: %s",
+                            type(rows).__name__, len(rows) if isinstance(rows, dict | list) else 0,
+                            type(first).__name__, ", ".join(sorted(map(str, first)))[:500]
+                            if isinstance(first, dict) else "-")
+                self.finder_error = ("iShares-Fondsfinder: Antwort ohne Produkte mit ISIN und Produktseite "
+                                     f"({len(rows) if isinstance(rows, dict | list) else 0} Einträge).")
         return self._ishares.get(isin) or (ISHARES.get(isin) if self.finder_down else None)
 
     def ter(self, isin: str) -> Decimal | None:
@@ -317,7 +343,7 @@ def fetch(sources: Sources, isin: str, page: str = "") -> tuple[tuple[Constituen
         return sources.ishares(*product), "iShares"
     # shortcut: only iShares for now (#144); Sources.xtrackers works - call it here again to bring Xtrackers back
     if sources.finder_down:  # maybe iShares' after all: try again tomorrow, not in NONE_DAYS
-        raise SourceError("Der iShares-Fondsfinder ist gerade nicht erreichbar.")
+        raise SourceError(sources.finder_error)
     raise NoSource(isin)
 
 
@@ -350,10 +376,11 @@ def _dec(value) -> Decimal:
     return number if number.is_finite() else Decimal(0)
 
 
-def read_depot(wf) -> Depot:
-    """Every open position of every Wealthfolio account, added up per asset, values in the base currency."""
+def read_depot(wf, learned: dict[str, str] | None = None) -> Depot:
+    """Every open position of every Wealthfolio account, added up per asset, values in the base currency.
+    ``learned``: asset id -> ISIN the sync learned, for assets Wealthfolio keeps without one."""
     depot = Depot()
-    isins = {a.get("id"): isin_of(a) or "" for a in wf.list_assets()}
+    isins = {a.get("id"): isin_of(a) or (learned or {}).get(a.get("id") or "", "") for a in wf.list_assets()}
     positions: dict[str, dict] = {}
     accounts = wf.list_accounts()
     for account in accounts:
@@ -388,7 +415,6 @@ def read_depot(wf) -> Depot:
 
 
 # ── after a run ──────────────────────────────────────────────────────────────
-PER_RUN = 30
 BUDGET = 300  # seconds a pass may fetch; it runs under the sync lock, after the brokers
 
 
@@ -412,26 +438,42 @@ def _days(at: str | None) -> float:
     return (datetime.now(UTC) - datetime.fromisoformat(at)).total_seconds() / 86400 if at else 1e9
 
 
+def is_ishares(position: dict, st: dict) -> bool:
+    """An iShares fund, as far as we can tell: by its name in Wealthfolio, or a list or page from iShares."""
+    return "ishares" in position["name"].lower() or st.get("source") == "iShares" or bool(st.get("url"))
+
+
 def update(state: State, depot: Depot, sources: Sources, *, force: bool = False, budget: float = BUDGET,
            only: str = "") -> Result:
     """Fetch the holdings of the depot's positions that are due; an uploaded file is kept unless the user
-    saved an iShares page for the fund. ``force``: everything now (the button on *Durchschau*); ``only``: just
-    this asset (its own button)."""
+    saved an iShares page for the fund. ``force``: everything now (the button on *X-Ray*); ``only``: just
+    this asset (its own button). Why an iShares fund got no list is stored at the fund, for the page."""
     result = Result()
     deadline = time.monotonic() + budget
-    for p in [p for p in depot.positions if p["id"] == only] if only else depot.positions[:PER_RUN]:
+    for p in [p for p in depot.positions if p["id"] == only] if only else depot.positions:
         if time.monotonic() > deadline:  # the rest is due again next run
             log.info("look-through: time budget used up, the remaining funds next run")
             break
         st = status(state, p["id"])
-        if not (p["isin"] or st.get("url")) or (st.get("status") == "upload" and not st.get("url")):
+        if st.get("status") == "upload" and not st.get("url"):
             continue
         due = {"ok": REFRESH_DAYS, "none": NONE_DAYS, "error": REFRESH_DAYS}.get(st.get("status", ""), 0)
         if not force and _days(st.get("at")) < due:
             continue
         try:
+            if not (p["isin"] or st.get("url")):
+                if not is_ishares(p, st):
+                    continue
+                raise SourceError("Wealthfolio kennt keine ISIN zu diesem ETF - trag unter „Einstellungen dieses "
+                                  "ETFs“ seine Produktseite bei iShares ein.")
             lines, source = fetch(sources, p["isin"], st.get("url", ""))
         except NoSource:
+            if is_ishares(p, st):
+                e = SourceError(f"Der iShares-Fondsfinder kennt die ISIN {p['isin']} nicht - trag unter "
+                                "„Einstellungen dieses ETFs“ seine Produktseite bei iShares ein.")
+                set_status(state, p["id"], status="error", error=str(e))
+                result.errors.append(f"{p['name']}: {e}")
+                continue
             set_status(state, p["id"], status="none", source="", error="")
             result.none += 1
         except SourceError as e:
@@ -443,7 +485,18 @@ def update(state: State, depot: Depot, sources: Sources, *, force: bool = False,
             set_status(state, p["id"], status="ok", source=source, error="", lines=len(lines),
                        **({"ter": str(ter), "ter_source": source, "ter_at": now()} if ter is not None else {}))
             result.fetched += 1
+    record(state, fetched=result.fetched, none=result.none, failed=len(result.errors),
+           finder=sources.finder_error)
     return result
+
+
+def record(state: State, **values) -> None:
+    """The last pass, for the page's header: {at, fetched, none, failed, finder, error}."""
+    state.set_meta(meta_keys.FUNDS_LAST(), json.dumps({**values, "at": now()}))
+
+
+def last_pass(state: State) -> dict:
+    return json.loads(state.meta(meta_keys.FUNDS_LAST()) or "{}")
 
 
 def ter(st: dict) -> tuple[Decimal | None, str]:

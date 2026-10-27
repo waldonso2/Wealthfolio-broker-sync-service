@@ -1023,7 +1023,6 @@ EN: dict[str, str] = {
     "Keine Positionen in Wealthfolio.": "No positions in Wealthfolio.",
     "Aktien über alle Positionen": "Stocks across all positions",
     "{n} Aktien, effektive Titelzahl {effective}.": "{n} stocks, effective number of stocks {effective}.",
-    "Nicht zugeordnet: {share}.": "Unassigned: {share}.",
     "Anzahl": "Number",
     "alle": "all",
     "Top {n}": "Top {n}",
@@ -1136,20 +1135,28 @@ EN: dict[str, str] = {
     "Positionslisten holt der Dienst jeden Morgen selbst bei iShares; andere ETFs zählen vorerst als eine Position.":
         "Which stocks your iShares ETFs hold and how they add up with your other positions. The service fetches the "
         "holdings lists from iShares itself every morning; other ETFs count as one position for now.",
-    "{funds} ETFs durchleuchtet, {other} Positionen ohne Positionsliste.":
-        "{funds} ETFs looked through, {other} positions without a holdings list.",
-    "Alle Positionslisten jetzt abrufen": "Fetch all holdings lists now",
     "Gesamt: Aktien über alle Positionen": "Overall: stocks across all positions",
     "Alle {n} Aktien": "All {n} stocks",
     "Weitere Aktien über alle Positionen": "More stocks across all positions",
     "Alle {n} Positionen": "All {n} holdings",
     "Weitere Positionen von {name}": "More holdings of {name}",
     "Einstellungen dieses ETFs": "Settings of this ETF",
-    "Ohne Positionsliste": "Without a holdings list",
-    "Einzelaktien und ETFs, die nicht von iShares sind, zählen als eine Position.":
-        "Single stocks and ETFs not from iShares count as one position.",
-    "Quelle noch nicht unterstützt (nur iShares)": "Source not supported yet (iShares only)",
-    "noch nicht abgerufen": "not fetched yet",
+    "{funds} iShares-ETFs durchleuchtet · {open} ohne Positionsliste · {hidden} weitere Positionen ausgeblendet "
+    "(zählen als je eine Position)":
+        "{funds} iShares ETFs looked through · {open} without a holdings list · {hidden} other positions hidden "
+        "(each counts as one position)",
+    "Letzter Abruf {when}: {fetched} Positionslisten geholt, {failed} fehlgeschlagen.":
+        "Last fetch {when}: {fetched} holdings lists fetched, {failed} failed.",
+    "Der Abruf ist abgebrochen: {error}": "The fetch stopped: {error}",
+    "Zeigen:": "Show:",
+    "Nicht zugeordnet (Bargeld, Derivate, Rest der Gewichte): {share}.":
+        "Unassigned (cash, derivatives, rest of the weights): {share}.",
+    "ohne ISIN": "no ISIN",
+    "noch keine Positionsliste": "no holdings list yet",
+    "Abruf fehlgeschlagen {when}: {error}": "Fetch failed {when}: {error}",
+    "Kein iShares-ETF in Wealthfolio gefunden.": "No iShares ETF found in Wealthfolio.",
+    "Die Positionen werden beim Öffnen der Seite aus Wealthfolio gelesen, höchstens alle 10 Minuten.":
+        "The positions are read from Wealthfolio when the page opens, at most every 10 minutes.",
     "Klumpenrisiken ({n})": "Cluster risks ({n})",
     "Einstellungen von X-Ray": "X-Ray settings",
     "Positionsliste von {name} jetzt abrufen": "Fetch the holdings list of {name} now",

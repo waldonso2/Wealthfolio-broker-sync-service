@@ -19,46 +19,45 @@
 <div class="card">
   <h1>{{ _("X-Ray") }}</h1>
   <p>{{ _("Welche Aktien in deinen iShares-ETFs stecken und wie sie sich mit deinen anderen Positionen addieren. Die Positionslisten holt der Dienst jeden Morgen selbst bei iShares; andere ETFs zählen vorerst als eine Position.") }}</p>
-  {% if positions %}<p>{{ _("{funds} ETFs durchleuchtet, {other} Positionen ohne Positionsliste.", funds=fund_list | length, other=positions | length - fund_list | length) }}</p>{% endif %}
-  <form method="post" action="/lookthrough/refresh" class="actions">
+  {% if positions %}<p>{{ _("{funds} iShares-ETFs durchleuchtet · {open} ohne Positionsliste · {hidden} weitere Positionen ausgeblendet (zählen als je eine Position)", funds=fund_list | length, open=ishares | length - fund_list | length, hidden=hidden) }}</p>{% endif %}
+  {% if last.at %}<p class="muted">{{ _("Letzter Abruf {when}: {fetched} Positionslisten geholt, {failed} fehlgeschlagen.", when=last.at | local, fetched=last.fetched or 0, failed=last.failed or 0) }}</p>{% endif %}
+  {% if last.error %}<p class="error" role="alert">{{ _("Der Abruf ist abgebrochen: {error}", error=last.error | redact) }}</p>{% endif %}
+  {% if last.finder %}<p class="error" role="alert">{{ last.finder | redact }}</p>{% endif %}
+  <form method="post" action="/lookthrough/fetch" class="actions">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <p class="muted grow" aria-live="polite">{% if reading %}{{ _("Die Positionen werden gerade aus Wealthfolio gelesen …") }}{% elif read_at %}{{ _("Positionen gelesen {when}.", when=read_at | local) }}{% endif %}</p>
-    <button class="secondary" {% if reading %}disabled{% endif %}>{{ _("Neu lesen") }}</button>
+    <button {% if reading %}disabled{% endif %}>{{ _("Jetzt abrufen") }}</button>
   </form>
-  <form method="post" action="/lookthrough/fetch" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><button {% if reading %}disabled{% endif %}>{{ _("Alle Positionslisten jetzt abrufen") }}</button></form>
   {% if wf_error %}<p class="error" role="alert">{{ wf_error | redact }}</p>{% endif %}
-  <p><a href="/lookthrough/fire">{{ _("FIRE-Rechner: wie viel Vermögen ein Leben vom Depot braucht") }}</a></p>
-  <details><summary>{{ _("Was wird berechnet?") }}</summary>
-    <p>{{ _("Anteil am Depot: Wert der Position mal Gewicht der Aktie im Fonds, über alle Positionen addiert. Was die Gewichte eines Fonds offen lassen, steht als „nicht zugeordnet“ – nichts wird hochgerechnet. Überschneidung zweier ETFs: Summe des jeweils kleineren Gewichts jeder Aktie, die beide halten. Eigener Beitrag: der Teil eines ETFs, den keine andere Position mitbringt. Effektive Titelzahl: so vielen gleich gewichteten Aktien entspricht das Depot.") }}</p>
-    <p>{{ _("Klumpenrisiken: eine Aktie, ein Land, ein Sektor oder Fremdwährung über ihrer Grenze, zwei ETFs, die sich stark überschneiden, zu wenige effektive Titel, Bargeld über 100.000 EUR auf einem Konto (gesetzliche Einlagensicherung je Bank). Land, Sektor und Währung stehen so, wie der Anbieter sie nennt; ein währungsgesicherter ETF zählt noch als Fremdwährung. Bei synthetischen ETFs (Swap) listet der Anbieter oft den Sicherheitenkorb statt des Index.") }}</p>
-    <p class="muted">{{ _("Vereinfachte Modellrechnung, keine Anlageberatung.") }}</p>
-  </details>
 </div>
 
 {% if matrix %}
 <div class="card">
   <h2>{{ _("Gesamt: Aktien über alle Positionen") }}</h2>
-  <p>{{ _("{n} Aktien, effektive Titelzahl {effective}.", n=count, effective=effective | round | int) }}{% if unassigned %} {{ _("Nicht zugeordnet: {share}.", share=pct(unassigned.share)) }}{% endif %}</p>
+  <p>{{ _("Zeigen:") }} {% for n in tops %}{% if n == matrix_top %}<strong aria-current="page">{{ _("Top {n}", n=n) }}</strong>{% else %}<a href="/lookthrough?top={{ n }}">{{ _("Top {n}", n=n) }}</a>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+  <p>{{ _("{n} Aktien, effektive Titelzahl {effective}.", n=count, effective=effective | round | int) }}</p>
   <div class="table"><table>
     <caption class="sr-only">{{ _("Aktien über alle Positionen") }}</caption>
     <thead><tr><th scope="col">#</th><th scope="col">{{ _("Aktie") }}</th>{% for h in columns %}<th scope="col">{{ h.name }}</th>{% endfor %}{% if more_funds %}<th scope="col">{{ _("weitere ETFs") }}</th>{% endif %}<th scope="col">{{ _("direkt") }}</th><th scope="col">{{ _("Summe (EUR)") }}</th><th scope="col">{{ _("Anteil am Depot") }}</th></tr></thead>
-    <tbody>{{ matrix_rows(matrix[:top], 0) }}</tbody></table></div>
-  {% if matrix | length > top %}
+    <tbody>{{ matrix_rows(matrix[:matrix_top], 0) }}</tbody></table></div>
+  {% if matrix | length > matrix_top %}
   <details><summary>{{ _("Alle {n} Aktien", n=matrix | length) }}</summary>
     <div class="table"><table>
       <caption class="sr-only">{{ _("Weitere Aktien über alle Positionen") }}</caption>
     <thead><tr><th scope="col">#</th><th scope="col">{{ _("Aktie") }}</th>{% for h in columns %}<th scope="col">{{ h.name }}</th>{% endfor %}{% if more_funds %}<th scope="col">{{ _("weitere ETFs") }}</th>{% endif %}<th scope="col">{{ _("direkt") }}</th><th scope="col">{{ _("Summe (EUR)") }}</th><th scope="col">{{ _("Anteil am Depot") }}</th></tr></thead>
-      <tbody>{{ matrix_rows(matrix[top:], top) }}</tbody></table></div>
+      <tbody>{{ matrix_rows(matrix[matrix_top:], matrix_top) }}</tbody></table></div>
   </details>{% endif %}
+  {% if unassigned %}<p class="muted">{{ _("Nicht zugeordnet (Bargeld, Derivate, Rest der Gewichte): {share}.", share=pct(unassigned.share)) }}</p>{% endif %}
 </div>
 {% endif %}
 
-{% for p in positions %}{% set f = funds.get(p.id) %}{% set st = status[p.id] %}{% if f %}{% set lines = largest[p.id] %}
+{% for p in ishares %}{% set f = funds.get(p.id) %}{% set st = status[p.id] %}{% set lines = largest.get(p.id, []) %}
 <div class="card">
   <h2>{{ p.name }}</h2>
-  <p class="muted">{{ p.isin }} · {{ p.value | money }} EUR ({{ pct(p.value / total) }}) · {{ _("{n} Positionen von {source}, Stand {when}", n=lines | length, source=st.source or "iShares", when=f.at | local) }}</p>
-  {% if st.status == "error" %}<p class="error">{{ st.error | redact }}</p>{% endif %}
-  {% if p.isin or st.url %}<form method="post" action="/lookthrough/fetch" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}"><button class="secondary" {% if reading %}disabled{% endif %} aria-label="{{ _('Positionsliste von {name} jetzt abrufen', name=p.name) }}">{{ _("Jetzt abrufen") }}</button></form>{% endif %}
+  <p class="muted">{{ p.isin or _("ohne ISIN") }} · {{ p.value | money }} EUR ({{ pct(p.value / total) }}){% if f %} · {{ _("{n} Positionen von {source}, Stand {when}", n=lines | length, source=st.source or "iShares", when=f.at | local) }}{% else %} · {{ _("noch keine Positionsliste") }}{% endif %}</p>
+  {% if st.status == "error" %}<p class="error" role="alert">{{ _("Abruf fehlgeschlagen {when}: {error}", when=st.at | local, error=st.error | redact) }}</p>{% endif %}
+  <form method="post" action="/lookthrough/fetch" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}"><button class="secondary" {% if reading %}disabled{% endif %} aria-label="{{ _('Positionsliste von {name} jetzt abrufen', name=p.name) }}">{{ _("Jetzt abrufen") }}</button></form>
+  {% if f %}
   <div class="table"><table>
     <caption class="sr-only">{{ _("Positionen von {name}", name=p.name) }}</caption>
             <thead><tr><th scope="col">{{ _("Aktie") }}</th><th scope="col">{{ _("Land") }}</th><th scope="col">{{ _("Sektor") }}</th><th scope="col">{{ _("Gewicht im ETF") }}</th><th scope="col">{{ _("Wert in deinem Depot (EUR)") }}</th></tr></thead>
@@ -70,6 +69,7 @@
             <thead><tr><th scope="col">{{ _("Aktie") }}</th><th scope="col">{{ _("Land") }}</th><th scope="col">{{ _("Sektor") }}</th><th scope="col">{{ _("Gewicht im ETF") }}</th><th scope="col">{{ _("Wert in deinem Depot (EUR)") }}</th></tr></thead>
       <tbody>{{ fund_rows(lines[top:], p.value) }}</tbody></table></div>
   </details>{% endif %}
+  {% endif %}
   <details><summary>{{ _("Einstellungen dieses ETFs") }}</summary>
     <form method="post" action="/lookthrough/source" class="inline-form">
             <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
@@ -83,38 +83,9 @@
           </form>
   </details>
 </div>
-{% endif %}{% endfor %}
-
-{% if positions | length > fund_list | length %}
-<div class="card">
-  <h2>{{ _("Ohne Positionsliste") }}</h2>
-  <p class="muted">{{ _("Einzelaktien und ETFs, die nicht von iShares sind, zählen als eine Position.") }}</p>
-  <div class="table"><table>
-    <caption class="sr-only">{{ _("Ohne Positionsliste") }}</caption>
-    <thead><tr><th scope="col">{{ _("Position") }}</th><th scope="col">ISIN</th><th scope="col">{{ _("Anteil am Depot") }}</th><th scope="col">{{ _("Positionsliste") }}</th></tr></thead>
-    <tbody>
-    {% for p in positions %}{% set st = status[p.id] %}{% if not funds.get(p.id) %}
-    <tr><td data-label="{{ _('Position') }}">{{ p.name }}</td>
-      <td data-label="ISIN">{{ p.isin }}</td>
-      <td data-label="{{ _('Anteil am Depot') }}">{{ pct(p.value / total) }}</td>
-      <td data-label="{{ _('Positionsliste') }}">{% if st.status == "error" %}<p class="error">{{ st.error | redact }}</p>{% elif st.status == "none" %}<span class="muted">{{ _("Quelle noch nicht unterstützt (nur iShares)") }}</span>{% else %}<span class="muted">{{ _("noch nicht abgerufen") }}</span>{% endif %}
-        {% if p.isin or st.url %}<form method="post" action="/lookthrough/fetch" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}"><button class="secondary" {% if reading %}disabled{% endif %} aria-label="{{ _('Positionsliste von {name} jetzt abrufen', name=p.name) }}">{{ _("Jetzt abrufen") }}</button></form>{% endif %}
-        <details><summary>{{ _("Einstellungen") }}</summary>
-          <form method="post" action="/lookthrough/source" class="inline-form">
-            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
-            <label>{{ _("Produktseite bei iShares für {name}", name=p.name) }} <input type="url" name="url" value="{{ st.url or '' }}" maxlength="300" placeholder="https://www.ishares.com/de/privatanleger/de/produkte/…"></label>
-            <div class="actions"><button class="secondary">{{ _("Speichern") }}</button></div>
-          </form>
-          <form method="post" action="/lookthrough/ter" class="inline-form">
-            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
-            <label>{{ _("Laufende Kosten (TER, % im Jahr) für {name}, leer: vom Anbieter", name=p.name) }} <input type="text" name="ter" inputmode="decimal" maxlength="10" value="{{ typed(st.ter_manual, true) }}"></label>
-            <div class="actions"><button class="secondary">{{ _("Speichern") }}</button></div>
-          </form>
-        </details></td></tr>
-    {% endif %}{% endfor %}
-    </tbody></table></div>
-</div>
-{% elif not positions and not reading %}<div class="card"><p class="muted">{{ _("Keine Positionen in Wealthfolio.") }}</p></div>{% endif %}
+{% endfor %}
+{% if positions and not ishares %}<div class="card"><p class="muted">{{ _("Kein iShares-ETF in Wealthfolio gefunden.") }}</p></div>{% endif %}
+{% if not positions and not reading %}<div class="card"><p class="muted">{{ _("Keine Positionen in Wealthfolio.") }}</p></div>{% endif %}
 
 {% if positions %}
 <div class="card">
@@ -203,6 +174,7 @@
 
 <div class="card">
   <details><summary>{{ _("Einstellungen von X-Ray") }}</summary>
+  <form method="post" action="/lookthrough/refresh" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><p class="muted grow">{{ _("Die Positionen werden beim Öffnen der Seite aus Wealthfolio gelesen, höchstens alle 10 Minuten.") }}</p><button class="secondary" {% if reading %}disabled{% endif %}>{{ _("Neu lesen") }}</button></form>
   <form method="post" action="/lookthrough/settings">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label class="check"><input type="checkbox" name="write"{% if cfg.lookthrough_write %} checked{% endif %}> {{ _("Länder und Sektoren der ETFs in Wealthfolio eintragen, damit seine eigenen Auswertungen durch die ETFs sehen. Ersetzt nur Yahoos automatische Werte, nie deine eigenen Zuordnungen.") }}</label>
@@ -213,6 +185,14 @@
   </form>
   {% if written %}<p class="muted">{{ _("Zuletzt in Wealthfolio eingetragen {when}: {written} geändert, {manual} mit deinen eigenen Zuordnungen gelassen.", when=written.at | local, written=written.written, manual=written.manual) }}{% if written.unmatched %} {{ _("Ohne passende Kategorie: {names}.", names=written.unmatched | join(", ")) }}{% endif %}</p>
   <form method="post" action="/lookthrough/taxonomies/remove" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary">{{ _("Aus Wealthfolio entfernen") }}</button></form>{% endif %}
+  </details>
+</div>
+<div class="card">
+  <p><a href="/lookthrough/fire">{{ _("FIRE-Rechner: wie viel Vermögen ein Leben vom Depot braucht") }}</a></p>
+  <details><summary>{{ _("Was wird berechnet?") }}</summary>
+    <p>{{ _("Anteil am Depot: Wert der Position mal Gewicht der Aktie im Fonds, über alle Positionen addiert. Was die Gewichte eines Fonds offen lassen, steht als „nicht zugeordnet“ – nichts wird hochgerechnet. Überschneidung zweier ETFs: Summe des jeweils kleineren Gewichts jeder Aktie, die beide halten. Eigener Beitrag: der Teil eines ETFs, den keine andere Position mitbringt. Effektive Titelzahl: so vielen gleich gewichteten Aktien entspricht das Depot.") }}</p>
+    <p>{{ _("Klumpenrisiken: eine Aktie, ein Land, ein Sektor oder Fremdwährung über ihrer Grenze, zwei ETFs, die sich stark überschneiden, zu wenige effektive Titel, Bargeld über 100.000 EUR auf einem Konto (gesetzliche Einlagensicherung je Bank). Land, Sektor und Währung stehen so, wie der Anbieter sie nennt; ein währungsgesicherter ETF zählt noch als Fremdwährung. Bei synthetischen ETFs (Swap) listet der Anbieter oft den Sicherheitenkorb statt des Index.") }}</p>
+    <p class="muted">{{ _("Vereinfachte Modellrechnung, keine Anlageberatung.") }}</p>
   </details>
 </div>
 {% endblock %}

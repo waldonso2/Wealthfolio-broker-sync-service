@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.33.1
+
+- **X-Ray shows why a list is missing (waldonso2/wealthfolio-importer-addon#144):**
+  - Each iShares ETF has its own card, also without a list, with the reason a fetch failed: iShares not reachable (HTTP status), the fund finder's answer not JSON or without products, its ISIN unknown to the fund finder, or no ISIN in Wealthfolio.
+  - The header shows the last fetch (lists fetched, failed) and an error that stopped the whole pass (`meta` `funds:last`).
+  - A fund finder answer that parses but holds no products was taken as "no source" for every ETF; it is now an error, retried the next day, and its layout (names only) is logged.
+  - Fund finder values given as `{d, r}` are read too.
+- **Every position is fetched**, not only the 30 largest; the time budget still limits a pass.
+- **ISINs the sync learned** are used for positions Wealthfolio keeps without one.
+- **Only iShares ETFs are shown** for now; single stocks and other issuers' ETFs are hidden and still count as one position each.
+- **Layout as agreed:** one *Jetzt abrufen* at the top, Top 25/50/100 for the overall matrix, "nicht zugeordnet" below it, the FIRE calculator and the explanations at the bottom, *Neu lesen* under the settings.
+
 ## 0.33.0
 
 - **X-Ray (waldonso2/wealthfolio-importer-addon#144):** the look-through is redone as the page *X-Ray*.
