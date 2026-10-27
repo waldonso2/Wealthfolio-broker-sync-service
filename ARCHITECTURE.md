@@ -36,6 +36,7 @@ Es gibt zwei Prozesse mit demselben Code und demselben Datenverzeichnis:
 |---|---|---|
 | `brokersync serve` | `wealthfolio-broker-sync.service` | Weboberfläche: Einrichtung, Broker-Login mit TAN oder App-Bestätigung, Abruf per Knopf, Listen (unbekannte Buchungen, Duplikate, Wertpapiere) |
 | `brokersync run` | `wealthfolio-broker-sync-run.service` + `.timer` | Ein Abruf aller aktiven Broker. Exit-Code 1, wenn ein Broker fehlschlug, damit systemd es anzeigt |
+| `brokersync-autoupdate` | `wealthfolio-broker-sync-update.service` + `.timer` (root, jede Minute) | Nur wenn auf der Seite *Updates* eingeschaltet: fragt `brokersync update-due`, installiert ein neueres Release mit `PHS_SILENT=1 update` und meldet es mit `brokersync update-done` (ntfy, `meta` `auto-update`) |
 
 Beide laufen als Systembenutzer `brokersync` mit systemd-Härtung (`ProtectSystem=strict`, `PrivateDevices`, `CapabilityBoundingSet=` leer, `RestrictNamespaces`, `SystemCallFilter=@system-service`, `ProtectProc=invisible`, `UMask=0077` …; `systemd-analyze security` 1,5; der Abruf-Lauf endet nach 45 Minuten, #107) und dürfen nur in `data/` schreiben. Den Schlüssel bekommen sie von systemd als Credential (`$CREDENTIALS_DIRECTORY/brokersync-key`, Drop-in `10-key.conf` von `setup.sh`); `/run/wealthfolio-broker-sync` (RAM, `RuntimeDirectoryPreserve=yes`) teilen sie sich für den entsperrten Passphrasen-Schlüssel. Eine Lock-Datei (`data/sync.lock`, `flock`) sorgt dafür, dass immer nur ein Abruf läuft, auch wenn Timer und Weboberfläche gleichzeitig starten.
 

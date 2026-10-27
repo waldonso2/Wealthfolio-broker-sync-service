@@ -3,7 +3,8 @@
 Only the redirect of GitHub's ``releases/latest`` page is read (no API, no token, nothing about
 the user is sent). The answer is kept in ``meta`` (``UPDATE``); the overview shows a newer
 version, and a newly found one is notified once. ``BROKERSYNC_UPDATE_CHECK=0`` turns it off.
-Installing stays the user's ``update`` in the container's console.
+Installing is the user's ``update`` in the container's console, or - switched on on the page *Updates* - the
+container's own updater (``deploy/brokersync-autoupdate``, root, every minute), which asks ``due``.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ log = logging.getLogger(__name__)
 REPO = "https://github.com/waldonso2/Wealthfolio-broker-sync-service"
 RELEASES = f"{REPO}/releases"
 EVERY = timedelta(days=1)
+MIN_INTERVAL, MAX_INTERVAL = 60, 86400  # seconds between two questions of the updater
 KEY = meta_keys.UPDATE()
 
 
@@ -73,3 +75,21 @@ def check(state: State, current: str, *, http: httpx.Client | None = None) -> st
     if version and newer(version, current) and version != stored.get("version"):
         return version
     return None
+
+
+def due(auto_update: bool, interval: int, current: str, since: float, *, http: httpx.Client | None = None
+        ) -> tuple[bool, str | None]:
+    """For the container's updater: whether GitHub is asked now (``since``: seconds since it last was) and the
+    newer release to install. Never raises: no answer means nothing to install."""
+    if not auto_update or since < max(interval, MIN_INTERVAL):
+        return False, None
+    client = http or httpx.Client(timeout=10)
+    try:
+        version = latest(client)
+    except httpx.HTTPError as e:
+        log.info("update check: GitHub not reachable (%s)", type(e).__name__)
+        version = None
+    finally:
+        if http is None:
+            client.close()
+    return True, version if version and newer(version, current) else None

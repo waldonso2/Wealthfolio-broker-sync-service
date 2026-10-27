@@ -1,0 +1,13 @@
+[Unit]
+Description=Wealthfolio Broker Sync - install a newer release when switched on (page Updates)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Root, without a sandbox: it runs the same update as `update` in the console (packages, units, the service's
+# key). It does nothing unless the page Updates switched it on; brokersync-autoupdate explains the steps.
+User=root
+UMask=0077
+ExecStart=/usr/local/bin/brokersync-autoupdate
+TimeoutStartSec=30min

@@ -81,7 +81,7 @@ jobs:
         with:
           persist-credentials: false
       - name: shellcheck
-        run: shellcheck ct/*.sh install/*.sh deploy/setup.sh deploy/brokersync-reset-password deploy/brokersync-cli scripts/*.sh
+        run: shellcheck ct/*.sh install/*.sh deploy/setup.sh deploy/brokersync-reset-password deploy/brokersync-cli deploy/brokersync-autoupdate scripts/*.sh
       - name: catalog JSON
         run: python3 -m json.tool json/wealthfolio-broker-sync.json > /dev/null
       - name: install from the release tarball layout, like deploy/setup.sh

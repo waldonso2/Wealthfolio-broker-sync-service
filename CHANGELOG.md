@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.34.0
+
+- **Automatic updates (opt-in, page *Updates* under *Einstellungen*):**
+  - When switched on, the container looks for a newer release as often as set there: every 60 seconds by default, at most once a day. It installs a new release with the same unattended `update` as the console (`PHS_SILENT=1`): every file checked against `SHA256SUMS`, the data backed up first.
+  - Afterwards ntfy says which version runs now. The page shows the last result.
+  - A failed version is retried after an hour, and nothing is updated while a fetch runs.
+  - New: `wealthfolio-broker-sync-update.timer`/`.service` (root, every minute; installs nothing while switched off), `deploy/brokersync-autoupdate`, and `brokersync update-due` / `update-done`.
+  - The switch and the interval live in the host tier, so updates also run while the master passphrase locks the data. Switching needs the UI password.
+- The daily "new version" message is not sent while automatic updates are on; the updater reports the installed version itself.
+
 ## 0.33.2
 
 - **X-Ray finds iShares ETFs without the fund finder (waldonso2/wealthfolio-importer-addon#144):** iShares' fund finder answers 404 since 10/2026. While it fails, each ISIN is looked up in the iShares site's search (`autoComplete.search`); only an unambiguous product is taken, never a guess. The header shows the fund finder's failure as a note, no longer as an error.

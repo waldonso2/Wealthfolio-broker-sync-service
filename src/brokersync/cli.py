@@ -46,6 +46,13 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("backup", help="data/ as an encrypted archive to stdout: brokersync-cli backup > file.tar.gz")
     sub.add_parser("restore", help="data/ from such an archive on stdin, after checking it opens with this "
                                    "container's key; the web UI must be stopped")
+    due = sub.add_parser("update-due", help="for the container's updater: whether to ask GitHub now, and the newer "
+                                            "release to install (prints 'checked' and 'install <version>')")
+    due.add_argument("--since", type=float, required=True, help="seconds since GitHub was last asked")
+    done = sub.add_parser("update-done", help="for the container's updater: notify and record how an update went")
+    done.add_argument("--from", dest="old", required=True)
+    done.add_argument("--to", dest="new", required=True)
+    done.add_argument("--failed", action="store_true")
     return parser
 
 
@@ -214,9 +221,54 @@ def _restore(args) -> int:
     return 0
 
 
+def _update_due(args) -> int:
+    """Asked every minute by deploy/brokersync-autoupdate (root, through brokersync-cli): only the host tier is
+    read, so it works while the data is locked."""
+    from . import updates
+    from .config import load_notify
+
+    cfg = load_notify(data_dir())
+    asked, version = updates.due(cfg.auto_update, cfg.update_interval, __version__, args.since)
+    if asked:
+        print("checked")
+    if version:
+        print(f"install {version}")
+    return 0
+
+
+def _update_done(args) -> int:
+    """After an automatic update: ntfy, and on the page *Updates* (when the data is unlocked)."""
+    from datetime import UTC, datetime
+
+    from . import meta_keys
+    from .config import load_notify
+    from .notify import Notifier
+    from .state import State
+
+    cfg = load_notify(data_dir())
+    ok = not args.failed
+    text = (f"Version {args.new} ist installiert (vorher {args.old})." if ok else
+            f"Das automatische Update auf {args.new} ist fehlgeschlagen - Version {args.old} läuft weiter. "
+            "Details: journalctl -u wealthfolio-broker-sync-update")
+    Notifier(cfg.ntfy_server, cfg.ntfy_topic, cfg.ntfy_token, details=cfg.ntfy_details).send(
+        "Update installiert" if ok else "Update fehlgeschlagen", text,
+        link=f"{cfg.public_url.rstrip('/')}/updates" if cfg.public_url else None,
+        tags="arrow_up" if ok else "warning")
+    try:
+        state = State(data_dir())
+        state.set_meta(meta_keys.AUTO_UPDATE(), json.dumps({"from": args.old, "to": args.new, "ok": ok,
+                                                            "at": datetime.now(UTC).isoformat()}))
+        state.add_event("auto_update", ok=ok, detail=f"{args.old} -> {args.new}")
+    except Exception as e:  # locked by the master passphrase: ntfy said it
+        logging.getLogger("brokersync").info("update not recorded on the page (%s)", type(e).__name__)
+    print(text)
+    return 0 if ok else 1
+
+
 COMMANDS = {"serve": _serve, "run": _run, "reset-ui-password": _setup_code, "setup-code": _setup_code,
             "install-sc": _install_sc, "make-cert": _make_cert, "renew-cert": _renew_cert, "migrate": _migrate,
-            "rotate-key": _rotate_key, "security-status": _security_status, "backup": _backup, "restore": _restore}
+            "rotate-key": _rotate_key, "security-status": _security_status, "backup": _backup, "restore": _restore,
+            "update-due": _update_due, "update-done": _update_done}
 
 
 class JsonFormatter(logging.Formatter):

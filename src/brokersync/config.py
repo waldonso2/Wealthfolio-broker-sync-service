@@ -77,6 +77,10 @@ class Config:
     # "auto": sessions are kept, the timer fetches. "safe": every fetch needs a fresh login in the UI, the
     # session is ended after it, the timer only reminds (#85). For all brokers.
     sync_mode: str = "auto"
+    # Page Updates: the container installs a newer release by itself (deploy/brokersync-autoupdate, root), asking
+    # GitHub every ``update_interval`` seconds. In the host tier, so it works while the data is locked.
+    auto_update: bool = False
+    update_interval: int = 60
     # Page Darstellung: "de" / "en". Light or dark follows the device (header switch until a reload, #123).
     ui_language: str = "de"
 
@@ -88,7 +92,9 @@ class Config:
         return self.brokers.setdefault(key, BrokerConfig())
 
 
-NOTIFY_FIELDS = ("public_url", "ntfy_server", "ntfy_topic", "ntfy_token", "ntfy_details")
+# The host tier (notify.enc): readable while the data is locked - ntfy and the automatic update.
+NOTIFY_FIELDS = ("public_url", "ntfy_server", "ntfy_topic", "ntfy_token", "ntfy_details", "auto_update",
+                 "update_interval")
 
 
 def _read(path: Path, key: bytes, purpose: str) -> dict:

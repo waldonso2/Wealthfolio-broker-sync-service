@@ -1159,6 +1159,30 @@ EN: dict[str, str] = {
     "Kein iShares-ETF in Wealthfolio gefunden.": "No iShares ETF found in Wealthfolio.",
     "Die Positionen werden beim Öffnen der Seite aus Wealthfolio gelesen, höchstens alle 10 Minuten.":
         "The positions are read from Wealthfolio when the page opens, at most every 10 minutes.",
+    "Automatisches Update": "Automatic update",
+    "Updates": "Updates",
+    "Neue Versionen automatisch installieren": "Install new versions automatically",
+    "Wie oft nachsehen (Sekunden)": "How often to look (seconds)",
+    "Bitte ganze Sekunden angeben.": "Please give whole seconds.",
+    "Installiert: Version {version}.": "Installed: version {version}.",
+    "Neueste Version auf GitHub: {version}.": "Newest version on GitHub: {version}.",
+    "Eingeschaltet sieht der Container selbst nach, ob eine neue Version erschienen ist, und installiert sie wie "
+    "der Befehl update in seiner Konsole: dieselben Prüfungen (jede Datei gegen die Prüfsummen des Releases), "
+    "dieselbe Sicherung der Daten vorher. Danach kommt eine Nachricht über ntfy. Schlägt ein Update fehl, läuft "
+    "die bisherige Version weiter; dieselbe Version wird nach einer Stunde noch einmal versucht. Während eines "
+    "Abrufs wird nicht aktualisiert.":
+        "When switched on, the container looks for a new version itself and installs it like the command update "
+        "in its console: the same checks (every file against the release's checksums), the same backup of the "
+        "data before. Then a message comes via ntfy. If an update fails, the previous version keeps running; the "
+        "same version is tried again after an hour. Nothing is updated while a fetch is running.",
+    "Mindestens {low} (eine Minute), höchstens {high} (ein Tag). Gefragt wird nur GitHub, nach der neuesten "
+    "Version - nichts über dich.":
+        "At least {low} (one minute), at most {high} (one day). Only GitHub is asked, for the newest version - "
+        "nothing about you.",
+    "Letztes automatisches Update": "Last automatic update",
+    "{when}: Version {new} installiert (vorher {old}).": "{when}: version {new} installed (before {old}).",
+    "{when}: Update auf {new} fehlgeschlagen, Version {old} läuft weiter.":
+        "{when}: update to {new} failed, version {old} keeps running.",
     "Klumpenrisiken ({n})": "Cluster risks ({n})",
     "Einstellungen von X-Ray": "X-Ray settings",
     "Positionsliste von {name} jetzt abrufen": "Fetch the holdings list of {name} now",

@@ -11,7 +11,7 @@ from brokersync.sync import Syncer
 
 from .helpers import first_password
 from .test_sync import RecordingNotifier
-from .test_web import make
+from .test_web import csrf, make
 
 
 def github(tag: str | None, calls: list):
@@ -84,3 +84,50 @@ def test_the_overview_shows_a_newer_release(tmp_path):
     page = client.get("/").text
     assert "Update verfügbar: Version 99.0.0" in page
     assert f"{updates.RELEASES}/tag/v99.0.0" in page
+
+
+def test_the_updater_asks_only_when_switched_on_and_its_time_is_up():
+    calls = []
+    assert updates.due(False, 60, "0.26.1", 1e9, http=github("v0.27.0", calls)) == (False, None) and not calls
+    assert updates.due(True, 300, "0.26.1", 299, http=github("v0.27.0", calls)) == (False, None) and not calls
+    assert updates.due(True, 5, "0.26.1", 30, http=github("v0.27.0", calls)) == (False, None)  # at least a minute
+    assert updates.due(True, 60, "0.26.1", 60, http=github("v0.27.0", calls)) == (True, "0.27.0")
+    assert updates.due(True, 60, "0.27.0", 60, http=github("v0.27.0", calls)) == (True, None)
+    assert updates.due(True, 60, "0.26.1", 60, http=github(None, calls)) == (True, None)  # offline: nothing
+
+
+def test_the_updater_reads_its_switch_from_the_host_tier_and_reports_the_result(tmp_path, monkeypatch, capsys):
+    from brokersync import cli, config
+
+    monkeypatch.setenv("BROKERSYNC_DATA", str(tmp_path))
+    config.update(tmp_path, lambda c: (setattr(c, "auto_update", True), setattr(c, "update_interval", 120)))
+    assert config.load_notify(tmp_path).auto_update and config.load_notify(tmp_path).update_interval == 120
+    monkeypatch.setattr(updates, "latest", lambda http: "99.0.0")
+    assert cli.main(["update-due", "--since", "60"]) == 0 and capsys.readouterr().out == ""
+    assert cli.main(["update-due", "--since", "120"]) == 0
+    assert capsys.readouterr().out.split("\n")[:2] == ["checked", "install 99.0.0"]
+    assert cli.main(["update-done", "--from", "0.33.2", "--to", "99.0.0"]) == 0
+    last = json.loads(State(tmp_path).meta(meta_keys.AUTO_UPDATE()))
+    assert (last["from"], last["to"], last["ok"]) == ("0.33.2", "99.0.0", True)
+    assert cli.main(["update-done", "--from", "0.33.2", "--to", "99.0.1", "--failed"]) == 1
+    assert "fehlgeschlagen" in capsys.readouterr().out
+
+
+def test_the_page_updates_switches_it_on_with_a_bounded_interval(tmp_path):
+    from brokersync import config
+
+    client, _, _ = make(tmp_path)
+    first_password(client)
+    page = client.get("/updates").text
+    assert "Neue Versionen automatisch installieren" in page and 'value="60"' in page
+    token = csrf(client, "/updates")
+    for bad in ("30", "abc", "90,5"):
+        r = client.post("/updates", data={"csrf": token, "auto_update": "1", "interval": bad})
+        assert 'role="alert"' in r.text and not config.load(tmp_path).auto_update
+    r = client.post("/updates", data={"csrf": token, "auto_update": "1", "interval": "300"})
+    assert "Gespeichert." in r.text
+    c = config.load(tmp_path)
+    assert c.auto_update and c.update_interval == 300
+    State(tmp_path).set_meta(meta_keys.AUTO_UPDATE(), json.dumps(
+        {"from": "0.33.2", "to": "0.34.0", "ok": False, "at": datetime.now(UTC).isoformat()}))
+    assert "Update auf 0.34.0 fehlgeschlagen, Version 0.33.2 läuft weiter" in client.get("/updates").text

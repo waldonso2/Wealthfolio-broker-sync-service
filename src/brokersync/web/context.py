@@ -52,6 +52,7 @@ SETTINGS_PAGES = [
     # Only while patterns are saved (waldonso2/wealthfolio-importer-addon#84): each one stays visible and deletable.
     ("/transfers", N_("Überträge"), N_("Auszahlungen auf eigene Konten erkennen")),
     ("/logos", N_("Logos"), N_("Logos der Wertpapiere von logo.dev")),
+    ("/updates", N_("Updates"), N_("Neue Versionen automatisch installieren")),
     ("/security", N_("Sicherheit"), N_("Abrufmodus, Verschlüsselung, Master-Passphrase, Zertifikat")),
     ("/appearance", N_("Darstellung"), N_("Sprache")),
     # Hidden for now (waldonso2/wealthfolio-importer-addon#84):
@@ -188,7 +189,8 @@ EVENTS = {"login": N_("Anmeldung"), "logout": N_("Abmeldung"), "setup_password":
           "credentials": N_("Zugangsdaten geändert"), "wealthfolio": N_("Wealthfolio-Adresse gespeichert"),
           "passphrase": N_("Master-Passphrase geändert"), "mode": N_("Abrufmodus geändert"),
           "reset": N_("Neu aufgesetzt"), "lock": N_("Gesperrt"), "unlock": N_("Entsperrt"),
-          "reauth": N_("Passwort für eine Aktion bestätigt")}
+          "reauth": N_("Passwort für eine Aktion bestätigt"),
+          "auto_update": N_("Automatisches Update")}
 
 
 def client_of(request: Request) -> str:
