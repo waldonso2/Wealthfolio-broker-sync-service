@@ -10,6 +10,10 @@
 - **Kosten (waldonso2/wealthfolio-importer-addon#142):** per position and for the depot, what is incurred from buy to sale - order fees and taxes from the Wealthfolio activities, the spread, ongoing charges (TER × mean of cost basis and value × years held) and the custody fee, plus the estimated cost of selling today; weighted TER, total cost ratio a year and costs a year in EUR. Taxes are shown apart and are not in the ratio. The TER of iShares funds comes from the fund finder, any other one is typed per position (it goes first); without a TER a position has no cost ratio, never 0 %. Each broker gets a fee model (fee per sale fixed and/or in percent, spread, custody fee); without one the sale is "not estimated". A new cluster risk "Gesamtkostenquote" over 0.5 % a year, and the FIRE calculator takes the cost ratio off the return (prefilled, can be overridden) and shows the result without costs next to it.
 - `scripts/lookthrough_probe.py` checks from the container which issuer sources answer.
 
+## 0.29.1
+
+- Dependency updates: fastapi 0.143.3 and starlette 1.8.0 (runtime); ruff 0.17.1 and filelock 4.2.1 (CI tools - filelock fixes six advisories, CVE-2026-112906 and others); `actions/checkout` v7.0.1 and `actions/setup-python` v7.0.0 in the workflows. enum-tools stays at 0.12.0: python-fints requires a version below 0.13.
+
 ## 0.29.0
 
 - **Spending per bank (waldonso2/wealthfolio-importer-addon#134):** a new switch *Ausgaben auswerten* in a broker's settings puts its cash account into Wealthfolio's spending tracker after the next fetch (and turns the tracker on). Wealthfolio categorizes the bookings with its own rules (*Spending → Rules*, with presets), which match the activity's note - the comment already names counterparty and purpose, so no activity changes and nothing is booked anew. Own transfers and securities settlements are linked pairs, which the tracker counts as saving or neutral, not as spending. Switched off, the account leaves the tracker again, unless it was tracked in Wealthfolio before; accounts chosen there are never removed. A Wealthfolio without the tracker only logs a warning.
