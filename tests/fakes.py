@@ -49,6 +49,7 @@ class FakeWealthfolio:
                                                {"id": "4510", "name": "Software & Services", "parentId": "45"},
                                                {"id": "20", "name": "Industrials", "parentId": None}]}
         self.assignments: list[dict] = []
+        self.spending: dict | None = {"enabled": False, "accountIds": [], "excludedCategoryIds": []}  # None: no tracker
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -181,6 +182,10 @@ class FakeWealthfolio:
             taxonomy_id = path.rsplit("/", 1)[1]
             return httpx.Response(200, json={"taxonomy": {"id": taxonomy_id},
                                              "categories": self.categories.get(taxonomy_id, [])})
+        if self.spending is not None and path == "/api/v1/spending/settings":
+            if request.method == "PUT":
+                self.spending.update(json.loads(request.content))
+            return httpx.Response(200, json=self.spending)
         if path == "/api/v1/holdings":
             return httpx.Response(200, json=self.holdings(request.url.params["accountId"]))
         if path == "/api/v1/activities/search":

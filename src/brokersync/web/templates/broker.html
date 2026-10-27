@@ -50,6 +50,8 @@
     {{ error("start_date") }}
     <div class="muted">{{ _("Leer = alles, was der Broker liefert. Gilt für den ersten Abruf; danach holt jeder Abruf ab dem letzten (minus 7 Tage) – für einen neuen Zeitraum unten „Ab Startdatum neu abrufen“.") }}</div>
     <label class="check"><input type="checkbox" name="enabled" {{ 'checked' if b.enabled }}> {{ _("Automatisch abrufen") }}</label>
+    <label class="check"><input type="checkbox" name="spending" aria-describedby="spending-help" {{ 'checked' if b.spending }}> {{ _("Ausgaben auswerten") }}</label>
+    <div class="muted" id="spending-help">{{ _("Nimmt das Verrechnungskonto ab dem nächsten Abruf in Wealthfolios Ausgaben-Tracker auf. Kategorien vergibt Wealthfolio mit seinen Regeln (Ausgaben → Regeln) anhand von Empfänger und Verwendungszweck. Wealthfolio wertet nur Konten vom Typ Bargeld aus; eigene Überträge und Wertpapierabrechnungen zählen dort als Sparen, nicht als Ausgabe.") }}</div>
     {{ reauth_field("broker_pw", required=False, label=_("Passwort der Oberfläche (nur beim Ändern der Zugangsdaten)")) }}
     <div class="actions">
       <button>{{ _("Speichern") }}</button>

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.29.0
+## 0.30.0
 
 - **Durchschau (waldonso2/wealthfolio-importer-addon#139):** a new page in the main menu shows what the depot really holds across all Wealthfolio accounts: every stock once with its share, value, country and sector and through which positions (a stock in three ETFs and held directly is one row) - top 50, top 100 or all; what the funds' holdings lists leave open as "nicht zugeordnet", never scaled up; the overlap of every two ETFs, each ETF's own contribution and the effective number of stocks. A position without a holdings list is one line of its own. New table `funds` (state.db migration 4).
 - **Holdings lists fetched or uploaded:** opt-in, after every fetch and at most weekly per ETF, the service gets the lists from Xtrackers (by ISIN) and iShares (by ISIN through iShares' own fund finder, or from a product page saved once); only the ISIN or that page leaves the container, only these two hosts over https, answers capped at 20 MB, a list must look complete before it replaces the stored one. Any other issuer's list can be uploaded as CSV or XLSX.
@@ -9,6 +9,10 @@
 - **FIRE-Rechner:** how much wealth a life on the depot needs, in today's money, with the German flat tax, solidarity surcharge and church tax on the gain share only, the 30 % partial exemption, the saver's allowance, voluntary statutory health and care insurance (or a private premium) and the statutory pension from its start: lean, regular, fat and Barista FIRE, years to the goal, Coast FIRE. Wealth and gain share come from Wealthfolio unless typed. Values of 2026.
 - **Kosten (waldonso2/wealthfolio-importer-addon#142):** per position and for the depot, what is incurred from buy to sale - order fees and taxes from the Wealthfolio activities, the spread, ongoing charges (TER × mean of cost basis and value × years held) and the custody fee, plus the estimated cost of selling today; weighted TER, total cost ratio a year and costs a year in EUR. Taxes are shown apart and are not in the ratio. The TER of iShares funds comes from the fund finder, any other one is typed per position (it goes first); without a TER a position has no cost ratio, never 0 %. Each broker gets a fee model (fee per sale fixed and/or in percent, spread, custody fee); without one the sale is "not estimated". A new cluster risk "Gesamtkostenquote" over 0.5 % a year, and the FIRE calculator takes the cost ratio off the return (prefilled, can be overridden) and shows the result without costs next to it.
 - `scripts/lookthrough_probe.py` checks from the container which issuer sources answer.
+
+## 0.29.0
+
+- **Spending per bank (waldonso2/wealthfolio-importer-addon#134):** a new switch *Ausgaben auswerten* in a broker's settings puts its cash account into Wealthfolio's spending tracker after the next fetch (and turns the tracker on). Wealthfolio categorizes the bookings with its own rules (*Spending → Rules*, with presets), which match the activity's note - the comment already names counterparty and purpose, so no activity changes and nothing is booked anew. Own transfers and securities settlements are linked pairs, which the tracker counts as saving or neutral, not as spending. Switched off, the account leaves the tracker again, unless it was tracked in Wealthfolio before; accounts chosen there are never removed. A Wealthfolio without the tracker only logs a warning.
 
 ## 0.28.1
 

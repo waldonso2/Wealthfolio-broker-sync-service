@@ -347,6 +347,14 @@ EN: dict[str, str] = {
         "Empty = everything the broker delivers. Applies to the first fetch; after that every fetch reads from the "
         "last one (minus 7 days) – for a new period use “Fetch again from the start date” below.",
     "Automatisch abrufen": "Fetch automatically",
+    "Ausgaben auswerten": "Analyse spending",
+    "Nimmt das Verrechnungskonto ab dem nächsten Abruf in Wealthfolios Ausgaben-Tracker auf. Kategorien vergibt "
+    "Wealthfolio mit seinen Regeln (Ausgaben → Regeln) anhand von Empfänger und Verwendungszweck. Wealthfolio wertet "
+    "nur Konten vom Typ Bargeld aus; eigene Überträge und Wertpapierabrechnungen zählen dort als Sparen, nicht als "
+    "Ausgabe.":
+        "From the next fetch, adds the cash account to Wealthfolio's spending tracker. Wealthfolio assigns categories "
+        "with its own rules (Spending → Rules) from payee and reference. Wealthfolio only analyses accounts of type "
+        "Cash; own transfers and securities settlements count as saving there, not as spending.",
     "Beim Broker anmelden": "Log in at the broker",
     "Fehlen Buchungen aus der Zeit vor dem letzten Abruf (etwa nach einem geänderten Startdatum)? Der nächste Abruf "
     "holt dann noch einmal alles ab dem Startdatum; schon übernommene Buchungen werden nicht doppelt angelegt.":

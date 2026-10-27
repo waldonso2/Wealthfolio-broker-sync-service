@@ -75,7 +75,7 @@ async def broker_save(request: Request, ctx: Ctx, key: str):
     form = await request.form()
     lang = language(request)
     errors: dict[str, str] = {}
-    b = replace(ctx.cfg().broker(key), enabled=form.get("enabled") == "on")
+    b = replace(ctx.cfg().broker(key), enabled=form.get("enabled") == "on", spending=form.get("spending") == "on")
 
     def field(name: str, check) -> str:
         raw = str(form.get(name, ""))
