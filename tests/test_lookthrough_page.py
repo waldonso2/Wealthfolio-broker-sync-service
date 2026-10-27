@@ -38,9 +38,10 @@ def test_upload_a_holdings_file_and_see_the_stock_added_up_with_the_direct_posit
                     files={"file": ("holdings.csv", FILE.encode(), "text/csv")})
     assert "2 Positionen gelesen, zusammen 90,00 % des Fonds" in r.text
     assert State(tmp_path).funds()[FUND]["constituents"][0][:3] == [STOCK, "Example Inc", "0.2"]
-    # 5 direct + 20 % of 5 in the fund = 6 of 10: the stock first, at 60 %, through both positions.
+    # 5 direct + 20 % of 5 in the fund = 6 EUR of 10: the stock first, at 60 %, 1 EUR through the fund, 5 direct.
     first = r.text.split("Aktien über alle Positionen</caption>")[1].split("<tbody>")[1].split("</tr>")[0]
-    assert "Example Inc" in first and "60,00 %" in first and "10,00 %" in first and "50,00 %" in first
+    assert "Example Inc" in first and "60,00 %" in first and "<strong>6,00</strong>" in first
+    assert '">1,00</td>' in first and 'data-label="direkt">5,00</td>' in first
     assert "Nicht zugeordnet: 5,00 %" in r.text
 
 
@@ -86,11 +87,11 @@ def test_limits_are_checked_and_saved_and_a_risk_can_be_accepted(tmp_path):
     # One fund, nothing else: a single stock of 100 % and too few stocks.
     page = client.get("/lookthrough").text
     assert "Klumpenrisiken" in page and "So gewollt" in page and "100,00 %" in page
-    r = client.post("/lookthrough/settings", data={"csrf": token, "enabled": "on", "stock": "abc"})
-    assert "Zahl" in r.text and not config_mod.load(tmp_path).lookthrough_enabled
-    r = client.post("/lookthrough/settings", data={"csrf": token, "enabled": "on", "stock": "12,5", "effective": "1"})
+    r = client.post("/lookthrough/settings", data={"csrf": token, "write": "on", "stock": "abc"})
+    assert "Zahl" in r.text and not config_mod.load(tmp_path).lookthrough_write
+    r = client.post("/lookthrough/settings", data={"csrf": token, "write": "on", "stock": "12,5", "effective": "1"})
     c = config_mod.load(tmp_path)
-    assert c.lookthrough_enabled and c.xray_limits == {"stock": "0.125", "effective": "1"}
+    assert c.lookthrough_write and c.xray_limits == {"stock": "0.125", "effective": "1"}
     assert 'value="12,50"' in r.text
     r = client.post("/lookthrough/accept", data={"csrf": token, "key": f"stock:{FUND}"})
     assert "Keine Klumpenrisiken über deinen Grenzen." in r.text and "So gewollt (1)" in r.text
@@ -98,7 +99,7 @@ def test_limits_are_checked_and_saved_and_a_risk_can_be_accepted(tmp_path):
     assert "So gewollt (1)" not in r.text
 
 
-def test_an_ishares_page_is_saved_only_when_it_is_one_and_fetching_needs_it_turned_on(tmp_path):
+def test_an_ishares_page_is_saved_only_when_it_is_one_and_fetching_needs_no_switch(tmp_path):
     from brokersync import lookthrough
 
     client, token = _client(tmp_path)
@@ -107,8 +108,8 @@ def test_an_ishares_page_is_saved_only_when_it_is_one_and_fetching_needs_it_turn
     page = "https://www.ishares.com/de/privatanleger/de/produkte/251882/ishares-msci-world-ucits-etf-acc-fund"
     client.post("/lookthrough/source", data={"csrf": token, "asset_id": FUND, "url": page})
     assert lookthrough.status(State(tmp_path), FUND)["url"] == page
-    r = client.post("/lookthrough/fetch", data={"csrf": token})
-    assert "Erst den automatischen Abruf einschalten." in r.text
+    r = client.post("/lookthrough/fetch", data={"csrf": token})  # no switch: fetching is always on
+    assert "Positionslisten geholt" in r.text
 
 
 def test_the_fire_page_takes_the_wealth_from_wealthfolio_and_reads_thousands(tmp_path):
@@ -153,15 +154,15 @@ def test_costs_need_a_ter_and_a_fee_model_and_go_into_the_fire_calculator(tmp_pa
     assert "Ohne Kosten" not in page  # overridden by the user
 
 
-def test_a_funds_largest_holdings_show_under_it_and_all_on_request(tmp_path):
+def test_a_funds_top_25_show_under_it_and_the_rest_folded(tmp_path):
     client, token = _client(tmp_path)
     many = "ISIN,Name,Weight (%)\n" + "".join(f",Example {n:02d} Inc,{(n + 1) / 100}\n" for n in range(60))
     client.post("/lookthrough/upload", data={"csrf": token, "asset_id": FUND},
                 files={"file": ("holdings.csv", many.encode(), "text/csv")})
     page = client.get("/lookthrough").text
-    assert "Die 50 größten von 60 Positionen im Fonds" in page and "Alle 60 anzeigen" in page
     fund = page.split(f"<caption class=\"sr-only\">Positionen von {FUND}")[1]
-    assert fund.index("Example 59 Inc") < fund.index("Example 58 Inc")  # largest first
-    assert "Example 05 Inc" not in fund.split("Alle 60 anzeigen")[0]  # beyond the top 50
-    full = client.get(f"/lookthrough?full={FUND}").text
-    assert "Alle 60 Positionen im Fonds" in full and "Example 05 Inc" in full
+    top, rest = fund.split("Alle 60 Positionen")[:2]
+    assert top.index("Example 59 Inc") < top.index("Example 58 Inc") and "Example 34 Inc" not in top  # top 25
+    assert "Example 34 Inc" in rest.split("Einstellungen dieses ETFs")[0]  # folded, on the same page
+    assert "<h1>X-Ray</h1>" in page and "Gesamt: Aktien über alle Positionen" in page
+    assert "/lookthrough/upload" not in page and "Xtrackers" not in page  # only iShares for now (#144)

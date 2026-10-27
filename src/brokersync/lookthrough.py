@@ -6,8 +6,8 @@ weights in percent, no ISIN), or any list with a name and a weight column, in En
 when there is a valid one, else ticker and exchange, else the name. Weights are a share of the fund
 (0..1); what they leave open stays open (``xray.UNASSIGNED``).
 
-``fetch`` gets the file itself (opt-in, ``Config.lookthrough_enabled``; ``Syncer.update_funds`` after a run,
-at most every ``REFRESH_DAYS`` per fund): Xtrackers by ISIN (an XLSX, read without a library), iShares by
+``fetch`` gets the file itself (always, #144; ``Syncer.update_funds`` after a run, at most every
+``REFRESH_DAYS`` per fund) - for now only iShares (Xtrackers by ISIN, an XLSX, is there but not called), by
 its product id - from iShares' fund finder (``ISHARES_SCREENER``, every product with its ISIN, read once per
 pass), from the product page's address the user saves, or, while the fund finder is down, ``ISHARES``. Only
 the ISIN or that address leaves the container; only ``HOSTS`` are asked, answers are read up to
@@ -315,10 +315,7 @@ def fetch(sources: Sources, isin: str, page: str = "") -> tuple[tuple[Constituen
     product = ishares_page(page) if page else sources.ishares_product(isin) if isin else None
     if product:
         return sources.ishares(*product), "iShares"
-    if isin:
-        lines = sources.xtrackers(isin)
-        if lines:
-            return lines, "Xtrackers"
+    # shortcut: only iShares for now (#144); Sources.xtrackers works - call it here again to bring Xtrackers back
     if sources.finder_down:  # maybe iShares' after all: try again tomorrow, not in NONE_DAYS
         raise SourceError("Der iShares-Fondsfinder ist gerade nicht erreichbar.")
     raise NoSource(isin)

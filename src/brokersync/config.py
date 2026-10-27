@@ -65,8 +65,7 @@ class Config:
     transfer_patterns: list[dict] = field(default_factory=list)
     # Logos from logo.dev by ISIN after every run (brokersync.logos); the key lives in the vault.
     logos_enabled: bool = False
-    # Look-through (*Durchschau*): fetch the funds' holdings lists from their issuers after a run
-    # (brokersync.lookthrough); off: upload only. Limits of the cluster risks, as text (xray.LIMITS' keys).
+    # Unused since X-Ray fetches iShares' lists always (#144); kept so configs saved before still load.
     lookthrough_enabled: bool = False
     # Write the funds' countries and sectors into Wealthfolio's taxonomies (replaces only Yahoo's AUTO values).
     lookthrough_write: bool = False
