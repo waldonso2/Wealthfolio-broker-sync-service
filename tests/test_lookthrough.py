@@ -479,3 +479,22 @@ def test_a_stock_the_search_could_not_check_is_not_counted_as_failed(tmp_path):
     r = lookthrough.update(state, depot, search(b"<html>splash</html>"))
     assert [e.split(":")[0] for e in r.errors] == ["iShares Core S&P 500"]
     assert lookthrough.last_pass(state)["finder"] == "iShares-Fondsfinder: HTTP 404"
+
+
+def test_a_product_address_without_the_pages_name_is_taken_and_the_german_site_is_asked_too():
+    page = "https://www.ishares.com/de/privatanleger/de/produkte/308858/"
+    assert lookthrough.ishares_page(page) == ("308858", "holdings") == lookthrough.ishares_page(page[:-1])
+    asked = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked.append(str(request.url))
+        if "product-screener" in request.url.path:
+            return httpx.Response(404)
+        if "autoComplete" in request.url.path:  # the UK site doesn't know it, the German one does
+            hit = [{"category": "productAutocomplete", "id": "/de/privatanleger/de/produkte/308858/"}]
+            return httpx.Response(200, json=[] if "/uk/" in request.url.path else hit)
+        return httpx.Response(200, content=ISHARES_FULL)
+
+    lines, source = fetch(Sources(transport=httpx.MockTransport(answer)), "IE00BJ5JNY98")
+    assert source == "iShares" and "term=IE00BJ5JNY98" in asked[1] and "/de/privatanleger/de/" in asked[2]
+    assert "/products/308858/holdings/1506575576011.ajax" in asked[-1]

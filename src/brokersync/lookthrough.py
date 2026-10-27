@@ -136,11 +136,14 @@ ISHARES_SCREENER = ("https://www.ishares.com/uk/individual/en/product-screener/p
                     "ishares-product-screener-backend-config&siteEntryPassthrough=true")
 # The site's search box: [{category, id, label}]; a product's id holds its page or its number. Used when the fund
 # finder fails - it answers per ISIN.
-ISHARES_SEARCH = ("https://www.ishares.com/uk/individual/en/autoComplete.search"
-                  "?type=autocomplete&siteEntryPassthrough=true&term={isin}")
-PRODUCT_PATH = re.compile(r"/(?:products|produkte)/(\d{4,8})/([a-z0-9-]{3,120})")
-ISHARES_PAGE = re.compile(r"^https://www\.ishares\.com/[a-z]{2}/[a-z-]+/[a-z]{2}/(?:products|produkte)/(\d{4,8})/"
-                          r"([a-z0-9-]{3,120})/?(?:[?#].*)?$")
+# The UK site's first, then the German one's (it lists funds the UK site doesn't); a product is the same number on both.
+ISHARES_SEARCH = tuple(f"https://www.ishares.com/{site}/autoComplete.search"
+                       "?type=autocomplete&siteEntryPassthrough=true&term={isin}"
+                       for site in ("uk/individual/en", "de/privatanleger/de"))
+# The page's name after the number is optional: links often end at the number (.../produkte/308858/).
+PRODUCT_PATH = re.compile(r"/(?:products|produkte)/(\d{4,8})(?:/([a-z0-9-]{3,120}))?")
+ISHARES_PAGE = re.compile(r"^https://www\.ishares\.com/[a-z]{2}/[a-z-]+/[a-z]{2}/(?:products|produkte)/(\d{4,8})"
+                          r"(?:/([a-z0-9-]{3,120}))?/?(?:[?#].*)?$")
 # Only while the fund finder is down: product ids confirmed by another project's live check (dmxch/openfolio,
 # 2026-06). Never a guess - a wrong id can be another fund's list.
 ISHARES = {
@@ -160,7 +163,12 @@ class NoSource(Exception):
 def ishares_page(url: str) -> tuple[str, str] | None:
     """Product id and name in the address of an iShares product page, if it is one."""
     m = ISHARES_PAGE.match(url.strip())
-    return (m.group(1), m.group(2)) if m else None
+    return _product(m) if m else None
+
+
+def _product(m: re.Match) -> tuple[str, str]:
+    # Any name serves: the export finds the list by the number (``holdings`` like the reference implementation).
+    return m.group(1), m.group(2) or "holdings"
 
 
 def xlsx_rows(data: bytes) -> list[list[str]]:
@@ -283,7 +291,7 @@ class Sources:
                     if not self._ishares:  # names only, no values: which field holds the TER (#142)
                         log.info("iShares fund finder: fields of a product: %s", ", ".join(sorted(map(str, row))))
                     key = code.strip().upper()
-                    self._ishares.setdefault(key, (m.group(1), m.group(2)))
+                    self._ishares.setdefault(key, _product(m))
                     if (ter := _ter(row)) is not None:
                         self._ter.setdefault(key, ter)
             if not self._ishares and not self.finder_error:
@@ -300,8 +308,24 @@ class Sources:
         return ISHARES.get(isin) or self._search(isin)
 
     def _search(self, isin: str) -> tuple[str, str] | None:
-        """The product of ``isin`` from the site's search box - only an unambiguous hit, never a guess."""
-        data = self._get(ISHARES_SEARCH.format(isin=quote(isin, safe="")), "iShares-Suche")
+        """The product of ``isin`` from the site's search box - only an unambiguous hit, never a guess. The UK
+        site first, then the German one; an error only when neither answered."""
+        error = None
+        for url in ISHARES_SEARCH:
+            try:
+                found = self._hits(url.format(isin=quote(isin, safe="")))
+            except SourceError as e:
+                error = e
+                continue
+            if found:
+                return found.pop() if len({p for p, _ in found}) == 1 else None
+            error = None
+        if error:
+            raise error
+        return None
+
+    def _hits(self, url: str) -> set[tuple[str, str]]:
+        data = self._get(url, "iShares-Suche")
         try:
             rows = json.loads(data or b"[]")
         except ValueError as e:
@@ -311,10 +335,10 @@ class Sources:
             if isinstance(row, dict) and row.get("category") == "productAutocomplete":
                 text = str(row.get("id") or "")
                 if m := PRODUCT_PATH.search(text):
-                    found.add((m.group(1), m.group(2)))
+                    found.add(_product(m))
                 elif re.fullmatch(r"\d{4,8}", text):
-                    found.add((text, "holdings"))  # the page's name is no part of the export's lookup
-        return found.pop() if len({p for p, _ in found}) == 1 else None
+                    found.add((text, "holdings"))
+        return found
 
     def ter(self, isin: str) -> Decimal | None:
         """The TER the fund finder lists for ``isin`` (after ``ishares_product``)."""

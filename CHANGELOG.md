@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.34.1
+
+- **X-Ray: product addresses without the page's name are accepted (waldonso2/wealthfolio-importer-addon#144).**
+  - iShares links often end at the product number (`…/produkte/308858/`). Both the site search's hits and a product page typed in were refused because the pattern required a name after the number.
+  - The number alone now suffices, as in the reference implementation; the export finds the list by the number.
+- **The German site's search is asked too** when the UK site's search doesn't know the ISIN.
+
 ## 0.34.0
 
 - **Automatic updates (opt-in, page *Updates* under *Einstellungen*):**
