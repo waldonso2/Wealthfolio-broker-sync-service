@@ -39,6 +39,12 @@ def site(tmp_path_factory):
     mp.setattr(vault, "PASSWORD_HASH", {"time_cost": 1, "memory_cost": 1024, "parallelism": 1})
     mp.setattr(crypto, "ARGON2", {"time_cost": 1, "memory_cost": 1024, "parallelism": 1})
     mp.setenv("BROKERSYNC_RECALC_WAIT", "0")
+    import httpx
+
+    from brokersync import lookthrough
+
+    real = lookthrough.Sources  # the conftest's guard is per test; this module's setup runs before it
+    mp.setattr(lookthrough, "Sources", lambda: real(transport=httpx.MockTransport(lambda r: httpx.Response(404))))
     tmp = tmp_path_factory.mktemp("ui")
     mp.setenv("BROKERSYNC_RUNTIME", str(tmp / "no-runtime"))
     client, _, _ = make(tmp / "data")

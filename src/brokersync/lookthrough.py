@@ -27,6 +27,7 @@ import zipfile
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+from urllib.parse import quote
 from xml.etree import ElementTree
 
 import httpx
@@ -133,6 +134,10 @@ ISHARES_CSV = ("https://www.ishares.com/uk/individual/en/products/{id}/{slug}/15
 ISHARES_SCREENER = ("https://www.ishares.com/uk/individual/en/product-screener/product-screener-v3.1.jsn"
                     "?dcrPath=/templatedata/config/product-screener-v3/data/en/uk/product-screener/"
                     "ishares-product-screener-backend-config&siteEntryPassthrough=true")
+# The site's search box: [{category, id, label}]; a product's id holds its page or its number. Used when the fund
+# finder fails - it answers per ISIN.
+ISHARES_SEARCH = ("https://www.ishares.com/uk/individual/en/autoComplete.search"
+                  "?type=autocomplete&siteEntryPassthrough=true&term={isin}")
 PRODUCT_PATH = re.compile(r"/(?:products|produkte)/(\d{4,8})/([a-z0-9-]{3,120})")
 ISHARES_PAGE = re.compile(r"^https://www\.ishares\.com/[a-z]{2}/[a-z-]+/[a-z]{2}/(?:products|produkte)/(\d{4,8})/"
                           r"([a-z0-9-]{3,120})/?(?:[?#].*)?$")
@@ -290,7 +295,26 @@ class Sources:
                             if isinstance(first, dict) else "-")
                 self.finder_error = ("iShares-Fondsfinder: Antwort ohne Produkte mit ISIN und Produktseite "
                                      f"({len(rows) if isinstance(rows, dict | list) else 0} Einträge).")
-        return self._ishares.get(isin) or (ISHARES.get(isin) if self.finder_down else None)
+        if isin in self._ishares or not self.finder_down:
+            return self._ishares.get(isin)
+        return ISHARES.get(isin) or self._search(isin)
+
+    def _search(self, isin: str) -> tuple[str, str] | None:
+        """The product of ``isin`` from the site's search box - only an unambiguous hit, never a guess."""
+        data = self._get(ISHARES_SEARCH.format(isin=quote(isin, safe="")), "iShares-Suche")
+        try:
+            rows = json.loads(data or b"[]")
+        except ValueError as e:
+            raise SourceError("iShares-Suche: Antwort ist kein JSON (vermutlich eine Zwischenseite).") from e
+        found = set()
+        for row in rows if isinstance(rows, list) else ():
+            if isinstance(row, dict) and row.get("category") == "productAutocomplete":
+                text = str(row.get("id") or "")
+                if m := PRODUCT_PATH.search(text):
+                    found.add((m.group(1), m.group(2)))
+                elif re.fullmatch(r"\d{4,8}", text):
+                    found.add((text, "holdings"))  # the page's name is no part of the export's lookup
+        return found.pop() if len({p for p, _ in found}) == 1 else None
 
     def ter(self, isin: str) -> Decimal | None:
         """The TER the fund finder lists for ``isin`` (after ``ishares_product``)."""
@@ -342,8 +366,6 @@ def fetch(sources: Sources, isin: str, page: str = "") -> tuple[tuple[Constituen
     if product:
         return sources.ishares(*product), "iShares"
     # shortcut: only iShares for now (#144); Sources.xtrackers works - call it here again to bring Xtrackers back
-    if sources.finder_down:  # maybe iShares' after all: try again tomorrow, not in NONE_DAYS
-        raise SourceError(sources.finder_error)
     raise NoSource(isin)
 
 
@@ -469,7 +491,7 @@ def update(state: State, depot: Depot, sources: Sources, *, force: bool = False,
             lines, source = fetch(sources, p["isin"], st.get("url", ""))
         except NoSource:
             if is_ishares(p, st):
-                e = SourceError(f"Der iShares-Fondsfinder kennt die ISIN {p['isin']} nicht - trag unter "
+                e = SourceError(f"iShares kennt die ISIN {p['isin']} nicht (Fondsfinder und Suche) - trag unter "
                                 "„Einstellungen dieses ETFs“ seine Produktseite bei iShares ein.")
                 set_status(state, p["id"], status="error", error=str(e))
                 result.errors.append(f"{p['name']}: {e}")
@@ -478,7 +500,8 @@ def update(state: State, depot: Depot, sources: Sources, *, force: bool = False,
             result.none += 1
         except SourceError as e:
             set_status(state, p["id"], status="error", error=str(e))
-            result.errors.append(f"{p['name']}: {e}")
+            if is_ishares(p, st):  # a stock the search couldn't check isn't shown, so it isn't counted either
+                result.errors.append(f"{p['name']}: {e}")
         else:
             state.set_fund(p["id"], p["name"], rows(lines))
             ter = sources.ter(p["isin"]) if source == "iShares" else None

@@ -143,8 +143,34 @@ def test_the_fund_finder_gives_every_ishares_fund_and_its_outage_is_retried_soon
     down = Sources(transport=httpx.MockTransport(lambda r: httpx.Response(503) if "product-screener" in r.url.path
                                                  else answer(r)))
     assert fetch(down, "IE00B4L5Y983")[1] == "iShares"  # a confirmed id while the finder is down
-    with pytest.raises(SourceError, match="Fondsfinder"):
-        fetch(down, "US0378331005")  # not "no source" for 30 days: maybe an iShares fund
+    assert "HTTP 503" in down.finder_error
+
+
+def search(hits) -> Sources:
+    """The fund finder gone (404, as in 10/2026), the site's search answering ``hits``."""
+    def answer(request: httpx.Request) -> httpx.Response:
+        if "product-screener" in request.url.path:
+            return httpx.Response(404)
+        if "autoComplete" in request.url.path:
+            return httpx.Response(200, content=hits) if isinstance(hits, bytes) else httpx.Response(200, json=hits)
+        return httpx.Response(200, content=ISHARES_FULL)
+
+    return Sources(transport=httpx.MockTransport(answer))
+
+
+def test_without_the_fund_finder_the_sites_search_finds_a_fund_but_only_an_unambiguous_one():
+    hit = {"category": "productAutocomplete", "id": "/uk/individual/en/products/999999/example-other-fund",
+           "label": "Example Other"}
+    s = search([hit, {"category": "pageAutocomplete", "id": "/uk/x"}])
+    assert fetch(s, "IE0000000017")[1] == "iShares" and s.finder_error == "iShares-Fondsfinder: HTTP 404"
+    assert search([{"category": "productAutocomplete", "id": "251882"}]).ishares_product("X") == ("251882",
+                                                                                                    "holdings")
+    with pytest.raises(NoSource):  # two funds for one ISIN: never a guess
+        fetch(search([hit, {"category": "productAutocomplete", "id": "123456"}]), "IE0000000017")
+    with pytest.raises(NoSource):
+        fetch(search([]), "US0378331005")  # a stock
+    with pytest.raises(SourceError, match="iShares-Suche"):
+        fetch(search(b"<html>splash</html>"), "IE0000000017")
 
 
 def test_fetch_asks_ishares_by_its_product_id_and_nothing_else_for_now():
@@ -420,9 +446,12 @@ def test_safe_mode_still_refreshes_the_lists_but_contacts_no_broker(tmp_path):
 def test_a_fund_finder_answer_without_products_is_an_error_with_its_reason():
     for content, reason in [(b"<html>splash</html>", "kein JSON"), (json.dumps({"a": {"x": 1}}).encode(),
                                                                     "ohne Produkte")]:
-        s = Sources(transport=httpx.MockTransport(lambda r, c=content: httpx.Response(200, content=c)))
-        with pytest.raises(SourceError, match=reason):
-            fetch(s, "IE0000000017")
+        s = Sources(transport=httpx.MockTransport(
+            lambda r, c=content: httpx.Response(200, content=c) if "product-screener" in r.url.path
+            else httpx.Response(200, json=[])))
+        with pytest.raises(NoSource):
+            fetch(s, "IE0000000017")  # the search asked instead, and it knows nothing
+        assert reason in s.finder_error
     raw = json.dumps({"1": {"isin": {"d": "IE0000000017"}, "productPageUrl": {"r": "/uk/a/en/products/123456/x-etf"}}})
     s = Sources(transport=httpx.MockTransport(lambda r: httpx.Response(200, content=raw.encode())))
     assert s.ishares_product("IE0000000017") == ("123456", "x-etf")  # values as {d, r} like its numbers
@@ -440,3 +469,13 @@ def test_an_ishares_fund_without_a_list_gets_its_reason_and_the_pass_is_recorded
     assert "keine ISIN" in lookthrough.status(state, "a-noisin")["error"]
     assert lookthrough.status(state, "a-other")["status"] == "none"
     assert lookthrough.last_pass(state) | {"at": ""} == {"fetched": 0, "none": 1, "failed": 2, "finder": "", "at": ""}
+
+
+def test_a_stock_the_search_could_not_check_is_not_counted_as_failed(tmp_path):
+    state = State(tmp_path)
+    depot = Depot(positions=[
+        {"id": "a-etf", "isin": "IE00B5BMR087", "name": "iShares Core S&P 500", "currency": "EUR", "value": D(9)},
+        {"id": "a-stock", "isin": "US0378331005", "name": "Apple", "currency": "USD", "value": D(5)}])
+    r = lookthrough.update(state, depot, search(b"<html>splash</html>"))
+    assert [e.split(":")[0] for e in r.errors] == ["iShares Core S&P 500"]
+    assert lookthrough.last_pass(state)["finder"] == "iShares-Fondsfinder: HTTP 404"
