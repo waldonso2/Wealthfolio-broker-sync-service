@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from . import broker_login, brokers, check, duplicates, overview, security, settings, setup, transfers
+from . import broker_login, brokers, check, duplicates, lookthrough, overview, security, settings, setup, transfers
 
 ROUTERS = [setup.router, overview.router, settings.router, brokers.router, broker_login.router, check.router,
+           lookthrough.router,
            # *Überträge*: listed under *Einstellungen* only while patterns are saved (#84).
            transfers.router,
            # Hidden for now (waldonso2/wealthfolio-importer-addon#84) - back into ROUTERS to show it again:

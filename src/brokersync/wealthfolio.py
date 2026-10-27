@@ -194,6 +194,29 @@ class WealthfolioClient:
         r = self._request("DELETE", f"/activities/{quote(activity_id, safe='')}")
         _raise(r)
 
+    # ── taxonomies (look-through, waldonso2/wealthfolio-importer-addon#139) ──
+    def taxonomy_categories(self, taxonomy_id: str) -> list[dict]:
+        """The categories of a taxonomy (``id``, ``name``, ``parentId``), e.g. ``regions``, ``industries_gics``."""
+        r = self._request("GET", f"/taxonomies/{quote(taxonomy_id, safe='')}")
+        _raise(r)
+        return (r.json() or {}).get("categories") or []
+
+    def asset_assignments(self, asset_id: str) -> list[dict]:
+        """``{id, taxonomyId, categoryId, weight, source}`` per category an asset is assigned to."""
+        r = self._request("GET", f"/taxonomies/assignments/asset/{quote(asset_id, safe='')}")
+        _raise(r)
+        return r.json()
+
+    def replace_assignments(self, asset_id: str, taxonomy_id: str, assignments: list[dict]) -> None:
+        """Every assignment of the asset in this taxonomy replaced by ``assignments`` (weights in basis points)."""
+        r = self._request("PUT", f"/taxonomies/assignments/asset/{quote(asset_id, safe='')}/taxonomy/"
+                                 f"{quote(taxonomy_id, safe='')}", json=assignments)
+        _raise(r)
+
+    def delete_assignment(self, assignment_id: str) -> None:
+        r = self._request("DELETE", f"/taxonomies/assignments/{quote(assignment_id, safe='')}")
+        _raise(r)
+
     def holdings(self, account_id: str) -> list[dict]:
         """Current holdings of an account, cash included (``holdingType`` "cash"/"security")."""
         r = self._request("GET", "/holdings", params={"accountId": account_id})

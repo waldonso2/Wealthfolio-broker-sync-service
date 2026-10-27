@@ -28,7 +28,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-from . import __version__, coverage, crypto, meta_keys, retired, spending, updates
+from . import __version__, coverage, crypto, lookthrough, meta_keys, retired, spending, updates, xray
 from . import assets as assets_mod
 from . import config as config_mod
 from . import history as history_mod
@@ -151,7 +151,8 @@ def is_running(data_dir: Path) -> bool:
 class Syncer:
     def __init__(self, data_dir: Path, *, wealthfolio: Callable[[str, str | None], WealthfolioClient] | None = None,
                  notifier: Notifier | None = None, adapters: dict[str, type[BrokerAdapter]] | None = None,
-                 logo_source: Callable[[str], logos_mod.LogoDev] | None = None):
+                 logo_source: Callable[[str], logos_mod.LogoDev] | None = None,
+                 fund_sources: Callable[[], lookthrough.Sources] | None = None):
         self.data_dir = Path(data_dir)
         self.vault = Vault(self.data_dir)
         self.state = State(self.data_dir)
@@ -165,6 +166,7 @@ class Syncer:
         self._pins: dict[str, str] = {}  # PINs typed at the login, for the current run only (#85)
         self._progress: dict = {}  # the broker being fetched, for the overview (#104)
         self._logo_source = logo_source or logos_mod.LogoDev
+        self._fund_sources = fund_sources or lookthrough.Sources
 
     def _consent_existing(self) -> None:
         """Brokers with a ``consent`` set up before it existed (0.23.0, #112): their credentials were saved
@@ -211,6 +213,7 @@ class Syncer:
                     results.append(self._run_broker(cfg, key))
                 self._progress = {}
                 self._update_logos(cfg)
+                self._update_funds(cfg)
                 self._update_spending(cfg)
                 self._check_update(cfg)
             finally:
@@ -266,6 +269,53 @@ class Syncer:
             return None
         finally:
             source.close()
+
+    def update_funds(self) -> lookthrough.Result | None:
+        """The button on *Durchschau*: fetch every fund's holdings now (under the sync lock)."""
+        with run_lock(self.data_dir, wait=5):
+            return self._update_funds(config_mod.load(self.data_dir), force=True)
+
+    def _update_funds(self, cfg: config_mod.Config, *, force: bool = False) -> lookthrough.Result | None:
+        """Look-through after a run (#139): the funds' holdings if turned on, then new cluster risks via ntfy.
+        Whatever goes wrong here never touches the brokers' results."""
+        if not cfg.lookthrough_enabled and not self.state.funds():
+            return None
+        secrets = self.vault.load()
+        sources = self._fund_sources()
+        try:
+            with connect(self._wealthfolio, cfg.wealthfolio_url, secrets.get("wealthfolio_password"),
+                         cfg.wealthfolio_fingerprint) as wf:
+                depot = lookthrough.read_depot(wf)
+                result = lookthrough.update(self.state, depot, sources, force=force) if cfg.lookthrough_enabled \
+                    else None
+                if cfg.lookthrough_write:
+                    try:
+                        lookthrough.write_taxonomies(self.state, wf, depot)
+                    except WealthfolioError:
+                        log.exception("look-through: countries and sectors not written to Wealthfolio")
+            if not depot.positions and not depot.cash:  # Wealthfolio answered nothing: keep what was notified
+                return result
+            found = xray.findings(lookthrough.holdings(self.state, depot), lookthrough.limits(cfg.xray_limits),
+                                  depot.base, depot.cash, lookthrough.cost(self.state, depot, cfg).rate)
+            new = lookthrough.new_risks(self.state, found)
+            if new:
+                names = ", ".join(f.name or f.kind for f in new[:5])
+                self.notifier(cfg).send("Klumpenrisiko", f"{len(new)} neue Klumpenrisiken in der Durchschau: {names}",
+                                        link=self.link(cfg, "/lookthrough"), tags="warning")
+            return result
+        except Exception:
+            log.exception("look-through not updated")
+            return None
+        finally:
+            sources.close()
+
+    def remove_taxonomies(self) -> int:
+        """*Aus Wealthfolio entfernen* on *Durchschau*: our countries and sectors out again (under the sync lock)."""
+        with run_lock(self.data_dir, wait=5):
+            cfg = config_mod.load(self.data_dir)
+            with connect(self._wealthfolio, cfg.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
+                         cfg.wealthfolio_fingerprint) as wf:
+                return lookthrough.remove_taxonomies(wf)
 
     def _update_spending(self, cfg: config_mod.Config) -> None:
         """The banks' cash accounts in Wealthfolio's spending tracker (#134); never touches a broker's result."""

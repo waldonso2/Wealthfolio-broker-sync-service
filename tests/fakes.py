@@ -41,6 +41,14 @@ class FakeWealthfolio:
         self.expire_next = False
         self.assets: list[dict] = []  # GET /assets
         self.logos: dict[str, str] | None = {}  # asset id -> base64 PNG; None: Wealthfolio before 3.8.0
+        # Taxonomies: a few of Wealthfolio's seeded categories, and the assignments made.
+        self.categories = {"regions": [{"id": "R20", "name": "Americas", "parentId": None},
+                                       {"id": "country_US", "name": "United States", "parentId": "R2010"},
+                                       {"id": "country_DE", "name": "Germany", "parentId": "R3010"}],
+                           "industries_gics": [{"id": "45", "name": "Information Technology", "parentId": None},
+                                               {"id": "4510", "name": "Software & Services", "parentId": "45"},
+                                               {"id": "20", "name": "Industrials", "parentId": None}]}
+        self.assignments: list[dict] = []
         self.spending: dict | None = {"enabled": False, "accountIds": [], "excludedCategoryIds": []}  # None: no tracker
 
     def transport(self) -> httpx.MockTransport:
@@ -153,6 +161,28 @@ class FakeWealthfolio:
                 return httpx.Response(400, json={"code": 400, "message": "Logo image must be a PNG"})
             self.logos[asset_id] = data
             return httpx.Response(200, json={"assetId": asset_id})
+        if path.startswith("/api/v1/taxonomies/assignments/asset/") and request.method == "PUT":
+            _, asset_id, _, taxonomy_id = path.removeprefix("/api/v1/taxonomies/assignments/").split("/")
+            new = json.loads(request.content)
+            known = {c["id"] for c in self.categories[taxonomy_id]}
+            if any(not 1 <= a["weight"] <= 10000 or a["categoryId"] not in known for a in new) or sum(
+                    a["weight"] for a in new) > 10000:  # like Wealthfolio's TaxonomyService
+                return httpx.Response(400, json={"code": 400, "message": "invalid assignment"})
+            self.assignments = [a for a in self.assignments
+                                if not (a["assetId"] == asset_id and a["taxonomyId"] == taxonomy_id)]
+            self.assignments += [{**a, "id": str(uuid.uuid4())} for a in new]
+            return httpx.Response(200, json=new)
+        if path.startswith("/api/v1/taxonomies/assignments/asset/"):
+            asset_id = unquote(path.rsplit("/", 1)[1])
+            return httpx.Response(200, json=[a for a in self.assignments if a["assetId"] == asset_id])
+        if path.startswith("/api/v1/taxonomies/assignments/") and request.method == "DELETE":
+            gone = path.rsplit("/", 1)[1]
+            self.assignments = [a for a in self.assignments if a["id"] != gone]
+            return httpx.Response(204)
+        if path.startswith("/api/v1/taxonomies/"):
+            taxonomy_id = path.rsplit("/", 1)[1]
+            return httpx.Response(200, json={"taxonomy": {"id": taxonomy_id},
+                                             "categories": self.categories.get(taxonomy_id, [])})
         if self.spending is not None and path == "/api/v1/spending/settings":
             if request.method == "PUT":
                 self.spending.update(json.loads(request.content))
@@ -198,6 +228,8 @@ class FakeWealthfolio:
                 symbols.setdefault(asset, symbol)
         out = [{"holdingType": "cash", "localCurrency": c, "quantity": str(v), "instrument": {"symbol": c}}
                for c, v in cash.items()]
+        # Every share is worth 1 EUR here.
         out += [{"holdingType": "security", "localCurrency": "EUR", "quantity": str(q),
+                 "marketValue": {"local": str(q), "base": str(q)},
                  "instrument": {"id": i, "symbol": symbols[i], "name": symbols[i]}} for i, q in shares.items() if q]
         return out

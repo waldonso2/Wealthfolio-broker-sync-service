@@ -22,7 +22,8 @@ sync_api = pytest.importorskip("playwright.sync_api")
 axe_api = pytest.importorskip("axe_playwright_python.sync_playwright")
 
 # Every page a signed-in user reaches (the hidden ones aside, routes.HIDDEN).
-PAGES = ["/", "/check", "/unknown", "/settings", "/brokers", "/brokers/fake", "/brokers/fake/login",
+PAGES = ["/", "/check", "/lookthrough", "/lookthrough/fire", "/unknown", "/settings", "/brokers", "/brokers/fake",
+         "/brokers/fake/login",
          "/brokers/fake/reset", "/setup/wealthfolio", "/notifications", "/securities", "/logos", "/security",
          "/appearance"]
 PHONE = {"width": 375, "height": 740}

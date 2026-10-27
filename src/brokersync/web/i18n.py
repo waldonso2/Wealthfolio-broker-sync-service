@@ -994,4 +994,257 @@ EN: dict[str, str] = {
         "Note on the interface confirmed.",
     "Ich habe den Hinweis gelesen und möchte den Zugang trotzdem nutzen.":
         "I have read the note and want to use the access anyway.",
+    # Durchschau (waldonso2/wealthfolio-importer-addon#139)
+    "Durchschau": "Look-through",
+    "{name}: {n} Positionen gelesen, zusammen {sum} % des Fonds.":
+        "{name}: {n} holdings read, {sum} % of the fund together.",
+    "Unbekannte Position - bitte die Seite neu laden.": "Unknown position - please reload the page.",
+    "Die Positionen werden gerade aus Wealthfolio gelesen …": "Reading the positions from Wealthfolio …",
+    "Positionen gelesen {when}.": "Positions read {when}.",
+    "Neu lesen": "Read again",
+    "Was wird berechnet?": "What is calculated?",
+    "Anteil am Depot: Wert der Position mal Gewicht der Aktie im Fonds, über alle Positionen addiert. Was die "
+    "Gewichte eines Fonds offen lassen, steht als „nicht zugeordnet“ – nichts wird hochgerechnet. Überschneidung "
+    "zweier ETFs: Summe des jeweils kleineren Gewichts jeder Aktie, die beide halten. Eigener Beitrag: der Teil "
+    "eines ETFs, den keine andere Position mitbringt. Effektive Titelzahl: so vielen gleich gewichteten Aktien "
+    "entspricht das Depot.":
+        "Share of the portfolio: value of the position times the stock's weight in the fund, added up over all "
+        "positions. What a fund's weights leave open is shown as \u201cunassigned\u201d - nothing is scaled up. "
+        "Overlap of two ETFs: sum of the smaller weight of each stock both hold. Own contribution: the part of an "
+        "ETF no other position brings. Effective number of stocks: as many equally weighted stocks as the portfolio "
+        "is worth.",
+    "Vereinfachte Modellrechnung, keine Anlageberatung.": "Simplified model calculation, not investment advice.",
+    "Positionen und Positionslisten": "Positions and holdings lists",
+    "Position": "Position",
+    "Anteil am Depot": "Share of the portfolio",
+    "Positionsliste": "Holdings list",
+    "keine": "none",
+    "Keine Positionen in Wealthfolio.": "No positions in Wealthfolio.",
+    "Aktien über alle Positionen": "Stocks across all positions",
+    "{n} Aktien, effektive Titelzahl {effective}.": "{n} stocks, effective number of stocks {effective}.",
+    "Nicht zugeordnet: {share}.": "Unassigned: {share}.",
+    "Anzahl": "Number",
+    "alle": "all",
+    "Top {n}": "Top {n}",
+    "Aktie": "Stock",
+    "Land": "Country",
+    "Sektor": "Sector",
+    "davon über": "of which through",
+    "Wie sich die ETFs überschneiden": "How the ETFs overlap",
+    "ETF": "ETF",
+    "Eigener Beitrag": "Own contribution",
+    # Klumpenrisiken und Abruf (#139)
+    "Einzelaktie": "Single stock",
+    "Fremdwährung": "Foreign currency",
+    "Überschneidung": "Overlap",
+    "Wenige Titel": "Few stocks",
+    "Bargeld über der Einlagensicherung": "Cash above the deposit guarantee",
+    "Einzelaktie über (%)": "Single stock above (%)",
+    "Land über (%)": "Country above (%)",
+    "Sektor über (%)": "Sector above (%)",
+    "Fremdwährung über (%)": "Foreign currency above (%)",
+    "Überschneidung zweier ETFs über (%)": "Overlap of two ETFs above (%)",
+    "Effektive Titelzahl unter": "Effective number of stocks below",
+    "Bargeld je Konto über (EUR)": "Cash per account above (EUR)",
+    "{fetched} Positionslisten geholt, {none} ohne Quelle (hochladen), {failed} fehlgeschlagen.":
+        "{fetched} holdings lists fetched, {none} without a source (upload), {failed} failed.",
+    "Positionslisten abrufen": "Fetch holdings lists",
+    "Meldung": "Finding",
+    "Das ist keine Produktseite von iShares (https://www.ishares.com/…/products/<Nummer>/<Name>).":
+        "That is not an iShares product page (https://www.ishares.com/…/products/<number>/<name>).",
+    "Erst den automatischen Abruf einschalten.": "Turn on automatic fetching first.",
+    "Die Positionslisten konnten nicht geholt werden - siehe Protokoll.":
+        "The holdings lists could not be fetched - see the log.",
+    "Welche Aktien in deinen ETFs stecken und wie sie sich mit deinen anderen Positionen addieren. Die "
+    "Positionslisten der ETFs holt der Dienst bei den Anbietern (unten einschalten) oder du lädst sie hoch; ohne "
+    "Liste zählt ein ETF als eine Position.":
+        "Which stocks your ETFs hold and how they add up with your other positions. The service fetches the ETFs' "
+        "holdings lists from their issuers (turn it on below), or you upload them; without a list an ETF counts as "
+        "one position.",
+    "Klumpenrisiken: eine Aktie, ein Land, ein Sektor oder Fremdwährung über ihrer Grenze, zwei ETFs, die sich "
+    "stark überschneiden, zu wenige effektive Titel, Bargeld über 100.000 EUR auf einem Konto (gesetzliche "
+    "Einlagensicherung je Bank). Land, Sektor und Währung stehen so, wie der Anbieter sie nennt; ein "
+    "währungsgesicherter ETF zählt noch als Fremdwährung. Bei synthetischen ETFs (Swap) listet der Anbieter oft den "
+    "Sicherheitenkorb statt des Index.":
+        "Cluster risks: a stock, a country, a sector or foreign currency above its limit, two ETFs that overlap a "
+        "lot, too few effective stocks, cash above 100,000 EUR on one account (statutory deposit guarantee per "
+        "bank). Country, sector and currency are as the issuer names them; a currency-hedged ETF still counts as "
+        "foreign currency. For synthetic ETFs (swap) the issuer often lists the collateral basket instead of the "
+        "index.",
+    "Klumpenrisiken": "Cluster risks",
+    "Was": "What",
+    "Grenze": "Limit",
+    "So gewollt": "Intended",
+    "Keine Klumpenrisiken über deinen Grenzen.": "No cluster risks above your limits.",
+    "So gewollt ({n})": "Intended ({n})",
+    "Wieder melden": "Report again",
+    "{n} Positionen von {source}, Stand {when}": "{n} holdings from {source}, as of {when}",
+    "keine Quelle gefunden – Positionsliste hochladen, falls es ein ETF ist":
+        "no source found – upload the holdings list if it is an ETF",
+    "Quelle ändern oder Liste hochladen": "Change source or upload a list",
+    "Produktseite bei iShares für {name}": "iShares product page for {name}",
+    "Positionsliste für {name} (CSV oder XLSX)": "Holdings list for {name} (CSV or XLSX)",
+    "Einstellungen der Durchschau": "Look-through settings",
+    "Positionslisten automatisch bei den Anbietern abrufen (iShares, Xtrackers) – nach jedem Abruf, je ETF "
+    "höchstens wöchentlich. Gesendet wird nur die ISIN bzw. die Produktseite.":
+        "Fetch the holdings lists from the issuers automatically (iShares, Xtrackers) – after every fetch, at most "
+        "weekly per ETF. Only the ISIN or the product page is sent.",
+    "Positionslisten jetzt abrufen": "Fetch holdings lists now",
+    # Taxonomien in Wealthfolio (#139)
+    "Zuordnungen entfernen": "Remove assignments",
+    "{n} Zuordnungen aus Wealthfolio entfernt.": "{n} assignments removed from Wealthfolio.",
+    "Länder und Sektoren der ETFs in Wealthfolio eintragen, damit seine eigenen Auswertungen durch die ETFs sehen. "
+    "Ersetzt nur Yahoos automatische Werte, nie deine eigenen Zuordnungen.":
+        "Enter the ETFs' countries and sectors in Wealthfolio, so its own analyses see through the ETFs. Replaces "
+        "only Yahoo's automatic values, never your own assignments.",
+    "Zuletzt in Wealthfolio eingetragen {when}: {written} geändert, {manual} mit deinen eigenen Zuordnungen "
+    "gelassen.":
+        "Last entered in Wealthfolio {when}: {written} changed, {manual} left with your own assignments.",
+    "Ohne passende Kategorie: {names}.": "Without a matching category: {names}.",
+    "Aus Wealthfolio entfernen": "Remove from Wealthfolio",
+    # FIRE-Rechner (#139)
+    "Lean FIRE (75 % der Ausgaben)": "Lean FIRE (75 % of expenses)",
+    "FIRE": "FIRE",
+    "Fat FIRE (150 % der Ausgaben)": "Fat FIRE (150 % of expenses)",
+    "Barista FIRE (mit Teilzeit bis zur Rente)": "Barista FIRE (with part-time work until the pension)",
+    "Ausgaben im Jahr (EUR, ohne Krankenversicherung)": "Expenses a year (EUR, without health insurance)",
+    "Sparrate im Jahr (EUR)": "Savings a year (EUR)",
+    "Vermögen (EUR, leer: aus Wealthfolio)": "Wealth (EUR, empty: from Wealthfolio)",
+    "Alter heute": "Age today",
+    "Alter bei Rückzug aus dem Beruf": "Age when you stop working",
+    "Alter bei Beginn der gesetzlichen Rente": "Age when the statutory pension starts",
+    "Rente netto im Jahr (EUR, heutiger Wert)": "Net pension a year (EUR, today's value)",
+    "Teilzeit-Einkommen netto im Jahr bis zur Rente (EUR, Barista FIRE)":
+        "Net part-time income a year until the pension (EUR, Barista FIRE)",
+    "Rendite nach Inflation (% im Jahr)": "Return after inflation (% a year)",
+    "Entnahmerate (% im Jahr)": "Withdrawal rate (% a year)",
+    "Gewinnanteil eines Verkaufs (%, leer: aus Wealthfolio)": "Gain share of a sale (%, empty: from Wealthfolio)",
+    "Kirchensteuer (%: 0, 8 oder 9)": "Church tax (%: 0, 8 or 9)",
+    "Private Krankenversicherung im Jahr (EUR)": "Private health insurance a year (EUR)",
+    "Zusammenveranlagt (2.000 EUR Sparerpauschbetrag)": "Joint assessment (2,000 EUR saver's allowance)",
+    "Freiwillig gesetzlich versichert (sonst privat)": "Voluntarily insured in the statutory scheme (else private)",
+    "Unbekannte Zeichenkodierung - bitte die CSV-Datei des Anbieters hochladen.":
+        "Unknown character encoding - please upload the issuer's CSV file.",
+    "Keine Positionsliste: Spalten für Name und Gewichtung fehlen.":
+        "Not a holdings list: columns for name and weight are missing.",
+    "Die Positionsliste enthält keine Zeile mit Gewichtung.": "The holdings list has no line with a weight.",
+    "Die XLSX-Datei ist zu groß.": "The XLSX file is too large.",
+    "Die XLSX-Datei enthält keine Tabelle.": "The XLSX file contains no sheet.",
+    "Keine lesbare XLSX-Datei.": "Not a readable XLSX file.",
+    "In der Rente pflichtversichert (KVdR): kein Beitrag auf Kapitalerträge":
+        "Compulsorily insured as a pensioner (KVdR): no contribution on capital income",
+    "Kinderlos (höherer Pflegebeitrag)": "Childless (higher long-term care contribution)",
+    "Aktienfonds (30 % Teilfreistellung)": "Equity funds (30 % partial exemption)",
+    "{label}: bitte eintragen.": "{label}: please fill in.",
+    "{label}: bitte eine ganze Zahl.": "{label}: please a whole number.",
+    "FIRE-Rechner": "FIRE calculator",
+    "Wie viel Vermögen ein Leben von deinem Depot braucht – mit deutscher Abgeltungsteuer, Teilfreistellung, "
+    "Sparerpauschbetrag und Krankenversicherung, in heutigem Geld.":
+        "How much wealth a life on your portfolio needs – with German flat tax, partial exemption, saver's "
+        "allowance and health insurance, in today's money.",
+    "Zurück zur Durchschau": "Back to the look-through",
+    "Aus Wealthfolio: Vermögen {total} EUR.": "From Wealthfolio: wealth {total} EUR.",
+    "Gewinnanteil der Wertpapiere {share} %.": "Gain share of the securities {share} %.",
+    "Vereinfachte Modellrechnung, keine Steuer- oder Anlageberatung. Rechtsstand {year}.":
+        "Simplified model calculation, no tax or investment advice. Law as of {year}.",
+    "Ziel": "Goal",
+    "Vermögen nötig": "Wealth needed",
+    "Erreicht in": "Reached in",
+    "Alter": "Age",
+    "nie bei dieser Sparrate": "never at this savings rate",
+    "erreicht": "reached",
+    "{n} Jahren": "{n} years",
+    "Coast FIRE: mit {coast} EUR heute wächst das Depot ohne weiteres Sparen bis zum Rückzug auf das FIRE-Ziel.":
+        "Coast FIRE: with {coast} EUR today the portfolio grows to the FIRE goal by the time you stop working, "
+        "without saving more.",
+    "Erreicht.": "Reached.",
+    "Noch nicht erreicht.": "Not reached yet.",
+    "Entnahme im Jahr bis zur Rente": "Withdrawal a year until the pension",
+    "Posten": "Item",
+    "Ausgaben": "Expenses",
+    "Steuer auf die Gewinne (Satz {rate} %)": "Tax on the gains (rate {rate} %)",
+    "Krankenversicherung": "Health insurance",
+    "Entnahme aus dem Depot": "Withdrawal from the portfolio",
+    "Deine Angaben": "Your details",
+    "Berechnen": "Calculate",
+    "Wie wird gerechnet?": "How is it calculated?",
+    "Brutto-Entnahme: so viel, dass nach Steuer und Krankenversicherung die Ausgaben bleiben. Steuerpflichtig ist "
+    "nur der Gewinnanteil eines Verkaufs, bei Aktienfonds davon 70 % (Teilfreistellung), abzüglich "
+    "Sparerpauschbetrag. Bis zur gesetzlichen Rente trägt das Depot die ganze Entnahme (Barwert dieser Jahre), "
+    "danach nur, was die Rente offen lässt – als dauerhafte Entnahme zur Entnahmerate. Jahre bis zum Ziel mit "
+    "heutigem Vermögen, Sparrate und Rendite nach Inflation. Die Vorabpauschale fehlt: sie wird beim späteren "
+    "Verkauf angerechnet.":
+        "Gross withdrawal: enough that the expenses remain after tax and health insurance. Only the gain share of a "
+        "sale is taxable, for equity funds 70 % of it (partial exemption), less the saver's allowance. Until the "
+        "statutory pension the portfolio carries the whole withdrawal (present value of those years), afterwards "
+        "only what the pension leaves open – as a permanent withdrawal at the withdrawal rate. Years to the goal "
+        "with today's wealth, savings and return after inflation. The advance lump sum (Vorabpauschale) is left "
+        "out: it is credited at the later sale.",
+    "Werte {year}": "Values {year}",
+    "Abgeltungsteuer + Solidaritätszuschlag": "Flat tax + solidarity surcharge",
+    "Teilfreistellung Aktienfonds": "Partial exemption of equity funds",
+    "Sparerpauschbetrag (einzeln / zusammen)": "Saver's allowance (single / joint)",
+    "Kranken- und Pflegeversicherung freiwillig (mit Kind / kinderlos)":
+        "Health and care insurance, voluntary (with child / childless)",
+    "Mindest- und Höchstbemessung im Jahr": "Minimum and maximum basis a year",
+    "FIRE-Rechner: wie viel Vermögen ein Leben vom Depot braucht":
+        "FIRE calculator: how much wealth a life on the portfolio needs",
+    # Costs (waldonso2/wealthfolio-importer-addon#142)
+    "Gesamtkostenquote": "Total cost ratio",
+    "Gesamtkostenquote über (% im Jahr)": "Total cost ratio above (% a year)",
+    "Ordergebühr je Verkauf (EUR)": "Order fee per sale (EUR)",
+    "Ordergebühr je Verkauf (% des Werts)": "Order fee per sale (% of the value)",
+    "Spread je Kauf und Verkauf (%)": "Spread per buy and sale (%)",
+    "Depotgebühr im Jahr (EUR)": "Custody fee a year (EUR)",
+    "Kosten (% im Jahr, leer: aus der Durchschau)": "Costs (% a year, empty: from the look-through)",
+    "Laufende Kosten (TER, % im Jahr)": "Ongoing charges (TER, % a year)",
+    "Kosten des Depots {rate} % im Jahr.": "Depot costs {rate} % a year.",
+    "Ohne Kosten": "Without costs",
+    "Gerechnet mit {rate} % Kosten im Jahr, abgezogen von der Rendite nach Inflation.":
+        "Calculated with costs of {rate} % a year, taken off the return after inflation.",
+    "Ohne Kosten wäre FIRE {n} Jahre früher erreicht.": "Without costs FIRE would be reached {n} years earlier.",
+    "Laufende Kosten (TER, % im Jahr) für {name}, leer: vom Anbieter":
+        "Ongoing charges (TER, % a year) of {name}, empty: from the issuer",
+    "Kosten": "Costs",
+    "Gesamtkostenquote {rate} im Jahr": "Total cost ratio {rate} a year",
+    "Gesamtkostenquote unbekannt": "Total cost ratio unknown",
+    "({share} des Depots ohne bekannte Kostenquote)": "({share} of the depot without a known cost ratio)",
+    "Gewichtete TER {ter}.": "Weighted TER {ter}.",
+    "Laufend {yearly} EUR im Jahr, bisher angefallen {so_far} EUR.":
+        "Ongoing {yearly} EUR a year, incurred so far {so_far} EUR.",
+    "Verkauf: {n} Positionen nicht geschätzt (Gebührenmodell fehlt).":
+        "Sale: {n} positions not estimated (no fee model).",
+    "Verkauf heute geschätzt {exit} EUR.": "Sale today estimated at {exit} EUR.",
+    "Steuern (nicht in der Kostenquote): {tax} EUR.": "Taxes (not in the cost ratio): {tax} EUR.",
+    "Kosten je Position": "Costs per position",
+    "Gehalten": "Held",
+    "Ordergebühren": "Order fees",
+    "Spread (geschätzt)": "Spread (estimated)",
+    "TER": "TER",
+    "Laufende Kosten bisher": "Ongoing charges so far",
+    "Depotgebühr bisher": "Custody fee so far",
+    "Kosten bisher": "Costs so far",
+    "Verkauf (geschätzt)": "Sale (estimated)",
+    "Steuern": "Taxes",
+    "Kostenquote im Jahr": "Cost ratio a year",
+    "{n} Jahre": "{n} years",
+    "von Hand": "by hand",
+    "unbekannt": "unknown",
+    "nicht geschätzt": "not estimated",
+    "Kostenquote unbekannt": "Cost ratio unknown",
+    "Ordergebühren und Steuern stehen so in den Buchungen in Wealthfolio. Geschätzt sind: der Spread (dein "
+    "Prozentsatz auf den Wert jedes Kaufs und Verkaufs), die laufenden Kosten (TER mal Mittel aus Einstandswert und "
+    "heutigem Wert mal Haltedauer seit dem ersten Kauf) und der Verkauf (dein Gebührenmodell auf den heutigen "
+    "Wert). Die Depotgebühr wird nach Wert auf die Positionen des Brokers verteilt. Ohne TER hat eine Position "
+    "keine Kostenquote – bei einer Einzelaktie trägst du 0 ein. Die Kostenquote ist alles bisher Angefallene "
+    "geteilt durch den mittleren Wert und die Jahre; Steuern zählen nicht dazu. Die Tracking-Differenz fehlt, weil "
+    "keine Quelle sie liefert.":
+        "Order fees and taxes are as booked in Wealthfolio. Estimated are: the spread (your percentage of the value "
+        "of every buy and sale), the ongoing charges (TER times the mean of cost basis and today's value times the "
+        "years held since the first buy) and the sale (your fee model on today's value). The custody fee is shared "
+        "by value among the broker's positions. Without a TER a position has no cost ratio - for a single stock "
+        "enter 0. The cost ratio is everything incurred so far divided by the mean value and the years; taxes are "
+        "not part of it. The tracking difference is missing because no source provides it.",
+    "Gebühren der Broker": "The brokers' fees",
+    "Leer heißt unbekannt: dann wird nichts geschätzt.": "Empty means unknown: then nothing is estimated.",
 }

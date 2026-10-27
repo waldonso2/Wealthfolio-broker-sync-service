@@ -254,7 +254,7 @@ def test_navigation_groups_the_settings(tmp_path):
     first_password(client)
     page = client.get("/").text
     nav = re.search(r'<nav class="main" aria-label="Hauptmenü">(.*?)</nav>', page, re.S).group(1)
-    assert re.findall(r'<a href="([^"]+)"', nav) == ["/", "/check", "/unknown", "/settings"]
+    assert re.findall(r'<a href="([^"]+)"', nav) == ["/", "/check", "/lookthrough", "/unknown", "/settings"]
     assert 'class="count"' not in nav and 'class="subnav"' not in page
 
     index = client.get("/settings").text

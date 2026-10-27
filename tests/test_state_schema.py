@@ -21,6 +21,7 @@ def _as_0_13(tmp_path) -> None:
         ])
         s.db.execute("DROP TABLE events")  # 0.22.0 (#102)
         s.db.execute("DROP TABLE completions")  # waldonso2/wealthfolio-importer-addon#132
+        s.db.execute("DROP TABLE funds")  # waldonso2/wealthfolio-importer-addon#139
         s.db.execute("PRAGMA user_version = 0")
     s.mark("dkb", "tx-1", "imported", ["a1", "a2"])
     s.close()
@@ -45,6 +46,8 @@ def test_a_database_of_0_13_is_migrated_without_loss(tmp_path):
     s.add_completion("tr", "ev-1", {"kind": "split", "isin": "US0378331005", "ratio": "0.1", "day": "2026-04-20"})
     assert s.completions("tr") == {("tr", "ev-1"): {"kind": "split", "isin": "US0378331005", "ratio": "0.1",
                                                      "day": "2026-04-20"}}
+    s.set_fund("asset-1", "Example World", [["US0378331005", "Example Inc", "0.05", "US", "IT", "USD"]])
+    assert s.funds()["asset-1"]["constituents"][0][2] == "0.05"
 
 
 def test_a_fresh_database_gets_the_current_schema_and_a_newer_one_is_refused(tmp_path):
