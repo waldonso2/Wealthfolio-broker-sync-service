@@ -38,6 +38,8 @@ class BrokerConfig:
     start_date: str = ""
     # The adapter's ``consent`` was agreed to (#112); without it no login starts.
     consented: bool = False
+    # The cash account goes into Wealthfolio's spending tracker (#134).
+    spending: bool = False
 
 
 @dataclass

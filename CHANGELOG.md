@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.29.0
+
+- **Spending per bank (waldonso2/wealthfolio-importer-addon#134):** a new switch *Ausgaben auswerten* in a broker's settings puts its cash account into Wealthfolio's spending tracker after the next fetch (and turns the tracker on). Wealthfolio categorizes the bookings with its own rules (*Spending → Rules*, with presets), which match the activity's note - the comment already names counterparty and purpose, so no activity changes and nothing is booked anew. Own transfers and securities settlements are linked pairs, which the tracker counts as saving or neutral, not as spending. Switched off, the account leaves the tracker again, unless it was tracked in Wealthfolio before; accounts chosen there are never removed. A Wealthfolio without the tracker only logs a warning.
+
 ## 0.28.1
 
 - Security updates of two locked dependencies (CI job `audit`): certifi 2026.10.19 (PYSEC-2026-4320) and setuptools 84.1.0 (GHSA-xmj3-9gf7-h52w).
