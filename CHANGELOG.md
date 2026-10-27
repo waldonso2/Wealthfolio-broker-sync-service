@@ -3,6 +3,7 @@
 ## 0.32.0
 
 - **Banks over PSD2, e.g. N26 (waldonso2/wealthfolio-importer-addon#137):** *Bank über PSD2 1–3* read a giro account through Enable Banking, a licensed account information service, with the user's own app in its free restricted mode (only the user's own accounts). App id and private key are kept in the vault; every request is signed with the key. The login opens the bank's page; afterwards the user pastes the address the bank sent them to. The consent lasts as long as the bank allows; ntfy reminds 7 days and 1 day before it ends, and a scheduled run never starts a login by itself. Bookings as for FinTS banks; pending ones wait until they are booked. No depot over PSD2. The README says that the account data passes through Enable Banking.
+- **N26 (waldonso2/wealthfolio-importer-addon#135):** the main account over the interface of the N26 app (unofficial; the broker settings ask for agreement first, as for Trade Republic). Login with e-mail and password, confirmed in the N26 app; afterwards the token is refreshed without the user, and a scheduled run never pushes a new login into the app. A rejected password stops every further attempt until the credentials are saved anew. Booked transactions only (pending ones wait), ids `n26-<id>`; the balance is compared after each run. Money moved to a Space is a withdrawal unless a transfer pattern books it as a transfer.
 
 ## 0.31.0
 

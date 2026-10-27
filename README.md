@@ -9,7 +9,7 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 - **Keine Duplikate:** Was schon in Wealthfolio steht – auch aus einem früheren CSV- oder PDF-Import –, erkennt der Dienst und legt es nicht noch einmal an
 - **Prüft sich selbst:** Nach jedem Abruf vergleicht er Konto und Depot mit dem Broker und zeigt, wo etwas fehlt oder nicht aufgeht
 
-> **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS), **Scalable Capital** (über Scalables offizielles CLI), **comdirect** (Girokonto und Depot über die offizielle REST-API), **Deutsche Bank** (Girokonto und maxblue-Depotbestand per FinTS; neu, noch nicht lange im Einsatz), **jede andere Bank mit FinTS** – z. B. Sparkasse, Volks- und Raiffeisenbank (Girokonto; neu, je Bank noch ungeprüft) – und **jede Bank mit PSD2-Schnittstelle**, z. B. N26 (Girokonto über Enable Banking; neu).
+> **Stand:** **Trade Republic**, **DKB** (Girokonto per FinTS), **Scalable Capital** (über Scalables offizielles CLI), **comdirect** (Girokonto und Depot über die offizielle REST-API), **Deutsche Bank** (Girokonto und maxblue-Depotbestand per FinTS; neu, noch nicht lange im Einsatz), **jede andere Bank mit FinTS** – z. B. Sparkasse, Volks- und Raiffeisenbank (Girokonto; neu, je Bank noch ungeprüft) – **N26** (Hauptkonto über die Schnittstelle der N26-App; neu) und **jede Bank mit PSD2-Schnittstelle** (Girokonto über Enable Banking; neu).
 
 ## Was du brauchst
 
@@ -173,6 +173,16 @@ Jede Bank in der EU muss Kontodaten über eine Schnittstelle nach der Zahlungsdi
 **Anmelden:** Der Dienst zeigt einen Link zu deiner Bank. Dort meldest du dich an und gibst den Zugriff frei. Danach landest du auf der Redirect-URL – die Seite muss nicht laden. Kopiere ihre Adresse aus der Adresszeile in das Feld des Dienstes. Die Freigabe gilt so lange, wie die Bank es erlaubt (meist 90 oder 180 Tage); 7 Tage und 1 Tag vor dem Ende erinnert ntfy daran, dich neu anzumelden.
 
 **Was gebucht wird:** wie bei der DKB – Ausgaben als Auszahlung, Eingänge als Einzahlung, Zinsen und Gebühren für sich; vorgemerkte Umsätze erst, wenn sie gebucht sind. PSD2 deckt nur Zahlungskonten ab, **kein Depot**: Girobuchungen von Wertpapiergeschäften wartet der Dienst ab, bis die Wertpapierseite in Wealthfolio steht.
+
+## N26
+
+> **Bitte beachten:** N26 bietet Privatkunden keine offizielle Schnittstelle. Der Dienst nutzt die der N26-App, wie andere Finanzprogramme auch. N26 kann sie jederzeit ändern oder solche Zugriffe untersagen; dann klappt der Abruf nicht mehr. Deshalb bestätigst du in den Broker-Einstellungen einmal, dass du diesen Hinweis gelesen hast; vorher startet keine Anmeldung.
+
+**Einrichten** unter *Broker → N26*: E-Mail und Passwort deines N26-Kontos.
+
+**Anmelden:** Der Dienst meldet sich an, N26 schickt eine Bestätigung in die N26-App. Du bestätigst dort und klickst *Ich habe in der App bestätigt*. Danach ruft der Dienst ohne dich ab, solange N26 die Anmeldung verlängert. Läuft sie ab, meldet ntfy *Anmeldung nötig* – eine neue Anfrage in der App löst nur die Oberfläche aus, nie der tägliche Abruf. Lehnt N26 Passwort oder E-Mail ab, versucht der Dienst es nicht noch einmal, bis du die Zugangsdaten neu speicherst.
+
+**Was gebucht wird:** Eingänge als Einzahlung, Kartenzahlungen, Lastschriften und Überweisungen als Auszahlung; vorgemerkte Umsätze erst, wenn sie gebucht sind. Geld, das du in einen Space schiebst, erscheint als Auszahlung vom Hauptkonto – mit einem Muster auf der Seite *Überträge* (z. B. Stichwort des Space) wird es ein Übertrag auf ein eigenes Wealthfolio-Konto. Der Saldo des Hauptkontos wird nach jedem Abruf verglichen.
 
 ## Trade Republic
 
