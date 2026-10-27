@@ -120,7 +120,7 @@ def parse(data: bytes) -> tuple[Constituent, ...]:
 
 
 # ── fetching ─────────────────────────────────────────────────────────────────
-HOSTS = ("www.ishares.com", "etf.dws.com")
+HOSTS = ("www.ishares.com", "www.blackrock.com", "etf.dws.com")
 BROWSER = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 MAX_BYTES = 20 * 1024 * 1024
 MAX_COLUMN = 16384  # Excel's last column, XFD
@@ -128,9 +128,11 @@ REFRESH_DAYS = 0.75  # daily: the timer runs once a day, so the next day's run m
 NONE_DAYS = 30  # an ISIN no source knows is asked again after this
 PAUSE = 1.5  # seconds between two requests to an issuer: iShares answers a burst with HTTP 429
 DWS = "https://etf.dws.com/etfdata/export/GBR/ENG/excel/product/constituent/{isin}/"
-# The UK site's CSV export; its last path part is a constant of the domain, not of the fund.
-ISHARES_CSV = ("https://www.ishares.com/uk/individual/en/products/{id}/{slug}/1506575576011.ajax"
-               "?fileType=csv&fileName=holdings&dataType=fund")
+# The product page's "Daten herunterladen" (10/2026): an Excel 2003 XML workbook of the fund, by product number;
+# the holdings are its sheet "Holdings". The page's old CSV address answers with the page itself since then.
+ISHARES_DOC = ("https://www.blackrock.com/varnish-api/uk-retail01-product-data/product-data/api/v1/get-fund-document"
+               "?appType=PRODUCT_PAGE&appSubType=ISHARES&targetSite=de-ishares-v2&locale=de_DE&portfolioId={id}"
+               "&component=fundDownloadV2&userType=individual")
 # The fund finder's data: {portfolioId: {isin, productPageUrl, fundName, ...}} for every iShares product.
 ISHARES_SCREENER = ("https://www.ishares.com/uk/individual/en/product-screener/product-screener-v3.1.jsn"
                     "?dcrPath=/templatedata/config/product-screener-v3/data/en/uk/product-screener/"
@@ -210,13 +212,44 @@ def xlsx_rows(data: bytes) -> list[list[str]]:
     return rows
 
 
+SS = "{urn:schemas-microsoft-com:office:spreadsheet}"
+
+
+def workbook_rows(data: bytes, sheet: str) -> list[list[str]]:
+    """One sheet of an Excel 2003 XML workbook (SpreadsheetML) as rows of text."""
+    text = _text(data)
+    text = re.sub(r"&(?!#?\w+;)", "&amp;", text)  # a bare & in a fund's name would end the parse
+    try:
+        root = ElementTree.fromstring(text)  # noqa: S314 - no entities resolved (see xlsx_rows)
+    except ElementTree.ParseError as e:
+        raise SourceError(N_("Keine lesbare Excel-Datei.")) from e
+    table = next((w for w in root.iter(f"{SS}Worksheet") if w.get(f"{SS}Name") == sheet), None)
+    if table is None:
+        raise SourceError(N_("Die Datei enthält keine Positionen."))
+    rows = []
+    for row in table.iter(f"{SS}Row"):
+        cells: list[str] = []
+        for cell in row.iter(f"{SS}Cell"):
+            index = cell.get(f"{SS}Index")
+            if index and index.isdigit() and int(index) <= MAX_COLUMN:
+                cells += [""] * (int(index) - 1 - len(cells))
+            data_ = cell.find(f"{SS}Data")
+            cells.append("".join(data_.itertext()) if data_ is not None else "")
+        rows.append(cells)
+    return rows
+
+
+def _rows_to_csv(rows: list[list[str]]) -> bytes:
+    out = io.StringIO()
+    csv.writer(out).writerows(rows)
+    return out.getvalue().encode()
+
+
 def parse_file(data: bytes) -> tuple[Constituent, ...]:
     """A holdings file as CSV or XLSX."""
     if data[:2] != b"PK":
         return parse(data)
-    out = io.StringIO()
-    csv.writer(out).writerows(xlsx_rows(data))
-    return parse(out.getvalue().encode())
+    return parse(_rows_to_csv(xlsx_rows(data)))
 
 
 def _usable(lines: tuple[Constituent, ...], source: str) -> tuple[Constituent, ...]:
@@ -378,12 +411,14 @@ class Sources:
             raise SourceError(f"{source} ist nicht erreichbar ({type(e).__name__}).") from e
 
     def ishares(self, product: str, slug: str) -> tuple[Constituent, ...]:
-        data = self._get(ISHARES_CSV.format(id=product, slug=slug), "iShares")
-        # The export answers a wrong id with an HTML page and status 200.
-        if not data or data.lstrip()[:1] == b"<":
-            raise SourceError("iShares: keine Positionsliste unter dieser Produktseite.")
+        """The holdings of iShares product ``product`` (its number; ``slug`` is not needed any more)."""
+        data = self._get(ISHARES_DOC.format(id=product), "iShares") or b""
+        workbook = b"Workbook" in data[:4096]
+        if not workbook and data.lstrip()[:1] in (b"", b"<"):  # nothing, or an HTML page: no such product
+            raise SourceError(f"iShares: keine Positionsliste zu Produkt {product}.")
         try:
-            return _usable(parse(data), "iShares")
+            rows = parse(_rows_to_csv(workbook_rows(data, "Holdings"))) if workbook else parse(data)
+            return _usable(rows, "iShares")
         except ValueError as e:
             raise SourceError(f"iShares: {e}") from e
 

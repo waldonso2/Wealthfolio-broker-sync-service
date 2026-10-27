@@ -1199,6 +1199,8 @@ EN: dict[str, str] = {
     "Die XLSX-Datei ist zu groß.": "The XLSX file is too large.",
     "Die XLSX-Datei enthält keine Tabelle.": "The XLSX file contains no sheet.",
     "Keine lesbare XLSX-Datei.": "Not a readable XLSX file.",
+    "Keine lesbare Excel-Datei.": "Not a readable Excel file.",
+    "Die Datei enthält keine Positionen.": "The file holds no holdings.",
     "In der Rente pflichtversichert (KVdR): kein Beitrag auf Kapitalerträge":
         "Compulsorily insured as a pensioner (KVdR): no contribution on capital income",
     "Kinderlos (höherer Pflegebeitrag)": "Childless (higher long-term care contribution)",

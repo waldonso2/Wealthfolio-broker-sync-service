@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.34.3
+
+- **X-Ray reads the holdings from iShares' new download:**
+  - iShares rebuilt its site (10/2026): the fund finder answers 404, and the old CSV address answers with the product page.
+  - The holdings now come from the product page's own download ("Daten herunterladen"), an Excel 2003 XML workbook fetched from `www.blackrock.com` by product number. Its sheet "Holdings" is read: German columns (Emittententicker, Name, Sektor, Gewichtung (%), Marktwährung) with decimal commas. This file names no location or exchange, so countries stay empty. A bare `&` in a name is tolerated.
+  - A fund whose product number is known works again: a product page typed in under "Einstellungen dieses ETFs" (the address may end at the number), or a number found or kept before.
+  - Finding the number from the ISIN alone follows.
+
 ## 0.34.2
 
 - **The automatic update works:** the updater's unit sets `TERM=xterm`. Without it, the install engine's `clear` failed ("TERM environment variable not set") and every automatic update stopped before it started. A container on 0.34.0/0.34.1 still has the old unit: update it once by hand (`update`).

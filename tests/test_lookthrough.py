@@ -130,14 +130,15 @@ def test_the_fund_finder_gives_every_ishares_fund_and_its_outage_is_retried_soon
     asked = []
 
     def answer(request: httpx.Request) -> httpx.Response:
-        asked.append(request.url.path)
+        asked.append(str(request.url))
         if "product-screener" in request.url.path:
             return httpx.Response(200, content=SCREENER)
-        return httpx.Response(200, content=ISHARES_FULL) if "ishares" in request.url.host else httpx.Response(404)
+        issuer = request.url.host in ("www.ishares.com", "www.blackrock.com")
+        return httpx.Response(200, content=ISHARES_FULL) if issuer else httpx.Response(404)
 
     s = Sources(transport=httpx.MockTransport(answer))
     lines, source = fetch(s, "IE0000000017")  # in no built-in list: found by the fund finder
-    assert source == "iShares" and "/products/999999/example-other-fund/" in asked[-1]
+    assert source == "iShares" and "portfolioId=999999&" in asked[-1]
     fetch(s, "IE00B4L5Y983")
     assert sum("product-screener" in a for a in asked) == 1  # read once per pass
     down = Sources(transport=httpx.MockTransport(lambda r: httpx.Response(503) if "product-screener" in r.url.path
@@ -179,7 +180,7 @@ def test_fetch_asks_ishares_by_its_product_id_and_nothing_else_for_now():
     def answer(request: httpx.Request) -> httpx.Response:
         asked.append(str(request.url))
         assert "Mozilla" in request.headers["user-agent"]
-        if request.url.host == "www.ishares.com":
+        if request.url.host == "www.blackrock.com":
             return httpx.Response(200, content=ISHARES_FULL)
         if "IE00BJ0KDQ92" in request.url.path:
             return httpx.Response(200, content=XTRACKERS)
@@ -187,12 +188,12 @@ def test_fetch_asks_ishares_by_its_product_id_and_nothing_else_for_now():
 
     s = sources(answer)
     lines, source = fetch(s, "IE00B4L5Y983")
-    assert source == "iShares" and len(lines) == 5 and "/products/251882/" in asked[0]
+    assert source == "iShares" and len(lines) == 5 and "portfolioId=251882&" in asked[0]
     with pytest.raises(NoSource):
         fetch(s, "IE00BJ0KDQ92")  # Xtrackers: hidden for now (#144), DWS is not asked
     assert not any("dws" in url for url in asked)
     lines, _ = fetch(s, "IE00XXXXXXXX", "https://www.ishares.com/de/privatanleger/de/produkte/123456/example-etf")
-    assert "/products/123456/example-etf/" in asked[-1]
+    assert "portfolioId=123456&" in asked[-1]
     with pytest.raises(NoSource):
         fetch(s, "US0378331005")  # a stock: no source has it
 
@@ -229,7 +230,7 @@ def test_update_fetches_what_is_due_keeps_uploads_and_remembers_funds_without_so
 
     def answer(request):
         calls.append(request.url.host)
-        ishares = request.url.host == "www.ishares.com"
+        ishares = request.url.host == "www.blackrock.com"
         return httpx.Response(200, content=ISHARES_FULL) if ishares else httpx.Response(404)
 
     r = lookthrough.update(state, depot, sources(answer))
@@ -418,7 +419,7 @@ def test_one_position_can_be_fetched_alone_and_lists_are_due_again_the_next_day(
     asked: list[str] = []
 
     def answer(request):
-        asked.append(request.url.path)
+        asked.append(str(request.url))
         return httpx.Response(200, content=ISHARES_FULL)
 
     state = State(tmp_path)
@@ -497,7 +498,7 @@ def test_a_product_address_without_the_pages_name_is_taken_and_the_german_site_i
 
     lines, source = fetch(Sources(transport=httpx.MockTransport(answer)), "IE00BJ5JNY98")
     assert source == "iShares" and "term=IE00BJ5JNY98" in asked[1] and "/de/privatanleger/de/" in asked[2]
-    assert "/products/308858/holdings/1506575576011.ajax" in asked[-1]
+    assert "portfolioId=308858&component=fundDownloadV2" in asked[-1]
 
 
 def test_only_ishares_funds_are_searched_a_429_stops_the_pass_and_a_found_product_is_kept(tmp_path):
@@ -524,7 +525,7 @@ def test_only_ishares_funds_are_searched_a_429_stops_the_pass_and_a_found_produc
     assert "HTTP 429" in lookthrough.status(state, "a-etf2")["error"]
     asked.clear()
     lookthrough.update(state, depot, Sources(transport=httpx.MockTransport(answer)), force=True, only="a-etf")
-    assert len(asked) == 1 and "/products/308858/holdings/" in asked[0]  # no finder, no search: the kept product
+    assert len(asked) == 1 and "portfolioId=308858&" in asked[0]  # no finder, no search: the kept product
 
     def limited(request: httpx.Request) -> httpx.Response:
         asked.append(str(request.url))
@@ -533,3 +534,53 @@ def test_only_ishares_funds_are_searched_a_429_stops_the_pass_and_a_found_produc
     asked.clear()
     lookthrough.update(state, depot, Sources(transport=httpx.MockTransport(limited)), force=True)
     assert len(asked) == 1  # the first 429 ends the pass's requests
+
+
+# Fabricated, in the layout of the product page's download (Excel 2003 XML, 10/2026): sheets by name, the holdings
+# below a line of fund details, numbers typed, a bare & in a name, an empty cell skipped with ss:Index.
+def cell(value: str, kind: str = "String", index: int = 0) -> str:
+    at = f' ss:Index="{index}"' if index else ""
+    return f'<ss:Cell{at}><ss:Data ss:Type="{kind}">{value}</ss:Data></ss:Cell>'
+
+
+def workbook() -> bytes:
+    holdings = [  # the real layout (10/2026): German columns, decimal comma, no location or exchange
+        ["All", "26.Okt.2026"],
+        ["Emittententicker", "Name", "Sektor", "Anlageklasse", "Marktwert", "Gewichtung (%)", "Nominalwert",
+         "Nominale", "Marktwährung"],
+        ["NVDA", "NVIDIA", "IT", "Aktien", "USD 2.000", "24,50", "2.000,00", "1.000", "USD"],
+        ["AAPL", "APPLE", "IT", "Aktien", "USD 1.600", "20,10", "1.600,00", "800", "USD"],
+        ["MSFT", "MICROSOFT", "IT", "Aktien", "USD 1.500", "18,00", "1.500,00", "700", "USD"],
+        ["T", "AT&T INC", "Kommunikation", "Aktien", None, "20,20", "1.700,00", "600", "USD"],
+        ["ASML", "ASML HOLDING NV", "IT", "Aktien", "EUR 1.400", "16,90", "1.400,00", "300", "EUR"]]
+    rows = ""
+    for values in holdings:
+        cells, skip = "", False
+        for i, v in enumerate(values, 1):
+            if v is None:
+                skip = True
+                continue
+            cells += cell(str(v), "Number" if isinstance(v, float) else "String", i if skip else 0)
+            skip = False
+        rows += f"<ss:Row>{cells}</ss:Row>"
+    return ('<?xml version="1.0"?><ss:Workbook xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
+            f'<ss:Worksheet ss:Name="Fund Header"><ss:Table><ss:Row>{cell("Example")}</ss:Row></ss:Table>'
+            f'</ss:Worksheet><ss:Worksheet ss:Name="Holdings"><ss:Table>{rows}</ss:Table></ss:Worksheet>'
+            '</ss:Workbook>').encode()
+
+
+def test_the_product_pages_download_is_read_from_its_holdings_sheet():
+    asked = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked.append(str(request.url))
+        return httpx.Response(200, content=workbook(), headers={"content-type": "application/vnd.ms-excel"})
+
+    lines = Sources(transport=httpx.MockTransport(answer)).ishares("308858", "holdings")
+    assert asked == [lookthrough.ISHARES_DOC.format(id="308858")]
+    assert [c.key for c in lines][:2] == ["NVDA:", "AAPL:"] and lines[0].weight == D("0.245")
+    assert lines[3].name == "AT&T INC" and lines[3].sector == "Kommunikation" and lines[3].weight == D("0.202")
+    assert lines[4].currency == "EUR"
+    page = b"<!doctype html><html><title>iShares</title></html>"
+    with pytest.raises(SourceError, match="keine Positionsliste zu Produkt 1"):
+        Sources(transport=httpx.MockTransport(lambda r: httpx.Response(200, content=page))).ishares("1", "x")
