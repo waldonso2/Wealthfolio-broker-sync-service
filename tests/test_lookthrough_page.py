@@ -186,6 +186,7 @@ def test_only_ishares_funds_are_shown_with_the_reason_a_list_is_missing(tmp_path
     page = client.get("/lookthrough").text
     assert "0 iShares-ETFs durchleuchtet · 1 ohne Positionsliste · 0 weitere" in page
     assert "Abruf fehlgeschlagen" in page and "iShares: HTTP 403" in page and "Fondsfinder: HTTP 403" in page
+    assert "produktliste#/?productView=all&amp;search=" in page and "<details open>" in page  # find it, paste it
     assert "0 Positionslisten geholt, 1 fehlgeschlagen" in page
     lookthrough.record(state, error="RuntimeError: kaputt")
     assert "Der Abruf ist abgebrochen: RuntimeError: kaputt" in client.get("/lookthrough").text

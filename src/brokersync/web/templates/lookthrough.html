@@ -70,7 +70,8 @@
       <tbody>{{ fund_rows(lines[top:], p.value, countries[p.id]) }}</tbody></table></div>
   </details>{% endif %}
   {% endif %}
-  <details><summary>{{ _("Einstellungen dieses ETFs") }}</summary>
+  <details{% if not f %} open{% endif %}><summary>{{ _("Einstellungen dieses ETFs") }}</summary>
+    {% if not f and p.isin %}<p>{{ _("Ohne Liste: Such den ETF bei iShares, öffne den Treffer und füg die Adresse seiner Seite hier ein - einmal genügt.") }} <a href="https://www.ishares.com/de/privatanleger/de/produkte/produktliste#/?productView=all&amp;search={{ p.isin | urlencode }}" target="_blank" rel="noopener noreferrer">{{ _("Bei iShares suchen ({isin})", isin=p.isin) }}</a></p>{% endif %}
     <form method="post" action="/lookthrough/source" class="inline-form">
             <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
             <label>{{ _("Produktseite bei iShares für {name}", name=p.name) }} <input type="url" name="url" value="{{ st.url or '' }}" maxlength="300" placeholder="https://www.ishares.com/de/privatanleger/de/produkte/…"></label>

@@ -1141,6 +1141,10 @@ EN: dict[str, str] = {
     "Alle {n} Positionen": "All {n} holdings",
     "Weitere Positionen von {name}": "More holdings of {name}",
     "Einstellungen dieses ETFs": "Settings of this ETF",
+    "Ohne Liste: Such den ETF bei iShares, öffne den Treffer und füg die Adresse seiner Seite hier ein - einmal "
+    "genügt.":
+        "No list yet: find the ETF at iShares, open the hit and paste its page's address here - once is enough.",
+    "Bei iShares suchen ({isin})": "Search at iShares ({isin})",
     "{funds} iShares-ETFs durchleuchtet · {open} ohne Positionsliste · {hidden} weitere Positionen ausgeblendet "
     "(zählen als je eine Position)":
         "{funds} iShares ETFs looked through · {open} without a holdings list · {hidden} other positions hidden "
