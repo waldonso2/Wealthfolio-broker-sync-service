@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.34.4
+
+- **X-Ray compact on phones:** a fund's holdings and the overall matrix show one line per stock (name, sector, weight, EUR) instead of a block per field. The matrix's columns per ETF appear on wider screens only. The column *Land* is left out when the list names no country (iShares' current download names none).
+- **The header's hint while iShares names no product number** says what to do: enter the product page once.
+
 ## 0.34.3
 
 - **X-Ray reads the holdings from iShares' new download:**
