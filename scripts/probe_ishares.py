@@ -1,4 +1,6 @@
-"""Temporary probe round 27: UBS ETF page -> where the constituents download comes from."""
+"""Temporary probe round 28: L&G fund page -> page sections -> parts -> holdings document."""
+import html
+import json
 import re
 from pathlib import Path
 from urllib.parse import urljoin
@@ -6,9 +8,8 @@ import httpx
 
 OUT = Path("probe-files"); OUT.mkdir(exist_ok=True)
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-http = httpx.Client(timeout=90, follow_redirects=True, headers={"User-Agent": UA, "Accept-Language": "de-CH,de;q=0.9",
-                                                               "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"})
-WORDS = ("Constituents", "constituents", "Holdings", "holdings", "UBSFunds", "/api/", "\\.json", "fundgate", "xls")
+http = httpx.Client(timeout=90, follow_redirects=True, headers={"User-Agent": UA, "Accept-Language": "en-GB,en;q=0.9"})
+B = "https://fundcentres.landg.com"
 
 
 def get(name, url):
@@ -16,28 +17,44 @@ def get(name, url):
         r = http.get(url)
     except httpx.HTTPError as e:
         print("##", name, url, type(e).__name__); return None
-    print("##", name, r.status_code, r.headers.get("content-type", ""), len(r.content), str(r.url)[:200])
+    print("##", name, r.status_code, r.headers.get("content-type", ""), len(r.content), str(r.url)[:250])
     if name: (OUT / name).write_bytes(r.content)
     return r
 
 
-def scan(t):
-    for w in WORDS:
-        ms = list(re.finditer(w, t))
-        print("  ", w, len(ms))
-        for m in ms[:5]:
-            print("     ..", t[max(0, m.start() - 250):m.end() + 300].replace("\n", " "))
+def hits(t):
+    return sorted(set(re.findall(r"[^\"'\s]*(?:documents-id|Fundholdings|fundholdings)[^\"'\s]*", t)))[:10]
 
 
-r = get("ubs-page.html", "https://www.ubs.com/ch/de/assetmanagement/funds/etf/"
-        "lu0629459743-ubs-msci-world-socially-responsible-ucits-etf-pd001.html")
-if r is not None and r.status_code == 200:
-    scan(r.text)
-    scripts = sorted(set(re.findall(r'<script[^>]+src="([^"]+)"', r.text)))
-    print("scripts", scripts)
-    for n, s in enumerate(scripts[:25]):
-        j = get(f"ubs-js-{n}.js", urljoin(str(r.url), s))
-        if j is not None and j.status_code == 200 and any(w in j.text for w in ("onstituents", "oldings")):
-            print("== script", s); scan(j.text)
-else:
-    print(r.text[:1500] if r is not None else "")
+fc = get("lg-fc47.json", f"{B}/srp/api/fund-centre/47?audience=79&language=1")
+t = fc.text
+for m in list(re.finditer("Cyber", t))[:3]:
+    print("  ..", t[max(0, m.start() - 600):m.end() + 600])
+urls = sorted(set(u for u in re.findall(r'"fundPageURL":\s*"([^"]+)"', t) if "yber" in u))
+print("fund pages", urls)
+for u in urls[:1]:
+    p = get("lg-fundpage.html", urljoin(B, u))
+    page = p.text
+    route = re.search(r'data-route-id="(\d+)"', page)
+    print("route", route and route.group(1), "hits", hits(page))
+    for m in re.finditer(r"data-config='(.*?)'\s", page, re.S):
+        try:
+            c = json.loads(html.unescape(m.group(1)))
+        except ValueError:
+            continue
+        if "pageSections" not in c:
+            continue
+        print("config keys", sorted(c))
+        print("fund", {k: c.get(k) for k in ("fundId", "banner", "shareClassesPart", "infoPartId", "routeId")})
+        for s in c["pageSections"]:
+            print("  section", json.dumps(s)[:300])
+        fund = c.get("fundId")
+        for s in c["pageSections"]:
+            pid = s.get("data") if isinstance(s.get("data"), int) else s.get("partId")
+            if not pid:
+                continue
+            for sc in ("", "&share_class_id=893"):
+                q = f"{B}/srp/api/part?id={pid}&audience=79&route={route and route.group(1)}&version=live&languageId=1&fund_id={fund}{sc}"
+                r = get(f"lg-part-{pid}{'-sc' if sc else ''}.txt", q)
+                if r is not None:
+                    print("     ", s.get("key"), "hits", hits(r.text), r.text[:200].replace("\n", " "))
