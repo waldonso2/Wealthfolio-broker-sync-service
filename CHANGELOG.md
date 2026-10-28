@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.35.2
+
+- X-Ray finds German-domiciled iShares ETFs (DE): the German site's new fund finder (its screener server) is asked first; it is the only one listing them.
+- X-Ray on phones: every row is a grid with fixed columns for the figures, so rows no longer shift; the sector column is gone, the country shows only on wide screens.
+- The overlap of the ETFs is a real ETF × ETF matrix with a heatmap, right below the overall matrix.
+- The weekly iShares product run opens an issue linking its branch (GitHub Actions may not open pull requests in this repository).
+
 ## 0.35.1
 
 - **The shipped iShares product list is filled:** 1,238 iShares funds with their product numbers, read by the weekly workflow from the Dutch, Italian and Spanish fund finders. X-Ray now finds the holdings of every listed iShares ETF without asking a fund finder.

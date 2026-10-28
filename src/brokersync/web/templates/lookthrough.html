@@ -3,10 +3,11 @@
 {% block content %}
 {% macro pct(value) %}{{ (value * 100) | money }} %{% endmacro %}
 {% macro amount(f, value) %}{% if f.kind == "effective" %}{{ value | round | int }}{% elif f.kind == "cash" %}{{ value | money }} EUR{% else %}{{ pct(value) }}{% endif %}{% endmacro %}
+{% macro heat(v) %}{% set x = v * 100 %}heat-{% if x < 5 %}0{% elif x < 15 %}1{% elif x < 30 %}2{% elif x < 50 %}3{% elif x < 70 %}4{% else %}5{% endif %}{% endmacro %}
 {% macro eur(v) %}{% if v %}{{ v | money }}{% else %}–{% endif %}{% endmacro %}
 {% macro matrix_rows(items, offset) %}{% for r, cells, more, direct in items %}
     <tr><td data-label="#">{{ offset + loop.index }}</td>
-      <td class="name" data-label="{{ _('Aktie') }}">{{ r.name }}{% if r.country or r.sector %} <span class="muted">{{ r.country }}{% if r.country and r.sector %} · {% endif %}{{ r.sector }}</span>{% endif %}</td>
+      <td class="name" data-label="{{ _('Aktie') }}">{{ r.name }}{% if r.country %} <span class="muted">{{ r.country }}</span>{% endif %}</td>
       {% for h in columns %}<td class="wide" data-label="{{ h.name }}">{{ eur(cells[loop.index0]) }}</td>{% endfor %}
       {% if more_funds %}<td class="wide" data-label="{{ _('weitere ETFs') }}">{{ eur(more) }}</td>{% endif %}
       <td class="wide" data-label="{{ _('direkt') }}">{{ eur(direct) }}</td>
@@ -14,7 +15,7 @@
       <td data-label="{{ _('Anteil am Depot') }}">{{ pct(r.share) }}</td></tr>
 {% endfor %}{% endmacro %}
 {% macro fund_rows(lines, value, with_country) %}{% for key, name, weight, country, sector, currency in lines %}
-            <tr><td class="name" data-label="{{ _('Aktie') }}">{{ name }}</td>{% if with_country %}<td data-label="{{ _('Land') }}">{{ country or "–" }}</td>{% endif %}<td data-label="{{ _('Sektor') }}">{{ sector or "–" }}</td><td data-label="{{ _('Gewicht im ETF') }}">{{ pct(weight | float) }}</td><td data-label="{{ _('Wert in deinem Depot (EUR)') }}">{{ ((weight | float) * (value | float)) | money }}</td></tr>
+            <tr><td class="name" data-label="{{ _('Aktie') }}">{{ name }}</td>{% if with_country %}<td class="wide" data-label="{{ _('Land') }}">{{ country or "–" }}</td>{% endif %}<td data-label="{{ _('Gewicht im ETF') }}">{{ pct(weight | float) }}</td><td data-label="{{ _('Wert in deinem Depot (EUR)') }}">{{ ((weight | float) * (value | float)) | money }}</td></tr>
 {% endfor %}{% endmacro %}
 <div class="card">
   <h1>{{ _("X-Ray") }}</h1>
@@ -36,18 +37,35 @@
   <h2>{{ _("Gesamt: Aktien über alle Positionen") }}</h2>
   <p>{{ _("Zeigen:") }} {% for n in tops %}{% if n == matrix_top %}<strong aria-current="page">{{ _("Top {n}", n=n) }}</strong>{% else %}<a href="/lookthrough?top={{ n }}">{{ _("Top {n}", n=n) }}</a>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</p>
   <p>{{ _("{n} Aktien, effektive Titelzahl {effective}.", n=count, effective=effective | round | int) }}</p>
-  <div class="table compact"><table>
+  <div class="table compact stocks"><table>
     <caption class="sr-only">{{ _("Aktien über alle Positionen") }}</caption>
     <thead><tr><th scope="col">#</th><th scope="col">{{ _("Aktie") }}</th>{% for h in columns %}<th scope="col">{{ h.name }}</th>{% endfor %}{% if more_funds %}<th scope="col">{{ _("weitere ETFs") }}</th>{% endif %}<th scope="col">{{ _("direkt") }}</th><th scope="col">{{ _("Summe (EUR)") }}</th><th scope="col">{{ _("Anteil am Depot") }}</th></tr></thead>
     <tbody>{{ matrix_rows(matrix[:matrix_top], 0) }}</tbody></table></div>
   {% if matrix | length > matrix_top %}
   <details><summary>{{ _("Alle {n} Aktien", n=matrix | length) }}</summary>
-    <div class="table compact"><table>
+    <div class="table compact stocks"><table>
       <caption class="sr-only">{{ _("Weitere Aktien über alle Positionen") }}</caption>
     <thead><tr><th scope="col">#</th><th scope="col">{{ _("Aktie") }}</th>{% for h in columns %}<th scope="col">{{ h.name }}</th>{% endfor %}{% if more_funds %}<th scope="col">{{ _("weitere ETFs") }}</th>{% endif %}<th scope="col">{{ _("direkt") }}</th><th scope="col">{{ _("Summe (EUR)") }}</th><th scope="col">{{ _("Anteil am Depot") }}</th></tr></thead>
       <tbody>{{ matrix_rows(matrix[matrix_top:], matrix_top) }}</tbody></table></div>
   </details>{% endif %}
   {% if unassigned %}<p class="muted">{{ _("Nicht zugeordnet (Bargeld, Derivate, Rest der Gewichte): {share}.", share=pct(unassigned.share)) }}</p>{% endif %}
+</div>
+{% endif %}
+
+{% if fund_list | length > 1 %}
+<div class="card">
+  <h2>{{ _("Wie sich die ETFs überschneiden") }}</h2>
+  <div class="table heat" tabindex="0" role="region" aria-label="{{ _('Wie sich die ETFs überschneiden') }}"><table>
+    <caption class="sr-only">{{ _("Wie sich die ETFs überschneiden") }}</caption>
+    <thead><tr><th scope="col">{{ _("ETF") }}</th>{% for b in fund_list %}<th scope="col" class="num"><span aria-hidden="true">{{ loop.index }}</span><span class="sr-only">{{ b.name }}</span></th>{% endfor %}<th scope="col" class="num">{{ _("Eigener Beitrag") }}</th></tr></thead>
+    <tbody>
+    {% for a in fund_list %}
+    <tr><th scope="row" title="{{ a.name }}"><span class="muted">{{ loop.index }}</span> {{ a.name }}</th>
+      {% for b in fund_list %}{% if a.id == b.id %}<td class="num self">–</td>{% else %}{% set v = overlap.get((a.id, b.id), overlap.get((b.id, a.id))) %}<td class="num {{ heat(v) }}">{{ (v * 100) | round | int }}</td>{% endif %}{% endfor %}
+      <td class="num">{{ pct(own[a.id]) }}</td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  <p class="muted">{{ _("Überschneidung in Prozent: Summe des jeweils kleineren Gewichts jeder Aktie, die beide ETFs halten. Je dunkler, desto mehr doppelt.") }}</p>
 </div>
 {% endif %}
 
@@ -58,15 +76,15 @@
   {% if st.status == "error" %}<p class="error" role="alert">{{ _("Abruf fehlgeschlagen {when}: {error}", when=st.at | local, error=st.error | redact) }}</p>{% endif %}
   <form method="post" action="/lookthrough/fetch" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}"><button class="secondary" {% if reading %}disabled{% endif %} aria-label="{{ _('Positionsliste von {name} jetzt abrufen', name=p.name) }}">{{ _("Jetzt abrufen") }}</button></form>
   {% if f %}
-  <div class="table compact"><table>
+  <div class="table compact holdings"><table>
     <caption class="sr-only">{{ _("Positionen von {name}", name=p.name) }}</caption>
-            <thead><tr><th scope="col">{{ _("Aktie") }}</th>{% if countries[p.id] %}<th scope="col">{{ _("Land") }}</th>{% endif %}<th scope="col">{{ _("Sektor") }}</th><th scope="col">{{ _("Gewicht im ETF") }}</th><th scope="col">{{ _("Wert in deinem Depot (EUR)") }}</th></tr></thead>
+            <thead><tr><th scope="col">{{ _("Aktie") }}</th>{% if countries[p.id] %}<th scope="col">{{ _("Land") }}</th>{% endif %}<th scope="col">{{ _("Gewicht im ETF") }}</th><th scope="col">{{ _("Wert in deinem Depot (EUR)") }}</th></tr></thead>
     <tbody>{{ fund_rows(lines[:top], p.value, countries[p.id]) }}</tbody></table></div>
   {% if lines | length > top %}
   <details><summary>{{ _("Alle {n} Positionen", n=lines | length) }}</summary>
-    <div class="table compact"><table>
+    <div class="table compact holdings"><table>
       <caption class="sr-only">{{ _("Weitere Positionen von {name}", name=p.name) }}</caption>
-            <thead><tr><th scope="col">{{ _("Aktie") }}</th>{% if countries[p.id] %}<th scope="col">{{ _("Land") }}</th>{% endif %}<th scope="col">{{ _("Sektor") }}</th><th scope="col">{{ _("Gewicht im ETF") }}</th><th scope="col">{{ _("Wert in deinem Depot (EUR)") }}</th></tr></thead>
+            <thead><tr><th scope="col">{{ _("Aktie") }}</th>{% if countries[p.id] %}<th scope="col">{{ _("Land") }}</th>{% endif %}<th scope="col">{{ _("Gewicht im ETF") }}</th><th scope="col">{{ _("Wert in deinem Depot (EUR)") }}</th></tr></thead>
       <tbody>{{ fund_rows(lines[top:], p.value, countries[p.id]) }}</tbody></table></div>
   </details>{% endif %}
   {% endif %}
@@ -155,22 +173,6 @@
   {% endif %}
   </details>
 </div>
-{% if fund_list | length > 1 %}
-<div class="card">
-  <details><summary>{{ _("Wie sich die ETFs überschneiden") }}</summary>
-  <div class="table"><table>
-    <caption class="sr-only">{{ _("Wie sich die ETFs überschneiden") }}</caption>
-    <thead><tr><th scope="col">{{ _("ETF") }}</th><th scope="col">{{ _("Eigener Beitrag") }}</th>{% for b in fund_list %}<th scope="col">{{ b.name }}</th>{% endfor %}</tr></thead>
-    <tbody>
-    {% for a in fund_list %}
-    <tr><td data-label="{{ _('ETF') }}">{{ a.name }}</td>
-      <td data-label="{{ _('Eigener Beitrag') }}">{{ pct(own[a.id]) }}</td>
-      {% for b in fund_list %}<td data-label="{{ b.name }}">{% if a.id == b.id %}–{% else %}{{ pct(overlap.get((a.id, b.id), overlap.get((b.id, a.id)))) }}{% endif %}</td>{% endfor %}</tr>
-    {% endfor %}
-    </tbody></table></div>
-  </details>
-</div>
-{% endif %}
 {% endif %}
 
 <div class="card">
