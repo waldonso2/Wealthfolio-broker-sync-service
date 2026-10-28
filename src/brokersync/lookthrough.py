@@ -51,9 +51,9 @@ NAME = ("name", "bezeichnung", "emittent", "security name", "security descriptio
 ISIN = ("isin",)
 TICKER = ("ticker", "emittententicker")
 EXCHANGE = ("exchange", "börse")
-COUNTRY = ("location", "standort", "country", "land", "sitz", "trade country name")
+COUNTRY = ("location", "standort", "country", "land", "sitz", "trade country name", "exposure country")
 SECTOR = ("sector", "sektor", "industry classification", "branche")
-CURRENCY = ("market currency", "marktwährung", "currency", "währung")
+CURRENCY = ("market currency", "marktwährung", "currency", "währung", "trading currency")
 
 
 def _text(data: bytes) -> str:
@@ -141,7 +141,7 @@ def parse(data: bytes) -> tuple[Constituent, ...]:
 # ── fetching ─────────────────────────────────────────────────────────────────
 HOSTS = ("www.ishares.com", "www.blackrock.com", "etf.dws.com", "www.ssga.com", "www.amundietf.de",
          "dng-api.invesco.com", "www.vanguard.co.uk", "www.vaneck.com", "europe.ark-funds.com",
-         "fundcentres.lgim.com", "fundcentres.landg.com")
+         "fundcentres.lgim.com", "fundcentres.landg.com", "hanetf.com")
 BROWSER = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 MAX_BYTES = 20 * 1024 * 1024
 MAX_COLUMN = 16384  # Excel's last column, XFD
@@ -177,6 +177,9 @@ VANECK_HOLDINGS = VANECK + "/Main/HoldingsBlock/GetContent/?blockid={block}&page
 ARK = "https://europe.ark-funds.com"
 ARK_LIST = ARK + "/de/funds/"
 ARK_DOC = ARK + "/funds/{fund}/full-fund-holdings-download/"
+# HANetf: the holdings XLSX lies under the fund's code and ISIN (the code from the shipped list - HANetf's site
+# answers automatic requests with a bot check, its files don't).
+HANETF_DOC = "https://hanetf.com/wp-content/assets/upload/Holdings-{code}-{isin}-all-all.xlsx"
 # The product page's "Daten herunterladen" (10/2026): an Excel 2003 XML workbook of the fund, by product number;
 # the holdings are its sheet "Holdings". The page's old CSV address answers with the page itself since then.
 ISHARES_DOC = ("https://www.blackrock.com/varnish-api/uk-retail01-product-data/product-data/api/v1/get-fund-document"
@@ -664,6 +667,16 @@ class Sources:
             raise SourceError(f"ARK: keine Positionsliste zu {fund}.")
         return self._file(data, "ARK")
 
+    def hanetf(self, isin: str) -> tuple[Constituent, ...] | None:
+        # shortcut: only the shipped codes - a fund HANetf launches later needs the list renewed (its product list
+        # sits behind the bot check)
+        if not (code := PRODUCTS.get("HANetf", {}).get(isin)):
+            return None
+        data = self._get(HANETF_DOC.format(code=code, isin=isin), "HANetf")
+        if not data or data[:2] != b"PK":
+            raise SourceError(f"HANetf: keine Positionsliste zu {code}.")
+        return self._file(data, "HANetf")
+
     def invesco(self, isin: str) -> tuple[Constituent, ...] | None:
         error: SourceError | None = None
         for kind in ("index", "fund"):
@@ -803,7 +816,7 @@ ISSUERS = {"iShares": r"\bishares\b", "SPDR": r"\bspdr\b|state street", "Xtracke
            "BNP Paribas": r"\bbnp\b",
            "HANetf": r"\bhan-?etf\b|future of defence|\bemqq\b"}
 FETCHERS = {"Xtrackers": "xtrackers", "SPDR": "spdr", "Amundi": "amundi", "Invesco": "invesco", "Vanguard": "vanguard",
-            "VanEck": "vaneck", "ARK": "ark"}
+            "VanEck": "vaneck", "ARK": "ark", "HANetf": "hanetf"}
 FUND_NAME = re.compile(r"\b(?:etf|ucits|fonds|fund|index|msci|ftse|s&p ?500|stoxx|nasdaq)\b", re.I)
 
 
@@ -813,7 +826,8 @@ def issuer(position: dict, st: dict) -> str:
         return st["source"]
     if st.get("url"):
         return "L&G" if lgim_doc(st["url"]) else "iShares"
-    return next((k for k, pattern in ISSUERS.items() if re.search(pattern, position["name"], re.I)), "")
+    return (next((k for k, pattern in ISSUERS.items() if re.search(pattern, position["name"], re.I)), "")
+            or next((k for k, ids in PRODUCTS.items() if position.get("isin") in ids), ""))
 
 
 def is_fund(position: dict, st: dict) -> bool:

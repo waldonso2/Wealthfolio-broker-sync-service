@@ -786,6 +786,22 @@ def test_an_ark_fund_is_found_on_its_page_and_its_full_holdings_downloaded():
     assert lookthrough.issuer({"name": "EMQQ Emerging Markets Internet UCITS ETF"}, {}) == "HANetf"
 
 
+def test_a_hanetf_fund_is_read_from_its_holdings_file_by_the_shipped_code(monkeypatch):
+    monkeypatch.setattr(lookthrough, "PRODUCTS", {"HANetf": {"IE0000000017": "EXMP"}})
+    doc = xlsx([["Security Description", "Shares", "Market Value (Base)", "Trading Currency", "SEDOL/CUSIP",
+                 "Exposure Country", "Region", "ISIN", "Weight"]]
+               + [[f"EXAMPLE {n} AG", "100", "1000", "EUR", "0000000", "Germany", "Europe", i, "0.199"]
+                  for n, i in enumerate(FIVE)])
+    s, asked = issuers({"Holdings-EXMP-IE0000000017-all-all.xlsx": httpx.Response(200, content=doc)})
+    lines, source = fetch(s, "IE0000000017", by="HANetf")
+    assert source == "HANetf" and len(lines) == 5 and lines[0].key == FIVE[0] and lines[0].weight == D("0.199")
+    assert lines[0].country == "Germany" and lines[0].currency == "EUR"
+    with pytest.raises(NoSource):
+        fetch(s, "IE0000000025", by="HANetf")  # no shipped code: nothing asked
+    assert len(asked) == 1
+    assert lookthrough.issuer({"name": "Sprott Example Miners UCITS ETF", "isin": "IE0000000017"}, {}) == "HANetf"
+
+
 LGIM_URL = "https://fundcentres.lgim.com/srp/documents-id/00000000-0000-4000-8000-000000000000/Fundholdings.csv"
 
 
