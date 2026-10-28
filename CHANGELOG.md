@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.35.3
+
+- The shipped iShares product list knows 129 more funds, among them the German-domiciled (DE) ones from the German site's fund finder.
+
 ## 0.35.2
 
 - X-Ray finds German-domiciled iShares ETFs (DE): the German site's new fund finder (its screener server) is asked first; it is the only one listing them.
