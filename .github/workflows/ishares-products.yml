@@ -29,4 +29,12 @@ jobs:
           python-version: "3.13"
       - run: "pip install --require-hashes --only-binary :all: -r requirements.txt"
       - run: pip install --no-deps --no-build-isolation -e .
-      - run: python scripts/probe_ishares.py
+      - run: python scripts/probe_ishares.py > probe-out.txt 2>&1 || true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p /tmp/o && cp probe-out.txt /tmp/o/ && cp -r probe-files /tmp/o/ 2>/dev/null || true
+          cd /tmp/o && git init -q && git checkout -q -b probe-out && git add -A
+          git -c user.name=probe -c user.email=probe@invalid commit -qm "probe output"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" HEAD:refs/heads/probe-out
