@@ -497,7 +497,8 @@ def test_a_product_address_without_the_pages_name_is_taken_and_the_german_site_i
         return httpx.Response(200, content=ISHARES_FULL)
 
     lines, source = fetch(Sources(transport=httpx.MockTransport(answer)), "IE00BJ5JNY98")
-    assert source == "iShares" and "term=IE00BJ5JNY98" in asked[1] and "/de/privatanleger/de/" in asked[2]
+    searches = [a for a in asked if "autoComplete" in a]
+    assert source == "iShares" and "term=IE00BJ5JNY98" in searches[0] and "/de/privatanleger/de/" in searches[1]
     assert "portfolioId=308858&component=fundDownloadV2" in asked[-1]
 
 
@@ -584,3 +585,25 @@ def test_the_product_pages_download_is_read_from_its_holdings_sheet():
     page = b"<!doctype html><html><title>iShares</title></html>"
     with pytest.raises(SourceError, match="keine Positionsliste zu Produkt 1"):
         Sources(transport=httpx.MockTransport(lambda r: httpx.Response(200, content=page))).ishares("1", "x")
+
+
+def test_the_country_fund_finders_are_asked_in_turn_and_the_number_may_be_only_the_key():
+    nl = {"111111": {"isin": {"d": "IE0000000017"}, "productPageUrl": "/nl/a/nl/producten/111111/other"}}
+    it = {"308858": {"isin": "IE00BJ5JNY98", "fundName": "Example IT Sector"}}  # no page: the key is the number
+    asked = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        asked.append(url)
+        if "product-screener" in url:
+            return httpx.Response(200, json=nl if "/nl/" in url else it if "/it/" in url else {})
+        return httpx.Response(200, content=workbook())
+
+    s = Sources(transport=httpx.MockTransport(answer))
+    lines, _ = fetch(s, "IE00BJ5JNY98")
+    assert len(lines) == 5 and "portfolioId=308858&" in asked[-1] and not s.finder_down
+    assert sum("product-screener" in a for a in asked) == 2  # Spain and the UK not asked: Italy knew it
+    assert s.ishares_product("IE0000000017")[0] == "111111"  # a Dutch page address: the number from the key
+    with pytest.raises(NoSource):
+        fetch(s, "US0378331005", search=False)  # a stock: every list read once, none knows it
+    assert sum("product-screener" in a for a in asked) == 4

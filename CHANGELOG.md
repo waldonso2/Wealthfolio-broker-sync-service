@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.34.5
+
+- **X-Ray finds the iShares product number by ISIN again.**
+  - The fund finders of the Dutch, Italian and Spanish sites still answer, with every product they sell keyed by its number. The German and UK ones answer 404 since iShares rebuilt them.
+  - The sites are asked in turn (NL, IT, ES, UK). Each is read at most once a pass, and only while an ISIN is still unknown.
+  - A product's number is the same on every site; it is taken from the product page link or, without one, from the list's key.
+  - A product page typed in still wins.
+
 ## 0.34.4
 
 - **X-Ray compact on phones:** a fund's holdings and the overall matrix show one line per stock (name, sector, weight, EUR) instead of a block per field. The matrix's columns per ETF appear on wider screens only. The column *Land* is left out when the list names no country (iShares' current download names none).

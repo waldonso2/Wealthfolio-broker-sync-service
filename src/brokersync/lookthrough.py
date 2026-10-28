@@ -8,7 +8,7 @@ when there is a valid one, else ticker and exchange, else the name. Weights are 
 
 ``fetch`` gets the file itself (always, #144; ``Syncer.update_funds`` after a run, at most every
 ``REFRESH_DAYS`` per fund) - for now only iShares (Xtrackers by ISIN, an XLSX, is there but not called), by
-its product id - from iShares' fund finder (``ISHARES_SCREENER``, every product with its ISIN, read once per
+its product id - from iShares' fund finders (``ISHARES_SCREENERS``, every product with its ISIN, read once per
 pass), from the product page's address the user saves, or, while the fund finder is down, ``ISHARES``. Only
 the ISIN or that address leaves the container; only ``HOSTS`` are asked, answers are read up to
 ``MAX_BYTES`` and must look like a holdings list. Amundi and Vanguard: upload only for now (their
@@ -133,10 +133,15 @@ DWS = "https://etf.dws.com/etfdata/export/GBR/ENG/excel/product/constituent/{isi
 ISHARES_DOC = ("https://www.blackrock.com/varnish-api/uk-retail01-product-data/product-data/api/v1/get-fund-document"
                "?appType=PRODUCT_PAGE&appSubType=ISHARES&targetSite=de-ishares-v2&locale=de_DE&portfolioId={id}"
                "&component=fundDownloadV2&userType=individual")
-# The fund finder's data: {portfolioId: {isin, productPageUrl, fundName, ...}} for every iShares product.
-ISHARES_SCREENER = ("https://www.ishares.com/uk/individual/en/product-screener/product-screener-v3.1.jsn"
-                    "?dcrPath=/templatedata/config/product-screener-v3/data/en/uk/product-screener/"
-                    "ishares-product-screener-backend-config&siteEntryPassthrough=true")
+# The fund finder's data: {portfolioId: {isin, productPageUrl, fundName, ...}} for every product the country's site
+# sells. A product has the same number on every site; since the German and UK sites were rebuilt (10/2026) only some
+# countries still answer, and each lists other funds - asked in turn until one knows the ISIN.
+ISHARES_SCREENERS = tuple(
+    f"https://www.ishares.com/{site}/product-screener/product-screener-v3.1.jsn?dcrPath=/templatedata/config/"
+    f"product-screener-v3/data/{data}/product-screener/ishares-product-screener-backend-config"
+    "&siteEntryPassthrough=true"
+    for site, data in (("nl/particuliere-belegger/nl", "nl/nl"), ("it/investitore-privato/it", "it/it"),
+                       ("es/inversor-particular/es", "es/es"), ("uk/individual/en", "en/uk")))
 # The site's search box: [{category, id, label}]; a product's id holds its page or its number. Used when the fund
 # finder fails - it answers per ISIN.
 # The UK site's first, then the German one's (it lists funds the UK site doesn't); a product is the same number on both.
@@ -295,6 +300,8 @@ class Sources:
                                   headers={"User-Agent": BROWSER, "Accept": "*/*"},
                                   event_hooks={"request": [_only_sources]})
         self._ishares: dict[str, tuple[str, str]] | None = None
+        self._pending: list[str] = []
+        self._finder_ok = False  # one fund finder answered with products this pass
         self._ter: dict[str, Decimal] = {}
         self.finder_error = ""  # why the fund finder gave no products this pass: an unknown ISIN may still be iShares'
         self.limited = ""  # iShares said "too many requests" (429): nothing more is asked this pass
@@ -306,43 +313,53 @@ class Sources:
         return bool(self.finder_error)
 
     def ishares_product(self, isin: str, *, search: bool = True) -> tuple[str, str] | None:
-        """Product id and page name of the iShares fund with ``isin``, from the fund finder (read once)."""
+        """Product number and page name of the iShares fund with ``isin``, from the fund finders (each read at most
+        once a pass, the next only while the ISIN is still unknown)."""
         if self._ishares is None:
-            self._ishares = {}
-            rows: object = None
-            try:
-                data = self._get(ISHARES_SCREENER, "iShares-Fondsfinder")
-                rows = json.loads(data) if data is not None else None
-                if data is None:
-                    self.finder_error = "iShares-Fondsfinder: HTTP 404"
-            except SourceError as e:
-                self.finder_error = str(e)
-            except ValueError:
-                self.finder_error = "iShares-Fondsfinder: Antwort ist kein JSON (vermutlich eine Zwischenseite)."
-            for row in rows.values() if isinstance(rows, dict) else ():
-                if not isinstance(row, dict):
-                    continue
-                m = PRODUCT_PATH.search(str(_raw(row.get("productPageUrl")) or ""))
-                code = _raw(row.get("isin"))
-                if m and isinstance(code, str):
-                    if not self._ishares:  # names only, no values: which field holds the TER (#142)
-                        log.info("iShares fund finder: fields of a product: %s", ", ".join(sorted(map(str, row))))
-                    key = code.strip().upper()
-                    self._ishares.setdefault(key, _product(m))
-                    if (ter := _ter(row)) is not None:
-                        self._ter.setdefault(key, ter)
-            if not self._ishares and not self.finder_error:
-                # names and types only, never values: enough to see how iShares changed the layout
-                first = next(iter(rows.values()), None) if isinstance(rows, dict) else None
-                log.warning("iShares fund finder: no products; answer %s with %d entries, first %s: %s",
-                            type(rows).__name__, len(rows) if isinstance(rows, dict | list) else 0,
-                            type(first).__name__, ", ".join(sorted(map(str, first)))[:500]
-                            if isinstance(first, dict) else "-")
-                self.finder_error = ("iShares-Fondsfinder: Antwort ohne Produkte mit ISIN und Produktseite "
-                                     f"({len(rows) if isinstance(rows, dict | list) else 0} Einträge).")
+            self._ishares, self._pending = {}, list(ISHARES_SCREENERS)
+        while isin not in self._ishares and self._pending:
+            self._read_finder(self._pending.pop(0), self._ishares)
         if isin in self._ishares or not self.finder_down:
             return self._ishares.get(isin)
         return ISHARES.get(isin) or (self._search(isin) if search else None)
+
+    def _read_finder(self, url: str, known: dict[str, tuple[str, str]]) -> None:
+        rows: object = None
+        try:
+            data = self._get(url, "iShares-Fondsfinder")
+            rows = json.loads(data) if data is not None else None
+            error = "" if data is not None else "iShares-Fondsfinder: HTTP 404"
+        except SourceError as e:
+            error = str(e)
+        except ValueError:
+            error = "iShares-Fondsfinder: Antwort ist kein JSON (vermutlich eine Zwischenseite)."
+        found = 0
+        for key, row in rows.items() if isinstance(rows, dict) else ():
+            code = _raw(row.get("isin")) if isinstance(row, dict) else None
+            if not isinstance(code, str):
+                continue
+            m = PRODUCT_PATH.search(str(_raw(row.get("productPageUrl")) or ""))
+            number = str(_raw(row.get("portfolioId")) or key)
+            product = _product(m) if m else (number, "holdings") if re.fullmatch(r"\d{4,8}", number) else None
+            if product is None:
+                continue
+            if not known:  # names only, no values: which field holds the TER (#142)
+                log.info("iShares fund finder: fields of a product: %s", ", ".join(sorted(map(str, row))))
+            known.setdefault(code.strip().upper(), product)
+            if (ter := _ter(row)) is not None:
+                self._ter.setdefault(code.strip().upper(), ter)
+            found += 1
+        if found:
+            self._finder_ok, self.finder_error = True, ""
+        elif not self._finder_ok:
+            if not error:
+                first = next(iter(rows.values()), None) if isinstance(rows, dict) else None
+                log.warning("iShares fund finder: no products; answer %s, first %s: %s", type(rows).__name__,
+                            type(first).__name__, ", ".join(sorted(map(str, first)))[:500]
+                            if isinstance(first, dict) else "-")
+                error = ("iShares-Fondsfinder: Antwort ohne Produkte mit ISIN und Produktseite "
+                         f"({len(rows) if isinstance(rows, dict | list) else 0} Einträge).")
+            self.finder_error = error
 
     def _search(self, isin: str) -> tuple[str, str] | None:
         """The product of ``isin`` from the site's search box - only an unambiguous hit, never a guess. The UK
