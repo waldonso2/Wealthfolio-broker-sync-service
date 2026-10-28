@@ -1,4 +1,4 @@
-"""Temporary probe round 4: Vanguard JS (GraphQL query), Invesco holdings variants, L&G API, VanEck holdings."""
+"""Temporary probe round 5."""
 import re
 from pathlib import Path
 import httpx
@@ -16,16 +16,27 @@ def save(name, url, **kw):
     if name: (OUT / name).write_bytes(r.content)
     return r
 
-main = save("vanguard-main.js", "https://www.vanguard.co.uk/main.a20141f28595d378.js")
-save("vanguard-runtime.js", "https://www.vanguard.co.uk/runtime.46f27ca601d8f023.js")
-for loc in ("en_GB", "de_DE", "en_IE"):
-    for path in ("holdings/fund", "holdings/index"):
-        for extra in ("", "&audienceType=Investor", "&productType=ETF&audienceType=Investor"):
-            save("", f"https://dng-api.invesco.com/cache/v1/accounts/{loc}/shareclasses/IE0032077012/{path}?idType=isin{extra}")
-save("invesco-de-page.html", "https://www.invesco.com/de/de/financial-products/etfs/invesco-eqqq-nasdaq-100-ucits-etf-dist.html")
-for q in ("/srp/api/fund-centre?audience_id=79&language_id=1", "/srp/api/fund-centre/?audience=79&language=1&litStructureId=1",
-          "/srp/api/fund-centre/funds?audience=79&language=1"):
-    save("", "https://fundcentres.landg.com" + q)
-save("vaneck-holdings.html", "https://www.vaneck.com/de/de/anlagen/semiconductor-etf/positionen/?tab=holdings")
-save("vaneck-overview.html", "https://www.vaneck.com/de/de/anlagen/semiconductor-etf/ueberblick/")
-save("hsbc-retail.html", "https://www.assetmanagement.hsbc.de/de/retail-investors/fund-centre")
+js = save("vanguard-92755.js", "https://www.vanguard.co.uk/92755.74374ac7c10596a7.js")
+rt = http.get("https://www.vanguard.co.uk/runtime.46f27ca601d8f023.js").text
+chunks = dict(re.findall(r'(\d+):"([0-9a-f]{16})"', rt))
+# chunks the app names together with holdings
+hits = 0
+for cid, h in chunks.items():
+    try:
+        c = http.get(f"https://www.vanguard.co.uk/{cid}.{h}.js")
+    except httpx.HTTPError:
+        continue
+    if re.search(r"(?i)fund-?holdings|holdingDetails|borHoldings|FundHoldings", c.text):
+        (OUT / f"vanguard-chunk-{cid}.js").write_bytes(c.content); hits += 1
+print("vanguard chunks with holdings", hits)
+for isin in ("IE0032077012", "IE00B3YCGJ38"):
+    for kind in ("fund", "index"):
+        save(f"invesco-{isin}-{kind}.json", f"https://dng-api.invesco.com/cache/v1/accounts/en_GB/shareclasses/{isin}/holdings/{kind}?idType=isin")
+save("vaneck-bundle.js", "https://www.vaneck.com/static/ReactApps/FundPagesNewDesignEU/dist/bundle.js")
+save("vaneck-common.js", "https://www.vaneck.com/Static/us/js/dist/fund-pages-common.js")
+lg = save("lgim-page.html", "https://fundcentres.landg.com/en/uk/institutional/fund-centre/ETF/Cyber-Security/")
+for s in sorted(set(re.findall(r'<script[^>]+src="([^"]+)"', lg.text)))[:15]:
+    u = s if s.startswith("http") else "https://fundcentres.landg.com" + s
+    r = save("", u)
+    if r is not None and ("srp/api" in r.text or "holding" in r.text.lower()):
+        (OUT / ("lgim-" + re.sub(r"[^a-z0-9.]", "_", s.lower())[-60:])).write_bytes(r.content)
