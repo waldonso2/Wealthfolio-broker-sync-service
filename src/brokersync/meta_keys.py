@@ -45,6 +45,8 @@ FUND = MetaKey("fund", "json", False,
                "look-through: where a Wealthfolio asset's holdings come from: {source, url, status, at, error}")
 FUNDS_LAST = MetaKey("funds:last", "json", False,
                      "X-Ray: the last fetch of the funds' lists: {at, fetched, none, failed, finder, error}")
+FUNDS_PROGRESS = MetaKey("funds:progress", "json", False,
+                         "X-Ray: the fetch of the funds' lists going on: {n, m, name}, gone after it")
 XRAY_ACCEPTED = MetaKey("xray:accepted", "json", False, "cluster risks the user accepted on *Durchschau*: [key]")
 XRAY_NOTIFIED = MetaKey("xray:notified", "json", False, "cluster risks notified via ntfy: [key]")
 TAXONOMIES_LAST = MetaKey("taxonomies:last", "json", False,
@@ -59,5 +61,5 @@ SPENDING = MetaKey("spending", "json", False,
 
 ALL = (ASSETS_LEARNED, CASH_ASSETS_REPAIRED, REFETCH, SAVINGS_ACCOUNT, DIVIDEND_TAX, HISTORY_START, POSITIONS,
        RETIRED_NOTICE, LOGO, LOGOS_LAST, PROGRESS, CHECKLIST_HIDDEN, UPDATE, AUTO_UPDATE, FUND, FUNDS_LAST,
-       XRAY_ACCEPTED, XRAY_NOTIFIED, TAXONOMIES_LAST, SPENDING, ISIN)
+       XRAY_ACCEPTED, XRAY_NOTIFIED, TAXONOMIES_LAST, SPENDING, ISIN, FUNDS_PROGRESS)
 BROKER_KEYS = tuple(k for k in ALL if k.per_broker)
