@@ -18,16 +18,11 @@ def get(name, url):
     if name: (OUT / name).write_bytes(r.content)
     return r
 
-for fc, aud in ((42, 79), (1, 117), (4, 132)):
-    r = get(f"lg-fc-{fc}.json", f"{B}/srp/api/fund-centre/{fc}?audience={aud}&language=1")
+for fc, aud in ((1, 117), (4, 132), (39, 146), (40, 130), (41, 78), (710, 309), (149, 311), (1238, 123)):
+    r = get("", f"{B}/srp/api/fund-centre/{fc}?audience={aud}&language=1")
     if r is None or r.status_code != 200:
         continue
     t = r.text
-    i = t.find("IE00BYPLS672")
-    print("   isin at", i, t[max(0, i - 700):i + 300] if i >= 0 else t[:600])
-    try:
-        d = r.json()
-        print("   keys", list(d)[:10], {k: (type(v).__name__, len(v) if hasattr(v, "__len__") else v) for k, v in d.items()})
-    except ValueError:
-        pass
-    break
+    print("   ", fc, "ETF names", t.count("UCITS ETF"), "isin", "IE00BYPLS672" in t, "fundholdings", t.lower().count("fundholdings"))
+    if "IE00BYPLS672" in t:
+        (OUT / f"lg-fc-{fc}.json").write_bytes(r.content)
