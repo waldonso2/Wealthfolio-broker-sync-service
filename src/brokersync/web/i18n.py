@@ -1054,8 +1054,15 @@ EN: dict[str, str] = {
         "{fetched} holdings lists fetched, {none} without a source (upload), {failed} failed.",
     "Positionslisten abrufen": "Fetch holdings lists",
     "Meldung": "Finding",
-    "Das ist keine Produktseite von iShares (https://www.ishares.com/…/products/<Nummer>/<Name>).":
-        "That is not an iShares product page (https://www.ishares.com/…/products/<number>/<name>).",
+    ("Das ist keine Produktseite von iShares (https://www.ishares.com/…/products/<Nummer>/<Name>) und keine "
+     "Positionsliste von L&G (https://fundcentres.lgim.com/srp/documents-id/…)."): (
+        "That is neither an iShares product page (https://www.ishares.com/…/products/<number>/<name>) nor an L&G "
+        "holdings list (https://fundcentres.lgim.com/srp/documents-id/…)."),
+    ("L&G: Öffne auf der Seite des ETFs den Download der Positionsliste (Fundholdings.csv), kopier seine Adresse und "
+     "trag sie hier ein - einmal genügt, danach holt der Dienst die Liste jeden Tag selbst."): (
+        "L&G: on the ETF's page, copy the address of the holdings list download (Fundholdings.csv) and enter it here "
+        "- once is enough; after that the service fetches the list itself every day."),
+    "Adresse der Positionsliste bei L&G für {name}": "Address of the L&G holdings list for {name}",
     "Erst den automatischen Abruf einschalten.": "Turn on automatic fetching first.",
     "Die Positionslisten konnten nicht geholt werden - siehe Protokoll.":
         "The holdings lists could not be fetched - see the log.",

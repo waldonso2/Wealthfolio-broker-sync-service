@@ -784,3 +784,24 @@ def test_an_ark_fund_is_found_on_its_page_and_its_full_holdings_downloaded():
     assert lookthrough.issuer({"name": "ARK Artificial Intelligence & Robotics UCITS ETF"}, {}) == "ARK"
     assert lookthrough.issuer({"name": "Future of Defence UCITS ETF"}, {}) == "HANetf"
     assert lookthrough.issuer({"name": "EMQQ Emerging Markets Internet UCITS ETF"}, {}) == "HANetf"
+
+
+LGIM_URL = "https://fundcentres.lgim.com/srp/documents-id/00000000-0000-4000-8000-000000000000/Fundholdings.csv"
+
+
+def test_an_lgim_fund_is_read_daily_from_the_address_the_user_saved(tmp_path):
+    csv = ("sep=,\nBasket NameL&G Example UCITS ETF\nETF Trading IDIE0000000017\nBasket Trade Date2026-10-28\n"
+           "Security Description,ISIN,Trading Currency,Constituent Weight (Base)\n"
+           + "".join(f"EXAMPLE {n} INC USD 0.01,{i},USD,0.199\n" for n, i in enumerate(FIVE))).encode()
+    assert lookthrough.lgim_doc(LGIM_URL) and not lookthrough.lgim_doc(LGIM_URL.replace("lgim.com", "evil.com"))
+    s, asked = issuers({"documents-id": httpx.Response(200, content=csv)})
+    lines, source = fetch(s, "IE0000000017", LGIM_URL)
+    assert source == "L&G" and len(lines) == 5 and lines[0].key == FIVE[0] and lines[0].weight == D("0.199")
+    state = State(tmp_path)
+    p = {"id": "a-lg", "isin": "IE00BYPLS672", "name": "L&G Cyber Security UCITS ETF", "currency": "EUR", "value": D(9)}
+    lookthrough.update(state, Depot(positions=[p]), issuers({})[0])
+    assert "Fundholdings.csv" in lookthrough.status(state, "a-lg")["error"]  # what to enter, at its card
+    lookthrough.set_status(state, "a-lg", url=LGIM_URL, status="")
+    lookthrough.update(state, Depot(positions=[p]), s)
+    st = lookthrough.status(state, "a-lg")
+    assert st["status"] == "ok" and lookthrough.issuer(p, st) == "L&G"

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.37.1
+
+- X-Ray reads L&G ETFs from the address of their daily holdings CSV ("Fundholdings.csv" on fundcentres.lgim.com), saved once under the ETF's settings; after that the list is fetched every day. The CSV's columns ("Security Description", "Constituent Weight (Base)") are read.
+
 ## 0.37.0
 
 - X-Ray fetches ARK Europe's ETFs (also the Rize ones) by ISIN: the fund page names it, the full holdings are the XLSX below it; the ids ship in `fund_products.json` and are renewed weekly.

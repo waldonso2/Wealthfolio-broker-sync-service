@@ -46,8 +46,8 @@ from .xray import Constituent
 log = logging.getLogger(__name__)
 
 WEIGHT = ("weight (%)", "gewichtung (%)", "weighting", "gewichtung", "weight", "anteil (%)", "% of net assets",
-          "percent of fund")
-NAME = ("name", "bezeichnung", "emittent", "security name")
+          "percent of fund", "constituent weight (base)")
+NAME = ("name", "bezeichnung", "emittent", "security name", "security description")
 ISIN = ("isin",)
 TICKER = ("ticker", "emittententicker")
 EXCHANGE = ("exchange", "börse")
@@ -140,7 +140,8 @@ def parse(data: bytes) -> tuple[Constituent, ...]:
 
 # ── fetching ─────────────────────────────────────────────────────────────────
 HOSTS = ("www.ishares.com", "www.blackrock.com", "etf.dws.com", "www.ssga.com", "www.amundietf.de",
-         "dng-api.invesco.com", "www.vanguard.co.uk", "www.vaneck.com", "europe.ark-funds.com")
+         "dng-api.invesco.com", "www.vanguard.co.uk", "www.vaneck.com", "europe.ark-funds.com",
+         "fundcentres.lgim.com", "fundcentres.landg.com")
 BROWSER = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 MAX_BYTES = 20 * 1024 * 1024
 MAX_COLUMN = 16384  # Excel's last column, XFD
@@ -217,6 +218,15 @@ class SourceError(Exception):
 
 class NoSource(Exception):
     """No source knows this ISIN (a stock, or a fund of another issuer): upload only."""
+
+
+# L&G: a fund's daily holdings CSV ("Fundholdings.csv") keeps its document id; the user saves its address once.
+LGIM_DOC = re.compile(r"^https://fundcentres\.(?:lgim|landg)\.com/srp/documents-id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+                      r"[0-9a-f]{4}-[0-9a-f]{12}/[A-Za-z0-9._-]{1,80}$")
+
+
+def lgim_doc(url: str) -> bool:
+    return bool(LGIM_DOC.match(url.strip()))
 
 
 def ishares_page(url: str) -> tuple[str, str] | None:
@@ -512,6 +522,13 @@ class Sources:
         except ValueError as e:
             raise SourceError(f"iShares: {e}") from e
 
+    def document(self, url: str, source: str) -> tuple[Constituent, ...]:
+        """A holdings file at an address the user saved (L&G)."""
+        data = self._get(url, source)
+        if not data or data.lstrip()[:1] == b"<":
+            raise SourceError(f"{source}: keine Positionsliste unter der gespeicherten Adresse.")
+        return self._file(data, source)
+
     def _file(self, data: bytes, source: str) -> tuple[Constituent, ...]:
         try:
             return _usable(parse_file(data), source)
@@ -671,6 +688,8 @@ def fetch(sources: Sources, isin: str, page: str = "", *, product: tuple[str, st
     iShares site's search when the fund finder fails (only for iShares funds - a search per stock costs requests
     and gets the pass refused)."""
     sources.note = ""
+    if page and lgim_doc(page):
+        return sources.document(page, "L&G"), "L&G"
     if by in FETCHERS and isin and not page and not product:
         if lines := getattr(sources, FETCHERS[by])(isin):
             return lines, by
@@ -793,7 +812,7 @@ def issuer(position: dict, st: dict) -> str:
     if st.get("source") and st["source"] != "Upload":
         return st["source"]
     if st.get("url"):
-        return "iShares"
+        return "L&G" if lgim_doc(st["url"]) else "iShares"
     return next((k for k, pattern in ISSUERS.items() if re.search(pattern, position["name"], re.I)), "")
 
 
@@ -861,6 +880,9 @@ def _unknown(by: str, isin: str) -> str:
                 "ETFs“ seine Produktseite bei iShares ein.")
     if by in FETCHERS:
         return f"{by} kennt die ISIN {isin} nicht."
+    if by == "L&G":
+        return ("L&G: trag unter „Einstellungen dieses ETFs“ einmal die Adresse seiner Positionsliste ein "
+                "(Fundholdings.csv) - danach holt der Dienst sie jeden Tag selbst.")
     upload = " Lade seine Positionsliste unter „Einstellungen dieses ETFs“ hoch."
     return (f"Für {by} gibt es keinen automatischen Abruf.{upload}" if by else
             f"Der Anbieter dieses ETFs ist unbekannt - kein automatischer Abruf.{upload}")
