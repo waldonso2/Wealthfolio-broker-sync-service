@@ -1,23 +1,19 @@
-"""Temporary probe round 23: HANetf holdings and product list on etp.hanetf.com."""
+"""Temporary probe round 24: HANetf ISIN -> holdings code."""
+import json
 from pathlib import Path
 import httpx
 
 OUT = Path("probe-files"); OUT.mkdir(exist_ok=True)
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-http = httpx.Client(timeout=90, follow_redirects=True, headers={"User-Agent": UA, "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"})
-
-def get(name, url):
-    try:
-        r = http.get(url)
-    except httpx.HTTPError as e:
-        print("##", name, url, type(e).__name__); return None
-    print("##", name, r.status_code, r.headers.get("content-type", ""), len(r.content), str(r.url)[:160],
-          r.headers.get("content-disposition", ""), r.content[:8])
-    if name and r.status_code == 200: (OUT / name).write_bytes(r.content)
-    return r
-
-for code in ("NATO", "EMQQ", "EMQQ-Holdings-xxx"):
-    get(f"hanetf-{code}.bin", f"https://etp.hanetf.com/{code}-Holdings")
-for u in ("https://etp.hanetf.com/productlist-all-all-all-all", "https://etp.hanetf.com/productlist",
-          "https://etp.hanetf.com/product-list", "https://etp.hanetf.com/"):
-    get("hanetf-list-" + u.rsplit("/", 1)[-1] + ".bin", u)
+http = httpx.Client(timeout=60, follow_redirects=False, headers={"User-Agent": UA})
+CAND = json.loads('{"IE000OJ5TQP4": ["NATO", "ETFNATO", "ASWC", "NATP", "NATON"], "IE00051W3PF2": ["BEEH"], "IE000F4FFLL6": ["BSUH"], "IE000FS24HM1": ["BSWH"], "IE00068IJAK0": ["GEP", "GEPN", "GEPP"], "IE0005YK6564": ["U3O8", "URNM", "URNP", "ETFHURNM"], "IE0006PHYNG8": ["BSTH"], "IE000NYVK0R8": ["FEP", "LFEP", "FEP1N", "FEPP"], "IE000YC7FPB6": ["BSWC"], "IE000I7E6HL0": ["8RMY", "ARMI", "NAVY", "ARMY", "ETFHARMY"], "IE000P1G9TM6": ["MCTP", "MCT", "ASWF"], "IE00BDDRF700": ["ITEP", "ITEKN", "ITEK", "T3KE"], "IE000IQQEL77": ["ASWD", "COPP", "CPPR", "ETFHCPPR", "COPR"], "IE000YR7N5U8": ["ODUT", "ODUS", "OBUS"], "IE0002HWPU75": ["JURY", "JURU", "JURP"], "IE00BFYN8Y92": ["EMQQ", "EMQP", "EMQQN"], "IE000CEUZ052": ["DR4M", "DRAM"], "IE00BKPTXQ89": ["MMLP", "PMLP", "ETFHMMLP", "JMLP"], "IE000MMRLY96": ["YMAG", "YMAP", "YYYY"], "IE000HF69TA9": ["FEPI", "FEPG", "ASWK"], "IE000WUTBLT5": ["A1P0", "AIPG", "AIPO"], "IE00BNTVVR89": ["ESGO", "ESGON", "ETFHESGO", "ZSG0", "ESGP"], "IE00075IVKF9": ["URNJ", "URJP", "U8NJ"], "IE000QVCOG22": ["OTUS", "OTUT"], "IE000RI14ZD9": ["MEXS", "MEXP", "MEXSN"], "IE000K5XQD29": ["BEEC"], "IE000W1W8IY2": ["BSTC"], "IE000UGM8X46": ["MEXMXN", "MEXMX"], "IE000T8QD852": ["CHPY", "CHPP", "YCHP"], "IE0008RSSHT4": ["UKIG", "UK1T", "UKIT"], "IE0003XW12I8": ["DRON", "DRN", "ETFHDRON"], "IE0008BA4TY1": ["CEGI", "ASWM", "CEPG"], "IE000Y187J49": ["RTNG", "RNTA"], "IE000UWJUW87": ["ILS", "C47B", "CATB"], "IE000AZ0ORF1": ["BSUC"], "IE000B5MAME7": ["DZMW", "DZMU"], "IE000OBK3UE0": ["FEPD", "FEGI", "ASWL"], "IE00BMYMHS24": ["AMAL", "ASWE", "AMAP"], "IE00BL643144": ["ROE", "ROES"], "IE000C7EUDG1": ["QUAD", "ADEF", "ASWJ"], "IE00BMFNW783": ["TRYP", "TRIP", "7RIP"], "IE000AN3AFZ1": ["JOGS", "JOGP"], "IE000R8PO127": ["UKRN", "KYIV", "ETFHUKRN"], "IE000GDU4WA8": ["GOVE", "ZINS", "PGOV"], "IE0008LRGGP4": ["PFFP", "ASWN", "PFFI"], "IE00BNC1F287": ["ECLM", "CLMA", "CLMP"], "IE000I50V6C7": ["WEEK", "W33K"], "IE0007WMHDE3": ["GR8", "ETFHGR8", "8GRT", "GRT8"], "IE000W1S2PT6": ["LYT3", "LYTE", "EUVL"], "IE00BJQTJ848": ["WELL", "WELP", "W311"], "IE000TAA0GK0": ["NATI", "NATY", "NA7Y"], "IE000V0Q8BV4": ["OBBA", "ODBA"], "IE000WYTQSF9": ["INQQN", "INQP", "INQQ"], "IE000KDY10O3": ["GIJ0", "SEAL", "GIJON", "GIJO"], "IE000DN1DKF8": ["DZUS", "DZUU"], "IE00041H4WT9": ["NATE", "NAT8", "ASWG"], "IE0008WICO06": ["SLVG", "SLVM"], "IE000LOAUP03": ["DZEU"], "IE0003FHAKK4": ["DZGB"], "IE000OQGOX00": ["GRNY", "GRNP"], "IE0001O9L5K4": ["OBGE"], "IE000X5OD4M3": ["PTAD", "PTAM"], "IE000PAW6X57": ["BSTE"], "IE0006WPPA00": ["NUKZ", "ASWA", "NUKP"], "IE000SDZFVP4": ["S3RA", "SERA", "SPCE"], "IE000HJ3ZIR8": ["BSUE"], "IE000QRUKAG2": ["BSEU"], "IE000N7ES011": ["BSWE"], "IE000TD32PU3": ["RMBP", "RMBS", "MBSR"], "IE000SKTEI24": ["SPYC", "ASWS", "SPYI"], "IE000WOBV8X1": ["UGOV"], "IE000IH9YO94": ["OCGP"], "IE0008IQ0DI1": ["NQQQ", "QQQI", "QQQP"], "IE000M5KXSP3": ["TCQU", "TCU"], "IE000DN0XQM1": ["TCQE", "TCE"], "IE000U00VD47": ["GOVH"], "IE000S23Q7H3": ["CGOV"], "IE000YM4FP49": ["TCQW", "TCW"], "IE0009D15VO0": ["REXC", "REE", "REXX"], "IE000UXI85C0": ["OBAA"], "IE000FVYOWC4": ["PTEU", "PTAE"]}')
+found = {}
+for isin, roots in CAND.items():
+    for root in roots:
+        r = http.get(f"https://hanetf.com/wp-content/assets/upload/Holdings-{root}-{isin}-all-all.xlsx")
+        if r.status_code == 200 and r.content[:2] == b"PK":
+            found[isin] = root
+            break
+    print(isin, found.get(isin))
+print(len(found), "of", len(CAND))
+(OUT / "hanetf-map.json").write_text(json.dumps(found, sort_keys=True))
