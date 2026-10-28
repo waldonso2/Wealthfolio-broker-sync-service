@@ -1096,6 +1096,7 @@ EN: dict[str, str] = {
     "Produktseite bei iShares für {name}": "iShares product page for {name}",
     "Positionsliste für {name} (CSV, XLSX oder XLS)": "Holdings list for {name} (CSV, XLSX or XLS)",
     "Abruf fehlgeschlagen": "Fetch failed",
+    "{n} von {m}: {name}": "{n} of {m}: {name}",
     "Alle {n}": "All {n}",
     "ETFs ({n})": "ETFs ({n})",
     "Nur die größten {n} zeigen": "Show only the {n} largest",

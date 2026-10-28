@@ -179,3 +179,44 @@ def test_dedup_index():
         times.append((time.perf_counter() - began) * 1000)
     record("Duplikat-Erkennung", f"Suche je Buchung bei {EXISTING} vorhandenen (stündlich, ~4 Monate)",
            statistics.median(times), "ms", 10, "eigenes Budget")
+
+
+# ── X-Ray with a large depot: 15 funds of 50 to 3000 lines (it once sent megabytes) ─────────────────
+
+def test_xray_page_with_large_funds(tmp_path):
+    import random
+
+    from fastapi.testclient import TestClient
+
+    from brokersync import lookthrough
+    from brokersync.state import State
+    from brokersync.web.app import create_app
+
+    from .helpers import first_password
+
+    random.seed(1)
+    syncer, _ = setup(tmp_path, FakeWealthfolio())
+    app = create_app(tmp_path, wealthfolio=syncer._wealthfolio, adapters={"fake": FakeBroker}, run_in_thread=False)
+    client = TestClient(app, base_url="http://sync.local:8090")
+    first_password(client)
+    client.get("/lookthrough")
+    universe = [f"US{n:09d}0" for n in range(6000)]
+    state, positions = State(tmp_path), []
+    for i, size in enumerate((3000, 2500, 1600, 1500, 1400, 1000, 600, 500, 400, 300, 300, 200, 100, 60, 50)):
+        keys = random.sample(universe, size)
+        weight = str(Decimal(1) / size)
+        state.set_fund(f"f{i}", f"Fund {i} UCITS ETF", [[k, f"Company {k}", weight, "United States", "IT", "USD"]
+                                                        for k in keys])
+        positions.append({"id": f"f{i}", "isin": "", "name": f"Fund {i} UCITS ETF", "currency": "EUR",
+                          "value": Decimal(10000), "cost": Decimal(9000), "parts": {}, "trades": []})
+    ctx = app.inner.state.ctx
+    ctx.depot, ctx.depot_at = lookthrough.Depot(positions=positions), time.time()
+    times, size = [], 0
+    for _ in range(3):
+        began = time.perf_counter()
+        page = client.get("/lookthrough")
+        times.append((time.perf_counter() - began) * 1000)
+        size = len(page.content)
+    record("X-Ray", "Antwortzeit mit 15 ETFs (13.500 Positionen), Median", statistics.median(times), "ms", 800,
+           "Core Web Vitals TTFB")
+    record("X-Ray", "Seitengewicht mit 15 ETFs", size / 1024, "KiB", 500, "Seitengewicht")

@@ -308,10 +308,10 @@ def test_countries_and_sectors_go_into_wealthfolio_without_touching_the_users_ow
     fake.assignments.append({"id": "y1", "assetId": "a-world", "taxonomyId": "regions", "categoryId": "country_DE",
                              "weight": 10000, "source": "AUTO"})  # Yahoo: only the domicile
     r = lookthrough.write_taxonomies(state, wf, depot)
-    assert (r.written, r.manual) == (2, 0) and r.unmatched == ["Narnia", "Software & Services"]
+    assert (r.written, r.manual) == (2, 0) and r.unmatched == ["Narnia"]
     mine = sorted((a["taxonomyId"], a["categoryId"], a["weight"]) for a in fake.assignments)
-    # A subcategory (Software & Services) is not a sector; Narnia has no country: both stay unassigned.
-    assert mine == [("industries_gics", "20", 3000), ("industries_gics", "45", 5000),
+    # A subcategory (Software & Services) counts for its sector; Narnia has no country: it stays unassigned.
+    assert mine == [("industries_gics", "20", 3000), ("industries_gics", "45", 6500),
                     ("regions", "country_DE", 3000), ("regions", "country_US", 5000)]
     assert all(a["source"] == "BROKERSYNC" for a in fake.assignments)
     assert lookthrough.write_taxonomies(state, wf, depot).written == 0  # unchanged: not written again
@@ -874,3 +874,26 @@ def test_a_fund_without_the_issuers_ter_gets_finanzfluss_and_asks_again_only_aft
     asked.clear()
     lookthrough.update(state, depot, s)
     assert asked == []  # asked lately
+
+
+def test_a_fund_without_countries_takes_its_issuers_breakdown_else_the_country_other_funds_name(tmp_path):
+    rows = [["Sector"], ["Kategorie", "Fonds", ""], ["IT", "30,65"], [], ["Geography/Locations"],
+            ["Per", "27.Okt.2026"], ["Kategorie", "Fonds", "", ""], ["Vereinigte Staaten", "72,85", "US"],
+            ["Deutschland", "2,05", "DE"], ["Other", "4,91", "OTHR"], ["Cash und/oder Derivate", "0,46", "CASHD_C"],
+            [], ["Allokationen können sich ändern."]]
+    assert lookthrough.locations(rows) == [["US", "0.7285"], ["DE", "0.0205"]]
+    state = State(tmp_path)
+    state.set_fund("a-world", "World", [["~A", "APPLE INC", "0.5", "", "IT", "USD"]])  # iShares: no country
+    lookthrough.set_status(state, "a-world", regions=[["US", "0.7285"], ["DE", "0.0205"]])
+    state.set_fund("a-tech", "Tech", [["~A", "Apple Inc.", "0.6", "", "IT", "USD"],
+                                     ["~X", "Unknown Corp", "0.4", "", "IT", "USD"]])
+    state.set_fund("a-spdr", "S&P", [["US0378331005", "APPLE INC", "0.07", "United States", "IT", "USD"]])
+    depot = Depot(positions=[{"id": k, "isin": "", "name": k, "currency": "EUR", "value": D(1)}
+                             for k in ("a-world", "a-tech", "a-spdr")])
+    fake, wf = _wf()
+    lookthrough.write_taxonomies(state, wf, depot)
+    regions = sorted((a["assetId"], a["categoryId"], a["weight"]) for a in fake.assignments
+                     if a["taxonomyId"] == "regions")
+    # World: the issuer's breakdown (Other and cash stay unassigned); Tech: Apple's country from the S&P fund.
+    assert regions == [("a-spdr", "country_US", 700), ("a-tech", "country_US", 6000),
+                       ("a-world", "country_DE", 205), ("a-world", "country_US", 7285)]
