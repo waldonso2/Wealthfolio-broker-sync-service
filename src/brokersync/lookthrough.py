@@ -416,6 +416,7 @@ class Sources:
         self._pending: list[str] = []
         self._finder_ok = False  # one fund finder answered with products this pass
         self._ter: dict[str, Decimal] = {}
+        self._country: dict[str, str] = {}  # iShares' fund finder: the one country a fund invests in
         self.finder_error = ""  # why the fund finder gave no products this pass: an unknown ISIN may still be iShares'
         self.limited = ""  # iShares said "too many requests" (429): nothing more is asked this pass
         self.last: tuple[str, str] | None = None  # the product the last fetch found, kept with the fund
@@ -462,6 +463,8 @@ class Sources:
             known.setdefault(code, product)
             if (ter := _ter(row)) is not None:
                 self._ter.setdefault(code, ter)
+            if (country := str(row.get("aladdinCountry") or "").strip()) and country != "Weitere":
+                self._country.setdefault(code, country)  # a single-country fund's country ("Indien")
             found += 1
         if found:
             self._finder_ok, self.finder_error = True, ""
@@ -508,8 +511,21 @@ class Sources:
                     found.add((text, "holdings"))
         return found
 
+    def _finder_facts(self, isin: str) -> None:
+        """A fund found in the shipped list skipped the fund finder; its TER and country are read there once a
+        pass (the German screener: it lists every fund the shipped list has)."""
+        if isin in KNOWN and self._ishares is None:
+            self._ishares, self._pending = {}, list(ISHARES_SCREENERS[1:])
+            self._read_finder(ISHARES_SCREENERS[0], self._ishares)
+
+    def fund_country(self, isin: str) -> list[list[str]]:
+        """A single-country fund's whole weight in its country, as its issuer names it (else nothing)."""
+        self._finder_facts(isin)
+        return [[self._country[isin], "1"]] if isin in self._country else []
+
     def ter(self, isin: str) -> Decimal | None:
         """The TER the issuer lists for ``isin``, as far as a fetch of this pass read it."""
+        self._finder_facts(isin)
         return self._ter.get(isin)
 
     def close(self) -> None:
@@ -963,7 +979,7 @@ def _update(state: State, depot: Depot, sources: Sources, force: bool, deadline:
             state.set_fund(p["id"], p["name"], rows(lines))
             ter = sources.ter(p["isin"])
             set_status(state, p["id"], status="ok", source=source, error="", lines=len(lines), product=sources.last,
-                       note=sources.note, regions=sources.regions,
+                       note=sources.note, regions=sources.regions or sources.fund_country(p["isin"]),
                        **({"ter": str(ter), "ter_source": source, "ter_at": now()} if ter is not None else {}))
             result.fetched += 1
     _fill_ters(state, depot, sources, deadline, only, force)
@@ -1100,7 +1116,12 @@ ALIASES = {"communication": "communication services", "telecommunication service
            "nichtzyklische konsumgüter": "consumer staples", "kommunikation": "communication services",
            "kommunikationsdienste": "communication services", "energie": "energy", "materialien": "materials",
            "roh-, hilfs- & betriebsstoffe": "materials", "grundstoffe": "materials", "versorger": "utilities",
-           "versorgungsbetriebe": "utilities", "immobilien": "real estate"}
+           "versorgungsbetriebe": "utilities", "immobilien": "real estate",
+           # DWS (Xtrackers) names its sectors in German, ICB style
+           "technologie": "information technology", "industrieunternehmen": "industrials",
+           "verbrauchsgüter": "consumer discretionary", "finanzdienstleister": "financials",
+           "telekommunikation": "communication services", "versorgungsunternehmen": "utilities",
+           "material": "materials"}
 # A country as ISO 3166-1 alpha-2, as Wealthfolio keys its regions (``country_US``): the issuers' spellings that
 # aren't Wealthfolio's English name - German ones (iShares' German download, DWS, VanEck) and English variants.
 # A two-letter code (Vanguard) is taken as it is. Names Wealthfolio has, in English, need no entry.
@@ -1121,7 +1142,8 @@ COUNTRIES = {
     "insel man": "im", "ägypten": "eg", "zypern": "cy", "estland": "ee", "lettland": "lv", "litauen": "lt",
     "slowenien": "si", "slowakei": "sk", "rumänien": "ro", "kroatien": "hr", "marokko": "ma", "kenia": "ke",
     "kasachstan": "kz", "britische jungferninseln": "vg", "jordanien": "jo", "bangladesch": "bd", "island": "is",
-    "china (volksrepublik)": "cn", "volksrepublik china": "cn", "macao": "mo", "makau": "mo"}
+    "china (volksrepublik)": "cn", "volksrepublik china": "cn", "macao": "mo", "makau": "mo",
+    "großbritannien (uk)": "gb", "süd korea": "kr", "süd-korea": "kr", "taiwan region": "tw", "hong kong": "hk"}
 # Taxonomy, the line's attribute, and which of its categories count (countries; every GICS level - an industry
 # group or industry, as SPDR and Vanguard name them, counts for its sector).
 TAXONOMIES = (("regions", "country", lambda c: str(c.get("id", "")).startswith("country_")),
@@ -1138,11 +1160,12 @@ class Written:
 def _bp(lines: list[list[str]], attr: int, categories: dict[str, str], unmatched: set[str]) -> list[tuple[str, int]]:
     """Weight per category in basis points, rounded down; a name without a category stays out (unassigned)."""
     out: dict[str, Decimal] = {}
+    aliases = {_norm(k): v for k, v in (COUNTRIES if attr == 3 else ALIASES).items()}
     for line in lines:
-        name = line[attr].strip().lower()
+        name = _norm(line[attr])
         if not name:
             continue
-        category = categories.get(COUNTRIES.get(name, name) if attr == 3 else ALIASES.get(name, name))
+        category = categories.get(aliases.get(name, name))
         if category is None:
             unmatched.add(line[attr].strip())
             continue
@@ -1163,8 +1186,13 @@ def _names(found: list[dict], counts) -> dict[str, str]:
             seen.add(cid)
             cid = parent[cid]
         return cid
-    return {str(c.get("name", "")).lower(): c["id"] if str(c["id"]).startswith("country_") else top(c["id"])
+    return {_norm(str(c.get("name", ""))): c["id"] if str(c["id"]).startswith("country_") else top(c["id"])
             for c in found if counts(c)}
+
+
+def _norm(name: str) -> str:
+    """A category name as compared: lower case, without commas (SPDR: "Oil Gas & Consumable Fuels")."""
+    return " ".join(name.replace(",", " ").lower().split())
 
 
 def write_taxonomies(state: State, wf, depot: Depot) -> Written:

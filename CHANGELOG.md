@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.42.1
+
+- Countries and sectors into Wealthfolio, checked against live lists: SPDR's GICS names without commas ("Oil Gas & Consumable Fuels"), DWS' (Xtrackers) German sector names ("Technologie", "Industrieunternehmen", "Finanzdienstleister" …) and country spellings ("Großbritannien (UK)", "Süd Korea", VanEck's "Taiwan Region") now find their category.
+- A single-country iShares fund (MSCI India, S&P 500 sector funds) gets its country from iShares' fund finder; the finder is read once a pass also for funds of the shipped list, so their TER comes from iShares too.
+
 ## 0.42.0
 
 - X-Ray: *Jetzt abrufen* shows a progress bar (which ETF of how many) while the lists are fetched.
