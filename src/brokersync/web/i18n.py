@@ -1141,6 +1141,10 @@ EN: dict[str, str] = {
     "Alle {n} Positionen": "All {n} holdings",
     "Weitere Positionen von {name}": "More holdings of {name}",
     "Einstellungen dieses ETFs": "Settings of this ETF",
+    "Ohne Liste: Such den ETF bei iShares, öffne den Treffer und füg die Adresse seiner Seite hier ein - einmal "
+    "genügt.":
+        "No list yet: find the ETF at iShares, open the hit and paste its page's address here - once is enough.",
+    "Bei iShares suchen ({isin})": "Search at iShares ({isin})",
     "{funds} iShares-ETFs durchleuchtet · {open} ohne Positionsliste · {hidden} weitere Positionen ausgeblendet "
     "(zählen als je eine Position)":
         "{funds} iShares ETFs looked through · {open} without a holdings list · {hidden} other positions hidden "
@@ -1148,8 +1152,10 @@ EN: dict[str, str] = {
     "Letzter Abruf {when}: {fetched} Positionslisten geholt, {failed} fehlgeschlagen.":
         "Last fetch {when}: {fetched} holdings lists fetched, {failed} failed.",
     "Der Abruf ist abgebrochen: {error}": "The fetch stopped: {error}",
-    "Der iShares-Fondsfinder ist nicht nutzbar ({error}); die ETFs werden über die Suche der iShares-Seite gefunden.":
-        "The iShares fund finder can't be used ({error}); the ETFs are found through the iShares site's search.",
+    "iShares nennt zu einer ISIN gerade keine Produktnummer ({error}). Trag bei einem ETF ohne Liste einmal seine "
+    "Produktseite unter „Einstellungen dieses ETFs“ ein - danach holt der Dienst seine Liste selbst.":
+        "iShares currently names no product number for an ISIN ({error}). For an ETF without a list, enter its product "
+        "page once under “Settings of this ETF” - then the service fetches its list itself.",
     "Zeigen:": "Show:",
     "Nicht zugeordnet (Bargeld, Derivate, Rest der Gewichte): {share}.":
         "Unassigned (cash, derivatives, rest of the weights): {share}.",

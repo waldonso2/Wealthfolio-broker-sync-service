@@ -6,15 +6,15 @@
 {% macro eur(v) %}{% if v %}{{ v | money }}{% else %}–{% endif %}{% endmacro %}
 {% macro matrix_rows(items, offset) %}{% for r, cells, more, direct in items %}
     <tr><td data-label="#">{{ offset + loop.index }}</td>
-      <td data-label="{{ _('Aktie') }}">{{ r.name }}{% if r.country or r.sector %} <span class="muted">{{ r.country }}{% if r.country and r.sector %} · {% endif %}{{ r.sector }}</span>{% endif %}</td>
-      {% for h in columns %}<td data-label="{{ h.name }}">{{ eur(cells[loop.index0]) }}</td>{% endfor %}
-      {% if more_funds %}<td data-label="{{ _('weitere ETFs') }}">{{ eur(more) }}</td>{% endif %}
-      <td data-label="{{ _('direkt') }}">{{ eur(direct) }}</td>
+      <td class="name" data-label="{{ _('Aktie') }}">{{ r.name }}{% if r.country or r.sector %} <span class="muted">{{ r.country }}{% if r.country and r.sector %} · {% endif %}{{ r.sector }}</span>{% endif %}</td>
+      {% for h in columns %}<td class="wide" data-label="{{ h.name }}">{{ eur(cells[loop.index0]) }}</td>{% endfor %}
+      {% if more_funds %}<td class="wide" data-label="{{ _('weitere ETFs') }}">{{ eur(more) }}</td>{% endif %}
+      <td class="wide" data-label="{{ _('direkt') }}">{{ eur(direct) }}</td>
       <td data-label="{{ _('Summe (EUR)') }}"><strong>{{ r.value | money }}</strong></td>
       <td data-label="{{ _('Anteil am Depot') }}">{{ pct(r.share) }}</td></tr>
 {% endfor %}{% endmacro %}
-{% macro fund_rows(lines, value) %}{% for key, name, weight, country, sector, currency in lines %}
-            <tr><td data-label="{{ _('Aktie') }}">{{ name }}</td><td data-label="{{ _('Land') }}">{{ country or "–" }}</td><td data-label="{{ _('Sektor') }}">{{ sector or "–" }}</td><td data-label="{{ _('Gewicht im ETF') }}">{{ pct(weight | float) }}</td><td data-label="{{ _('Wert in deinem Depot (EUR)') }}">{{ ((weight | float) * (value | float)) | money }}</td></tr>
+{% macro fund_rows(lines, value, with_country) %}{% for key, name, weight, country, sector, currency in lines %}
+            <tr><td class="name" data-label="{{ _('Aktie') }}">{{ name }}</td>{% if with_country %}<td data-label="{{ _('Land') }}">{{ country or "–" }}</td>{% endif %}<td data-label="{{ _('Sektor') }}">{{ sector or "–" }}</td><td data-label="{{ _('Gewicht im ETF') }}">{{ pct(weight | float) }}</td><td data-label="{{ _('Wert in deinem Depot (EUR)') }}">{{ ((weight | float) * (value | float)) | money }}</td></tr>
 {% endfor %}{% endmacro %}
 <div class="card">
   <h1>{{ _("X-Ray") }}</h1>
@@ -22,7 +22,7 @@
   {% if positions %}<p>{{ _("{funds} iShares-ETFs durchleuchtet · {open} ohne Positionsliste · {hidden} weitere Positionen ausgeblendet (zählen als je eine Position)", funds=fund_list | length, open=ishares | length - fund_list | length, hidden=hidden) }}</p>{% endif %}
   {% if last.at %}<p class="muted">{{ _("Letzter Abruf {when}: {fetched} Positionslisten geholt, {failed} fehlgeschlagen.", when=last.at | local, fetched=last.fetched or 0, failed=last.failed or 0) }}</p>{% endif %}
   {% if last.error %}<p class="error" role="alert">{{ _("Der Abruf ist abgebrochen: {error}", error=last.error | redact) }}</p>{% endif %}
-  {% if last.finder %}<p class="muted">{{ _("Der iShares-Fondsfinder ist nicht nutzbar ({error}); die ETFs werden über die Suche der iShares-Seite gefunden.", error=last.finder | redact) }}</p>{% endif %}
+  {% if last.finder %}<p class="muted">{{ _("iShares nennt zu einer ISIN gerade keine Produktnummer ({error}). Trag bei einem ETF ohne Liste einmal seine Produktseite unter „Einstellungen dieses ETFs“ ein - danach holt der Dienst seine Liste selbst.", error=last.finder | redact) }}</p>{% endif %}
   <form method="post" action="/lookthrough/fetch" class="actions">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <p class="muted grow" aria-live="polite">{% if reading %}{{ _("Die Positionen werden gerade aus Wealthfolio gelesen …") }}{% elif read_at %}{{ _("Positionen gelesen {when}.", when=read_at | local) }}{% endif %}</p>
@@ -36,13 +36,13 @@
   <h2>{{ _("Gesamt: Aktien über alle Positionen") }}</h2>
   <p>{{ _("Zeigen:") }} {% for n in tops %}{% if n == matrix_top %}<strong aria-current="page">{{ _("Top {n}", n=n) }}</strong>{% else %}<a href="/lookthrough?top={{ n }}">{{ _("Top {n}", n=n) }}</a>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</p>
   <p>{{ _("{n} Aktien, effektive Titelzahl {effective}.", n=count, effective=effective | round | int) }}</p>
-  <div class="table"><table>
+  <div class="table compact"><table>
     <caption class="sr-only">{{ _("Aktien über alle Positionen") }}</caption>
     <thead><tr><th scope="col">#</th><th scope="col">{{ _("Aktie") }}</th>{% for h in columns %}<th scope="col">{{ h.name }}</th>{% endfor %}{% if more_funds %}<th scope="col">{{ _("weitere ETFs") }}</th>{% endif %}<th scope="col">{{ _("direkt") }}</th><th scope="col">{{ _("Summe (EUR)") }}</th><th scope="col">{{ _("Anteil am Depot") }}</th></tr></thead>
     <tbody>{{ matrix_rows(matrix[:matrix_top], 0) }}</tbody></table></div>
   {% if matrix | length > matrix_top %}
   <details><summary>{{ _("Alle {n} Aktien", n=matrix | length) }}</summary>
-    <div class="table"><table>
+    <div class="table compact"><table>
       <caption class="sr-only">{{ _("Weitere Aktien über alle Positionen") }}</caption>
     <thead><tr><th scope="col">#</th><th scope="col">{{ _("Aktie") }}</th>{% for h in columns %}<th scope="col">{{ h.name }}</th>{% endfor %}{% if more_funds %}<th scope="col">{{ _("weitere ETFs") }}</th>{% endif %}<th scope="col">{{ _("direkt") }}</th><th scope="col">{{ _("Summe (EUR)") }}</th><th scope="col">{{ _("Anteil am Depot") }}</th></tr></thead>
       <tbody>{{ matrix_rows(matrix[matrix_top:], matrix_top) }}</tbody></table></div>
@@ -58,19 +58,20 @@
   {% if st.status == "error" %}<p class="error" role="alert">{{ _("Abruf fehlgeschlagen {when}: {error}", when=st.at | local, error=st.error | redact) }}</p>{% endif %}
   <form method="post" action="/lookthrough/fetch" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}"><button class="secondary" {% if reading %}disabled{% endif %} aria-label="{{ _('Positionsliste von {name} jetzt abrufen', name=p.name) }}">{{ _("Jetzt abrufen") }}</button></form>
   {% if f %}
-  <div class="table"><table>
+  <div class="table compact"><table>
     <caption class="sr-only">{{ _("Positionen von {name}", name=p.name) }}</caption>
-            <thead><tr><th scope="col">{{ _("Aktie") }}</th><th scope="col">{{ _("Land") }}</th><th scope="col">{{ _("Sektor") }}</th><th scope="col">{{ _("Gewicht im ETF") }}</th><th scope="col">{{ _("Wert in deinem Depot (EUR)") }}</th></tr></thead>
-    <tbody>{{ fund_rows(lines[:top], p.value) }}</tbody></table></div>
+            <thead><tr><th scope="col">{{ _("Aktie") }}</th>{% if countries[p.id] %}<th scope="col">{{ _("Land") }}</th>{% endif %}<th scope="col">{{ _("Sektor") }}</th><th scope="col">{{ _("Gewicht im ETF") }}</th><th scope="col">{{ _("Wert in deinem Depot (EUR)") }}</th></tr></thead>
+    <tbody>{{ fund_rows(lines[:top], p.value, countries[p.id]) }}</tbody></table></div>
   {% if lines | length > top %}
   <details><summary>{{ _("Alle {n} Positionen", n=lines | length) }}</summary>
-    <div class="table"><table>
+    <div class="table compact"><table>
       <caption class="sr-only">{{ _("Weitere Positionen von {name}", name=p.name) }}</caption>
-            <thead><tr><th scope="col">{{ _("Aktie") }}</th><th scope="col">{{ _("Land") }}</th><th scope="col">{{ _("Sektor") }}</th><th scope="col">{{ _("Gewicht im ETF") }}</th><th scope="col">{{ _("Wert in deinem Depot (EUR)") }}</th></tr></thead>
-      <tbody>{{ fund_rows(lines[top:], p.value) }}</tbody></table></div>
+            <thead><tr><th scope="col">{{ _("Aktie") }}</th>{% if countries[p.id] %}<th scope="col">{{ _("Land") }}</th>{% endif %}<th scope="col">{{ _("Sektor") }}</th><th scope="col">{{ _("Gewicht im ETF") }}</th><th scope="col">{{ _("Wert in deinem Depot (EUR)") }}</th></tr></thead>
+      <tbody>{{ fund_rows(lines[top:], p.value, countries[p.id]) }}</tbody></table></div>
   </details>{% endif %}
   {% endif %}
-  <details><summary>{{ _("Einstellungen dieses ETFs") }}</summary>
+  <details{% if not f %} open{% endif %}><summary>{{ _("Einstellungen dieses ETFs") }}</summary>
+    {% if not f and p.isin %}<p>{{ _("Ohne Liste: Such den ETF bei iShares, öffne den Treffer und füg die Adresse seiner Seite hier ein - einmal genügt.") }} <a href="https://www.ishares.com/de/privatanleger/de/produkte/produktliste#/?productView=all&amp;search={{ p.isin | urlencode }}" target="_blank" rel="noopener noreferrer">{{ _("Bei iShares suchen ({isin})", isin=p.isin) }}</a></p>{% endif %}
     <form method="post" action="/lookthrough/source" class="inline-form">
             <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
             <label>{{ _("Produktseite bei iShares für {name}", name=p.name) }} <input type="url" name="url" value="{{ st.url or '' }}" maxlength="300" placeholder="https://www.ishares.com/de/privatanleger/de/produkte/…"></label>

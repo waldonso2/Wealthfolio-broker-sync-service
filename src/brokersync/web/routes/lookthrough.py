@@ -120,6 +120,7 @@ def lookthrough_page(request: Request, ctx: Ctx, top: int = TOPS[0]):
         matrix=_matrix(stocks, with_list, total), columns=with_list[:COLUMNS],
         more_funds=len(with_list) > COLUMNS, count=len(stocks),
         largest={k: sorted(f["constituents"], key=lambda c: -Decimal(c[2])) for k, f in funds.items()},
+        countries={k: any(c[3] for c in f["constituents"]) for k, f in funds.items()},  # iShares' file names none
         unassigned=next((r for r in rows if r.key == xray.UNASSIGNED), None),
         names={h.id: h.name for h in holdings}, effective=xray.effective_count(rows), fund_list=with_list,
         overlap={(a.id, b.id): xray.overlap(a, b) for a, b in combinations(with_list, 2)},
