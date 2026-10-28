@@ -28,17 +28,16 @@ def scan(t):
             print("     ..", t[max(0, m.start() - 250):m.end() + 350].replace("\n", " "))
 
 
-for base in ("https://fundcentres.lgim.com", "https://fundcentres.landg.com"):
-    for u in ("/en/uk/institutional/fund-centre/ETF/Cyber-Security/IE00BYPLS672/",
-              "/en/uk/institutional/fund-centre/ETF/Cyber-Security/"):
-        r = get("lg-page.html", base + u)
-        if r is None or r.status_code != 200:
-            continue
-        scan(r.text)
-        scripts = sorted(set(re.findall(r'<script[^>]+src="([^"]+)"', r.text)))
-        print("scripts", scripts)
-        for n, s in enumerate(scripts):
-            j = get(f"lg-js-{n}.js", urljoin(str(r.url), s))
-            if j is not None and j.status_code == 200:
-                print("== script", s); scan(j.text)
-        raise SystemExit
+r = get("lg-fe.js", "https://fundcentres.landg.com/assets/bundles/latest-pointer/lgim/js/fundExplorer.js")
+u = re.search(r'var u="([^"]+)"', r.text).group(1)
+seen, todo = set(), [u]
+WORDS = WORDS + ("documents/", "api/", "Holdings", "inline-document", "documentType")
+while todo and len(seen) < 40:
+    u = todo.pop(0)
+    if u in seen: continue
+    seen.add(u)
+    j = get(f"lg-b{len(seen)}.js", u)
+    if j is None or j.status_code != 200: continue
+    print("== bundle", u); scan(j.text)
+    for m in re.findall(r'["\'(](\.{0,2}/[\w./-]+\.js)["\')]', j.text):
+        todo.append(urljoin(u, m))
