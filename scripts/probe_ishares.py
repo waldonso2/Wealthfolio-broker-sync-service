@@ -1,59 +1,63 @@
-"""Temporary probe: where other issuers publish an ETF's holdings."""
+"""Temporary probe round 2."""
+import json
 import re
 import httpx
 
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 http = httpx.Client(timeout=60, follow_redirects=True, headers={"User-Agent": UA, "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"})
-KEY = re.compile(r'(?:https?:)?//[^"\'\s<>]*?(?:holding|constituent|composition|xlsx|\.csv|/api/|graphql|mapi|fund-data|download)[^"\'\s<>]*|"/[^"\s<>]*?(?:holding|constituent|composition|xlsx|\.csv|/api/|graphql|mapi|fund-data|download)[^"\s<>]*', re.I)
 
-def show(label, method="GET", url="", **kw):
+def get(url, **kw):
     try:
-        r = http.request(method, url, **kw)
+        r = http.request(kw.pop("method", "GET"), url, **kw)
+        print(f"## {url[:150]}: {r.status_code} {r.headers.get('content-type','')} {len(r.content)}")
+        return r
     except httpx.HTTPError as e:
-        print(f"## {label}: {type(e).__name__}")
-        return None
-    ct = r.headers.get("content-type", "")
-    print(f"## {label}: {r.status_code} {ct} {len(r.content)} -> {str(r.url)[:160]}")
-    if "html" in ct:
-        links = sorted(set(m.group(0).strip('"') for m in KEY.finditer(r.text)))
-        for l in links[:40]:
-            print("   link", l[:220])
-    else:
-        print("   body", r.content[:400])
-    return r
+        print(f"## {url[:150]}: {type(e).__name__}")
 
-# SPDR
-show("spdr finder de", url="https://www.ssga.com/bin/v1/ssmp/fund/fundfinder?country=de&language=de&role=individual&product=etfs&ui=fund-finder")
-for t in ("spy5-gy", "spy5", "spy5-ln", "spyl-gy"):
-    show(f"spdr xlsx {t}", url=f"https://www.ssga.com/library-content/products/fund-data/etfs/emea/holdings-daily-emea-en-{t}.xlsx")
-show("spdr page", url="https://www.ssga.com/de/de/individual/etfs/state-street-spdr-sp-500-ucits-etf-acc-spy5-gy")
-# Vanguard
-show("vanguard uk list", url="https://www.vanguard.co.uk/professional/product")
-show("vanguard uk page", url="https://www.vanguard.co.uk/professional/product/etf/equity/9505/ftse-all-world-ucits-etf-usd-accumulating")
-show("vanguard de page", url="https://www.de.vanguard/professionell/anlageprodukte/etf/aktien/9505/ftse-all-world-ucits-etf-usd-thesaurierend")
-# Xtrackers
-show("dws xlsx", url="https://etf.dws.com/etfdata/export/GBR/ENG/excel/product/constituent/IE00BMFKG444/")
-show("dws xlsx DEU", url="https://etf.dws.com/etfdata/export/DEU/DEU/excel/product/constituent/IE00BJ0KDQ92/")
-# Amundi
-body = {"context": {"countryCode": "DEU", "languageCode": "de", "userProfileName": "RETAIL"}, "productIds": ["LU1681043599"],
-        "productType": "PRODUCT", "composition": {"compositionFields": ["date", "type", "bbg", "isin", "name", "weight", "quantity", "currency", "sector", "country", "countryOfRisk"]}}
-show("amundi mapi", "POST", "https://www.amundietf.de/mapi/ProductAPI/getProductsData", json=body)
-body["productIds"] = ["IE000BI8OT95"]
-show("amundi mapi core", "POST", "https://www.amundietf.de/mapi/ProductAPI/getProductsData", json=body)
-show("amundi page", url="https://www.amundietf.de/de/privatanleger/products/equity/amundi-msci-world-ucits-etf-eur-c/lu1681043599")
-# Invesco
-for kind in ("index", "fund"):
-    show(f"invesco {kind}", url=f"https://dng-api.invesco.com/cache/v1/accounts/en_GB/shareclasses/IE0032077012/holdings/{kind}?idType=isin&productType=ETF")
-show("invesco page", url="https://www.invesco.com/uk/en/financial-products/etfs/invesco-eqqq-nasdaq-100-ucits-etf-dist.html")
+def around(text, pat, n=3, w=500):
+    for m in list(re.finditer(pat, text))[:n]:
+        print("   ..", text[max(0, m.start() - w):m.end() + w].replace("\n", " "))
+
+# SPDR finder structure
+r = get("https://www.ssga.com/bin/v1/ssmp/fund/fundfinder?country=de&language=de&role=individual&product=etfs&ui=fund-finder")
+d = r.json()["data"]["funds"]["etfs"]
+print("keys", list(d.keys()))
+around(r.text, "IE00B6YX5C33", 2, 700)
+# Vanguard: JS bundles with the holdings query
+r = get("https://www.vanguard.co.uk/professional/product/etf/equity/9505/ftse-all-world-ucits-etf-usd-accumulating")
+around(r.text, r"(?i)holding", 4, 300)
+srcs = sorted(set(re.findall(r'<script[^>]+src="([^"]+)"', r.text)))
+print("scripts", srcs[:30])
+for s in srcs:
+    u = s if s.startswith("http") else "https://www.vanguard.co.uk" + s
+    js = get(u)
+    if js is not None and "olding" in js.text:
+        around(js.text, r"(?i)query\s+\w*holding\w*|holdings\s*\(|fundHoldings|borHoldings", 4, 400)
+r = get("https://www.vanguard.co.uk/content/uk-aem/gb/en/professional/product/etf-equity/jcr:content/root/responsivegrid/jump_links_list_1089442245/fund_holdings.html")
+if r is not None: print(r.text[:1500])
+# Invesco download API
+for path in ("holdings/index", "holdings/fund", "holdings"):
+    for loc in ("en_GB", "de_DE"):
+        r = get(f"https://dng-api.invesco.com/download/v1/accounts/{loc}/shareclasses/IE0032077012/{path}?idType=isin")
+        if r is not None and r.status_code == 200: print("   body", r.content[:300])
+r = get("https://www.invesco.com/uk/en/financial-products/etfs/invesco-eqqq-nasdaq-100-ucits-etf-dist.html")
+around(r.text, r"dng-api\.invesco\.com[^\"&]*", 12, 120)
 # L&G
-show("lgim page", url="https://www.lgim.com/uk/en/capabilities/etfs/fund-centre/?isin=IE00BYPLS672")
-show("lgim fundcentre", url="https://fundcentres.lgim.com/uk/en/fund-centre/ETF/Cyber-Security/")
+r = get("https://fundcentres.landg.com/en/uk/institutional/fund-centre/ETF/Cyber-Security/")
+around(r.text, r"(?i)srp/api[^\"']*", 6, 200)
+around(r.text, r"(?i)holdings", 3, 300)
 # VanEck
-show("vaneck page", url="https://www.vaneck.com/de/de/investments/semiconductor-etf/holdings/")
-# WisdomTree
-show("wisdomtree page", url="https://www.wisdomtree.eu/de-de/etfs/equity/wisdomtree-global-quality-dividend-growth-ucits-etf-usd-acc")
-# HSBC
-show("hsbc page", url="https://www.assetmanagement.hsbc.de/de/privatanleger/fund-centre/IE00B4X9L533")
-# extraETF / justETF
-show("extraetf", url="https://extraetf.com/api-v3/etf/holdings/?isin=IE00B8GKDB10")
-show("justetf", url="https://www.justetf.com/de/etf-profile.html?isin=IE00B8GKDB10")
+r = get("https://www.vaneck.com/de/de/anlagen/semiconductor-etf/positionen")
+around(r.text, r"(?i)HoldingsBlock|GetContent|\.xlsx|\.csv|download", 6, 250)
+# Amundi: one row fully, and whether an index composition exists
+body = {"context": {"countryCode": "DEU", "languageCode": "de", "userProfileName": "RETAIL"}, "productIds": ["LU1681043599"],
+        "productType": "PRODUCT", "composition": {"compositionFields": ["date", "type", "bbg", "isin", "name", "weight", "quantity", "currency", "sector", "country", "countryOfRisk"]},
+        "characteristics": ["REPLICATION_METHOD", "INDEX_NAME", "FUND_REPLICATION_METHODOLOGY", "REPLICATION_TYPE"]}
+r = get("https://www.amundietf.de/mapi/ProductAPI/getProductsData", method="POST", json=body)
+p = r.json()["products"][0]
+print("characteristics", p.get("characteristics"))
+print("row", p["composition"]["compositionData"][:2])
+# WisdomTree / HSBC
+get("https://www.wisdomtree.eu/de-de/products")
+r = get("https://www.assetmanagement.hsbc.de/de/privatanleger")
+if r is not None: around(r.text, r"(?i)fund-centre[^\"']*", 4, 100)
