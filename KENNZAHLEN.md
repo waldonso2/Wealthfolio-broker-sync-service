@@ -47,6 +47,8 @@ entscheidend ist ihre Entwicklung von Lauf zu Lauf.
 | CLS (Layout springt), schlechteste Seite | ≤ 0,1 | Core Web Vitals | Bericht |
 | INP (Reaktion auf Eingaben) | ≤ 200 ms | Core Web Vitals | entfällt: die Oberfläche hat kein JavaScript |
 | Übertragene Daten, größte Seite | ≤ 500 KiB | Seitengewicht | Bericht |
+| X-Ray mit großem Depot (15 ETFs, 13.500 Positionen): Antwortzeit (Median) | ≤ 800 ms | Core Web Vitals TTFB | Bericht |
+| X-Ray mit großem Depot: Seitengewicht | ≤ 500 KiB | Seitengewicht | Bericht |
 | Dauer eines Abrufs (300 Buchungen, 3000 vorhandene Aktivitäten) | ≤ 10 s | Nielsen, danach Fortschrittsanzeige | Bericht |
 | Wealthfolio-Aufrufe je Buchung | ≤ 4 | eigenes Budget | Bericht |
 | Lesende Wealthfolio-Aufrufe | kein Aufruf je Buchung (N+1) | eigenes Budget | Bericht |

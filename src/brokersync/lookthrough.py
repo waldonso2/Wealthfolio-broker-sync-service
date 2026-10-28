@@ -321,6 +321,20 @@ def _rows_to_csv(rows: list[list[str]]) -> bytes:
     return out.getvalue().encode()
 
 
+def locations(rows: list[list[str]]) -> list[list[str]]:
+    """iShares' "Geography/Locations" block: [[ISO code, weight as a share]] - "Other" and cash have no code."""
+    start = next((i for i, r in enumerate(rows) if r[:1] == ["Geography/Locations"]), None)
+    out: list[list[str]] = []
+    for row in rows[start + 1:] if start is not None else []:
+        if not row:
+            if out:
+                break
+            continue
+        if len(row) > 2 and re.fullmatch(r"[A-Z]{2}", row[2].strip()) and (w := _number(row[1])) is not None:
+            out.append([row[2].strip(), str(w / 100)])
+    return out
+
+
 def parse_file(data: bytes) -> tuple[Constituent, ...]:
     """A holdings file as CSV or XLSX (also when it is named .xls, like UBS' download)."""
     if data[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":  # the binary Excel 97 format (OLE2)
@@ -406,6 +420,7 @@ class Sources:
         self.limited = ""  # iShares said "too many requests" (429): nothing more is asked this pass
         self.last: tuple[str, str] | None = None  # the product the last fetch found, kept with the fund
         self.note = ""  # what the last list is, if it is no plain holdings list (a swap ETF's basket)
+        self.regions: list[list[str]] = []  # the last fund's countries as its issuer breaks them down: [[code, w]]
         self._spdr: dict[str, str] | None = None
         self._vanguard: dict[str, str] | None = None
         self._vaneck: dict[str, str] | None = None
@@ -534,9 +549,14 @@ class Sources:
             raise SourceError(f"iShares: keine Positionsliste zu Produkt {product}.")
         try:
             rows = parse(_rows_to_csv(workbook_rows(data, "Holdings"))) if workbook else parse(data)
-            return _usable(rows, "iShares")
+            lines = _usable(rows, "iShares")
         except ValueError as e:
             raise SourceError(f"iShares: {e}") from e
+        try:  # the holdings name no country; broad funds break their countries down on a sheet of their own
+            self.regions = locations(workbook_rows(data, "Exposure Breakdowns")) if workbook else []
+        except SourceError:
+            self.regions = []
+        return lines
 
     def document(self, url: str, source: str) -> tuple[Constituent, ...]:
         """A holdings file at an address the user saved (L&G)."""
@@ -755,7 +775,7 @@ def fetch(sources: Sources, isin: str, page: str = "", *, product: tuple[str, st
     and the source's name. ``by``: the issuer the name says - its own source is asked first. ``search``: ask the
     iShares site's search when the fund finder fails (only for iShares funds - a search per stock costs requests
     and gets the pass refused)."""
-    sources.note = ""
+    sources.note, sources.regions = "", []
     if page and lgim_doc(page):
         return sources.document(page, "L&G"), "L&G"
     if by in FETCHERS and isin and not page and not product:
@@ -899,12 +919,21 @@ def update(state: State, depot: Depot, sources: Sources, *, force: bool = False,
     """Fetch the holdings of the depot's positions that are due; an uploaded file is kept unless the user
     saved an iShares page for the fund. ``force``: everything now (the button on *X-Ray*); ``only``: just
     this asset (its own button). Why an iShares fund got no list is stored at the fund, for the page."""
-    result = Result()
     deadline = time.monotonic() + budget
-    for p in [p for p in depot.positions if p["id"] == only] if only else depot.positions:
+    try:
+        return _update(state, depot, sources, force, deadline, only)
+    finally:
+        state.delete_meta(meta_keys.FUNDS_PROGRESS())
+
+
+def _update(state: State, depot: Depot, sources: Sources, force: bool, deadline: float, only: str) -> Result:
+    result = Result()
+    todo = [p for p in depot.positions if p["id"] == only] if only else depot.positions
+    for n, p in enumerate(todo, 1):
         if time.monotonic() > deadline:  # the rest is due again next run
             log.info("look-through: time budget used up, the remaining funds next run")
             break
+        state.set_meta(meta_keys.FUNDS_PROGRESS(), json.dumps({"n": n, "m": len(todo), "name": p["name"]}))
         st = status(state, p["id"])
         if st.get("status") == "upload" and not st.get("url"):
             continue
@@ -934,7 +963,7 @@ def update(state: State, depot: Depot, sources: Sources, *, force: bool = False,
             state.set_fund(p["id"], p["name"], rows(lines))
             ter = sources.ter(p["isin"])
             set_status(state, p["id"], status="ok", source=source, error="", lines=len(lines), product=sources.last,
-                       note=sources.note,
+                       note=sources.note, regions=sources.regions,
                        **({"ter": str(ter), "ter_source": source, "ter_at": now()} if ter is not None else {}))
             result.fetched += 1
     _fill_ters(state, depot, sources, deadline, only, force)
@@ -1093,9 +1122,10 @@ COUNTRIES = {
     "slowenien": "si", "slowakei": "sk", "rumänien": "ro", "kroatien": "hr", "marokko": "ma", "kenia": "ke",
     "kasachstan": "kz", "britische jungferninseln": "vg", "jordanien": "jo", "bangladesch": "bd", "island": "is",
     "china (volksrepublik)": "cn", "volksrepublik china": "cn", "macao": "mo", "makau": "mo"}
-# Taxonomy, the line's attribute, and which of its categories count (countries; the GICS sectors).
+# Taxonomy, the line's attribute, and which of its categories count (countries; every GICS level - an industry
+# group or industry, as SPDR and Vanguard name them, counts for its sector).
 TAXONOMIES = (("regions", "country", lambda c: str(c.get("id", "")).startswith("country_")),
-              ("industries_gics", "sector", lambda c: not c.get("parentId")))
+              ("industries_gics", "sector", lambda c: True))
 
 
 @dataclass
@@ -1123,27 +1153,52 @@ def _bp(lines: list[list[str]], attr: int, categories: dict[str, str], unmatched
     return sorted((c, int(w * scale * 10000)) for c, w in out.items() if int(w * scale * 10000) >= 1)
 
 
+def _names(found: list[dict], counts) -> dict[str, str]:
+    """Category name (lower case) -> the id to assign: a GICS subcategory rolls up to its sector."""
+    parent: dict[str, str] = {c["id"]: c["parentId"] for c in found if c.get("parentId")}
+
+    def top(cid: str) -> str:
+        seen: set[str] = set()
+        while cid in parent and cid not in seen:
+            seen.add(cid)
+            cid = parent[cid]
+        return cid
+    return {str(c.get("name", "")).lower(): c["id"] if str(c["id"]).startswith("country_") else top(c["id"])
+            for c in found if counts(c)}
+
+
 def write_taxonomies(state: State, wf, depot: Depot) -> Written:
     """Countries and sectors of every fund with a holdings list into Wealthfolio, so its own allocation views
     see through the funds. Only Yahoo's (``AUTO``) and our own assignments are replaced; unchanged ones are
     not written again."""
     result, unmatched = Written(), set[str]()
-    categories = {tax: {str(c.get("name", "")).lower(): c["id"] for c in wf.taxonomy_categories(tax) if counts(c)}
-                  for tax, _, counts in TAXONOMIES}
+    categories = {tax: _names(wf.taxonomy_categories(tax), counts) for tax, _, counts in TAXONOMIES}
     categories["regions"].update({c[len("country_"):].lower(): c for c in list(categories["regions"].values())})
     funds = state.funds()
+    # A line without a country takes the one another issuer names for the same company (iShares names none).
+    known = {xray.plain(line[1]): line[3] for f in funds.values() for line in f["constituents"] if line[3]}
     for p in depot.positions:
         fund = funds.get(p["id"])
         if not fund:
             continue
         try:
-            _write_asset(wf, p["id"], fund["constituents"], categories, unmatched, result)
+            _write_asset(wf, p["id"], _lines(fund["constituents"], status(state, p["id"]), known), categories,
+                         unmatched, result)
         except WealthfolioError:  # one fund Wealthfolio refuses never keeps the others out
             log.exception("look-through: countries and sectors of %s not written", p["id"])
     result.unmatched = sorted(unmatched)[:20]
     state.set_meta(meta_keys.TAXONOMIES_LAST(), json.dumps({"written": result.written, "manual": result.manual,
                                                             "unmatched": result.unmatched, "at": now()}))
     return result
+
+
+def _lines(constituents: list[list[str]], st: dict, known: dict[str, str]) -> list[list[str]]:
+    """A fund's lines for its taxonomies: the issuer's own breakdown of its countries first (iShares), else each
+    line's country, else the one another fund's issuer names for that company."""
+    if breakdown := st.get("regions"):
+        return [[*line[:3], "", *line[4:]] for line in constituents] + [["", "", w, code, "", ""]
+                                                                         for code, w in breakdown]
+    return [[*line[:3], line[3] or known.get(xray.plain(line[1]), ""), *line[4:]] for line in constituents]
 
 
 def _write_asset(wf, asset_id: str, constituents: list[list[str]], categories: dict[str, dict[str, str]],

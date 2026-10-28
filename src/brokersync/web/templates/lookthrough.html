@@ -27,7 +27,8 @@
   {% if last.finder %}<p class="muted">{{ _("iShares nennt zu einer ISIN gerade keine Produktnummer ({error}). Trag bei einem ETF ohne Liste einmal seine Produktseite unter „Einstellungen dieses ETFs“ ein - danach holt der Dienst seine Liste selbst.", error=last.finder | redact) }}</p>{% endif %}
   <form method="post" action="/lookthrough/fetch" class="actions">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <p class="muted grow" aria-live="polite">{% if reading %}{{ _("Die Positionen werden gerade aus Wealthfolio gelesen …") }}{% elif read_at %}{{ _("Positionen gelesen {when}.", when=read_at | local) }}{% endif %}</p>
+    {% if progress %}<p class="grow" aria-live="polite"><progress max="{{ progress.m }}" value="{{ progress.n }}" aria-label="{{ _('Positionslisten abrufen') }}"></progress> {{ _("{n} von {m}: {name}", n=progress.n, m=progress.m, name=progress.name) }}</p>{% else %}
+    <p class="muted grow" aria-live="polite">{% if reading %}{{ _("Die Positionen werden gerade aus Wealthfolio gelesen …") }}{% elif read_at %}{{ _("Positionen gelesen {when}.", when=read_at | local) }}{% endif %}</p>{% endif %}
     <button {% if reading %}disabled{% endif %}>{{ _("Jetzt abrufen") }}</button>
   </form>
   {% if wf_error %}<p class="error" role="alert">{{ wf_error | redact }}</p>{% endif %}

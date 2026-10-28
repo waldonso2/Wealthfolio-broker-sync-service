@@ -222,3 +222,20 @@ def test_an_lgim_address_is_saved_and_anything_else_refused(tmp_path):
     page = client.post("/lookthrough/source", data={"csrf": token, "asset_id": FUND,
                                                      "url": "https://example.com/x.csv"}).text
     assert "keine Positionsliste von L&amp;G" in page and lookthrough.status(State(tmp_path), FUND)["url"] == url
+
+
+def test_a_fetch_going_on_shows_its_progress(tmp_path):
+    import json
+
+    from brokersync import meta_keys
+
+    client, _ = _client(tmp_path)
+    ctx = client.app.inner.state.ctx
+    State(tmp_path).set_meta(meta_keys.FUNDS_PROGRESS(), json.dumps({"n": 3, "m": 12, "name": "Example ETF"}))
+    ctx.running.set()
+    try:
+        page = client.get("/lookthrough").text
+    finally:
+        ctx.running.clear()
+    assert '<progress max="12" value="3"' in page and "3 von 12: Example ETF" in page
+    assert "<progress" not in client.get("/lookthrough").text  # no fetch going on: no bar

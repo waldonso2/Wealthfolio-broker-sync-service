@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.42.0
+
+- X-Ray: *Jetzt abrufen* shows a progress bar (which ETF of how many) while the lists are fetched.
+- Countries into Wealthfolio for iShares funds, whose holdings name no country: a broad fund's own breakdown (iShares' sheet "Exposure Breakdowns") is written; otherwise a line takes the country another of the user's funds names for the same company (e.g. SPDR's S&P 500 list for an S&P 500 sector fund). What stays open (cash, "Other") is unassigned.
+- Sectors: a GICS industry or industry group ("Banks", "Aerospace & Defense") counts for its sector instead of staying unassigned.
+- Performance report: X-Ray with 15 funds of up to 3000 lines (response time, page size), KPIs in KENNZAHLEN.md.
+
 ## 0.41.0
 
 - X-Ray is fast again with large ETFs: the page renders only the rows it shows - the overall matrix its top 10 (25, 50, 100 or all on request), each ETF its 10 largest positions, all of them only when asked (`?fund=`). With 15 funds of up to 3000 lines the page went from 6.7 MB to 0.1 MB. A fund's weights are computed once per page, not once per pair of funds.

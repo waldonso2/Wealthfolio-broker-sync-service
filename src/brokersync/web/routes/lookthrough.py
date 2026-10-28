@@ -138,6 +138,7 @@ def lookthrough_page(request: Request, ctx: Ctx, top: str = TOPS[0], fund: str =
         typed=lambda raw, percent: _typed(raw, percent, language(request)),
         written=json.loads(state.meta(meta_keys.TAXONOMIES_LAST()) or "null"),
         reading=ctx.running.is_set() and ctx.job in (N_("X-Ray"), N_("Positionslisten abrufen")),
+        progress=json.loads(state.meta(meta_keys.FUNDS_PROGRESS()) or "{}") if ctx.running.is_set() else {},
         read_at=datetime.fromtimestamp(ctx.depot_at, UTC) if ctx.depot_at else None)
 
 
