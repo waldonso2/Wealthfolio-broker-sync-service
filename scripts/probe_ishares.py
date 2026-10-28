@@ -29,7 +29,7 @@ for ls in (38, 4):
         continue
     for row in rows:
         q = "&".join([f"lit_types={t}" for t in row.get("lit_types", [])])
-        d = get("", f"{B}/srp/api/documents/?audience=79&share_classes=893&language=1&{q}&date_from=")
+        d = get(f"lg-doc-{ls}-{row.get('set_id')}.json", f"{B}/srp/api/documents/?audience=79&share_classes=893&language=1&{q}&date_from=")
         if d is not None and d.status_code == 200:
             hit = [x for x in re.findall(r"documents-id/[0-9a-f-]{36}/[^\"']+", d.text)]
             print("     ", row.get("display_name"), row.get("lit_types"), hit[:4])
