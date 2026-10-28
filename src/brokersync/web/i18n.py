@@ -60,6 +60,38 @@ def template_gettext(context, text: str, **params) -> Markup:
 # Abruf = fetch, Buchung = booking, Anmeldung = login, Anfangsbestand = opening position, Tresor = vault.
 EN: dict[str, str] = {
     # ── navigation, frame ──
+    # Page Dienste (#145)
+    "Dienste": "Services",
+    "Was der Service in dein Wealthfolio schreibt. Jeder Dienst lässt sich einzeln ein- und ausschalten.":
+        "What the service writes into your Wealthfolio. Each service can be switched on and off on its own.",
+    "schaltet sich ein, sobald die Einstellungen gespeichert sind": "switches on once the settings are saved",
+    "Einstellungen: {name}": "Settings: {name}",
+    "Broker-Sync": "Broker sync",
+    "bucht die Umsätze deiner Broker und Banken in Wealthfolio":
+        "books the transactions of your brokers and banks in Wealthfolio",
+    "Länder & Sektoren": "Countries & sectors",
+    "trägt Länder und Sektoren der ETFs in Wealthfolio ein; deine eigenen Zuordnungen bleiben":
+        "enters the ETFs' countries and sectors in Wealthfolio; your own assignments stay",
+    "ISIN ergänzen": "Complete ISINs",
+    "trägt bei Wertpapieren ohne ISIN die ISIN in Wealthfolio ein":
+        "enters the ISIN in Wealthfolio for securities without one",
+    "setzt die Logos der Wertpapiere von logo.dev in Wealthfolio":
+        "sets the securities' logos from logo.dev in Wealthfolio",
+    "Ausgaben-Tracker": "Spending tracker",
+    "nimmt die Verrechnungskonten deiner Banken in Wealthfolios Ausgaben-Auswertung auf":
+        "adds your banks' cash accounts to Wealthfolio's spending tracker",
+    "{name} ist eingeschaltet.": "{name} is on.",
+    "{name} ist ausgeschaltet.": "{name} is off.",
+    "{what} Danach schaltet sich {name} ein.": "{what} {name} then switches on.",
+    "Erst Wealthfolio verbinden.": "Connect Wealthfolio first.",
+    "Erst einen Broker einrichten.": "Set up a broker first.",
+    "Erst bei einem Broker „Ausgaben auswerten“ einschalten.": "Turn on \"Analyse spending\" at a broker first.",
+    "Erst einen logo.dev-Schlüssel eintragen.": "Enter a logo.dev key first.",
+    "Unbekannter Dienst.": "Unknown service.",
+    "Broker-Sync ist ausgeschaltet - auf der Seite Dienste einschalten.":
+        "Broker sync is off - switch it on on the page Services.",
+    "Broker-Sync ist ausgeschaltet: kein Broker wird abgerufen.": "Broker sync is off: no broker is fetched.",
+    "Auf der Seite Dienste einschalten": "Switch it on on the page Services",
     "Übersicht": "Overview",
     "Prüfung": "Check",
     "Unbekannt": "Unknown",
@@ -768,8 +800,8 @@ EN: dict[str, str] = {
         "Account check",
     "Logos holen":
         "Fetching logos",
-    "Passwort gespeichert. Die Übersicht zeigt, was noch einzurichten ist.":
-        "Password saved. The overview shows what is left to set up.",
+    "Passwort gespeichert. Die Seite Broker zeigt, was noch einzurichten ist.":
+        "Password saved. The page Brokers shows what is left to set up.",
     "Dieses Passwort ist zu verbreitet und schnell erraten. Am besten eines aus einem Passwortmanager.":
         "This password is too common and quickly guessed. Best take one from a password manager.",
     "Passwort geändert. Alle anderen Anmeldungen sind beendet.":

@@ -179,8 +179,8 @@
 </div>
 {% endif %}
 
-<div class="card">
-  <details><summary>{{ _("Einstellungen von X-Ray") }}</summary>
+<div class="card" id="xray-settings">
+  <details{% if request.query_params.get("settings") %} open{% endif %}><summary>{{ _("Einstellungen von X-Ray") }}</summary>
   <form method="post" action="/lookthrough/refresh" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><p class="muted grow">{{ _("Die Positionen werden beim Öffnen der Seite aus Wealthfolio gelesen, höchstens alle 10 Minuten.") }}</p><button class="secondary" {% if reading %}disabled{% endif %}>{{ _("Neu lesen") }}</button></form>
   <form method="post" action="/lookthrough/settings">
     <input type="hidden" name="csrf" value="{{ csrf }}">

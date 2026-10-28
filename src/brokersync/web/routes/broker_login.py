@@ -77,7 +77,7 @@ def start_login(request: Request, ctx: AppContext, key: str, run: bool):
                 outcome = e
             ctx.vault.store_session(key, adapter)
     except AlreadyRunning:
-        return redirect(request, "/", tr(request, "Gerade läuft ein Abruf - bitte danach anmelden."), "warn")
+        return redirect(request, "/broker", tr(request, "Gerade läuft ein Abruf - bitte danach anmelden."), "warn")
     if isinstance(outcome, AuthRequired):
         adapter.ui_challenge, adapter.ui_since = outcome.challenge, time.monotonic()
         ctx.pending[key] = adapter
@@ -137,10 +137,11 @@ def _logged_in(request: Request, ctx: AppContext, key: str, adapter: BrokerAdapt
     label = ctx.adapters[key].label
     if not run:
         if confirmed:
-            return redirect(request, "/", tr(request, "{label}: angemeldet. Du kannst jetzt abrufen.", label=label))
-        return redirect(request, "/", tr(request, "{label}: angemeldet - die gespeicherte Sitzung ist noch gültig, "
-                                                  "eine Bestätigung war nicht nötig. Du kannst jetzt abrufen.",
-                                         label=label))
+            return redirect(request, "/broker",
+                            tr(request, "{label}: angemeldet. Du kannst jetzt abrufen.", label=label))
+        return redirect(request, "/broker",
+                        tr(request, "{label}: angemeldet - die gespeicherte Sitzung ist noch gültig, "
+                                    "eine Bestätigung war nicht nötig. Du kannst jetzt abrufen.", label=label))
     # A PIN typed at this login (not stored) is handed to the run in memory only.
     stored = ctx.vault.broker(key).get("credentials", {})
     for f in ctx.adapters[key].credential_fields:
@@ -173,8 +174,8 @@ def _next(request: Request, ctx: AppContext, key: str, dropped: bool = False, no
             return start_login(request, ctx, queue["todo"][0], True)
         request.session.pop("run_queue", None)
         if not queue["run"]:
-            return redirect(request, "/", note or tr(request, "Nichts abzurufen."), level)
+            return redirect(request, "/broker", note or tr(request, "Nichts abzurufen."), level)
         return start_run(request, ctx, queue["run"])
     if dropped:
-        return redirect(request, "/", note or tr(request, "Übersprungen."), level)
+        return redirect(request, "/broker", note or tr(request, "Übersprungen."), level)
     return start_run(request, ctx, [key])

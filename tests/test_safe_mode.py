@@ -47,7 +47,7 @@ def make(tmp_path, adapters=None, safe=True):
                      adapters=adapters, notifier=RecordingNotifier(), run_in_thread=False)
     client = TestClient(app, base_url="http://sync.local:8090")
     first_password(client)
-    token = re.search(r'name="csrf" value="([^"]+)"', client.get("/").text).group(1)
+    token = re.search(r'name="csrf" value="([^"]+)"', client.get("/broker").text).group(1)
     return client, wf, token
 
 
@@ -80,7 +80,7 @@ def test_the_session_ends_after_every_fetch_but_the_lock_out_guards_stay(tmp_pat
 
 def test_fetch_now_starts_with_the_login_and_logs_out_afterwards(tmp_path):
     client, wf, token = make(tmp_path)
-    page = client.get("/").text
+    page = client.get("/broker").text
     assert "Sicherer Modus" in page
     r = client.post("/run", data={"csrf": token, "broker": "fake"})
     # The POST started the login itself (#99).

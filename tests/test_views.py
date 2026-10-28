@@ -78,7 +78,7 @@ def test_overview_shows_three_runs_and_folds_the_rest(tmp_path):
     state = State(tmp_path)
     for _ in range(5):
         state.finish_run(state.start_run("fake"), "ok")
-    page = client.get("/").text
+    page = client.get("/broker").text
     head, _, folded = page.partition("Ältere Läufe (2)")
     row = '<li><span class="status ok">'
     assert folded and head.count(row) == 3 and folded.count(row) == 2
@@ -102,7 +102,7 @@ def test_overview_card_has_two_buttons_and_the_reasons_link_to_their_page(tmp_pa
     state.finish_run(state.start_run("fake"), "ok")
     state.add_unknown("fake", "x1", "ODD", "2026-01-02", {"title": "Beispiel"})
     state.set_reconcile("fake", [{"kind": "cash", "key": "EUR", "name": "Cash EUR", "broker": "1", "wealthfolio": "2"}])
-    page = client.get("/").text
+    page = client.get("/broker").text
     card = page[page.index('id="broker-fake"'):]
     assert '<a href="/unknown">1 unbekannte Buchung</a>' in card
     assert '<a href="/check#broker-fake">1 Abweichung zu Wealthfolio</a>' in card
@@ -118,7 +118,7 @@ def test_the_language_is_chosen_on_the_page_appearance_light_or_dark_in_the_head
     from .test_safe_mode import make as make_safe
 
     client, _, token = make_safe(tmp_path, safe=False)
-    page = client.get("/").text
+    page = client.get("/broker").text
     # #123: a session starts in the device's colours; the header's symbol turns them for every page until
     # logout - no script.
     assert "data-flip" not in page and "<script" not in page
@@ -128,9 +128,9 @@ def test_the_language_is_chosen_on_the_page_appearance_light_or_dark_in_the_head
     assert (r.status_code, r.headers["location"]) == (303, "/check")
     for path in ("/", "/check", "/settings"):  # every page, not only the one it was clicked on
         assert '<html lang="de" data-flip>' in client.get(path).text
-    assert 'aria-pressed="true"' in client.get("/").text
+    assert 'aria-pressed="true"' in client.get("/broker").text
     client.post("/theme", data={"csrf": token, "next": "/"})
-    assert "data-flip" not in client.get("/").text  # and back
+    assert "data-flip" not in client.get("/broker").text  # and back
     for bad in ("//evil.example/x", "https://evil.example/", "/\\evil.example"):  # only a path of this site
         assert client.post("/theme", data={"csrf": token, "next": bad}, follow_redirects=False).headers[
             "location"] == "/"

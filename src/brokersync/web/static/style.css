@@ -246,3 +246,21 @@ a.button.danger { background: var(--error); border-color: var(--error); color: v
 .heat-3 { background: color-mix(in srgb, var(--error) 26%, transparent); }
 .heat-4 { background: color-mix(in srgb, var(--error) 36%, transparent); }
 .heat-5 { background: color-mix(in srgb, var(--error) 46%, transparent); font-weight: 600; }
+
+/* Page Dienste (#145): a card per service, its settings and an iOS-like switch (a form button - no scripts) */
+.card.service { display: flex; align-items: center; gap: 12px; }
+.card.service h2 { margin: 0 0 4px; }
+.card.service p { margin: 0; }
+.card.service form { margin: 0; }
+.card.service .grow { flex: 1; min-width: 0; }
+a.gear { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: none;
+  color: var(--muted); border-radius: 8px; }
+a.gear:hover { color: var(--text); background: var(--line); }
+a.gear svg { width: 22px; height: 22px; }
+button.switch { position: relative; width: 52px; min-height: 0; height: 32px; padding: 0; flex: none; border-radius: 99px;
+  border: none; background: var(--grey); transition: background .2s; }
+button.switch span { position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%;
+  background: #fffcf0; box-shadow: 0 1px 3px rgb(0 0 0 / .3); transition: left .2s; }
+button.switch[aria-checked=true] { background: var(--ok); }
+button.switch[aria-checked=true] span { left: 23px; }
+@media (prefers-reduced-motion: reduce) { button.switch, button.switch span { transition: none; } }

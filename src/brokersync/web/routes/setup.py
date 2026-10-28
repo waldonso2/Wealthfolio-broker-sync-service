@@ -102,7 +102,8 @@ def setup_password(request: Request, ctx: Ctx, password: str = Form(...), passwo
     ctx.event(request, "setup_password")
     url = str(request.base_url).rstrip("/")
     ctx.update(lambda c: setattr(c, "public_url", c.public_url or url))
-    return redirect(request, "/", tr(request, "Passwort gespeichert. Die Übersicht zeigt, was noch einzurichten ist."))
+    return redirect(request, "/broker",
+                    tr(request, "Passwort gespeichert. Die Seite Broker zeigt, was noch einzurichten ist."))
 
 
 def password_problem(request: Request, password: str, password2: str) -> str | None:

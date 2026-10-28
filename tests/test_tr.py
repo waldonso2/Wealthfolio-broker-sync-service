@@ -290,7 +290,7 @@ def test_dashboard_shows_the_holdings_check(tmp_path):
                      adapters={"tr": ReplayTR}, notifier=RecordingNotifier(), run_in_thread=False)
     client = TestClient(app)
     first_password(client)
-    page = client.get("/").text
+    page = client.get("/broker").text
     assert "Abweichungen zu Wealthfolio (" in page and 'class="light yellow"' in page
     assert re.search(r"<td[^>]*>Cash EUR</td><td[^>]*>1234.56</td>", page)
     assert 'Saldo <strong class="warn-text">weicht ab</strong>' in page

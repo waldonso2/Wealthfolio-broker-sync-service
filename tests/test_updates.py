@@ -78,10 +78,10 @@ def test_a_run_notifies_a_new_release_once(tmp_path, monkeypatch):
 def test_the_overview_shows_a_newer_release(tmp_path):
     client, _, _ = make(tmp_path)
     first_password(client)
-    assert "Update verfügbar" not in client.get("/").text
+    assert "Update verfügbar" not in client.get("/broker").text
     State(tmp_path).set_meta(meta_keys.UPDATE(), json.dumps(
         {"version": "99.0.0", "checked": datetime.now(UTC).isoformat()}))
-    page = client.get("/").text
+    page = client.get("/broker").text
     assert "Update verfügbar: Version 99.0.0" in page
     assert f"{updates.RELEASES}/tag/v99.0.0" in page
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.44.0
+
+- New start page *Dienste* (#145): every service that writes into Wealthfolio - broker sync, countries & sectors, ISINs, logos, spending tracker - with an iOS-like switch and a gear to its settings. A new install starts with everything off; switching a service on that still lacks something opens its settings and turns it on once they are saved. Existing installs keep what runs today.
+- The overview, *Prüfung* and *Unbekannt* are one page *Broker* (`/broker`, sub-bar Status · Prüfung · Unbekannt); the header holds Dienste, Broker, X-Ray, Einstellungen. Notification links lead to `/broker`.
+- The app has an icon in the browser tab.
+
 ## 0.43.0
 
 - Countries and sectors into Wealthfolio, last resort: Finanzfluss' breakdown of the whole fund (countries by ISO code; its industries mapped to the GICS sectors). Taken for a fund only where its issuer's list covers less than half (L&G, uploaded lists without countries or sectors, …); the fund's card then says the values come from Finanzfluss. Finanzfluss is now read for every fund every 30 days (with the TER, which an issuer's still takes precedence over).

@@ -32,7 +32,7 @@ Holt deine Buchungen automatisch bei deinen Brokern ab und trägt sie ohne Dupli
 
 **Aktualisieren:** In Proxmox die Konsole des Containers öffnen und `update` eingeben. Einstellungen und Zugangsdaten bleiben erhalten; vorher wird eine Sicherung der verschlüsselten Daten unter `/opt/wealthfolio-broker-sync/backup-*.tar.gz` angelegt (die letzten drei bleiben). Installation und Update prüfen jede heruntergeladene Datei gegen die Prüfsummen (`SHA256SUMS`), die der Release-Workflow mit dem Release veröffentlicht. Passt eine nicht oder ist eine zu viel, brechen sie ab, und die bisherige Version läuft weiter. Eine bestimmte Version, auch eine ältere: `VERSION=<Version> update`. Ohne `VERSION` geht das Update nie auf eine ältere Version zurück.
 
-**Neue Version:** Einmal am Tag fragt der Dienst nach einem Abruf bei GitHub, welches Release das neueste ist (gelesen wird nur die Weiterleitung von `releases/latest`, mitgeschickt wird nichts). Ist es neuer als das installierte, steht das auf der Übersicht, und ntfy meldet es einmal. Abschalten: `Environment=BROKERSYNC_UPDATE_CHECK=0` per `systemctl edit wealthfolio-broker-sync-run`.
+**Neue Version:** Einmal am Tag fragt der Dienst nach einem Abruf bei GitHub, welches Release das neueste ist (gelesen wird nur die Weiterleitung von `releases/latest`, mitgeschickt wird nichts). Ist es neuer als das installierte, steht das auf der Seite *Broker*, und ntfy meldet es einmal. Abschalten: `Environment=BROKERSYNC_UPDATE_CHECK=0` per `systemctl edit wealthfolio-broker-sync-run`.
 
 **Automatisch aktualisieren (Seite *Updates*, wahlweise):** Eingeschaltet sieht der Container selbst nach, ob ein neues Release erschienen ist – so oft, wie du dort einstellst (mindestens jede Minute, höchstens einmal am Tag) –, und installiert es mit genau dem `update` von oben: dieselbe Prüfung jeder Datei gegen `SHA256SUMS`, dieselbe Sicherung vorher. Danach meldet ntfy, welche Version jetzt läuft, und die Seite *Updates* zeigt das letzte Ergebnis. Schlägt es fehl, läuft die bisherige Version weiter, und dieselbe Version wird erst nach einer Stunde wieder versucht. Während eines Abrufs wird nicht aktualisiert. Gefragt wird dabei nur GitHub nach der neuesten Version. Das erledigt ein Timer des Containers (`wealthfolio-broker-sync-update.timer`, jede Minute, als root, weil er dasselbe tut wie `update`); ausgeschaltet installiert er nichts. Einschalten und Ausschalten fragt nach dem Passwort der Oberfläche. Was er getan hat, zeigt `journalctl -u wealthfolio-broker-sync-update` in der Konsole.
 
@@ -46,9 +46,11 @@ Beim ersten Öffnen legst du ein Passwort fest. Es schützt deine Broker-Zugäng
 
 <img src="docs/screenshots/01-passwort.png" width="560" alt="Passwort festlegen">
 
-Danach zeigt die Übersicht eine Checkliste mit dem, was noch zu tun ist: Wealthfolio verbinden, den ersten Broker einrichten, Benachrichtigungen, und wahlweise Master-Passphrase und Zertifikat. Ist alles erledigt, lässt sie sich ausblenden.
+Danach zeigt die Seite *Broker* eine Checkliste mit dem, was noch zu tun ist: Wealthfolio verbinden, den ersten Broker einrichten, Benachrichtigungen, und wahlweise Master-Passphrase und Zertifikat. Ist alles erledigt, lässt sie sich ausblenden.
 
-<img src="docs/screenshots/02-uebersicht.png" width="560" alt="Übersicht mit der Einrichtungs-Checkliste">
+**Dienste:** Die Startseite *Dienste* listet, was der Service in dein Wealthfolio schreibt – Broker-Sync, Länder & Sektoren der ETFs, ISIN ergänzen, Logos und Ausgaben-Tracker –, jeden mit einem Schalter und einem Zahnrad zu seinen Einstellungen. Bei einer neuen Installation ist alles aus. Fehlt einem Dienst beim Einschalten noch etwas (Wealthfolio, ein Broker, ein Schlüssel), öffnen sich die nötigen Einstellungen; sobald sie gespeichert sind, ist er an. *Broker* fasst Status, *Prüfung* und *Unbekannt* zusammen, *X-Ray* zeigt das Depot durch die ETFs hindurch.
+
+<img src="docs/screenshots/02-uebersicht.png" width="560" alt="Seite Broker mit der Einrichtungs-Checkliste">
 
 ### 2. Wealthfolio verbinden
 
@@ -76,9 +78,9 @@ ntfy-App öffnen, *Thema abonnieren* und den Themennamen von dieser Seite eintra
 
 ### 6. Erster Abruf
 
-In der Übersicht **Alle abrufen** klicken (oder bei einem Broker **Jetzt abrufen**). Danach siehst du je Broker, was neu angelegt wurde und was schon in Wealthfolio war. Broker mit ausgeschaltetem *Automatisch abrufen* überspringt der tägliche Lauf und „Alle abrufen“ – sie rufst du mit ihrem eigenen Button ab.
+Auf der Seite *Broker* **Alle abrufen** klicken (oder bei einem Broker **Jetzt abrufen**). Danach siehst du je Broker, was neu angelegt wurde und was schon in Wealthfolio war. Broker mit ausgeschaltetem *Automatisch abrufen* überspringt der tägliche Lauf und „Alle abrufen“ – sie rufst du mit ihrem eigenen Button ab.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/07-nach-dem-abruf-dunkel.png"><img src="docs/screenshots/07-nach-dem-abruf.png" width="560" alt="Übersicht nach dem ersten Abruf"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/07-nach-dem-abruf-dunkel.png"><img src="docs/screenshots/07-nach-dem-abruf.png" width="560" alt="Seite Broker nach dem ersten Abruf"></picture>
 
 Ab jetzt läuft der Abruf jeden Morgen zwischen 6:00 und 6:45 Uhr.
 
@@ -112,7 +114,7 @@ Der Dienst liest dein **DKB-Girokonto** per FinTS (HBCI), dieselbe Schnittstelle
 
 **Ältere Wertpapierabrechnungen:** Importierst du Abrechnungen von vor dem ersten gelesenen Girokonto-Tag, hat der Dienst das Geld dafür nie gesehen. Er bucht deshalb vor jedem solchen Kauf eine Einzahlung in gleicher Höhe und nach jedem solchen Verkauf eine Auszahlung; Dividenden bleiben auf dem Verrechnungskonto. Käufe und Verkäufe ab dem ersten gelesenen Tag sind über ihre Girobuchung abgedeckt.
 
-**Saldo:** Die Übersicht zeigt nach jedem Abruf den Saldo laut DKB (und den des Tagesgelds). Er sollte mit dem DKB-Verrechnungskonto (bzw. dem Tagesgeld-Konto) in Wealthfolio übereinstimmen.
+**Saldo:** Die Seite *Broker* zeigt nach jedem Abruf den Saldo laut DKB (und den des Tagesgelds). Er sollte mit dem DKB-Verrechnungskonto (bzw. dem Tagesgeld-Konto) in Wealthfolio übereinstimmen.
 
 **Sicherheit:** Lehnt die DKB Anmeldename oder PIN ab, versucht der Dienst es nicht noch einmal, bis du die Zugangsdaten neu speicherst. Nach drei Fehlversuchen sperrt die DKB sonst das Online-Banking.
 
@@ -281,7 +283,7 @@ Vorgemerkte Umsätze und Orders übernimmt der Dienst erst, wenn sie gebucht sin
 
 ## Abgleich mit Wealthfolio
 
-Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in Wealthfolio: das Guthaben mit dem Cash des Verrechnungskontos (nicht bei comdirect, dort wird das Girokonto nicht gebucht), ob das Depotkonto kein Bargeld hält (es muss 0 sein) und keine Position „$CASH“ in einem der Konten steht, und, bei Trade Republic, Scalable Capital, comdirect und der Deutschen Bank, jede Position mit dem Bestand des Depotkontos. Die Übersicht zeigt das Ergebnis. Eine Abweichung, die auch beim nächsten Abruf noch besteht, kommt als ntfy-Nachricht. Direkt nach neuen Buchungen rechnet Wealthfolio noch. Typische Ursachen: eine Kapitalmaßnahme, die von Hand nachzubuchen ist, oder Bestände aus der Zeit vor dem Startdatum – die legst du auf der Seite *Prüfung* als Anfangsbestand an.
+Nach jedem Abruf vergleicht der Dienst, was der Broker meldet, mit dem Stand in Wealthfolio: das Guthaben mit dem Cash des Verrechnungskontos (nicht bei comdirect, dort wird das Girokonto nicht gebucht), ob das Depotkonto kein Bargeld hält (es muss 0 sein) und keine Position „$CASH“ in einem der Konten steht, und, bei Trade Republic, Scalable Capital, comdirect und der Deutschen Bank, jede Position mit dem Bestand des Depotkontos. Die Seite *Broker* zeigt das Ergebnis. Eine Abweichung, die auch beim nächsten Abruf noch besteht, kommt als ntfy-Nachricht. Direkt nach neuen Buchungen rechnet Wealthfolio noch. Typische Ursachen: eine Kapitalmaßnahme, die von Hand nachzubuchen ist, oder Bestände aus der Zeit vor dem Startdatum – die legst du auf der Seite *Prüfung* als Anfangsbestand an.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/10-pruefung-dunkel.png"><img src="docs/screenshots/10-pruefung.png" width="560" alt="Seite Prüfung"></picture>
 
@@ -311,7 +313,7 @@ Der **FIRE-Rechner** (Link unten auf X-Ray) rechnet aus, wie viel Vermögen ein 
 | Was passiert | Was du tust |
 |---|---|
 | Push-Nachricht „Anmeldung nötig“ | Auf die Nachricht tippen, TAN eingeben – fertig |
-| Push-Nachricht „Abruf fehlgeschlagen“ | Übersicht öffnen, dort steht der Grund. Meist löst es sich beim nächsten Lauf von selbst |
+| Push-Nachricht „Abruf fehlgeschlagen“ | Seite *Broker* öffnen, dort steht der Grund. Meist löst es sich beim nächsten Lauf von selbst |
 | „unbekannte Buchungen“ | Der Dienst kennt eine Buchungsart noch nicht und hat sie **nicht** übernommen. Unter *Unbekannte Buchungen* steht, was es war (IBANs, Konto- und Depotnummern ausgeblendet). Mit *Vervollständigen und buchen* sagst du, was es ist – Kauf, Verkauf, Einbuchung oder Ausbuchung ohne Zahlung, Split bzw. Reverse Split (Verhältnis neue je alte Stücke, 1:10 = 0,1) – und ergänzt, was fehlt (ISIN, Stückzahl, Betrag); der nächste Abruf bucht es wie jede andere Buchung, einmal. Bis dahin lässt es sich zurücknehmen. Gern auch ein Issue mit dem Typ anlegen, damit der Dienst ihn künftig selbst kennt |
 | Abgleich zeigt Bargeld im Depotkonto oder zu viel/zu wenig auf dem Verrechnungskonto | Seite *Prüfung* öffnen: Sie listet die Zeitpunkte, an denen im Depotkonto Bargeld stehen bleibt (z. B. ein Kauf ohne Übertrag oder ein Übertrag, dessen Verkauf gelöscht wurde), und Überträge ohne Gegenstück – mit Datum, Betrag, Kommentar und ob die Buchung vom Dienst oder aus einem Import stammt. Korrigiert wird in Wealthfolio; die Seite ändert nichts |
 | Ein Broker soll noch einmal von vorn gebucht werden (z. B. nach geänderten Regeln) | In den Broker-Einstellungen *Neu aufsetzen …*: Die Seite zeigt, wie viele Buchungen des Dienstes gelöscht würden; gelöscht wird erst, wenn du den Namen des Brokers eintippst. Der nächste Abruf holt alles ab dem Startdatum neu. Importe und Handeinträge bleiben |

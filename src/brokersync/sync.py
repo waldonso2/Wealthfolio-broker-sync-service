@@ -200,21 +200,24 @@ class Syncer:
             self.state.abort_stale_runs()
             cfg = config_mod.load(self.data_dir)
             if cfg.safe_mode and not manual:
-                self._remind(cfg)
+                if cfg.service("sync"):
+                    self._remind(cfg)
                 self._update_funds(cfg)  # the issuers' lists are no broker: they stay daily in safe mode too
                 return []
             self._pins = dict(pins or {})
             # "Automatisch abrufen" off: the timer and the general button skip
             # the broker, a request for exactly this broker still runs it.
             keys = [key for key, bcfg in cfg.brokers.items()
-                    if key in self.adapters and (not only or key in only) and (bcfg.enabled or (only and key in only))]
+                    if key in self.adapters and (not only or key in only) and (bcfg.enabled or (only and key in only))
+                    and cfg.service("sync")]
             results = []
             try:
                 for n, key in enumerate(keys, 1):
                     self._progress = {"broker": key, "label": self.adapters[key].label, "n": n, "m": len(keys)}
                     results.append(self._run_broker(cfg, key))
                 self._progress = {}
-                self._complete_isins(cfg)  # before the logos: they look the ISIN up there first
+                if cfg.service("isin"):
+                    self._complete_isins(cfg)  # before the logos: they look the ISIN up there first
                 self._update_logos(cfg)
                 self._update_funds(cfg)
                 self._update_spending(cfg)
@@ -238,7 +241,7 @@ class Syncer:
         log.info("safe mode: scheduled run skipped (%d broker(s) to fetch in the UI)", len(due))
         if due:
             self.notifier(cfg).send("Abruf fällig", f"Sicherer Modus: {', '.join(due)} in der Oberfläche abrufen - "
-                                    "jeder Abruf braucht deine Anmeldung.", link=self.link(cfg, "/"), tags="key")
+                                    "jeder Abruf braucht deine Anmeldung.", link=self.link(cfg, "/broker"), tags="key")
 
     def end_sessions(self, keys: list[str] | None = None) -> None:
         """Safe mode: forget the brokers' sessions, keeping only the lock-out guards (``SAFETY_KEYS``)."""
@@ -342,6 +345,8 @@ class Syncer:
 
     def _update_spending(self, cfg: config_mod.Config) -> None:
         """The banks' cash accounts in Wealthfolio's spending tracker (#134); never touches a broker's result."""
+        if not cfg.service("spending"):  # switched off on *Dienste*: the accounts the sync added leave it
+            cfg = replace(cfg, brokers={k: replace(b, spending=False) for k, b in cfg.brokers.items()})
         try:
             with connect(self._wealthfolio, cfg.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
                          cfg.wealthfolio_fingerprint) as wf:
@@ -380,13 +385,13 @@ class Syncer:
         except (AdapterError, WealthfolioError) as e:
             result.status = "error"
             result.messages.append(str(e))
-            notifier.send(f"{label}: Abruf fehlgeschlagen", str(e), link=self.link(cfg, "/"), priority="high",
+            notifier.send(f"{label}: Abruf fehlgeschlagen", str(e), link=self.link(cfg, "/broker"), priority="high",
                           tags="warning")
         except Exception as e:  # a broken adapter must not stop the others
             log.exception("sync of %s crashed", key)
             result.status = "error"
             result.messages.append(f"Unexpected error: {e}")
-            notifier.send(f"{label}: Abruf fehlgeschlagen", f"Unerwarteter Fehler: {e}", link=self.link(cfg, "/"),
+            notifier.send(f"{label}: Abruf fehlgeschlagen", f"Unerwarteter Fehler: {e}", link=self.link(cfg, "/broker"),
                           priority="high", tags="warning")
         if cfg.safe_mode or self._safe_now():
             # Safe mode (#85): the login ends with the run, whatever happened - the next one needs the user.
@@ -395,7 +400,7 @@ class Syncer:
         if result.status == "ok" and result.failed:
             result.status = "error"
             notifier.send(f"{label}: {result.failed} Buchungen nicht übernommen", "\n".join(result.messages[:5]),
-                          link=self.link(cfg, "/"), tags="warning")
+                          link=self.link(cfg, "/broker"), tags="warning")
         self.state.finish_run(run_id, result.status, created=result.created, existing=result.existing,
                               failed=result.failed, unknown=result.unknown, message="\n".join(result.messages))
         log.info("%s: %s, %d created, %d already there, %d failed, %d unknown", key, result.status,
@@ -452,8 +457,8 @@ class Syncer:
 
         def user_action(message: str) -> None:
             self._phase("approval")
-            self.notifier(cfg).send(f"{label}: Bestätigung nötig", message, link=self.link(cfg, "/"), priority="high",
-                                    tags="key")
+            self.notifier(cfg).send(f"{label}: Bestätigung nötig", message, link=self.link(cfg, "/broker"),
+                                    priority="high", tags="key")
 
         adapter.on_user_action = user_action
         run = RunContext(cfg=cfg, key=key, bcfg=bcfg, result=result, secrets=secrets, adapter=adapter)
@@ -828,7 +833,7 @@ class Syncer:
             lines = [f"{d['name']}: {self.adapters[key].label} {d['broker']}, Wealthfolio {d['wealthfolio']}"
                      for d in persistent[:6]]
             self.notifier(cfg).send(f"{self.adapters[key].label}: Bestand weicht ab", "\n".join(lines),
-                                    link=self.link(cfg, "/"), tags="scales")
+                                    link=self.link(cfg, "/broker"), tags="scales")
         self.state.set_reconcile(key, deviations, notified=persistent)
 
     def _settle_securities_cash(self, key: str, tx: Transaction, accounts: Accounts, existing: ExistingIndex,

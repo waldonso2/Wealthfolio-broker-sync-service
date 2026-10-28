@@ -172,10 +172,10 @@ def test_overview_shows_the_running_broker_and_refreshes_slowly(tmp_path):
     app.state.ctx.job = "Abruf"
     State(tmp_path).set_meta(meta_keys.PROGRESS(), '{"broker": "fake", "label": "Test", "n": 1, "m": 2, '
                                                    '"phase": "approval", "since": "2026-10-15T08:00:00+00:00"}')
-    page = client.get("/").text
+    page = client.get("/broker").text
     assert '<meta http-equiv="refresh" content="10">' in page and 'aria-live="polite"' in page
     assert "Test (1 von 2)" in page and "Warte auf deine Freigabe in der App (seit 15.10.2026 10:00)" in page
-    page = client.get("/?still=1").text
+    page = client.get("/broker?still=1").text
     assert "http-equiv" not in page and "Aktualisieren" in page
     app.state.ctx.running.clear()
 
