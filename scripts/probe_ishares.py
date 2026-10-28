@@ -18,13 +18,18 @@ def get(name, url):
     if name: (OUT / name).write_bytes(r.content)
     return r
 
-for fc, aud in ((48, 132), (48, 117), (47, 79)):
-    r = get(f"lg-fc-{fc}-{aud}.json", f"{B}/srp/api/fund-centre/{fc}?audience={aud}&language=1")
+for ls in (38, 4):
+    r = get(f"lg-lit-{ls}.json", f"{B}/srp/api/literature-structure/{ls}/?audience=79&share_classes=893&language=1")
     if r is None or r.status_code != 200:
         continue
-    t = r.text
-    print("   ", fc, aud, "ETF", t.count("UCITS ETF"), "isin", "IE00BYPLS672" in t, "fundholdings", t.lower().count("fundholdings"),
-          "docid", "9f3a4ebd" in t)
-    i = t.lower().find("fundholdings")
-    if i >= 0:
-        print("   ..", t[max(0, i - 600):i + 200])
+    print("   ", r.text[:1500])
+    try:
+        rows = r.json().get("data") or []
+    except ValueError:
+        continue
+    for row in rows:
+        q = "&".join([f"lit_types={t}" for t in row.get("lit_types", [])])
+        d = get("", f"{B}/srp/api/documents/?audience=79&share_classes=893&language=1&{q}&date_from=")
+        if d is not None and d.status_code == 200:
+            hit = [x for x in re.findall(r"documents-id/[0-9a-f-]{36}/[^\"']+", d.text)]
+            print("     ", row.get("display_name"), row.get("lit_types"), hit[:4])
