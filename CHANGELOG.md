@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.42.2
+
+- Sectors into Wealthfolio: the GICS 2023 names the issuers use ("Airlines", "Automobile Components", "Ground Transportation", "Marine Transportation", "Personal Care Products") find Wealthfolio's categories, which still carry the earlier names.
+
 ## 0.42.1
 
 - Countries and sectors into Wealthfolio, checked against live lists: SPDR's GICS names without commas ("Oil Gas & Consumable Fuels"), DWS' (Xtrackers) German sector names ("Technologie", "Industrieunternehmen", "Finanzdienstleister" …) and country spellings ("Großbritannien (UK)", "Süd Korea", VanEck's "Taiwan Region") now find their category.
