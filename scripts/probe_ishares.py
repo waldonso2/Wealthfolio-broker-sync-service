@@ -18,18 +18,13 @@ def get(name, url):
     if name: (OUT / name).write_bytes(r.content)
     return r
 
-import html as H
-p = get("lg-cyber.html", B + "/en/uk/institutional/fund-centre/ETF/Cyber-Security/")
-for m in re.finditer(r"data-config='([^']+)'", p.text):
-    try:
-        c = json.loads(H.unescape(m.group(1)))
-    except ValueError:
+for fc, aud in ((48, 132), (48, 117), (47, 79)):
+    r = get(f"lg-fc-{fc}-{aud}.json", f"{B}/srp/api/fund-centre/{fc}?audience={aud}&language=1")
+    if r is None or r.status_code != 200:
         continue
-    print("config", {k: c.get(k) for k in ("type", "productType", "id", "fundCentreId", "fundId", "routeId", "umbrellaId",
-                                          "audienceId", "audience_id", "audience", "languageId", "language", "url",
-                                          "litStructureId", "shareClassId")})
-for m in re.finditer(r'<script[^>]*type="application/json"[^>]*>(.{0,4000})', p.text, re.S):
-    print("json", m.group(1)[:800])
-for m in list(re.finditer(r"fundId|fund_id|umbrellaId|routeId", p.text))[:6]:
-    print("..", p.text[max(0, m.start() - 200):m.end() + 200].replace("\n", " "))
-raise SystemExit
+    t = r.text
+    print("   ", fc, aud, "ETF", t.count("UCITS ETF"), "isin", "IE00BYPLS672" in t, "fundholdings", t.lower().count("fundholdings"),
+          "docid", "9f3a4ebd" in t)
+    i = t.lower().find("fundholdings")
+    if i >= 0:
+        print("   ..", t[max(0, i - 600):i + 200])
