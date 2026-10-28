@@ -897,3 +897,30 @@ def test_a_fund_without_countries_takes_its_issuers_breakdown_else_the_country_o
     # World: the issuer's breakdown (Other and cash stay unassigned); Tech: Apple's country from the S&P fund.
     assert regions == [("a-spdr", "country_US", 700), ("a-tech", "country_US", 6000),
                        ("a-world", "country_DE", 205), ("a-world", "country_US", 7285)]
+
+
+def test_issuers_spellings_without_commas_dws_sectors_and_a_single_country_fund(tmp_path, monkeypatch):
+    state = State(tmp_path)
+    state.set_fund("a-x", "X", [["US0000000002", "A", "0.5", "Taiwan Region", "Technologie", "USD"],
+                                ["US0000000010", "B", "0.3", "Großbritannien (UK)", "Industrieunternehmen", "USD"]])
+    depot = Depot(positions=[{"id": "a-x", "isin": "", "name": "X", "currency": "EUR", "value": D(1)}])
+    fake, wf = _wf()
+    fake.categories["regions"] += [{"id": "country_TW", "name": "Taiwan", "parentId": "R3020"},
+                                   {"id": "country_GB", "name": "United Kingdom", "parentId": "R1010"}]
+    fake.categories["industries_gics"].append({"id": "101020", "name": "Oil, Gas & Consumable Fuels",
+                                               "parentId": "10"})
+    fake.categories["industries_gics"].append({"id": "10", "name": "Energy", "parentId": None})
+    lookthrough.write_taxonomies(state, wf, depot)
+    mine = sorted((a["categoryId"], a["weight"]) for a in fake.assignments)
+    assert mine == [("20", 3000), ("45", 5000), ("country_GB", 3000), ("country_TW", 5000)]
+    fake.assignments.clear()
+    state.set_fund("a-x", "X", [["US0000000002", "A", "0.5", "", "Oil Gas & Consumable Fuels", "USD"]])  # SPDR
+    lookthrough.write_taxonomies(state, wf, depot)
+    assert [(a["categoryId"], a["weight"]) for a in fake.assignments] == [("10", 5000)]
+    # iShares' fund finder names a single-country fund's country, also for a fund from the shipped list.
+    monkeypatch.setattr(lookthrough, "KNOWN", {"IE00BZCQB185": "280510"})
+    rows = {"1": {"isin": "IE00BZCQB185", "productPageUrl": "/de/produkte/280510/x", "aladdinCountry": "Indien"},
+            "2": {"isin": "IE00B4L5Y983", "productPageUrl": "/de/produkte/251882/y", "aladdinCountry": "Weitere"}}
+    s, asked = issuers({"product-screener": httpx.Response(200, json=rows)})
+    assert s.fund_country("IE00BZCQB185") == [["Indien", "1"]] and s.fund_country("US0378331005") == []
+    assert len(asked) == 1  # read once a pass, and only for a fund of the shipped list
