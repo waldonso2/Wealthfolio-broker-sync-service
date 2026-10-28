@@ -5,7 +5,7 @@
 - X-Ray finds German-domiciled iShares ETFs (DE): the German site's new fund finder (its screener server) is asked first; it is the only one listing them.
 - X-Ray on phones: every row is a grid with fixed columns for the figures, so rows no longer shift; the sector column is gone, the country shows only on wide screens.
 - The overlap of the ETFs is a real ETF × ETF matrix with a heatmap, right below the overall matrix.
-- The weekly iShares product run opens an issue linking its branch (GitHub Actions may not open pull requests in this repository).
+- The weekly iShares product run starts CI before it opens its pull request, and opens an issue linking its branch if GitHub Actions may not open pull requests.
 
 ## 0.35.1
 

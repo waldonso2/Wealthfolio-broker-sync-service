@@ -2,7 +2,7 @@ name: iShares products
 
 # src/brokersync/ishares_products.json maps ISIN -> iShares product number, so X-Ray finds an ETF's holdings
 # without reading iShares' fund finders (megabytes) in every container. Once a week: read the fund finders
-# (scripts/ishares_products.py); when funds were added, push them to a branch, start CI for it and open an issue linking it.
+# (scripts/ishares_products.py); when funds were added, push them to a branch, start CI for it and open a pull request (an issue if that is refused).
 
 on:
   schedule:
@@ -17,7 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # push the branch
-      issues: write # the issue that links the branch
+      pull-requests: write
+      issues: write # when the pull request is refused
       actions: write # start CI on that branch
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -29,7 +30,7 @@ jobs:
       - run: "pip install --require-hashes --only-binary :all: -r requirements.txt"
       - run: pip install --no-deps --no-build-isolation -e .
       - run: python scripts/ishares_products.py
-      - name: Push new funds and open an issue
+      - name: Push new funds and open a pull request
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -42,7 +43,8 @@ jobs:
           git commit -qm "iShares products: new funds from the fund finders" -- src/brokersync/ishares_products.json
           git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/$BRANCH"
           gh workflow run ci.yml --ref "$BRANCH"
-          # GitHub Actions may not open pull requests here: an issue links the branch, one click opens the PR.
-          TITLE="iShares products: new funds on branch $BRANCH"
-          gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq length | grep -qx 0 || exit 0
-          gh issue create --title "$TITLE" --body "New ISIN -> product number pairs from iShares' fund finders (scripts/ishares_products.py), pushed to \`$BRANCH\`; CI is running on it. Open the pull request: https://github.com/${REPO}/compare/main...${BRANCH}?expand=1 - data only, it ships with the next release."
+          gh pr list --head "$BRANCH" --state open --json number --jq length | grep -qx 0 || exit 0
+          BODY="New ISIN -> product number pairs from iShares' fund finders (scripts/ishares_products.py). Data only: no version bump needed; it ships with the next release."
+          # Needs "Allow GitHub Actions to create and approve pull requests" (Settings -> Actions); without it an issue links the branch.
+          gh pr create --head "$BRANCH" --title "iShares products: new funds" --body "$BODY" \
+            || gh issue create --title "iShares products: new funds on branch $BRANCH" --body "$BODY Open the pull request: https://github.com/${REPO}/compare/main...${BRANCH}?expand=1"
