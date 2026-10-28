@@ -103,7 +103,6 @@ def lookthrough_page(request: Request, ctx: Ctx, top: int = TOPS[0]):
     funds = state.funds()
     holdings = lookthrough.holdings(state, depot)
     rows = xray.exposures(holdings)
-    stocks = [r for r in rows if r.key != xray.UNASSIGNED]
     with_list = sorted((h for h in holdings if h.id in funds), key=lambda h: -h.value)
     total = sum((p["value"] for p in depot.positions), Decimal(0))
     limits = lookthrough.limits(c.xray_limits)
@@ -111,11 +110,15 @@ def lookthrough_page(request: Request, ctx: Ctx, top: int = TOPS[0]):
     cost = lookthrough.cost(state, depot, c)
     found = xray.findings(holdings, limits, depot.base, depot.cash, cost.rate)
     status = {p["id"]: lookthrough.status(state, p["id"]) for p in depot.positions}
-    # shortcut: only iShares for now (#144) - every other position is hidden, it still counts in the matrix
-    ishares = [p for p in depot.positions if p["id"] in funds or lookthrough.is_ishares(p, status[p["id"]])]
+    etfs = [p for p in depot.positions if p["id"] in funds or lookthrough.is_fund(p, status[p["id"]])]
+    pending = [p for p in etfs if p["id"] not in funds]
+    # The matrix holds stocks only: a fund still without its list is named below it, never a row of its own.
+    waiting = {p["isin"] or p["id"] for p in pending}
+    stocks = [r for r in rows if r.key != xray.UNASSIGNED and r.key not in waiting]
     return ctx.render(
         request, "lookthrough.html", wf_error=ctx.depot_error, positions=depot.positions, funds=funds,
-        status=status, ishares=ishares, hidden=len(depot.positions) - len(ishares), last=lookthrough.last_pass(state),
+        status=status, etfs=etfs, pending=pending, singles=len(depot.positions) - len(etfs),
+        issuers={p["id"]: lookthrough.issuer(p, status[p["id"]]) for p in etfs}, last=lookthrough.last_pass(state),
         total=total, top=TOP, tops=TOPS, matrix_top=top if top in TOPS else TOPS[0],
         matrix=_matrix(stocks, with_list, total), columns=with_list[:COLUMNS],
         more_funds=len(with_list) > COLUMNS, count=len(stocks),

@@ -35,12 +35,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          git diff --quiet -- src/brokersync/ishares_products.json && { echo "no new funds"; exit 0; }
+          git diff --quiet -- src/brokersync/ishares_products.json src/brokersync/fund_products.json && { echo "no new funds"; exit 0; }
           BRANCH=ishares-products
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
-          git commit -qm "iShares products: new funds from the fund finders" -- src/brokersync/ishares_products.json
+          git commit -qm "iShares products: new funds from the fund finders" -- src/brokersync/ishares_products.json src/brokersync/fund_products.json
           git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/$BRANCH"
           gh workflow run ci.yml --ref "$BRANCH"
           gh pr list --head "$BRANCH" --state open --json number --jq length | grep -qx 0 || exit 0

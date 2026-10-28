@@ -1,4 +1,6 @@
-"""Writes ``src/brokersync/ishares_products.json``: ISIN -> iShares product number, from the country fund finders.
+"""Writes ``src/brokersync/ishares_products.json``: ISIN -> iShares product number, from the country fund finders,
+and ``fund_products.json``: ISIN -> Vanguard portfolio id and VanEck holdings block (issuers whose source needs an
+id of its own).
 
 Usage: python3 scripts/ishares_products.py             # asks the fund finders (lookthrough.ISHARES_SCREENERS)
        python3 scripts/ishares_products.py FILE ...    # or reads answers saved before (curl -o FILE <finder>)
@@ -48,3 +50,14 @@ if not named:
     sys.exit("No fund finder answer named a product - nothing written.")
 lookthrough.PRODUCTS_FILE.write_text(json.dumps(dict(sorted(products.items())), indent=0) + "\n")
 print(f"{len(products)} products ({len(products) - len(lookthrough.KNOWN)} new) in {lookthrough.PRODUCTS_FILE}")
+if not sys.argv[1:]:  # the other issuers whose source needs an id of its own
+    funds = {k: dict(v) for k, v in lookthrough.PRODUCTS.items()}
+    sources = lookthrough.Sources()
+    for issuer, ids in (("Vanguard", sources.vanguard_ids), ("VanEck", sources.vaneck_ids)):
+        try:
+            for isin, fund in ids().items():
+                funds.setdefault(issuer, {}).setdefault(isin, fund)
+        except lookthrough.SourceError as e:
+            print(f"{issuer}: {e}", file=sys.stderr)
+    lookthrough.FUNDS_FILE.write_text(json.dumps(funds, indent=0, sort_keys=True) + "\n")
+    print(f"{sum(map(len, funds.values()))} ids of other issuers in {lookthrough.FUNDS_FILE}")

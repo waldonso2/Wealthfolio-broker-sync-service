@@ -167,24 +167,26 @@ def test_a_funds_top_25_show_under_it_and_the_rest_folded(tmp_path):
     assert top.index("Example 59 Inc") < top.index("Example 58 Inc") and "Example 34 Inc" not in top  # top 25
     assert "Example 34 Inc" in rest.split("Einstellungen dieses ETFs")[0]  # folded, on the same page
     assert "<h1>X-Ray</h1>" in page and "Gesamt: Aktien über alle Positionen" in page
-    assert "/lookthrough/upload" not in page and "Xtrackers" not in page  # only iShares for now (#144)
+    assert "/lookthrough/upload" not in page  # no upload: every issuer is fetched
     matrix = client.get("/lookthrough?top=50").text.split("Weitere Aktien über alle Positionen")[0]
     assert '<strong aria-current="page">Top 50</strong>' in matrix and "Example 10 Inc" in matrix  # 50th of 60
 
 
-def test_only_ishares_funds_are_shown_with_the_reason_a_list_is_missing(tmp_path):
+def test_every_fund_is_shown_with_the_reason_a_list_is_missing_and_stays_out_of_the_matrix(tmp_path):
     from brokersync import lookthrough
 
     client, token = _client(tmp_path)
     page = client.get("/lookthrough").text
-    assert "0 iShares-ETFs durchleuchtet · 0 ohne Positionsliste · 1 weitere Positionen ausgeblendet" in page
-    assert f"<h2>{FUND}" not in page and "Kein iShares-ETF in Wealthfolio gefunden." in page
+    assert "0 ETFs durchleuchtet · 0 ohne Positionsliste · 1 Einzelwerte" in page  # its name says no fund
+    assert f"<h2>{FUND}" not in page and "Kein ETF in Wealthfolio gefunden." in page
     state = State(tmp_path)
     lookthrough.set_status(state, FUND, url="https://www.ishares.com/uk/a/en/products/123456/x-etf", status="error",
                            error="iShares: HTTP 403")
     lookthrough.record(state, fetched=0, none=0, failed=1, finder="iShares-Fondsfinder: HTTP 403")
     page = client.get("/lookthrough").text
-    assert "0 iShares-ETFs durchleuchtet · 1 ohne Positionsliste · 0 weitere" in page
+    assert "0 ETFs durchleuchtet · 1 ohne Positionsliste · 0 Einzelwerte" in page
+    assert f"<h2>{FUND}" in page and f"weil ihre Positionsliste noch fehlt: {FUND}." in page
+    assert "Gesamt: Aktien über alle Positionen" not in page  # a fund without its list is never a row of its own
     assert "Abruf fehlgeschlagen" in page and "iShares: HTTP 403" in page and "Fondsfinder: HTTP 403" in page
     assert "produktliste#/?productView=all&amp;search=" in page and "<details open>" in page  # find it, paste it
     assert "0 Positionslisten geholt, 1 fehlgeschlagen" in page
