@@ -74,8 +74,8 @@ def _position(ctx: AppContext, asset_id: str) -> dict | None:
     return next((p for p in ctx.depot.positions if p["id"] == asset_id), None)
 
 
-TOP = 25  # rows shown at first under each fund; the rest folded
-TOPS = (25, 50, 100)  # the overall matrix: the user's choice
+TOP = 10  # rows shown at first under each fund; the rest folded
+TOPS = (10, 25, 50, 100)  # the overall matrix: the user's choice
 COLUMNS = 4  # the largest funds get a column of the matrix of their own, the others share "weitere ETFs"
 
 
@@ -121,6 +121,7 @@ def lookthrough_page(request: Request, ctx: Ctx, top: int = TOPS[0]):
         issuers={p["id"]: lookthrough.issuer(p, status[p["id"]]) for p in etfs},
         auto={"iShares", *lookthrough.FETCHERS}, last=lookthrough.last_pass(state),
         total=total, top=TOP, tops=TOPS, matrix_top=top if top in TOPS else TOPS[0],
+        matrix_open="top" in request.query_params,
         matrix=_matrix(stocks, with_list, total), columns=with_list[:COLUMNS],
         more_funds=len(with_list) > COLUMNS, count=len(stocks),
         largest={k: sorted(f["constituents"], key=lambda c: -Decimal(c[2])) for k, f in funds.items()},

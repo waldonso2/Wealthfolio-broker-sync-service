@@ -1,82 +1,70 @@
-"""Temporary probe round 30: TER at Invesco, Xtrackers, Vanguard, VanEck."""
+"""Temporary probe round 31: TER at Finanzfluss, Vanguard and VanEck pages. Prints snippets only, saves no page."""
 import json
 import re
 import sys
-from pathlib import Path
 
 sys.path.insert(0, "src")
 import httpx  # noqa: E402
 
 from brokersync import lookthrough as l  # noqa: E402
 
-OUT = Path("probe-files"); OUT.mkdir(exist_ok=True)
-http = httpx.Client(timeout=90, follow_redirects=True, headers={"User-Agent": l.BROWSER, "Accept-Language": "de-DE,de;q=0.9"})
-PAT = re.compile(r"ter\b|fee|charge|expense|ocf|kosten|ongoing|tcr", re.I)
+http = httpx.Client(timeout=60, follow_redirects=True, headers={"User-Agent": l.BROWSER, "Accept-Language": "de-DE,de;q=0.9"})
+PAT = r"TER\b|Gesamtkostenquote|OCF|[Ll]aufende Kosten|expense|ongoingCharge|\"ter\""
 
 
-def get(name, url, **kw):
+def get(url):
     try:
-        r = http.request("POST" if "json" in kw else "GET", url, **kw)
+        r = http.get(url)
     except httpx.HTTPError as e:
-        print("##", name, type(e).__name__); return None
-    print("##", name, r.status_code, r.headers.get("content-type", ""), len(r.content), str(r.url)[:160])
-    (OUT / name).write_bytes(r.content)
+        print("##", url, type(e).__name__); return None
+    print("##", r.status_code, r.headers.get("content-type", ""), len(r.content), str(r.url)[:180])
     return r
 
 
-def keys(obj, path=""):
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            p = f"{path}.{k}"
-            if PAT.search(str(k)):
-                print("   KEY", p, "=", json.dumps(v)[:200])
-            keys(v, p)
-    elif isinstance(obj, list):
-        for v in obj[:2]:
-            keys(v, path + "[]")
+def snip(t, n=5):
+    for m in list(re.finditer(PAT, t))[:n]:
+        print("   ..", re.sub(r"\s+", " ", t[max(0, m.start() - 120):m.end() + 160]).replace("\n", " ")[:300])
 
 
-def text(t, n=4):
-    for m in list(re.finditer(r"TER\b|Gesamtkostenquote|Laufende Kosten|Ongoing charges|Total expense|OCF", t))[:n]:
-        print("   TXT ..", re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", t[max(0, m.start() - 100):m.end() + 200]))[:300])
-
-
-r = get("invesco.json", "https://dng-api.invesco.com/cache/v1/accounts/en_GB/shareclasses/IE00B60SX394?idType=isin")
+r = get("https://www.finanzfluss.de/robots.txt")
 if r is not None:
-    print("   ", r.text[:3000])
-for u in ("https://etf.dws.com/api/pdp/de-de/etf/IE00BJ0KDQ92", "https://etf.dws.com/api/pdp/de-de/IE00BJ0KDQ92",
-          "https://etf.dws.com/api/de-de/products/IE00BJ0KDQ92", "https://etf.dws.com/api/products/IE00BJ0KDQ92"):
-    r = get("dws.json", u)
+    print(r.text[:1500])
+for isin in ("lu0629459743", "ie00bk5bqt80", "ie00bqqp9f84", "ie00bj0kdq92", "ie00b60sx394"):
+    r = get(f"https://www.finanzfluss.de/informer/etf/{isin}/")
     if r is not None and r.status_code == 200:
-        print("   ", r.text[:500])
-        try:
-            keys(r.json())
-        except ValueError:
-            pass
-r = get("dwsnuxt.html", "https://etf.dws.com/de-de/IE00BJ0KDQ92-msci-world-ucits-etf-1c/")
-if r is not None:
-    print("   urls", sorted(set(re.findall(r'https://etf\.dws\.com/api/[^"\s]+', r.text)))[:20])
-    print("   js", sorted(set(re.findall(r'/_nuxt/[\w.-]+\.js', r.text)))[:10])
-for q in ('{ funds(portIds: ["9505"]) { portId profile { fundFact { ocf } } } }',
-          '{ funds(portIds: ["9505"]) { portId profile { ocfValue } } }',
-          '{ funds(portIds: ["9505"]) { portId profile { totalExpenseRatio } } }',
-          '{ funds(portIds: ["9505"]) { portId profile { fees { ocf } } } }',
-          '{ funds(portIds: ["9505"]) { portId profile { primaryExchange expenseRatioDate ongoingCharge ocfFee } } }',
-          '{ funds(portIds: ["9505"]) { portId fees { ocf } } }',
-          '{ funds(portIds: ["9505"]) { portId ocf } }'):
-    r = get("vg.json", l.VANGUARD, json={"query": q}, headers=l.VANGUARD_HEADERS)
-    if r is not None:
-        print("   ", re.sub(r"\s+", " ", r.text)[:500])
-r = get("vgpage.html", "https://www.vanguard.co.uk/professional/product/etf/equity/9505/ftse-all-world-ucits-etf-usd-accumulating")
-if r is not None: text(r.text)
-fund = l.PRODUCTS.get("VanEck", {}).get("IE00BQQP9F84") or next(iter(l.PRODUCTS.get("VanEck", {}).values()), "")
-print("   vaneck id", fund)
-r = get("vanecklist.html", l.VANECK_LIST)
-if r is not None:
-    links = sorted(set(re.findall(r'/de/de/anlagen/[\w-]+/', r.text)))[:3]
-    print("   links", links)
-    for link in links[:1]:
-        p = get("vaneckpage.html", l.VANECK + link + "ueberblick/")
-        if p is not None: text(p.text)
-        p = get("vaneckpage2.html", l.VANECK + link)
-        if p is not None: text(p.text)
+        snip(r.text, 4)
+        print("   ld+json", len(re.findall(r"application/ld\+json", r.text)), "next", "__NEXT_DATA__" in r.text,
+              "nuxt", "__NUXT" in r.text)
+# Vanguard: page by port id without slug
+for u in ("https://www.vanguard.co.uk/professional/product/etf/equity/9505",
+          "https://www.vanguard.co.uk/professional/product/etf/equity/9505/x",
+          "https://www.vanguard.co.uk/professional/product/9505"):
+    r = get(u)
+    if r is not None and r.status_code == 200:
+        m = re.search(r"OCF/TER\s*([\d.,]+)\s*%", r.text)
+        print("   vanguard ter", m and m.group(1))
+# Vanguard GraphQL guesses on Fund / profile
+for q in ('{ funds(portIds: ["9505"]) { portId profile { fundFullName ocfDetails { ocf } } } }',
+          '{ funds(portIds: ["9505"]) { portId profile { ongoingCharge } } }',
+          '{ funds(portIds: ["9505"]) { portId profile { ocfAsOfDate managementFee } } }',
+          '{ funds(portIds: ["9505"]) { portId profile { expenseRatio: ocf } } }',
+          '{ funds(portIds: ["9505"]) { portId fundCharges { ocf } } }',
+          '{ funds(portIds: ["9505"]) { portId costsAndCharges { ocf } } }',
+          '{ funds(portIds: ["9505"]) { portId profile { costsAndCharges { ocf } } } }'):
+    try:
+        r = http.post(l.VANGUARD, json={"query": q}, headers=l.VANGUARD_HEADERS)
+        print("   vg", re.sub(r"\s+", " ", r.text)[:300])
+    except httpx.HTTPError as e:
+        print("   vg", type(e).__name__)
+# VanEck: does the holdings page (whose slug vaneck_ids sees) name the TER?
+r = get(l.VANECK_LIST)
+links = sorted(set(re.findall(r'/de/de/anlagen/[\w-]+/', r.text))) if r is not None else []
+print("   vaneck links", len(links), links[:3])
+for link in [x for x in links if "gold-miners" in x][:1] + links[:1]:
+    for suffix in ("positionen/", ""):
+        p = get(l.VANECK + link + suffix)
+        if p is not None and p.status_code == 200:
+            m = re.search(r"Gesamtkostenquote \(TER\)\s*(?:<[^>]+>\s*)*([\d.,]+)\s*%", p.text)
+            print("   vaneck ter", suffix or "page", m and m.group(1))
+            if not m:
+                snip(p.text, 2)
