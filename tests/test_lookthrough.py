@@ -108,6 +108,15 @@ def test_xlsx_rows_turn_into_holdings():
     assert len(lines) == 5 and lines[0].key == "US0000000002" and lines[0].weight == D("0.19")  # a share
 
 
+
+def test_an_uploaded_ubs_list_is_read():
+    # fabricated, in the layout of UBS' "Constituents" download: fund name and ISIN above the header
+    doc = xlsx([["UBS Example UCITS ETF"], ["ISIN: : LU0000000000"],
+                ["Wertpapiere", "ISIN", "Sedol-Code", "Währung", "Kurs", "Gewichtung (%)"]]
+               + [[f"EXAMPLE {n} CORP", i, "0000000", "USD", "1'430.00", "19.9"] for n, i in enumerate(FIVE)])
+    lines = parse_file(doc)
+    assert len(lines) == 5 and lines[0].name == "EXAMPLE 0 CORP" and lines[0].weight == D("0.199")
+
 # Fabricated, in the layout of iShares' fund finder data (product-screener-v3.1.jsn).
 SCREENER = json.dumps({
     "251882": {"portfolioId": 251882, "isin": "IE00B4L5Y983", "fundName": "Example World",

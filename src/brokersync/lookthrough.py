@@ -47,7 +47,7 @@ log = logging.getLogger(__name__)
 
 WEIGHT = ("weight (%)", "gewichtung (%)", "weighting", "gewichtung", "weight", "anteil (%)", "% of net assets",
           "percent of fund", "constituent weight (base)")
-NAME = ("name", "bezeichnung", "emittent", "security name", "security description")
+NAME = ("name", "bezeichnung", "emittent", "security name", "security description", "wertpapiere")
 ISIN = ("isin",)
 TICKER = ("ticker", "emittententicker")
 EXCHANGE = ("exchange", "börse")

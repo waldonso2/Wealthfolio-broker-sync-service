@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.1
+
+- An uploaded UBS holdings list (the "Constituents" download of the ETF's page) is read: its name column "Wertpapiere" is recognised.
+
 ## 0.38.0
 
 - X-Ray fetches HANetf ETFs (Future of Defence, EMQQ, …) automatically: the holdings XLSX lies under the fund's code and ISIN on hanetf.com; the codes of 75 HANetf funds ship in `fund_products.json`. A fund whose ISIN is in that list is recognised as HANetf's even when its name doesn't say so. The file's "Exposure Country" and "Trading Currency" columns are read.
