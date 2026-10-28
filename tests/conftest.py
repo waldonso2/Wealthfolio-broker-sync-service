@@ -17,6 +17,7 @@ def _no_issuer_requests(monkeypatch):
 
     real = lookthrough.Sources
     monkeypatch.setattr(lookthrough, "PAUSE", 0)
+    monkeypatch.setattr(lookthrough, "KNOWN", {})  # the shipped list: tests ask their own fund finders
     monkeypatch.setattr(lookthrough, "Sources",
                         lambda: real(transport=httpx.MockTransport(lambda request: httpx.Response(404))))
 

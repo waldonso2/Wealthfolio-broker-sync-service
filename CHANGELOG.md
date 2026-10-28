@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.35.0
+
+- **iShares product numbers ship with the service:**
+  - `src/brokersync/ishares_products.json` maps ISIN → product number for every fund the country fund finders list. X-Ray looks there first, so a container no longer reads the finders' megabytes for a fund in it. A product page typed in and a number kept before still win; a fund missing from the file is still looked up live.
+  - `scripts/ishares_products.py` builds it, from the finders or from answers saved with curl. It keeps every number already there (a number never changes) and fails when no answer named a product.
+  - The weekly workflow `ishares-products.yml` runs it. When funds were added, it opens a pull request and starts CI for it (`ci.yml` can now be started by hand). New numbers come with the next release.
+
 ## 0.34.5
 
 - **X-Ray finds the iShares product number by ISIN again.**

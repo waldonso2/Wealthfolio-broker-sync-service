@@ -24,9 +24,11 @@ import logging
 import re
 import time
 import zipfile
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from urllib.parse import quote
 from xml.etree import ElementTree
 
@@ -293,6 +295,26 @@ def _only_sources(request: httpx.Request) -> None:
         raise httpx.UnsupportedProtocol(f"Anfrage an {request.url.host} abgelehnt")
 
 
+def finder_rows(rows: object) -> Iterator[tuple[str, tuple[str, str], dict]]:
+    """ISIN, product (number, page name) and the row of every product in a fund finder's answer: the number from
+    the page link, else ``portfolioId``, else the list's key."""
+    for key, row in rows.items() if isinstance(rows, dict) else ():
+        code = _raw(row.get("isin")) if isinstance(row, dict) else None
+        if not isinstance(code, str):
+            continue
+        m = PRODUCT_PATH.search(str(_raw(row.get("productPageUrl")) or ""))
+        number = str(_raw(row.get("portfolioId")) or key)
+        if m or re.fullmatch(r"\d{4,8}", number):
+            yield code.strip().upper(), _product(m) if m else (number, "holdings"), row
+
+
+# ISIN -> product number of every iShares fund the fund finders listed, shipped with the release
+# (scripts/ishares_products.py, renewed weekly by .github/workflows/ishares-products.yml): no container has to
+# read the finders' megabytes for a fund in it. A number never changes, so the file only grows.
+PRODUCTS_FILE = Path(__file__).with_name("ishares_products.json")
+KNOWN: dict[str, str] = json.loads(PRODUCTS_FILE.read_text()) if PRODUCTS_FILE.exists() else {}
+
+
 class Sources:
     def __init__(self, *, transport: httpx.BaseTransport | None = None, timeout: float = 60.0):
         # Redirects only to the sources themselves; a browser's name, or the issuers' CDN refuses.
@@ -315,6 +337,8 @@ class Sources:
     def ishares_product(self, isin: str, *, search: bool = True) -> tuple[str, str] | None:
         """Product number and page name of the iShares fund with ``isin``, from the fund finders (each read at most
         once a pass, the next only while the ISIN is still unknown)."""
+        if isin in KNOWN:
+            return KNOWN[isin], "holdings"
         if self._ishares is None:
             self._ishares, self._pending = {}, list(ISHARES_SCREENERS)
         while isin not in self._ishares and self._pending:
@@ -334,20 +358,12 @@ class Sources:
         except ValueError:
             error = "iShares-Fondsfinder: Antwort ist kein JSON (vermutlich eine Zwischenseite)."
         found = 0
-        for key, row in rows.items() if isinstance(rows, dict) else ():
-            code = _raw(row.get("isin")) if isinstance(row, dict) else None
-            if not isinstance(code, str):
-                continue
-            m = PRODUCT_PATH.search(str(_raw(row.get("productPageUrl")) or ""))
-            number = str(_raw(row.get("portfolioId")) or key)
-            product = _product(m) if m else (number, "holdings") if re.fullmatch(r"\d{4,8}", number) else None
-            if product is None:
-                continue
+        for code, product, row in finder_rows(rows):
             if not known:  # names only, no values: which field holds the TER (#142)
                 log.info("iShares fund finder: fields of a product: %s", ", ".join(sorted(map(str, row))))
-            known.setdefault(code.strip().upper(), product)
+            known.setdefault(code, product)
             if (ter := _ter(row)) is not None:
-                self._ter.setdefault(code.strip().upper(), ter)
+                self._ter.setdefault(code, ter)
             found += 1
         if found:
             self._finder_ok, self.finder_error = True, ""
