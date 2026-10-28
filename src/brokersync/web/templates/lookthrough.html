@@ -34,8 +34,7 @@
 </div>
 
 {% if matrix %}
-<div class="card">
-  <h2>{{ _("Gesamt: Aktien über alle Positionen") }}</h2>
+<div class="card"><details class="panel"{% if matrix_open %} open{% endif %}><summary><h2>{{ _("Gesamt: Aktien über alle Positionen") }}</h2></summary>
   <p>{{ _("Zeigen:") }} {% for n in tops %}{% if n == matrix_top %}<strong aria-current="page">{{ _("Top {n}", n=n) }}</strong>{% else %}<a href="/lookthrough?top={{ n }}">{{ _("Top {n}", n=n) }}</a>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</p>
   <p>{{ _("{n} Aktien, effektive Titelzahl {effective}.", n=count, effective=effective | round | int) }}</p>
   <div class="table compact stocks"><table>
@@ -50,12 +49,11 @@
       <tbody>{{ matrix_rows(matrix[matrix_top:], matrix_top) }}</tbody></table></div>
   </details>{% endif %}
   {% if unassigned %}<p class="muted">{{ _("Nicht zugeordnet (Bargeld, Derivate, Rest der Gewichte): {share}.", share=pct(unassigned.share)) }}</p>{% endif %}
-</div>
+</details></div>
 {% endif %}
 
 {% if fund_list | length > 1 %}
-<div class="card">
-  <h2>{{ _("Wie sich die ETFs überschneiden") }}</h2>
+<div class="card"><details class="panel"><summary><h2>{{ _("Wie sich die ETFs überschneiden") }}</h2></summary>
   <div class="table heat" tabindex="0" role="region" aria-label="{{ _('Wie sich die ETFs überschneiden') }}"><table>
     <caption class="sr-only">{{ _("Wie sich die ETFs überschneiden") }}</caption>
     <thead><tr><th scope="col">{{ _("ETF") }}</th>{% for b in fund_list %}<th scope="col" class="num"><span aria-hidden="true">{{ loop.index }}</span><span class="sr-only">{{ b.name }}</span></th>{% endfor %}<th scope="col" class="num">{{ _("Eigener Beitrag") }}</th></tr></thead>
@@ -67,13 +65,13 @@
     {% endfor %}
     </tbody></table></div>
   <p class="muted">{{ _("Überschneidung in Prozent: Summe des jeweils kleineren Gewichts jeder Aktie, die beide ETFs halten. Je dunkler, desto mehr doppelt.") }}</p>
-</div>
+</details></div>
 {% endif %}
 
 {% for p in etfs %}{% set f = funds.get(p.id) %}{% set st = status[p.id] %}{% set lines = largest.get(p.id, []) %}{% set by = issuers[p.id] %}
-<div class="card">
-  <h2>{{ p.name }}</h2>
-  <p class="muted">{{ p.isin or _("ohne ISIN") }} · {{ p.value | money }} EUR ({{ pct(p.value / total) }}){% if f %} · {{ _("{n} Positionen von {source}, Stand {when}", n=lines | length, source=st.source or by or "iShares", when=f.at | local) }}{% else %} · {{ _("noch keine Positionsliste") }}{% endif %}</p>
+<div class="card"><details class="panel"><summary><h2>{{ p.name }}</h2>
+  <span class="muted">{{ p.isin or _("ohne ISIN") }} · {{ p.value | money }} EUR ({{ pct(p.value / total) }}){% if f %} · {{ _("{n} Positionen von {source}, Stand {when}", n=lines | length, source=st.source or by or "iShares", when=f.at | local) }}{% else %} · {{ _("noch keine Positionsliste") }}{% endif %}{% set t = ters[p.id] %}{% if t[0] is not none %} · {{ _("TER") }} {{ pct(t[0]) }}{% endif %}{% if st.status == "error" %} · <span class="error">{{ _("Abruf fehlgeschlagen") }}</span>{% endif %}</span></summary>
+  {% if p.isin %}<p><a href="https://www.finanzfluss.de/informer/etf/{{ p.isin | lower | urlencode }}/" target="_blank" rel="noopener noreferrer">{{ _("{name} bei Finanzfluss ansehen", name=p.name) }}</a></p>{% endif %}
   {% if f and st.note == "swap" %}<p class="muted">{{ _("Synthetischer ETF (Swap): die Liste ist der Wertpapierkorb des Fonds, nicht der Index, dessen Wertentwicklung er liefert.") }}</p>{% endif %}
   {% if st.status == "error" %}<p class="error" role="alert">{{ _("Abruf fehlgeschlagen {when}: {error}", when=st.at | local, error=st.error | redact) }}</p>{% endif %}
   <form method="post" action="/lookthrough/fetch" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}"><button class="secondary" {% if reading %}disabled{% endif %} aria-label="{{ _('Positionsliste von {name} jetzt abrufen', name=p.name) }}">{{ _("Jetzt abrufen") }}</button></form>
@@ -110,11 +108,11 @@
     {% if by not in auto %}<p>{{ _("Dieser Anbieter lässt keinen automatischen Abruf zu: Lade die Positionsliste von der Seite des ETFs herunter (CSV oder Excel) und hier hoch. Sie gilt, bis du eine neue hochlädst.") }}</p>
     <form method="post" action="/lookthrough/upload" enctype="multipart/form-data" class="inline-form">
             <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
-            <label>{{ _("Positionsliste für {name} (CSV oder XLSX)", name=p.name) }} <input type="file" name="file" accept=".csv,.xlsx,text/csv" required></label>
+            <label>{{ _("Positionsliste für {name} (CSV, XLSX oder XLS)", name=p.name) }} <input type="file" name="file" accept=".csv,.xlsx,.xls,text/csv" required></label>
             <div class="actions"><button>{{ _("Hochladen") }}</button></div>
           </form>{% endif %}
   </details>
-</div>
+</details></div>
 {% endfor %}
 {% if positions and not etfs %}<div class="card"><p class="muted">{{ _("Kein ETF in Wealthfolio gefunden.") }}</p></div>{% endif %}
 {% if not positions and not reading %}<div class="card"><p class="muted">{{ _("Keine Positionen in Wealthfolio.") }}</p></div>{% endif %}

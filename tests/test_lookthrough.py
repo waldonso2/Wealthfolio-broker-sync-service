@@ -116,6 +116,8 @@ def test_an_uploaded_ubs_list_is_read():
                + [[f"EXAMPLE {n} CORP", i, "0000000", "USD", "1'430.00", "19.9"] for n, i in enumerate(FIVE)])
     lines = parse_file(doc)
     assert len(lines) == 5 and lines[0].name == "EXAMPLE 0 CORP" and lines[0].weight == D("0.199")
+    with pytest.raises(SourceError, match="XLSX oder CSV"):
+        parse_file(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + bytes(504))
 
 # Fabricated, in the layout of iShares' fund finder data (product-screener-v3.1.jsn).
 SCREENER = json.dumps({
@@ -670,7 +672,7 @@ def issuers(answers: dict[str, httpx.Response]) -> tuple[Sources, list[str]]:
 
 def test_an_spdr_fund_is_found_by_its_ticker_in_the_fund_finder():
     kid = "/library-content/kids?isin=IE00B6YX5C33&documentType=kid&country=de&language=en&ticker=spy5-gy"
-    finder = {"data": {"funds": {"etfs": {"datas": [{"fundName": "Example", "documentPdf": [
+    finder = {"data": {"funds": {"etfs": {"datas": [{"fundName": "Example", "ter": ["0,12%", 0.12], "documentPdf": [
         {"docType": "Kid", "docs": [{"path": kid}]}]}]}}}}
     doc = xlsx([["Fund Name:", "SPDR Example"], ["ISIN:", "IE00B6YX5C33"], [],
                 ["ISIN", "SEDOL", "Security Name", "Currency", "Percent of Fund", "Trade Country Name"]]
@@ -679,7 +681,7 @@ def test_an_spdr_fund_is_found_by_its_ticker_in_the_fund_finder():
                         "en-spy5-gy.xlsx": httpx.Response(200, content=doc)})
     lines, source = fetch(s, "IE00B6YX5C33", by="SPDR")
     assert source == "SPDR" and len(lines) == 5 and lines[0].key == FIVE[0] and lines[0].weight == D("0.195")
-    assert lines[0].country == "United States"
+    assert lines[0].country == "United States" and s.ter("IE00B6YX5C33") == D("0.0012")
     with pytest.raises(NoSource):
         fetch(s, "IE0000000017", by="SPDR")  # not in the finder
     assert sum("fundfinder" in a for a in asked) == 1  # read once a pass
@@ -690,11 +692,12 @@ def test_an_amundi_fund_comes_from_its_product_api_and_a_swap_says_so():
                                             "countryOfRisk": "France", "currency": "EUR"}, "weight": 0.19}
             for n, i in enumerate(FIVE)]
     answer = {"products": [{"productId": "LU1681043599", "characteristics": {
-        "FUND_REPLICATION_METHODOLOGY": "Indirect(Swap Based)"}, "composition": {"compositionData": rows}}]}
+        "FUND_REPLICATION_METHODOLOGY": "Indirect(Swap Based)", "TER": 0.38},
+        "composition": {"compositionData": rows}}]}
     s, asked = issuers({"getProductsData": httpx.Response(200, json=answer)})
     lines, source = fetch(s, "LU1681043599", by="Amundi")
     assert source == "Amundi" and len(lines) == 5 and lines[0].weight == D("0.19") and lines[0].country == "France"
-    assert s.note == "swap"
+    assert s.note == "swap" and s.ter("LU1681043599") == D("0.0038")
     s, _ = issuers({"getProductsData": httpx.Response(200, json={"products": [{"composition": {}}]})})
     with pytest.raises(NoSource):
         fetch(s, "LU0000000000", by="Amundi")
@@ -782,11 +785,13 @@ def test_an_ark_fund_is_found_on_its_page_and_its_full_holdings_downloaded():
                + [[f"EXAMPLE {n} INC COM", i, "19.90%", "USD"] for n, i in enumerate(FIVE)])
     s, asked = issuers({"robotics/full-fund-holdings-download": httpx.Response(200, content=doc),
                         "/de/funds/active-etfs/artificial-intelligence-robotics/": httpx.Response(
-                            200, text="<strong>ISIN:</strong> IE0003A512E4"),
+                            200, text="<strong>ISIN:</strong> IE0003A512E4 <tr>\n<td>Gesamtkostenquote</td>\n"
+                            "<td>0.75%</td>"),
                         "/de/funds/index-etfs/": httpx.Response(200, text="ISIN IE00BJXRZJ40"),
                         "/de/funds/": httpx.Response(200, text=listing)})
     lines, source = fetch(s, "IE0003A512E4", by="ARK")
     assert source == "ARK" and len(lines) == 5 and lines[0].key == FIVE[0] and lines[0].weight == D("0.199")
+    assert s.ter("IE0003A512E4") == D("0.0075")
     with pytest.raises(NoSource):
         fetch(s, "IE0000000017", by="ARK")
     assert sum(a.endswith("/de/funds/") for a in asked) == 1
@@ -801,13 +806,17 @@ def test_a_hanetf_fund_is_read_from_its_holdings_file_by_the_shipped_code(monkey
                  "Exposure Country", "Region", "ISIN", "Weight"]]
                + [[f"EXAMPLE {n} AG", "100", "1000", "EUR", "0000000", "Germany", "Europe", i, "0.199"]
                   for n, i in enumerate(FIVE)])
-    s, asked = issuers({"Holdings-EXMP-IE0000000017-all-all.xlsx": httpx.Response(200, content=doc)})
+    products = xlsx([["ETFs/ETCs", "Ticker", "ISIN", "TER"],
+                     ["Example UCITS ETF", "EXMP GY", "IE0000000017", "0.0049"]])
+    s, asked = issuers({"Holdings-EXMP-IE0000000017-all-all.xlsx": httpx.Response(200, content=doc),
+                        "productlist-all": httpx.Response(200, content=products)})
     lines, source = fetch(s, "IE0000000017", by="HANetf")
+    assert s.ter("IE0000000017") == D("0.0049")
     assert source == "HANetf" and len(lines) == 5 and lines[0].key == FIVE[0] and lines[0].weight == D("0.199")
     assert lines[0].country == "Germany" and lines[0].currency == "EUR"
     with pytest.raises(NoSource):
         fetch(s, "IE0000000025", by="HANetf")  # no shipped code: nothing asked
-    assert len(asked) == 1
+    assert len(asked) == 2  # the holdings and, once a pass, the product list with the TERs
     assert lookthrough.issuer({"name": "Sprott Example Miners UCITS ETF", "isin": "IE0000000017"}, {}) == "HANetf"
 
 

@@ -132,6 +132,10 @@ details > summary::-webkit-details-marker { display: none; }
 details > summary::before { content: "›"; display: inline-block; transition: transform .15s; font-size: 16px; }
 details[open] > summary::before { transform: rotate(90deg); }
 details pre { max-width: 100%; overflow-x: auto; }
+details.panel { margin-top: 0; }
+details.panel > summary { color: var(--text); font-size: 14px; display: flex; flex-wrap: wrap; column-gap: 8px; }
+details.panel > summary h2 { margin: 0; }
+details.panel > summary .muted { flex-basis: 100%; }
 
 /* Tables */
 table { width: 100%; border-collapse: collapse; font-size: 14px; }

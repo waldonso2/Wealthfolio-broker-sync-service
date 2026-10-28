@@ -177,9 +177,11 @@ VANECK_HOLDINGS = VANECK + "/Main/HoldingsBlock/GetContent/?blockid={block}&page
 ARK = "https://europe.ark-funds.com"
 ARK_LIST = ARK + "/de/funds/"
 ARK_DOC = ARK + "/funds/{fund}/full-fund-holdings-download/"
+ARK_TER = re.compile(r"Gesamtkostenquote</td>\s*<td>\s*(\d+[.,]\d+)\s*%")  # the fund page's facts table
 # HANetf: the holdings XLSX lies under the fund's code and ISIN (the code from the shipped list - HANetf's site
 # answers automatic requests with a bot check, its files don't).
 HANETF_DOC = "https://hanetf.com/wp-content/assets/upload/Holdings-{code}-{isin}-all-all.xlsx"
+HANETF_LIST = "https://hanetf.com/wp-content/assets/upload/productlist-all-all-all-all.xlsx"  # ISIN, TER (a share)
 # The product page's "Daten herunterladen" (10/2026): an Excel 2003 XML workbook of the fund, by product number;
 # the holdings are its sheet "Holdings". The page's old CSV address answers with the page itself since then.
 ISHARES_DOC = ("https://www.blackrock.com/varnish-api/uk-retail01-product-data/product-data/api/v1/get-fund-document"
@@ -315,7 +317,9 @@ def _rows_to_csv(rows: list[list[str]]) -> bytes:
 
 
 def parse_file(data: bytes) -> tuple[Constituent, ...]:
-    """A holdings file as CSV or XLSX."""
+    """A holdings file as CSV or XLSX (also when it is named .xls, like UBS' download)."""
+    if data[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":  # the binary Excel 97 format (OLE2)
+        raise SourceError(N_("Altes Excel-Format (XLS): bitte in Excel als XLSX oder CSV speichern und hochladen."))
     if data[:2] != b"PK":
         return parse(data)
     return parse(_rows_to_csv(xlsx_rows(data)))
@@ -328,8 +332,9 @@ def _usable(lines: tuple[Constituent, ...], source: str) -> tuple[Constituent, .
     return lines
 
 
-# The fund finder's fields that may carry the TER (#142); unverified - a pass logs a product's field names.
-TER_FIELDS = ("ter", "fees", "ongoingCharges", "ongoingChargesRatio", "netExpenseRatio", "totalExpenseRatio")
+# The fields that carry the TER in percent (#142): iShares' screener has "ter" ("-" when empty) and "ter_ocf", SPDR's
+# fund finder "ter" as ["0,30%", 0.3], Amundi's product API the characteristic "TER".
+TER_FIELDS = ("ter", "ter_ocf", "onGoingCharges", "fees", "totalExpenseRatio")
 
 
 def _ter(row: dict) -> Decimal | None:
@@ -338,6 +343,8 @@ def _ter(row: dict) -> Decimal | None:
         value = row.get(key)
         if isinstance(value, dict):  # {"r": 0.2, "d": "0.20"}: raw and display value
             value = value.get("r", value.get("raw", value.get("d")))
+        if isinstance(value, list):  # ["0,30%", 0.3]: display and raw value
+            value = value[-1] if value else None
         try:
             number = Decimal(str(value).replace("%", "").replace(",", ".").strip())
         except InvalidOperation:
@@ -398,6 +405,7 @@ class Sources:
         self._vanguard: dict[str, str] | None = None
         self._vaneck: dict[str, str] | None = None
         self._ark: dict[str, str] | None = None
+        self._hanetf_ter = False
         self._sent = 0.0
 
     @property
@@ -481,7 +489,7 @@ class Sources:
         return found
 
     def ter(self, isin: str) -> Decimal | None:
-        """The TER the fund finder lists for ``isin`` (after ``ishares_product``)."""
+        """The TER the issuer lists for ``isin``, as far as a fetch of this pass read it."""
         return self._ter.get(isin)
 
     def close(self) -> None:
@@ -548,6 +556,14 @@ class Sources:
         if self._spdr is None:  # the fund finder once a pass: ISIN -> ticker
             finder = (self._get(SPDR_FINDER, "SPDR-Fondsfinder") or b"").decode(errors="replace")
             self._spdr = dict(SPDR_KID.findall(finder))
+            try:
+                funds = json.loads(finder)["data"]["funds"]["etfs"]["datas"]
+            except (ValueError, KeyError, TypeError):
+                funds = []
+            for row in funds if isinstance(funds, list) else []:
+                if isinstance(row, dict) and (ter := _ter(row)) is not None:
+                    for code, _ticker in SPDR_KID.findall(json.dumps(row)):
+                        self._ter.setdefault(code, ter)
         if not (ticker := self._spdr.get(isin)):
             return None
         data = self._get(SPDR_DOC.format(ticker=ticker), "SPDR")
@@ -557,7 +573,8 @@ class Sources:
 
     def amundi(self, isin: str) -> tuple[Constituent, ...] | None:
         body = {"context": {"countryCode": "DEU", "languageCode": "de", "userProfileName": "RETAIL"},
-                "productIds": [isin], "productType": "PRODUCT", "characteristics": ["FUND_REPLICATION_METHODOLOGY"],
+                "productIds": [isin], "productType": "PRODUCT",
+                "characteristics": ["FUND_REPLICATION_METHODOLOGY", "TER"],
                 "composition": {"compositionFields": ["isin", "name", "weight", "currency", "sector", "countryOfRisk",
                                                       "bbg"]}}
         try:
@@ -568,8 +585,11 @@ class Sources:
                 for r in (product.get("composition") or {}).get("compositionData") or []]
         if not rows:
             return None
-        if "swap" in str((product.get("characteristics") or {}).get("FUND_REPLICATION_METHODOLOGY", "")).lower():
+        characteristics = product.get("characteristics") or {}
+        if "swap" in str(characteristics.get("FUND_REPLICATION_METHODOLOGY", "")).lower():
             self.note = "swap"
+        if (ter := _ter({"ter": characteristics.get("TER")})) is not None:
+            self._ter.setdefault(isin, ter)
         return records([{**r, "country": r.get("countryOfRisk"), "ticker": r.get("bbg")} for r in rows], "Amundi")
 
     def _graphql(self, query: str, variables: dict) -> dict:
@@ -665,13 +685,39 @@ class Sources:
         data = self._get(ARK_DOC.format(fund=fund), "ARK")
         if not data or data[:2] != b"PK":
             raise SourceError(f"ARK: keine Positionsliste zu {fund}.")
-        return self._file(data, "ARK")
+        lines = self._file(data, "ARK")
+        try:
+            page = (self._get(f"{ARK_LIST}{fund}/", "ARK") or b"").decode(errors="replace")
+        except SourceError:  # the TER only: the list stands without it
+            page = ""
+        if (m := ARK_TER.search(page)) and (ter := _ter({"ter": m.group(1)})) is not None:
+            self._ter.setdefault(isin, ter)
+        return lines
+
+    def hanetf_ters(self) -> None:
+        """Every HANetf fund's TER from its product list (once a pass; the TER column is a share, not percent)."""
+        try:
+            data = self._get(HANETF_LIST, "HANetf") or b""
+            table = xlsx_rows(data) if data[:2] == b"PK" else []
+        except SourceError:
+            table = []
+        header = next((i for i, r in enumerate(table) if "ISIN" in r and "TER" in r), None)
+        if header is None:
+            return
+        isin, share = table[header].index("ISIN"), table[header].index("TER")
+        for row in table[header + 1:]:
+            number = _number(row[share]) if len(row) > max(isin, share) else None
+            if number is not None and (ter := _ter({"ter": number * 100})) is not None:
+                self._ter.setdefault(row[isin], ter)
 
     def hanetf(self, isin: str) -> tuple[Constituent, ...] | None:
         # shortcut: only the shipped codes - a fund HANetf launches later needs the list renewed (its product list
         # sits behind the bot check)
         if not (code := PRODUCTS.get("HANetf", {}).get(isin)):
             return None
+        if not self._hanetf_ter:
+            self._hanetf_ter = True
+            self.hanetf_ters()
         data = self._get(HANETF_DOC.format(code=code, isin=isin), "HANetf")
         if not data or data[:2] != b"PK":
             raise SourceError(f"HANetf: keine Positionsliste zu {code}.")
@@ -877,7 +923,7 @@ def update(state: State, depot: Depot, sources: Sources, *, force: bool = False,
                 result.errors.append(f"{p['name']}: {e}")
         else:
             state.set_fund(p["id"], p["name"], rows(lines))
-            ter = sources.ter(p["isin"]) if source == "iShares" else None
+            ter = sources.ter(p["isin"])
             set_status(state, p["id"], status="ok", source=source, error="", lines=len(lines), product=sources.last,
                        note=sources.note,
                        **({"ter": str(ter), "ter_source": source, "ter_at": now()} if ter is not None else {}))
