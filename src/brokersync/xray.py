@@ -62,10 +62,14 @@ class Exposure:
 
 
 def weights(holding: Holding) -> dict[str, Decimal]:
-    """Weight per company key; lines with the same key added up."""
-    out: dict[str, Decimal] = {}
+    """Weight per company key; lines with the same key added up. Kept on the holding: the page asks it for every
+    pair of funds (overlap) - don't change the dict."""
+    if (out := holding.__dict__.get("_weights")) is not None:
+        return out
+    out = {}
     for c in holding.constituents:
         out[c.key] = out.get(c.key, Decimal(0)) + c.weight
+    object.__setattr__(holding, "_weights", out)  # frozen: the cache only
     return out
 
 

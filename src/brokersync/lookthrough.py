@@ -141,12 +141,13 @@ def parse(data: bytes) -> tuple[Constituent, ...]:
 # ── fetching ─────────────────────────────────────────────────────────────────
 HOSTS = ("www.ishares.com", "www.blackrock.com", "etf.dws.com", "www.ssga.com", "www.amundietf.de",
          "dng-api.invesco.com", "www.vanguard.co.uk", "www.vaneck.com", "europe.ark-funds.com",
-         "fundcentres.lgim.com", "fundcentres.landg.com", "hanetf.com")
+         "fundcentres.lgim.com", "fundcentres.landg.com", "hanetf.com", "www.finanzfluss.de")
 BROWSER = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 MAX_BYTES = 20 * 1024 * 1024
 MAX_COLUMN = 16384  # Excel's last column, XFD
 REFRESH_DAYS = 0.75  # daily: the timer runs once a day, so the next day's run must find a list due
 NONE_DAYS = 30  # an ISIN no source knows is asked again after this
+TER_DAYS = 30  # Finanzfluss is asked for a fund's TER again after this
 PAUSE = 1.5  # seconds between two requests to an issuer: iShares answers a burst with HTTP 429
 DWS = "https://etf.dws.com/etfdata/export/DEU/DEU/excel/product/constituent/{isin}/"
 # SPDR: the fund finder names each fund's ISIN and ticker (in its KID links); the daily holdings are an XLSX by ticker.
@@ -181,6 +182,10 @@ ARK_TER = re.compile(r"Gesamtkostenquote</td>\s*<td>\s*(\d+[.,]\d+)\s*%")  # the
 # HANetf: the holdings XLSX lies under the fund's code and ISIN (the code from the shipped list - HANetf's site
 # answers automatic requests with a bot check, its files don't).
 HANETF_DOC = "https://hanetf.com/wp-content/assets/upload/Holdings-{code}-{isin}-all-all.xlsx"
+# Finanzfluss: every ETF's page names its TER in the page's FAQ data ("… hat eine Gesamtkostenquote (TER) von 0,22%") -
+# the TER of a fund whose issuer lists none (Xtrackers, Invesco, Vanguard, VanEck, UBS, …), by ISIN.
+FINANZFLUSS = "https://www.finanzfluss.de/informer/etf/{isin}/"
+FINANZFLUSS_TER = re.compile(r"Gesamtkostenquote \(TER\) von (\d+(?:,\d+)?)\s*%")
 HANETF_LIST = "https://hanetf.com/wp-content/assets/upload/productlist-all-all-all-all.xlsx"  # ISIN, TER (a share)
 # The product page's "Daten herunterladen" (10/2026): an Excel 2003 XML workbook of the fund, by product number;
 # the holdings are its sheet "Holdings". The page's old CSV address answers with the page itself since then.
@@ -694,6 +699,10 @@ class Sources:
             self._ter.setdefault(isin, ter)
         return lines
 
+    def finanzfluss_ter(self, isin: str) -> Decimal | None:
+        page = (self._get(FINANZFLUSS.format(isin=isin.lower()), "Finanzfluss") or b"").decode(errors="replace")
+        return _ter({"ter": m.group(1)}) if (m := FINANZFLUSS_TER.search(page)) else None
+
     def hanetf_ters(self) -> None:
         """Every HANetf fund's TER from its product list (once a pass; the TER column is a share, not percent)."""
         try:
@@ -928,9 +937,31 @@ def update(state: State, depot: Depot, sources: Sources, *, force: bool = False,
                        note=sources.note,
                        **({"ter": str(ter), "ter_source": source, "ter_at": now()} if ter is not None else {}))
             result.fetched += 1
+    _fill_ters(state, depot, sources, deadline, only, force)
     record(state, fetched=result.fetched, none=result.none, failed=len(result.errors),
            finder=sources.finder_error)
     return result
+
+
+def _fill_ters(state: State, depot: Depot, sources: Sources, deadline: float, only: str, force: bool) -> None:
+    """A fund whose issuer lists no TER gets Finanzfluss' (also an uploaded one); the user's own stays first."""
+    funds = state.funds()
+    for p in depot.positions:
+        st = status(state, p["id"])
+        if (only and p["id"] != only) or not p["isin"] or not (p["id"] in funds or is_fund(p, st)):
+            continue
+        if (st.get("ter") and st.get("ter_source") != "Finanzfluss") or (
+                not force and _days(st.get("ter_asked")) < TER_DAYS):
+            continue  # the issuer's, or Finanzfluss asked lately (with or without an answer)
+        if time.monotonic() > deadline:
+            break
+        try:
+            ter = sources.finanzfluss_ter(p["isin"])
+        except SourceError as e:
+            log.info("look-through: no TER from Finanzfluss for %s: %s", p["isin"], e)
+            continue
+        found = {"ter": str(ter), "ter_source": "Finanzfluss", "ter_at": now()} if ter is not None else {}
+        set_status(state, p["id"], ter_asked=now(), **found)
 
 
 def _unknown(by: str, isin: str) -> str:
@@ -1029,13 +1060,39 @@ def new_risks(state: State, found: list[xray.Finding]) -> list[xray.Finding]:
 
 # ── into Wealthfolio's taxonomies ────────────────────────────────────────────
 SOURCE = "BROKERSYNC"  # the assignments' source: ours; AUTO is Yahoo's, anything else the user's
-# The issuers' names that differ from Wealthfolio's category names (all lower case).
-ALIASES = {"usa": "united states", "united states of america": "united states", "us": "united states",
-           "uk": "united kingdom", "great britain": "united kingdom", "korea (south)": "south korea",
-           "korea, republic of": "south korea", "korea": "south korea", "netherlands (the)": "netherlands",
-           "russian federation": "russia", "taiwan, province of china": "taiwan", "hong kong sar": "hong kong",
-           "communication": "communication services", "telecommunication services": "communication services",
-           "telecommunications": "communication services", "it": "information technology"}
+# The issuers' sector names that differ from Wealthfolio's GICS sectors (all lower case), German ones included -
+# iShares' German download and DWS name them in German.
+ALIASES = {"communication": "communication services", "telecommunication services": "communication services",
+           "telecommunications": "communication services", "it": "information technology",
+           "informationstechnologie": "information technology", "finanzwesen": "financials",
+           "finanzen": "financials", "gesundheitswesen": "health care", "gesundheitsversorgung": "health care",
+           "gesundheit": "health care", "industrie": "industrials", "nicht-basiskonsumgüter": "consumer discretionary",
+           "zyklische konsumgüter": "consumer discretionary", "basiskonsumgüter": "consumer staples",
+           "nichtzyklische konsumgüter": "consumer staples", "kommunikation": "communication services",
+           "kommunikationsdienste": "communication services", "energie": "energy", "materialien": "materials",
+           "roh-, hilfs- & betriebsstoffe": "materials", "grundstoffe": "materials", "versorger": "utilities",
+           "versorgungsbetriebe": "utilities", "immobilien": "real estate"}
+# A country as ISO 3166-1 alpha-2, as Wealthfolio keys its regions (``country_US``): the issuers' spellings that
+# aren't Wealthfolio's English name - German ones (iShares' German download, DWS, VanEck) and English variants.
+# A two-letter code (Vanguard) is taken as it is. Names Wealthfolio has, in English, need no entry.
+COUNTRIES = {
+    "usa": "us", "united states of america": "us", "vereinigte staaten": "us", "vereinigte staaten von amerika": "us",
+    "uk": "gb", "great britain": "gb", "vereinigtes königreich": "gb", "großbritannien": "gb",
+    "korea": "kr", "korea (south)": "kr", "korea, republic of": "kr", "south korea": "kr", "republic of korea": "kr",
+    "südkorea": "kr", "korea (süd)": "kr", "republik korea": "kr", "netherlands (the)": "nl", "niederlande": "nl",
+    "russian federation": "ru", "russland": "ru", "russische föderation": "ru", "taiwan, province of china": "tw",
+    "taiwan (republik china)": "tw", "hong kong sar": "hk", "hongkong": "hk", "czech republic": "cz",
+    "tschechien": "cz", "tschechische republik": "cz", "türkiye": "tr", "turkey": "tr", "türkei": "tr",
+    "kanada": "ca", "frankreich": "fr", "deutschland": "de", "schweiz": "ch", "indien": "in", "brasilien": "br",
+    "australien": "au", "spanien": "es", "italien": "it", "schweden": "se", "dänemark": "dk", "norwegen": "no",
+    "finnland": "fi", "irland": "ie", "belgien": "be", "österreich": "at", "singapur": "sg", "neuseeland": "nz",
+    "mexiko": "mx", "südafrika": "za", "saudi-arabien": "sa", "vereinigte arabische emirate": "ae", "katar": "qa",
+    "indonesien": "id", "philippinen": "ph", "polen": "pl", "griechenland": "gr", "kolumbien": "co",
+    "argentinien": "ar", "ungarn": "hu", "luxemburg": "lu", "kaimaninseln": "ky", "cayman-inseln": "ky",
+    "insel man": "im", "ägypten": "eg", "zypern": "cy", "estland": "ee", "lettland": "lv", "litauen": "lt",
+    "slowenien": "si", "slowakei": "sk", "rumänien": "ro", "kroatien": "hr", "marokko": "ma", "kenia": "ke",
+    "kasachstan": "kz", "britische jungferninseln": "vg", "jordanien": "jo", "bangladesch": "bd", "island": "is",
+    "china (volksrepublik)": "cn", "volksrepublik china": "cn", "macao": "mo", "makau": "mo"}
 # Taxonomy, the line's attribute, and which of its categories count (countries; the GICS sectors).
 TAXONOMIES = (("regions", "country", lambda c: str(c.get("id", "")).startswith("country_")),
               ("industries_gics", "sector", lambda c: not c.get("parentId")))
@@ -1055,7 +1112,7 @@ def _bp(lines: list[list[str]], attr: int, categories: dict[str, str], unmatched
         name = line[attr].strip().lower()
         if not name:
             continue
-        category = categories.get(ALIASES.get(name, name))
+        category = categories.get(COUNTRIES.get(name, name) if attr == 3 else ALIASES.get(name, name))
         if category is None:
             unmatched.add(line[attr].strip())
             continue
@@ -1073,6 +1130,7 @@ def write_taxonomies(state: State, wf, depot: Depot) -> Written:
     result, unmatched = Written(), set[str]()
     categories = {tax: {str(c.get("name", "")).lower(): c["id"] for c in wf.taxonomy_categories(tax) if counts(c)}
                   for tax, _, counts in TAXONOMIES}
+    categories["regions"].update({c[len("country_"):].lower(): c for c in list(categories["regions"].values())})
     funds = state.funds()
     for p in depot.positions:
         fund = funds.get(p["id"])

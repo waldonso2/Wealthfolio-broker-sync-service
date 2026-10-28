@@ -1096,6 +1096,10 @@ EN: dict[str, str] = {
     "Produktseite bei iShares für {name}": "iShares product page for {name}",
     "Positionsliste für {name} (CSV, XLSX oder XLS)": "Holdings list for {name} (CSV, XLSX or XLS)",
     "Abruf fehlgeschlagen": "Fetch failed",
+    "Alle {n}": "All {n}",
+    "ETFs ({n})": "ETFs ({n})",
+    "Nur die größten {n} zeigen": "Show only the {n} largest",
+    "Alle {n} Positionen von {name} zeigen": "Show all {n} holdings of {name}",
     "Altes Excel-Format (XLS): bitte in Excel als XLSX oder CSV speichern und hochladen.":
         "Old Excel format (XLS): please save it as XLSX or CSV in Excel and upload that.",
     "{name} bei Finanzfluss ansehen": "View {name} on Finanzfluss",
@@ -1151,10 +1155,6 @@ EN: dict[str, str] = {
         "Which stocks your iShares ETFs hold and how they add up with your other positions. The service fetches the "
         "holdings lists from iShares itself every morning; other ETFs count as one position for now.",
     "Gesamt: Aktien über alle Positionen": "Overall: stocks across all positions",
-    "Alle {n} Aktien": "All {n} stocks",
-    "Weitere Aktien über alle Positionen": "More stocks across all positions",
-    "Alle {n} Positionen": "All {n} holdings",
-    "Weitere Positionen von {name}": "More holdings of {name}",
     "Einstellungen dieses ETFs": "Settings of this ETF",
     "Ohne Liste: Such den ETF bei iShares, öffne den Treffer und füg die Adresse seiner Seite hier ein - einmal "
     "genügt.":
