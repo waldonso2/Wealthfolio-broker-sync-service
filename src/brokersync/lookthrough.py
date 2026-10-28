@@ -140,7 +140,7 @@ def parse(data: bytes) -> tuple[Constituent, ...]:
 
 # ── fetching ─────────────────────────────────────────────────────────────────
 HOSTS = ("www.ishares.com", "www.blackrock.com", "etf.dws.com", "www.ssga.com", "www.amundietf.de",
-         "dng-api.invesco.com", "www.vanguard.co.uk", "www.vaneck.com")
+         "dng-api.invesco.com", "www.vanguard.co.uk", "www.vaneck.com", "europe.ark-funds.com")
 BROWSER = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 MAX_BYTES = 20 * 1024 * 1024
 MAX_COLUMN = 16384  # Excel's last column, XFD
@@ -172,6 +172,10 @@ VANECK = "https://www.vaneck.com"
 VANECK_LIST = VANECK + "/de/de/factsheets/etfs/"
 VANECK_PAGE = VANECK + "/de/de/anlagen/{slug}/positionen/"
 VANECK_HOLDINGS = VANECK + "/Main/HoldingsBlock/GetContent/?blockid={block}&pageid={page}&ticker={ticker}"
+# ARK Europe (also the Rize ETFs): each fund page names its ISIN; the full holdings are an XLSX below the page.
+ARK = "https://europe.ark-funds.com"
+ARK_LIST = ARK + "/de/funds/"
+ARK_DOC = ARK + "/funds/{fund}/full-fund-holdings-download/"
 # The product page's "Daten herunterladen" (10/2026): an Excel 2003 XML workbook of the fund, by product number;
 # the holdings are its sheet "Holdings". The page's old CSV address answers with the page itself since then.
 ISHARES_DOC = ("https://www.blackrock.com/varnish-api/uk-retail01-product-data/product-data/api/v1/get-fund-document"
@@ -380,6 +384,7 @@ class Sources:
         self._spdr: dict[str, str] | None = None
         self._vanguard: dict[str, str] | None = None
         self._vaneck: dict[str, str] | None = None
+        self._ark: dict[str, str] | None = None
         self._sent = 0.0
 
     @property
@@ -620,6 +625,28 @@ class Sources:
                          "country": r.get("Country"), "sector": r.get("Sector"), "currency": r.get("CurrencyCode")}
                         for r in rows], "VanEck") if rows else None
 
+    def ark_ids(self) -> dict[str, str]:
+        """ISIN -> "<kind>/<slug>" of every fund on ARK Europe's fund list."""
+        found: dict[str, str] = {}
+        listing = (self._get(ARK_LIST, "ARK") or b"").decode(errors="replace")
+        for fund in sorted(set(re.findall(r'href="/de/funds/([a-z-]+/[a-z0-9-]+)/"', listing))):
+            page = (self._get(f"{ARK_LIST}{fund}/", "ARK") or b"").decode(errors="replace")
+            for code in set(re.findall(r"\bIE[A-Z0-9]{9}\d\b", page)):
+                if valid_isin(code):
+                    found.setdefault(code, fund)
+        return found
+
+    def ark(self, isin: str) -> tuple[Constituent, ...] | None:
+        if not (fund := PRODUCTS.get("ARK", {}).get(isin)):
+            if self._ark is None:
+                self._ark = self.ark_ids()
+            if not (fund := self._ark.get(isin)):
+                return None
+        data = self._get(ARK_DOC.format(fund=fund), "ARK")
+        if not data or data[:2] != b"PK":
+            raise SourceError(f"ARK: keine Positionsliste zu {fund}.")
+        return self._file(data, "ARK")
+
     def invesco(self, isin: str) -> tuple[Constituent, ...] | None:
         error: SourceError | None = None
         for kind in ("index", "fund"):
@@ -753,10 +780,11 @@ ISSUERS = {"iShares": r"\bishares\b", "SPDR": r"\bspdr\b|state street", "Xtracke
            "L&G": r"\bl ?& ?g\b|legal ?& ?general", "VanEck": r"\bvan ?eck\b", "WisdomTree": r"wisdom ?tree",
            "HSBC": r"\bhsbc\b", "UBS": r"\bubs\b", "Franklin": r"\bfranklin\b",
            "J.P. Morgan": r"\bjpm\b|j\.? ?p\.? ?morgan", "Fidelity": r"\bfidelity\b", "Global X": r"\bglobal ?x\b",
-           "Deka": r"\bdeka\b", "First Trust": r"first trust",
-           "BNP Paribas": r"\bbnp\b", "HANetf": r"\bhan-?etf\b"}
+           "Deka": r"\bdeka\b", "First Trust": r"first trust", "ARK": r"\bark\b|\brize\b",
+           "BNP Paribas": r"\bbnp\b",
+           "HANetf": r"\bhan-?etf\b|future of defence|\bemqq\b"}
 FETCHERS = {"Xtrackers": "xtrackers", "SPDR": "spdr", "Amundi": "amundi", "Invesco": "invesco", "Vanguard": "vanguard",
-            "VanEck": "vaneck"}
+            "VanEck": "vaneck", "ARK": "ark"}
 FUND_NAME = re.compile(r"\b(?:etf|ucits|fonds|fund|index|msci|ftse|s&p ?500|stoxx|nasdaq)\b", re.I)
 
 
@@ -833,8 +861,9 @@ def _unknown(by: str, isin: str) -> str:
                 "ETFs“ seine Produktseite bei iShares ein.")
     if by in FETCHERS:
         return f"{by} kennt die ISIN {isin} nicht."
-    return (f"Für {by} gibt es noch keinen automatischen Abruf." if by else
-            "Der Anbieter dieses ETFs ist unbekannt - kein automatischer Abruf.")
+    upload = " Lade seine Positionsliste unter „Einstellungen dieses ETFs“ hoch."
+    return (f"Für {by} gibt es keinen automatischen Abruf.{upload}" if by else
+            f"Der Anbieter dieses ETFs ist unbekannt - kein automatischer Abruf.{upload}")
 
 
 def _failed(state: State, p: dict, result: Result, e: SourceError) -> None:

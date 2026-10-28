@@ -764,3 +764,23 @@ def test_a_vaneck_fund_is_found_on_its_holdings_page_and_read_from_its_block():
     with pytest.raises(NoSource):
         fetch(s, "IE0000000017", by="VanEck")
     assert sum("factsheets" in a for a in asked) == 1  # the site's list once a pass
+
+
+def test_an_ark_fund_is_found_on_its_page_and_its_full_holdings_downloaded():
+    listing = ('<a href="/de/funds/active-etfs/artificial-intelligence-robotics/">AI</a>'
+               '<a href="/de/funds/index-etfs/cybersecurity-and-data-privacy/">Cyber</a>')
+    doc = xlsx([["Data from 28/10/2026"], ["Name", "ISIN", "Weight", "Currency"]]
+               + [[f"EXAMPLE {n} INC COM", i, "19.90%", "USD"] for n, i in enumerate(FIVE)])
+    s, asked = issuers({"robotics/full-fund-holdings-download": httpx.Response(200, content=doc),
+                        "/de/funds/active-etfs/artificial-intelligence-robotics/": httpx.Response(
+                            200, text="<strong>ISIN:</strong> IE0003A512E4"),
+                        "/de/funds/index-etfs/": httpx.Response(200, text="ISIN IE00BJXRZJ40"),
+                        "/de/funds/": httpx.Response(200, text=listing)})
+    lines, source = fetch(s, "IE0003A512E4", by="ARK")
+    assert source == "ARK" and len(lines) == 5 and lines[0].key == FIVE[0] and lines[0].weight == D("0.199")
+    with pytest.raises(NoSource):
+        fetch(s, "IE0000000017", by="ARK")
+    assert sum(a.endswith("/de/funds/") for a in asked) == 1
+    assert lookthrough.issuer({"name": "ARK Artificial Intelligence & Robotics UCITS ETF"}, {}) == "ARK"
+    assert lookthrough.issuer({"name": "Future of Defence UCITS ETF"}, {}) == "HANetf"
+    assert lookthrough.issuer({"name": "EMQQ Emerging Markets Internet UCITS ETF"}, {}) == "HANetf"

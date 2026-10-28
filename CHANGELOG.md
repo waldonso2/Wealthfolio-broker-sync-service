@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.0
+
+- X-Ray fetches ARK Europe's ETFs (also the Rize ones) by ISIN: the fund page names it, the full holdings are the XLSX below it; the ids ship in `fund_products.json` and are renewed weekly.
+- HANetf funds (Future of Defence, EMQQ) are recognised by name.
+- Issuers that block automatic fetching (WisdomTree, UBS, HANetf) or offer no open full list (L&G, …): their ETF's settings offer the upload of the holdings list downloaded from the ETF's page (CSV or Excel); it counts until the next upload.
+
 ## 0.36.0
 
 - X-Ray looks through the ETFs of other issuers too, fetched by ISIN without any setting: Xtrackers (DWS XLSX), SPDR (fund finder ISIN → ticker, daily holdings XLSX), Amundi/Lyxor (product API), Invesco (index list first, so a swap ETF shows its index stocks), Vanguard (product API by portfolio id) and VanEck (holdings block). Vanguard's and VanEck's ids ship in `fund_products.json`, renewed weekly with the iShares list; an id not shipped yet is looked up once a pass.

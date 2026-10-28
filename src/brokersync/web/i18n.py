@@ -1167,12 +1167,16 @@ EN: dict[str, str] = {
     "noch keine Positionsliste": "no holdings list yet",
     "Abruf fehlgeschlagen {when}: {error}": "Fetch failed {when}: {error}",
     "Kein ETF in Wealthfolio gefunden.": "No ETF found in Wealthfolio.",
+    ("Dieser Anbieter lässt keinen automatischen Abruf zu: Lade die Positionsliste von der Seite des ETFs herunter "
+     "(CSV oder Excel) und hier hoch. Sie gilt, bis du eine neue hochlädst."): (
+        "This issuer allows no automatic fetching: download the holdings list from the ETF's page (CSV or Excel) and "
+        "upload it here. It counts until you upload a new one."),
     ("Welche Aktien in deinen ETFs stecken und wie sie sich mit deinen Einzelwerten addieren. Die Positionslisten "
      "holt der Dienst jeden Morgen selbst bei den Anbietern (iShares, Xtrackers, SPDR, Amundi, Invesco, Vanguard, "
-     "VanEck)."): (
+     "VanEck, ARK)."): (
         "Which stocks are in your ETFs and how they add up with your single holdings. The service fetches the "
         "holdings lists itself every morning from the issuers (iShares, Xtrackers, SPDR, Amundi, Invesco, Vanguard, "
-        "VanEck)."),
+        "VanEck, ARK)."),
     "{funds} ETFs durchleuchtet · {open} ohne Positionsliste · {singles} Einzelwerte": (
         "{funds} ETFs looked through · {open} without a holdings list · {singles} single holdings"),
     "Nicht in der Tabelle, weil ihre Positionsliste noch fehlt: {names}.": (

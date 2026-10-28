@@ -1,4 +1,17 @@
 {
+"ARK": {
+"IE0003A512E4": "active-etfs/artificial-intelligence-robotics",
+"IE0003LFZ4U7": "index-etfs/sustainable-future-of-food",
+"IE000AON7ET1": "active-etfs/space-defence-innovation",
+"IE000GA3D489": "active-etfs/innovation",
+"IE000O5M6XO1": "active-etfs/genomic-revolution",
+"IE000PY7F8J9": "index-etfs/usa-environmental-impact",
+"IE000QUCVEN9": "index-etfs/global-sustainable-infrastructure",
+"IE000RMSPY39": "index-etfs/circular-economy-enablers",
+"IE00BJXRZJ40": "index-etfs/cybersecurity-and-data-privacy",
+"IE00BLRPQH31": "index-etfs/sustainable-future-of-food",
+"IE00BLRPRR04": "index-etfs/environmental-impact-100"
+},
 "VanEck": {
 "IE0000H445G8": "194721:233177:UCTCNEW",
 "IE0001J5A2T9": "194762:233163:UCTREUS",
