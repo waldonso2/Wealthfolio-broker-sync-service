@@ -18,6 +18,7 @@ jobs:
     permissions:
       contents: write # push the branch of the pull request
       pull-requests: write
+      issues: write # when a pull request can't be opened
       actions: write # start CI on that branch
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,7 +42,9 @@ jobs:
           git switch -c "$BRANCH"
           git commit -qm "iShares products: new funds from the fund finders" -- src/brokersync/ishares_products.json
           git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/$BRANCH"
-          if gh pr list --head "$BRANCH" --state open --json number --jq length | grep -qx 0; then
-            gh pr create --head "$BRANCH" --title "iShares products: new funds" --body "New ISIN -> product number pairs from iShares' fund finders (scripts/ishares_products.py). Data only: no version bump needed; it ships with the next release."
-          fi
           gh workflow run ci.yml --ref "$BRANCH"
+          gh pr list --head "$BRANCH" --state open --json number --jq length | grep -qx 0 || exit 0
+          BODY="New ISIN -> product number pairs from iShares' fund finders (scripts/ishares_products.py). Data only: no version bump needed; it ships with the next release."
+          # Without "Allow GitHub Actions to create and approve pull requests" (Settings -> Actions) the PR is refused: ask by issue instead.
+          gh pr create --head "$BRANCH" --title "iShares products: new funds" --body "$BODY" \
+            || gh issue create --title "iShares products: new funds on branch $BRANCH" --body "$BODY Open a pull request from \`$BRANCH\`."
