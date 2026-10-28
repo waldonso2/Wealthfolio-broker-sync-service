@@ -1094,7 +1094,11 @@ EN: dict[str, str] = {
         "no source found – upload the holdings list if it is an ETF",
     "Quelle ändern oder Liste hochladen": "Change source or upload a list",
     "Produktseite bei iShares für {name}": "iShares product page for {name}",
-    "Positionsliste für {name} (CSV oder XLSX)": "Holdings list for {name} (CSV or XLSX)",
+    "Positionsliste für {name} (CSV, XLSX oder XLS)": "Holdings list for {name} (CSV, XLSX or XLS)",
+    "Abruf fehlgeschlagen": "Fetch failed",
+    "Altes Excel-Format (XLS): bitte in Excel als XLSX oder CSV speichern und hochladen.":
+        "Old Excel format (XLS): please save it as XLSX or CSV in Excel and upload that.",
+    "{name} bei Finanzfluss ansehen": "View {name} on Finanzfluss",
     "Einstellungen der Durchschau": "Look-through settings",
     "Positionslisten automatisch bei den Anbietern abrufen (iShares, Xtrackers) – nach jedem Abruf, je ETF "
     "höchstens wöchentlich. Gesendet wird nur die ISIN bzw. die Produktseite.":

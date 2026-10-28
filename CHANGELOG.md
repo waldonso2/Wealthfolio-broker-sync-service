@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.39.0
+
+- X-Ray: every card (overall matrix, overlap, each ETF) is folded; an ETF opened shows its 10 largest positions first, all of them folded below, and a link to its page at Finanzfluss. The overall matrix starts at the top 10 (10, 25, 50 or 100).
+- The TER comes with the holdings where the issuer lists it: iShares (screener field `ter`/`ter_ocf`), SPDR (fund finder), Amundi (product API), ARK (fund page), HANetf (product list). It shows in the ETF's card and feeds the costs; a TER typed by hand still comes first.
+- The upload accepts `.xls` files (UBS' download is an XLSX named `.xls`); an old binary Excel file gets a message to save it as XLSX or CSV.
+
 ## 0.38.1
 
 - An uploaded UBS holdings list (the "Constituents" download of the ETF's page) is read: its name column "Wertpapiere" is recognised.
