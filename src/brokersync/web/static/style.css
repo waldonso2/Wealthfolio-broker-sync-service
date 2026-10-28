@@ -171,12 +171,22 @@ ol.steps { padding-left: 22px; margin: 0; } ol.steps li { margin: 6px 0; }
      the columns per ETF only on wider screens. */
   .table.compact thead { display: none; }
   .table.compact td.name .muted { display: none; }
-  .table.compact tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 12px; padding: 6px 0; }
+  .table.compact tr { padding: 6px 0; }
   .table.compact td { display: inline; width: auto; padding: 0; font-size: 14px; }
   .table.compact td::before { content: none; }
   .table.compact td[data-label="#"] { color: var(--muted); font-size: 12px; }
-  .table.compact td.name { flex: 1 1 55%; font-weight: 600; }
+  .table.compact tr { display: grid; align-items: baseline; gap: 0 8px; }
+  .table.compact.stocks tr { grid-template-columns: 1.6em minmax(0, 1fr) 5.6em 4.6em; }
+  .table.compact.holdings tr { grid-template-columns: minmax(0, 1fr) 4.6em 5.6em; }
+  .table.compact td.name { font-weight: 600; overflow-wrap: anywhere; }
+  .table.compact td:not(.name):not([data-label="#"]) { text-align: right; white-space: nowrap; }
   .table.compact td.wide { display: none; }
+  /* The overlap heatmap stays a real grid on phones, scrolling sideways inside its card. */
+  .table.heat table { display: table; width: auto; }
+  .table.heat tbody { display: table-row-group; }
+  .table.heat tr, .table.heat tr:has(th) { display: table-row; padding: 0; }
+  .table.heat td, .table.heat th { display: table-cell; width: auto; padding: 6px 8px; }
+  .table.heat td::before { content: none; }
   .wrap { padding: 10px 12px; }
   .card { padding: 14px; margin: 12px 0; }
 }
@@ -219,3 +229,13 @@ button.danger { background: var(--error); border-color: var(--error); color: var
 input[aria-invalid=true], select[aria-invalid=true] { border-color: var(--error); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 a.button.danger { background: var(--error); border-color: var(--error); color: var(--on-primary); }
+
+/* X-Ray: overlap of two ETFs as a heatmap; stronger tint = more held twice. */
+.table.heat th[scope=row] { text-align: left; font-weight: 600; max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.table.heat .num { text-align: center; white-space: nowrap; }
+.table.heat .self { color: var(--muted); }
+.heat-1 { background: color-mix(in srgb, var(--error) 8%, transparent); }
+.heat-2 { background: color-mix(in srgb, var(--error) 16%, transparent); }
+.heat-3 { background: color-mix(in srgb, var(--error) 26%, transparent); }
+.heat-4 { background: color-mix(in srgb, var(--error) 36%, transparent); }
+.heat-5 { background: color-mix(in srgb, var(--error) 46%, transparent); font-weight: 600; }

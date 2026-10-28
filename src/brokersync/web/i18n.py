@@ -1031,6 +1031,10 @@ EN: dict[str, str] = {
     "Sektor": "Sector",
     "davon über": "of which through",
     "Wie sich die ETFs überschneiden": "How the ETFs overlap",
+    ("Überschneidung in Prozent: Summe des jeweils kleineren Gewichts jeder Aktie, die beide ETFs halten. "
+     "Je dunkler, desto mehr doppelt."): (
+        "Overlap in percent: the sum of the smaller weight of every stock both ETFs hold. "
+        "The darker, the more is held twice."),
     "ETF": "ETF",
     "Eigener Beitrag": "Own contribution",
     # Klumpenrisiken und Abruf (#139)

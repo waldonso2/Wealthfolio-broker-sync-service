@@ -590,23 +590,26 @@ def test_the_product_pages_download_is_read_from_its_holdings_sheet():
 def test_the_country_fund_finders_are_asked_in_turn_and_the_number_may_be_only_the_key():
     nl = {"111111": {"isin": {"d": "IE0000000017"}, "productPageUrl": "/nl/a/nl/producten/111111/other"}}
     it = {"308858": {"isin": "IE00BJ5JNY98", "fundName": "Example IT Sector"}}  # no page: the key is the number
+    de = {"251911": {"isin": "DE000A0H0744", "fundName": "Example Dividend 50 UCITS ETF (DE)"}}  # German site only
     asked = []
 
     def answer(request: httpx.Request) -> httpx.Response:
         url = str(request.url)
         asked.append(url)
         if "product-screener" in url:
-            return httpx.Response(200, json=nl if "/nl/" in url else it if "/it/" in url else {})
+            return httpx.Response(200, json=de if "country=de" in url else nl if "/nl/" in url
+                                  else it if "/it/" in url else {})
         return httpx.Response(200, content=workbook())
 
     s = Sources(transport=httpx.MockTransport(answer))
     lines, _ = fetch(s, "IE00BJ5JNY98")
     assert len(lines) == 5 and "portfolioId=308858&" in asked[-1] and not s.finder_down
-    assert sum("product-screener" in a for a in asked) == 2  # Spain and the UK not asked: Italy knew it
+    assert sum("product-screener" in a for a in asked) == 3  # German, Dutch, Italian; Spain and the UK not asked
     assert s.ishares_product("IE0000000017")[0] == "111111"  # a Dutch page address: the number from the key
+    assert s.ishares_product("DE000A0H0744")[0] == "251911"  # a (DE) fund: only the German screener server lists it
     with pytest.raises(NoSource):
         fetch(s, "US0378331005", search=False)  # a stock: every list read once, none knows it
-    assert sum("product-screener" in a for a in asked) == 4
+    assert sum("product-screener" in a for a in asked) == 5
 
 
 def test_the_shipped_list_names_the_product_without_asking_a_fund_finder(monkeypatch):

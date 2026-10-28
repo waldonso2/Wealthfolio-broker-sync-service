@@ -137,13 +137,16 @@ ISHARES_DOC = ("https://www.blackrock.com/varnish-api/uk-retail01-product-data/p
                "&component=fundDownloadV2&userType=individual")
 # The fund finder's data: {portfolioId: {isin, productPageUrl, fundName, ...}} for every product the country's site
 # sells. A product has the same number on every site; since the German and UK sites were rebuilt (10/2026) only some
-# countries still answer, and each lists other funds - asked in turn until one knows the ISIN.
-ISHARES_SCREENERS = tuple(
-    f"https://www.ishares.com/{site}/product-screener/product-screener-v3.1.jsn?dcrPath=/templatedata/config/"
+# countries still answer, and each lists other funds - asked in turn until one knows the ISIN. The German site's new
+# product list reads the same rows from a screener server (first: it also lists the German-domiciled (DE) funds).
+ISHARES_SCREENERS = (
+    "https://www.ishares.com/varnish-api/blk-product-screener-server/api/v1/product-screener/product-data"
+    "?country=de&language=de&siteName=de-ishares-v2&userType=individual",
+    *(f"https://www.ishares.com/{site}/product-screener/product-screener-v3.1.jsn?dcrPath=/templatedata/config/"
     f"product-screener-v3/data/{data}/product-screener/ishares-product-screener-backend-config"
     "&siteEntryPassthrough=true"
     for site, data in (("nl/particuliere-belegger/nl", "nl/nl"), ("it/investitore-privato/it", "it/it"),
-                       ("es/inversor-particular/es", "es/es"), ("uk/individual/en", "en/uk")))
+                       ("es/inversor-particular/es", "es/es"), ("uk/individual/en", "en/uk"))))
 # The site's search box: [{category, id, label}]; a product's id holds its page or its number. Used when the fund
 # finder fails - it answers per ISIN.
 # The UK site's first, then the German one's (it lists funds the UK site doesn't); a product is the same number on both.

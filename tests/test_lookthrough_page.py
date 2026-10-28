@@ -190,3 +190,17 @@ def test_only_ishares_funds_are_shown_with_the_reason_a_list_is_missing(tmp_path
     assert "0 Positionslisten geholt, 1 fehlgeschlagen" in page
     lookthrough.record(state, error="RuntimeError: kaputt")
     assert "Der Abruf ist abgebrochen: RuntimeError: kaputt" in client.get("/lookthrough").text
+
+
+def test_the_overlap_of_two_funds_is_a_heatmap_and_no_sector_is_shown(tmp_path):
+    client, token = _client(tmp_path)
+    depot = client.app.inner.state.ctx.depot
+    depot.positions.append(dict(depot.positions[0], id="fund-2", name="iShares Second ETF", isin="IE00BJ5JNY98"))
+    for asset in (FUND, "fund-2"):
+        client.post("/lookthrough/upload", data={"csrf": token, "asset_id": asset},
+                    files={"file": ("holdings.csv", FILE.encode(), "text/csv")})
+    page = client.get("/lookthrough").text
+    heat = page.split('<div class="table heat"')[1].split("</table>")[0]
+    assert heat.count('class="num heat-5">90</td>') == 2  # the same list twice: 90 % held twice, darkest
+    assert heat.count('class="num self">') == 2 and '<th scope="row" title=' in heat
+    assert '<th scope="col">Sektor</th>' not in page and "United States · IT" not in page
