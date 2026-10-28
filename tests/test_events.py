@@ -71,9 +71,9 @@ def test_old_events_are_dropped(tmp_path):
 def test_the_page_claims_only_the_protection_there_is(tmp_path, monkeypatch):
     client, _, _ = make(tmp_path)
     first_password(client)
-    assert "alle Daten verschlüsselt" in client.get("/").text
+    assert "alle Daten verschlüsselt" in client.get("/broker").text
     monkeypatch.setattr(state_mod, "ENCRYPTED", False)
-    page = client.get("/").text
+    page = client.get("/broker").text
     assert "alle Daten verschlüsselt" not in page and "die Sync-Datenbank nicht" in page
     page = client.get("/security").text
     assert "Die Sync-Datenbank nicht" in page and "Die Sync-Datenbank mit SQLCipher" not in page

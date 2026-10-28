@@ -29,7 +29,7 @@ router = APIRouter()
 TIMER = "wealthfolio-broker-sync-run.timer"
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/broker", response_class=HTMLResponse)
 def dashboard(request: Request, ctx: Ctx):
     # A run whose process died stays at 'running' in the database; close it
     # unless a sync (here or the timer's) really is in progress.
@@ -47,7 +47,7 @@ def dashboard(request: Request, ctx: Ctx):
                       next_run=_next_timer_run(), runs=ctx.state.runs(limit=20),
                       retired_notices=retired.notices(ctx.state), safe_mode=c.safe_mode,
                       update=updates.available(ctx.state, __version__), releases=updates.RELEASES,
-                      checklist=_checklist(ctx, c, secrets_, brokers))
+                      checklist=_checklist(ctx, c, secrets_, brokers), sync_off=not c.service("sync"))
 
 
 def _checklist(ctx: AppContext, c: config_mod.Config, secrets_: dict, brokers: list[dict]) -> list[dict] | None:
@@ -70,7 +70,7 @@ def _checklist(ctx: AppContext, c: config_mod.Config, secrets_: dict, brokers: l
 @router.post("/checklist/hide")
 def checklist_hide(request: Request, ctx: Ctx):
     ctx.state.set_flag(meta_keys.CHECKLIST_HIDDEN())
-    return redirect(request, "/")
+    return redirect(request, "/broker")
 
 
 def _brokers(ctx: AppContext, c: config_mod.Config, secrets_: dict) -> list[dict]:
@@ -108,17 +108,20 @@ def _brokers(ctx: AppContext, c: config_mod.Config, secrets_: dict) -> list[dict
 @router.post("/retired/dismiss")
 def retired_dismiss(request: Request, ctx: Ctx, broker: str = Form(...)):
     retired.dismiss(ctx.state, broker)
-    return redirect(request, "/")
+    return redirect(request, "/broker")
 
 
 @router.post("/run")
 def run_now(request: Request, ctx: Ctx, broker: str = Form("")):
     if ctx.running.is_set():
-        return redirect(request, "/", tr(request, "Ein Abruf läuft bereits."), "warn")
+        return redirect(request, "/broker", tr(request, "Ein Abruf läuft bereits."), "warn")
     c = ctx.cfg()
+    if not c.service("sync"):
+        return redirect(request, "/broker",
+                        tr(request, "Broker-Sync ist ausgeschaltet - auf der Seite Dienste einschalten."), "warn")
     if broker:
         if broker not in ctx.adapters:
-            return redirect(request, "/", tr(request, "Unbekannter Broker."), "error")
+            return redirect(request, "/broker", tr(request, "Unbekannter Broker."), "error")
         if ctx.needs_login(broker, c):
             from .broker_login import start_login  # this POST starts the login itself (#99)
 
@@ -149,7 +152,7 @@ def start_run(request: Request, ctx: AppContext, only: list[str] | None) -> Redi
         finally:
             pins.clear()
 
-    return start_job(request, ctx, N_("Abruf"), work, "/",
+    return start_job(request, ctx, N_("Abruf"), work, "/broker",
                      started=N_("Abruf gestartet. Die Seite aktualisiert sich, bis er fertig ist."),
                      done=N_("Abruf beendet."))
 

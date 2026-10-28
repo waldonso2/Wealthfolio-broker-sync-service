@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#fffcf0" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#100f0f" media="(prefers-color-scheme: dark)">
 <title>{% block title %}Broker Sync{% endblock %} · Wealthfolio Broker Sync</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/style.css">
 {% block head %}{% endblock %}
 </head>
@@ -15,12 +16,12 @@
   <a class="brand" href="/">Broker Sync <span class="version">v{{ version }}</span></a>
   {% if request.session.get("user") %}
   {% set path = request.url.path %}
+  {% set in_broker = path == "/broker" or path.startswith("/check") or path == "/unknown" %}
   {% set in_settings = path == "/settings" or path.startswith("/brokers") or path in settings_pages | map(attribute=0) | list %}
   <nav class="main" aria-label="{{ _('Hauptmenü') }}">
-    <a href="/"{% if path == "/" %} aria-current="page"{% endif %}>{{ icon("home") }}<span>{{ _("Übersicht") }}</span></a>
-    <a href="/check"{% if path.startswith("/check") %} aria-current="page"{% endif %}>{{ icon("check") }}<span>{{ _("Prüfung") }}</span></a>
+    <a href="/"{% if path == "/" %} aria-current="page"{% endif %}>{{ icon("toggle") }}<span>{{ _("Dienste") }}</span></a>
+    <a href="/broker"{% if in_broker %} aria-current="page"{% endif %}>{{ icon("bank") }}<span>{{ _("Broker") }}</span>{% if nav_unknown %} <span class="count" aria-label="{{ _('{n} offen', n=nav_unknown) }}">{{ nav_unknown }}</span>{% endif %}</a>
     <a href="/lookthrough"{% if path.startswith("/lookthrough") %} aria-current="page"{% endif %}>{{ icon("layers") }}<span>{{ _("X-Ray") }}</span></a>
-    <a href="/unknown"{% if path == "/unknown" %} aria-current="page"{% endif %}>{{ icon("unknown") }}<span>{{ _("Unbekannt") }}</span>{% if nav_unknown %} <span class="count" aria-label="{{ _('{n} offen', n=nav_unknown) }}">{{ nav_unknown }}</span>{% endif %}</a>
     <a href="/settings"{% if in_settings %} aria-current="page"{% endif %}>{{ icon("settings") }}<span>{{ _("Einstellungen") }}</span></a>
   </nav>
   <form method="post" action="/theme" class="logout"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ request.url.path }}"><button class="link" title="{{ _('Hell/Dunkel umschalten') }}" aria-label="{{ _('Hell/Dunkel umschalten') }}" aria-pressed="{{ 'true' if request.session.get('flip') else 'false' }}">{{ icon("theme") }}</button></form>
@@ -31,6 +32,13 @@
   {% if request.session.get("user") and in_settings and path != "/settings" %}
   <nav class="subnav" aria-label="{{ _('Einstellungen') }}">
     {% for href, title, hint in settings_pages %}<a href="{{ href }}"{% if path == href or (href == "/brokers" and path.startswith("/brokers")) %} aria-current="page"{% endif %}>{{ _(title) }}</a>{% endfor %}
+  </nav>
+  {% endif %}
+  {% if request.session.get("user") and in_broker %}
+  <nav class="subnav" aria-label="{{ _('Broker') }}">
+    <a href="/broker"{% if path == "/broker" %} aria-current="page"{% endif %}>{{ _("Status") }}</a>
+    <a href="/check"{% if path.startswith("/check") %} aria-current="page"{% endif %}>{{ _("Prüfung") }}</a>
+    <a href="/unknown"{% if path == "/unknown" %} aria-current="page"{% endif %}>{{ _("Unbekannt") }}{% if nav_unknown %} ({{ nav_unknown }}){% endif %}</a>
   </nav>
   {% endif %}
   {% if flash %}<div class="flash {{ flash.level }}" role="{{ 'alert' if flash.level == 'error' else 'status' }}">{{ flash.text }}</div>{% endif %}

@@ -259,6 +259,8 @@ def migrate(data_dir: Path) -> list[str]:
         done.append("Sync-Datenbank mit SQLCipher verschlüsselt")
     if crypto.is_locked(d):
         return done
+    if not (d / "config.enc").exists():  # a new install: every service of the page Dienste starts off (#145)
+        config_mod.update(d, lambda cfg: setattr(cfg, "services", {}))
     m = re.fullmatch(r"http://([^/:]+):8090", config_mod.load(d).public_url or "")
     if m:
         config_mod.update(d, lambda cfg: setattr(cfg, "public_url", f"https://{m.group(1)}:8443"))

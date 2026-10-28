@@ -171,7 +171,7 @@ def test_web_login_with_app_confirmation_and_transfer_patterns(tmp_path, fake, h
                      adapters={"dkb": DkbAdapter}, notifier=RecordingNotifier(), run_in_thread=False)
     client = TestClient(app)
     first_password(client)
-    csrf = re.search(r'name="csrf" value="([^"]+)"', client.get("/").text).group(1)
+    csrf = re.search(r'name="csrf" value="([^"]+)"', client.get("/broker").text).group(1)
     client.post("/setup/wealthfolio", data={"csrf": csrf, "url": "http://wf", "password": PASSWORD})
     page = client.get("/brokers/dkb").text
     assert "FinTS-Produkt-ID" not in page and "IBAN des Girokontos" in page

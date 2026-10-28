@@ -100,7 +100,7 @@ def test_assistant_from_first_visit_to_first_sync(tmp_path):
     # Automatic fetch off: still shown with its last result, fetched by its own button.
     r = client.post("/brokers/fake", data={"csrf": token, "cred_username": "max", "cash_account_id": "acc-cash",
                                             "portfolio_account_id": "acc-depot"})
-    page = client.get("/").text
+    page = client.get("/broker").text
     assert "nur manuell" in page and "ohne automatischen Abruf nur einzeln" in page and "OK" in page
     assert 'name="broker" value="fake"' in page
 
@@ -113,7 +113,7 @@ def test_login_required_and_csrf_checked(tmp_path):
     r = client.get("/", follow_redirects=False)
     assert r.headers["location"] == "/login"
     assert "Falsches Passwort" in client.post("/login", data={"password": "wrong"}).text
-    assert "Alle abrufen" in client.post("/login", data={"password": "Kiefer-Ozelot-9182"}).text
+    assert "Broker-Sync" in client.post("/login", data={"password": "Kiefer-Ozelot-9182"}).text
     # The password can only be chosen once.
     r = first_password(client, "andere-123456", follow_redirects=False)
     assert r.headers["location"] == "/login"
@@ -163,7 +163,7 @@ def test_status_follows_the_real_state_of_the_sync(tmp_path):
     # A run the process died in the middle of (restart, update, crash).
     stale = State(tmp_path)
     stale.start_run("fake")
-    page = client.get("/").text
+    page = client.get("/broker").text
     assert "abgebrochen" in page and "läuft" not in page and "Alle abrufen" in page
     assert 'http-equiv="refresh"' not in page
     assert "Dienst wurde während des Abrufs beendet" in stale.runs()[0].message
@@ -172,7 +172,7 @@ def test_status_follows_the_real_state_of_the_sync(tmp_path):
     # and its run is not closed as stale.
     stale.start_run("fake")
     with run_lock(tmp_path):
-        page = client.get("/").text
+        page = client.get("/broker").text
         assert "Abruf läuft" in page and 'http-equiv="refresh"' in page
         assert stale.runs()[0].status == "running"
 
@@ -221,7 +221,7 @@ def test_an_installation_with_the_old_dummy_broker_is_cleaned_up(tmp_path):
     assert state.known("fake") == {"f-1"} and len(state.runs("fake")) == 1
 
     first_password(client)
-    page = client.get("/").text
+    page = client.get("/broker").text
     # Its activities stay in Wealthfolio: shown once, with the count and how to find them.
     assert "Dummy (Test) entfernt" in page and "4 Buchungen" in page and "[SYNC dummy:" in page
     assert "/brokers/dummy" not in page
@@ -230,7 +230,7 @@ def test_an_installation_with_the_old_dummy_broker_is_cleaned_up(tmp_path):
     # A restart finds nothing left to clean up and doesn't show it again.
     client, _, _ = make(tmp_path)
     client.post("/login", data={"password": "Kiefer-Ozelot-9182"})
-    assert "Dummy (Test) entfernt" not in client.get("/").text
+    assert "Dummy (Test) entfernt" not in client.get("/broker").text
     assert "Unbekannter Broker" in client.get("/brokers/dummy").text
 
 
@@ -254,7 +254,7 @@ def test_navigation_groups_the_settings(tmp_path):
     first_password(client)
     page = client.get("/").text
     nav = re.search(r'<nav class="main" aria-label="Hauptmenü">(.*?)</nav>', page, re.S).group(1)
-    assert re.findall(r'<a href="([^"]+)"', nav) == ["/", "/check", "/lookthrough", "/unknown", "/settings"]
+    assert re.findall(r'<a href="([^"]+)"', nav) == ["/", "/broker", "/lookthrough", "/settings"]
     assert 'class="count"' not in nav and 'class="subnav"' not in page
 
     index = client.get("/settings").text
@@ -311,7 +311,7 @@ def test_an_unexpected_error_shows_only_an_id(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(overview, "_brokers", broken)
     quiet = TestClient(client.app, base_url="http://sync.local:8090", raise_server_exceptions=False)
     quiet.cookies = client.cookies
-    r = quiet.get("/")
+    r = quiet.get("/broker")
     assert r.status_code == 500 and "secret detail" not in r.text
     error_id = re.search(r"Fehler-ID ([0-9a-f]{6})", r.text).group(1)
     assert error_id in caplog.text  # the details are in the log, found by the id
@@ -377,7 +377,7 @@ def test_a_run_aborted_by_a_restart_reads_in_the_pages_language(tmp_path):
     st.start_run("fake")
     st.abort_stale_runs()
     client.post("/appearance", data={"csrf": token, "language": "en"})
-    page = client.get("/").text
+    page = client.get("/broker").text
     assert "Aborted - the service was stopped during the fetch" in page and "Abgebrochen - der Dienst" not in page
 
 

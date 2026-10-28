@@ -89,7 +89,7 @@ def test_error_texts_are_stored_and_shown_masked(tmp_path):
     # Runs stored by an older version: masked when shown.
     with state.db:
         state.db.execute("UPDATE runs SET message = ? WHERE id = ?", (text, run))
-    page = client.get("/").text
+    page = client.get("/broker").text
     assert "gesperrt" in page
     for s in ("DE02500105170137075030", "123456789", "wf-pw-very-secret"):
         assert s not in page

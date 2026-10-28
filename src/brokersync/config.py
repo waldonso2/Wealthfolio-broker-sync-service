@@ -83,6 +83,23 @@ class Config:
     update_interval: int = 60
     # Page Darstellung: "de" / "en". Light or dark follows the device (header switch until a reload, #123).
     ui_language: str = "de"
+    # Page Dienste (#145): what the sync writes into Wealthfolio besides the flags above (``SERVICES``). None: set
+    # up before the page existed - all of it on, as it ran; a new install starts with {} (``security.migrate``).
+    services: dict[str, bool] | None = None
+
+    def service(self, key: str) -> bool:
+        """Whether the service ``key`` of the page *Dienste* is on."""
+        if key in _FLAGS:
+            return bool(getattr(self, _FLAGS[key]))
+        return True if self.services is None else self.services.get(key, False)
+
+    def set_service(self, key: str, on: bool) -> None:
+        if key in _FLAGS:
+            setattr(self, _FLAGS[key], on)
+            return
+        services = dict.fromkeys(SERVICES, True) if self.services is None else dict(self.services)
+        services[key] = on
+        self.services = services
 
     @property
     def safe_mode(self) -> bool:
@@ -91,6 +108,10 @@ class Config:
     def broker(self, key: str) -> BrokerConfig:
         return self.brokers.setdefault(key, BrokerConfig())
 
+
+# The services of the page *Dienste* without a flag of their own (#145), and those that have one.
+SERVICES = ("sync", "isin", "spending")
+_FLAGS = {"taxonomies": "lookthrough_write", "logos": "logos_enabled"}
 
 # The host tier (notify.enc): readable while the data is locked - ntfy and the automatic update.
 NOTIFY_FIELDS = ("public_url", "ntfy_server", "ntfy_topic", "ntfy_token", "ntfy_details", "auto_update",

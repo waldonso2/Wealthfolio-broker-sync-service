@@ -120,7 +120,7 @@ async def broker_save(request: Request, ctx: Ctx, key: str):
 
         request.session["flash"] = {"text": tr(request, "Gespeichert. Jetzt beim Broker anmelden."), "level": "ok"}
         return start_login(request, ctx, key, False)
-    return redirect(request, "/", tr(request, "Gespeichert."))
+    return redirect(request, "/broker", tr(request, "Gespeichert."))
 
 
 def _credentials(request: Request, adapter, form, old: dict, errors: dict[str, str]) -> dict:

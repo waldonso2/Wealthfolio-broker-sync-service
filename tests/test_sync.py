@@ -135,7 +135,7 @@ def test_a_failing_broker_is_reported_and_the_others_still_run(tmp_path):
     results = {r.broker: r for r in syncer.run()}
     assert results["broken"].status == "error"
     assert results["fake"].status == "ok" and results["fake"].created == 3
-    assert ("Kaputt: Abruf fehlgeschlagen", "broker is down", "http://sync.local:8090/") in notifier.sent
+    assert ("Kaputt: Abruf fehlgeschlagen", "broker is down", "http://sync.local:8090/broker") in notifier.sent
 
 
 def test_needs_auth_notifies_with_the_login_link(tmp_path):
@@ -314,7 +314,7 @@ def test_a_crashing_adapter_is_reported_keeps_its_session_and_the_others_still_r
     results = {r.broker: r for r in syncer.run()}
     assert results["broken"].status == "error"
     assert results["broken"].messages == ["Unexpected error: 'eventType'"]
-    assert ("Kaputt: Abruf fehlgeschlagen", "Unerwarteter Fehler: 'eventType'", "http://sync.local:8090/") \
+    assert ("Kaputt: Abruf fehlgeschlagen", "Unerwarteter Fehler: 'eventType'", "http://sync.local:8090/broker") \
         in notifier.sent
     assert results["fake"].status == "ok" and results["fake"].created == 3
     # The session is stored even though the run crashed after the login.

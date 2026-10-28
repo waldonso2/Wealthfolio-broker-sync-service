@@ -98,6 +98,10 @@ class AppContext:
     def render(self, request: Request, name: str, **ctx) -> HTMLResponse:
         if "csrf" not in request.session:
             request.session["csrf"] = secrets.token_urlsafe(16)
+        if request.session.get("enable_service") and request.session.get("user"):
+            from .routes.services import settle  # a service waiting for its settings (#145)
+
+            settle(request, self)
         flash = request.session.pop("flash", None)
         if not flash and self.job_result and request.session.get("user"):
             flash, self.job_result = self.job_result, None  # what a background job ended with (#104)

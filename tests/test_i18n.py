@@ -114,15 +114,14 @@ def _english(tmp_path):
 
 def test_the_english_pages_have_no_german_navigation(tmp_path):
     client, _ = _english(tmp_path)
-    for path, heading in [("/", "Overview"), ("/check", "Check"), ("/security", "Security"),
+    for path, heading in [("/", "Services"), ("/broker", "Brokers"), ("/check", "Check"), ("/security", "Security"),
                           ("/appearance", "Appearance"), ("/settings", "Settings"), ("/unknown", "Unknown bookings")]:
         page = client.get(path).text
         for word in ("Übersicht", "Einstellungen", "Prüfung", "Speichern", "Abruf"):
             assert word not in page, f"{path}: {word}"
         assert "<h1" in page and heading in page, path
-        assert ">Overview</span>" in page and ">Check</span>" in page and ">Settings</span>" in page
-        assert ">Unknown</span>" in page
-    overview = client.get("/").text
+        assert ">Services</span>" in page and ">Brokers</span>" in page and ">Settings</span>" in page
+    overview = client.get("/broker").text
     assert "Fetch all" in overview and "Fetch now" in overview and "Last runs" in overview
     assert "Balance <strong" in overview
     security_page = client.get("/security").text
@@ -140,7 +139,7 @@ def test_flash_messages_follow_the_language(tmp_path):
     assert "Wealthfolio address: please give an address with http:// or https://." in r.text
     # Back to German: the confirmation is already in the language just chosen.
     r = client.post("/appearance", data={"csrf": token, "theme": "system", "language": "de"})
-    assert "Gespeichert." in r.text and ">Übersicht</span>" in r.text
+    assert "Gespeichert." in r.text and ">Dienste</span>" in r.text
     assert "Gespeichert." in client.post("/securities", data={"csrf": token, "isin": "DE0007164600",
                                                                 "symbol": "SAP.DE"}).text
 

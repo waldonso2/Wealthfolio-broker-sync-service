@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
-from . import broker_login, brokers, check, duplicates, lookthrough, overview, security, settings, setup, transfers
+from . import (
+               broker_login,
+               brokers,
+               check,
+               duplicates,
+               lookthrough,
+               overview,
+               security,
+               services,
+               settings,
+               setup,
+               transfers,
+)
 
-ROUTERS = [setup.router, overview.router, settings.router, brokers.router, broker_login.router, check.router,
+ROUTERS = [setup.router, services.router, overview.router, settings.router, brokers.router, broker_login.router,
+           check.router,
            lookthrough.router,
            # *Überträge*: listed under *Einstellungen* only while patterns are saved (#84).
            transfers.router,
