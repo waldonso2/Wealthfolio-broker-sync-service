@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.0
+
+- X-Ray fetches HANetf ETFs (Future of Defence, EMQQ, …) automatically: the holdings XLSX lies under the fund's code and ISIN on hanetf.com; the codes of 75 HANetf funds ship in `fund_products.json`. A fund whose ISIN is in that list is recognised as HANetf's even when its name doesn't say so. The file's "Exposure Country" and "Trading Currency" columns are read.
+
 ## 0.37.1
 
 - X-Ray reads L&G ETFs from the address of their daily holdings CSV ("Fundholdings.csv" on fundcentres.lgim.com), saved once under the ETF's settings; after that the list is fetched every day. The CSV's columns ("Security Description", "Constituent Weight (Base)") are read.
