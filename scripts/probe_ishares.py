@@ -24,19 +24,16 @@ def save(name, url, **kw):
         print("   body", r.content[:300])
     return r
 
-# L&G fund centre API
-for q in ("id=42&audience=79&route=0&version=live&languageId=1", "id=13296&audience=79&route=0&version=live&languageId=1",
-          "id=1&audience=79&version=live&languageId=1", "id=42&audience=79&version=live&languageId=1"):
-    save(f"lgim-{q[:8]}.json", "https://fundcentres.landg.com/srp/api/fund-centre?" + q)
-# HANetf
-save("hanetf-range.html", "https://www.hanetf.com/fund-range")
-save("hanetf-search.html", "https://www.hanetf.com/?s=IE000OJ5TQP4")
-# ARK Europe
-save("ark-home.html", "https://europe.ark-funds.com/")
-save("ark-arki.html", "https://europe.ark-funds.com/funds/arki/")
-# UBS
-save("ubs-etf.html", "https://www.ubs.com/de/de/assetmanagement/funds/etf.html")
-save("ubs-search.html", "https://www.ubs.com/de/de/assetmanagement/funds.html?search=IE00BK72HJ67")
-# WisdomTree (plain request only)
-save("wt-page.html", "https://www.wisdomtree.eu/de-de/etfs/thematic/wisdomtree-europe-defence-ucits-etf-eur-acc")
-save("wt-api.json", "https://www.wisdomtree.eu/api/sitecore/fund/holdings?isin=IE0002Y8CX98")
+r = save("ark-arki.html", "https://europe.ark-funds.com/de/funds/active-etfs/artificial-intelligence-robotics/")
+t = html.unescape(r.text)
+for w in ("NVIDIA", "Tesla", "TESLA", "IE000"):
+    for m in list(re.finditer(w, t))[:2]: print("ARK..", t[max(0, m.start() - 250):m.end() + 150].replace("\n", " "))
+save("hanetf-list.html", "https://hanetf.com/product-list/")
+sm = save("hanetf-sitemap.xml", "https://hanetf.com/sitemap_index.xml")
+for u in re.findall(r"<loc>([^<]+)</loc>", sm.text if sm is not None else "")[:30]:
+    print("   sitemap", u)
+    if "product" in u or "fund" in u or "etf" in u:
+        sub = save("", u)
+        if sub is not None:
+            locs = re.findall(r"<loc>([^<]+)</loc>", sub.text)
+            print("   ", len(locs), [l for l in locs if "defence" in l or "emqq" in l][:5])
