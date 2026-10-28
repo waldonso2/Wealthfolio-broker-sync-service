@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.40.0
+
+- X-Ray reads the TER of every ETF whose issuer lists none (Xtrackers, Invesco, Vanguard, VanEck, UBS, uploaded lists, …) from its page at Finanzfluss, by ISIN; asked again after 30 days, also when Finanzfluss had none. An issuer's TER and one typed by hand still come first.
+
 ## 0.39.0
 
 - X-Ray: every card (overall matrix, overlap, each ETF) is folded; an ETF opened shows its 10 largest positions first, all of them folded below, and a link to its page at Finanzfluss. The overall matrix starts at the top 10 (10, 25, 50 or 100).
