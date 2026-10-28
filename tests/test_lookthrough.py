@@ -607,3 +607,34 @@ def test_the_country_fund_finders_are_asked_in_turn_and_the_number_may_be_only_t
     with pytest.raises(NoSource):
         fetch(s, "US0378331005", search=False)  # a stock: every list read once, none knows it
     assert sum("product-screener" in a for a in asked) == 4
+
+
+def test_the_shipped_list_names_the_product_without_asking_a_fund_finder(monkeypatch):
+    monkeypatch.setattr(lookthrough, "KNOWN", {"IE00BJ5JNY98": "308858"})
+    asked = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked.append(str(request.url))
+        return httpx.Response(200, content=workbook())
+
+    lines, _ = fetch(Sources(transport=httpx.MockTransport(answer)), "IE00BJ5JNY98")
+    assert len(lines) == 5 and asked == [lookthrough.ISHARES_DOC.format(id="308858")]
+
+
+def test_the_batch_script_keeps_old_numbers_and_adds_the_finders_ones(tmp_path, monkeypatch):
+    import runpy
+    import sys
+    from pathlib import Path
+
+    answer = tmp_path / "nl.json"
+    answer.write_text(json.dumps({"308858": {"isin": "IE00BJ5JNY98"}, "280510": {"isin": "IE00B3WJKG14"}}))
+    out = tmp_path / "products.json"
+    monkeypatch.setattr(lookthrough, "PRODUCTS_FILE", out)
+    monkeypatch.setattr(lookthrough, "KNOWN", {"IE0000000017": "111111"})
+    monkeypatch.setattr(sys, "argv", ["ishares_products.py", str(answer)])
+    runpy.run_path(str(Path(__file__).parents[1] / "scripts" / "ishares_products.py"))
+    assert json.loads(out.read_text()) == {"IE0000000017": "111111", "IE00B3WJKG14": "280510",
+                                           "IE00BJ5JNY98": "308858"}
+    answer.write_text("{}")
+    with pytest.raises(SystemExit, match="nothing written"):
+        runpy.run_path(str(Path(__file__).parents[1] / "scripts" / "ishares_products.py"))

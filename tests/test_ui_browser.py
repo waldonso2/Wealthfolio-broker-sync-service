@@ -45,6 +45,7 @@ def site(tmp_path_factory):
 
     real = lookthrough.Sources  # the conftest's guard is per test; this module's setup runs before it
     mp.setattr(lookthrough, "PAUSE", 0)
+    mp.setattr(lookthrough, "KNOWN", {})
     mp.setattr(lookthrough, "Sources", lambda: real(transport=httpx.MockTransport(lambda r: httpx.Response(404))))
     tmp = tmp_path_factory.mktemp("ui")
     mp.setenv("BROKERSYNC_RUNTIME", str(tmp / "no-runtime"))

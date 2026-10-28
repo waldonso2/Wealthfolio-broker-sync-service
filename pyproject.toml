@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wealthfolio-broker-sync"
-version = "0.34.5"
+version = "0.35.0"
 description = "Fetches transactions from brokers and writes them, deduplicated, into a self-hosted Wealthfolio"
 readme = "README.md"
 license = "MIT"
@@ -39,7 +39,8 @@ brokersync = "brokersync.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-brokersync = ["web/templates/*.html", "web/static/*", "web/static/fonts/*", "common-passwords.txt", "adapters/fints_institutes.bin"]
+brokersync = ["web/templates/*.html", "web/static/*", "web/static/fonts/*", "common-passwords.txt", "adapters/fints_institutes.bin",
+              "ishares_products.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
