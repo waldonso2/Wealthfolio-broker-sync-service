@@ -114,8 +114,12 @@ _FORMS = re.compile(r"\b(INC|INCORPORATED|CORP|CORPORATION|CO|COMPANY|LTD|LIMITE
                     r"SPA|HOLDINGS?|GROUP|CLASS [A-Z]|CL [A-Z]|REG|REGISTERED|ADR|ORD|SHS)\b")
 
 
+# A par value after the name, as Invesco writes it: "APPLE INC USD0.00001", "SAP NPV".
+_PAR = re.compile(r"\s(?:[A-Z]{3}\d+(?:[.,]\d+)?|NPV)\b")
+
+
 def plain(name: str) -> str:
-    return " ".join(_FORMS.sub(" ", re.sub(r"[^A-Z0-9 ]", " ", name.upper())).split())
+    return " ".join(_FORMS.sub(" ", re.sub(r"[^A-Z0-9 ]", " ", _PAR.sub(" ", name.upper()))).split())
 
 
 def unify(holdings: list[Holding]) -> list[Holding]:

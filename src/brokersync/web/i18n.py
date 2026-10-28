@@ -1166,6 +1166,20 @@ EN: dict[str, str] = {
     "ohne ISIN": "no ISIN",
     "noch keine Positionsliste": "no holdings list yet",
     "Abruf fehlgeschlagen {when}: {error}": "Fetch failed {when}: {error}",
+    "Kein ETF in Wealthfolio gefunden.": "No ETF found in Wealthfolio.",
+    ("Welche Aktien in deinen ETFs stecken und wie sie sich mit deinen Einzelwerten addieren. Die Positionslisten "
+     "holt der Dienst jeden Morgen selbst bei den Anbietern (iShares, Xtrackers, SPDR, Amundi, Invesco, Vanguard, "
+     "VanEck)."): (
+        "Which stocks are in your ETFs and how they add up with your single holdings. The service fetches the "
+        "holdings lists itself every morning from the issuers (iShares, Xtrackers, SPDR, Amundi, Invesco, Vanguard, "
+        "VanEck)."),
+    "{funds} ETFs durchleuchtet · {open} ohne Positionsliste · {singles} Einzelwerte": (
+        "{funds} ETFs looked through · {open} without a holdings list · {singles} single holdings"),
+    "Nicht in der Tabelle, weil ihre Positionsliste noch fehlt: {names}.": (
+        "Not in the table because their holdings list is still missing: {names}."),
+    ("Synthetischer ETF (Swap): die Liste ist der Wertpapierkorb des Fonds, nicht der Index, dessen Wertentwicklung "
+     "er liefert."): ("Synthetic ETF (swap): the list is the fund's basket of securities, not the index whose "
+                     "performance it delivers."),
     "Kein iShares-ETF in Wealthfolio gefunden.": "No iShares ETF found in Wealthfolio.",
     "Die Positionen werden beim Öffnen der Seite aus Wealthfolio gelesen, höchstens alle 10 Minuten.":
         "The positions are read from Wealthfolio when the page opens, at most every 10 minutes.",

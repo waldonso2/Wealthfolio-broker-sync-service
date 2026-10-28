@@ -463,13 +463,15 @@ def test_an_ishares_fund_without_a_list_gets_its_reason_and_the_pass_is_recorded
     depot = Depot(positions=[
         {"id": "a-unknown", "isin": "IE00B5BMR087", "name": "iShares Core S&P 500", "currency": "EUR", "value": D(9)},
         {"id": "a-noisin", "isin": "", "name": "iShares Example", "currency": "EUR", "value": D(8)},
-        {"id": "a-other", "isin": "IE00BK5BQT80", "name": "Vanguard All-World", "currency": "EUR", "value": D(7)}])
+        {"id": "a-other", "isin": "IE00BK5BQT80", "name": "Vanguard All-World", "currency": "EUR", "value": D(7)},
+        {"id": "a-stock", "isin": "US0378331005", "name": "Apple", "currency": "USD", "value": D(6)}])
     r = lookthrough.update(state, depot, sources(lambda req: httpx.Response(404)))
-    assert (r.fetched, r.none, len(r.errors)) == (0, 1, 2)
+    assert (r.fetched, r.none, len(r.errors)) == (0, 1, 3)
     assert "kennt die ISIN IE00B5BMR087 nicht" in lookthrough.status(state, "a-unknown")["error"]
     assert "keine ISIN" in lookthrough.status(state, "a-noisin")["error"]
-    assert lookthrough.status(state, "a-other")["status"] == "none"
-    assert lookthrough.last_pass(state) | {"at": ""} == {"fetched": 0, "none": 1, "failed": 2, "finder": "", "at": ""}
+    assert "Vanguard kennt die ISIN IE00BK5BQT80 nicht" in lookthrough.status(state, "a-other")["error"]
+    assert lookthrough.status(state, "a-stock")["status"] == "none"  # a stock is no fund: no error
+    assert lookthrough.last_pass(state) | {"at": ""} == {"fetched": 0, "none": 1, "failed": 3, "finder": "", "at": ""}
 
 
 def test_a_stock_the_search_could_not_check_is_not_counted_as_failed(tmp_path):
@@ -641,3 +643,124 @@ def test_the_batch_script_keeps_old_numbers_and_adds_the_finders_ones(tmp_path, 
     answer.write_text("{}")
     with pytest.raises(SystemExit, match="nothing written"):
         runpy.run_path(str(Path(__file__).parents[1] / "scripts" / "ishares_products.py"))
+
+
+# ── other issuers (fabricated answers in each issuer's layout) ───────────────
+FIVE = ["US0000000002", "US0000000010", "US0000000028", "US0000000036", "US0000000044"]
+
+
+def issuers(answers: dict[str, httpx.Response]) -> tuple[Sources, list[str]]:
+    """Sources whose requests are answered by the first key found in the URL; the rest 404."""
+    asked: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked.append(str(request.url))
+        return next((r for k, r in answers.items() if k in str(request.url)), httpx.Response(404))
+    return Sources(transport=httpx.MockTransport(answer)), asked
+
+
+def test_an_spdr_fund_is_found_by_its_ticker_in_the_fund_finder():
+    kid = "/library-content/kids?isin=IE00B6YX5C33&documentType=kid&country=de&language=en&ticker=spy5-gy"
+    finder = {"data": {"funds": {"etfs": {"datas": [{"fundName": "Example", "documentPdf": [
+        {"docType": "Kid", "docs": [{"path": kid}]}]}]}}}}
+    doc = xlsx([["Fund Name:", "SPDR Example"], ["ISIN:", "IE00B6YX5C33"], [],
+                ["ISIN", "SEDOL", "Security Name", "Currency", "Percent of Fund", "Trade Country Name"]]
+               + [[i, "1", f"Example {n} Corporation", "USD", "19.5", "United States"] for n, i in enumerate(FIVE)])
+    s, asked = issuers({"fundfinder": httpx.Response(200, json=finder),
+                        "en-spy5-gy.xlsx": httpx.Response(200, content=doc)})
+    lines, source = fetch(s, "IE00B6YX5C33", by="SPDR")
+    assert source == "SPDR" and len(lines) == 5 and lines[0].key == FIVE[0] and lines[0].weight == D("0.195")
+    assert lines[0].country == "United States"
+    with pytest.raises(NoSource):
+        fetch(s, "IE0000000017", by="SPDR")  # not in the finder
+    assert sum("fundfinder" in a for a in asked) == 1  # read once a pass
+
+
+def test_an_amundi_fund_comes_from_its_product_api_and_a_swap_says_so():
+    rows = [{"compositionCharacteristics": {"name": f"EXAMPLE {n}", "isin": i, "weight": 0.19, "sector": "IT",
+                                            "countryOfRisk": "France", "currency": "EUR"}, "weight": 0.19}
+            for n, i in enumerate(FIVE)]
+    answer = {"products": [{"productId": "LU1681043599", "characteristics": {
+        "FUND_REPLICATION_METHODOLOGY": "Indirect(Swap Based)"}, "composition": {"compositionData": rows}}]}
+    s, asked = issuers({"getProductsData": httpx.Response(200, json=answer)})
+    lines, source = fetch(s, "LU1681043599", by="Amundi")
+    assert source == "Amundi" and len(lines) == 5 and lines[0].weight == D("0.19") and lines[0].country == "France"
+    assert s.note == "swap"
+    s, _ = issuers({"getProductsData": httpx.Response(200, json={"products": [{"composition": {}}]})})
+    with pytest.raises(NoSource):
+        fetch(s, "LU0000000000", by="Amundi")
+
+
+def test_an_invesco_fund_takes_its_index_first_and_an_unknown_isin_is_no_error():
+    rows = [{"name": f"EXAMPLE {n} INC USD0.01", "isin": i, "weight": 19.6} for n, i in enumerate(FIVE)]
+    s, asked = issuers({"/holdings/index": httpx.Response(200, json={"holdings": rows})})
+    lines, source = fetch(s, "IE00B3YCGJ38", by="Invesco")
+    assert source == "Invesco" and lines[0].weight == D("0.196") and "/holdings/index" in asked[0]
+    s, asked = issuers({"/holdings/fund": httpx.Response(200, json={"holdings": rows}),
+                        "/holdings/index": httpx.Response(500)})
+    assert fetch(s, "IE0032077012", by="Invesco")[1] == "Invesco"  # a fund without an index list: its own
+    s, _ = issuers({"invesco": httpx.Response(500)})
+    with pytest.raises(NoSource):
+        fetch(s, "IE0000000017", by="Invesco")
+
+
+def test_a_vanguard_fund_is_read_page_by_page_over_its_portfolio_id(monkeypatch):
+    monkeypatch.setattr(lookthrough, "PRODUCTS", {"Vanguard": {"IE00B3RBWM25": "9505"}})
+    pages = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert request.headers["X-Consumer-ID"] == "uk2" and body["variables"]["portIds"] == ["9505"]
+        pages.append(body["variables"]["lastItemKey"])
+        items = [{"issuerName": f"Example {n} Corp", "marketValuePercentage": 19.0, "ticker": f"EX{n}",
+                  "bloombergIsoCountry": "US", "gicsSectorDescription": "Information Technology"}
+                 for n in (range(3) if not pages[-1] else range(3, 5))]
+        return httpx.Response(200, json={"data": {"borHoldings": [{"holdings": {
+            "items": items, "lastItemKey": None if pages[-1] else "next"}}]}})
+    lines, source = fetch(Sources(transport=httpx.MockTransport(answer)), "IE00B3RBWM25", by="Vanguard")
+    assert source == "Vanguard" and len(lines) == 5 and pages == [None, "next"] and lines[0].key == "EX0:"
+
+
+def test_an_isin_not_shipped_is_looked_up_once_among_every_vanguard_id():
+    asked = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        ports = json.loads(request.content)["variables"]["portIds"]
+        asked.append(len(ports))
+        return httpx.Response(200, json={"data": {"funds": [
+            {"portId": "9506", "profile": {"identifiers": [{"altIdCode": "ISIN", "altIdValue": "IE00B8GKDB10"}]}}]
+            if "9506" in ports else []}})
+    s = Sources(transport=httpx.MockTransport(answer))
+    assert s.vanguard_port("IE00B8GKDB10") == "9506" and s.vanguard_port("IE0000000017") is None
+    assert asked == [1000] * 10  # once a pass
+
+
+def test_the_issuer_comes_from_the_name_and_a_stock_is_no_fund():
+    def p(name):
+        return {"name": name}
+    assert lookthrough.issuer(p("State Street SPDR S&P 500 UCITS ETF"), {}) == "SPDR"
+    assert lookthrough.issuer(p("Xtrackers NASDAQ 100 UCITS ETF 1C"), {}) == "Xtrackers"
+    assert lookthrough.issuer(p("L&G Cyber Security UCITS ETF"), {}) == "L&G"
+    assert lookthrough.issuer(p("Vanguard FTSE All-World High Dividend Yield"), {}) == "Vanguard"
+    assert lookthrough.issuer(p("Lyxor Core MSCI World"), {}) == "Amundi"
+    assert lookthrough.issuer(p("Some fund"), {"url": "https://www.ishares.com/x"}) == "iShares"
+    assert not lookthrough.is_fund(p("Allianz SE"), {}) and not lookthrough.is_fund(p("Mercedes-Benz Group AG"), {})
+    assert lookthrough.is_fund(p("Unknown Issuer MSCI World UCITS ETF"), {})
+    assert lookthrough.issuer(p("Unknown Issuer MSCI World UCITS ETF"), {}) == ""
+
+
+def test_a_vaneck_fund_is_found_on_its_holdings_page_and_read_from_its_block():
+    listing = '<a href="/de/de/anlagen/semiconductor-etf/">SMH</a><a href="/de/de/anlagen/gold-etp/">GOLD</a>'
+    page = ('<ve-fundticker class="d-none">UCTSMH</ve-fundticker> ISIN IE00BMC38736 '
+            '<ve-holdingsblock class="" data-blockid="194732" data-pageid="233164" data-template="">')
+    rows = [{"HoldingName": f"Example {n} Inc", "Weight": "19.80", "Label": f"EX{n} US", "Country": "United States",
+             "Sector": "Information Technology", "CurrencyCode": "USD"} for n in range(5)]
+    s, asked = issuers({"factsheets": httpx.Response(200, text=listing),
+                        "semiconductor-etf/positionen": httpx.Response(200, text=page),
+                        "blockid=194732&pageid=233164&ticker=UCTSMH": httpx.Response(200, json={"data": {
+                            "Holdings": rows}})})
+    lines, source = fetch(s, "IE00BMC38736", by="VanEck")
+    assert source == "VanEck" and len(lines) == 5 and lines[0].weight == D("0.198") and lines[0].key == "EX0 US:"
+    with pytest.raises(NoSource):
+        fetch(s, "IE0000000017", by="VanEck")
+    assert sum("factsheets" in a for a in asked) == 1  # the site's list once a pass

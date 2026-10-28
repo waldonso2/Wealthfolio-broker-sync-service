@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.36.0
+
+- X-Ray looks through the ETFs of other issuers too, fetched by ISIN without any setting: Xtrackers (DWS XLSX), SPDR (fund finder ISIN → ticker, daily holdings XLSX), Amundi/Lyxor (product API), Invesco (index list first, so a swap ETF shows its index stocks), Vanguard (product API by portfolio id) and VanEck (holdings block). Vanguard's and VanEck's ids ship in `fund_products.json`, renewed weekly with the iShares list; an id not shipped yet is looked up once a pass.
+- Every ETF is shown with a card like the iShares ones; the issuer comes from its name. One without a list (an issuer without automatic fetching yet, such as L&G or WisdomTree) gets the reason at its card.
+- The overall matrix holds stocks only: an ETF still without its list is named above it instead of being a row.
+- An Amundi swap ETF is marked: its list is the fund's basket, not the index.
+- Names with a par value (Invesco: "APPLE INC USD0.00001") meet the same company from other issuers.
+
 ## 0.35.3
 
 - The shipped iShares product list knows 129 more funds, among them the German-domiciled (DE) ones from the German site's fund finder.
