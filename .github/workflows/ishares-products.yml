@@ -29,22 +29,4 @@ jobs:
           python-version: "3.13"
       - run: "pip install --require-hashes --only-binary :all: -r requirements.txt"
       - run: pip install --no-deps --no-build-isolation -e .
-      - run: python scripts/ishares_products.py
-      - name: Push new funds and open a pull request
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          git diff --quiet -- src/brokersync/ishares_products.json && { echo "no new funds"; exit 0; }
-          BRANCH=ishares-products
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -c "$BRANCH"
-          git commit -qm "iShares products: new funds from the fund finders" -- src/brokersync/ishares_products.json
-          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/$BRANCH"
-          gh workflow run ci.yml --ref "$BRANCH"
-          gh pr list --head "$BRANCH" --state open --json number --jq length | grep -qx 0 || exit 0
-          BODY="New ISIN -> product number pairs from iShares' fund finders (scripts/ishares_products.py). Data only: no version bump needed; it ships with the next release."
-          # Needs "Allow GitHub Actions to create and approve pull requests" (Settings -> Actions); without it an issue links the branch.
-          gh pr create --head "$BRANCH" --title "iShares products: new funds" --body "$BODY" \
-            || gh issue create --title "iShares products: new funds on branch $BRANCH" --body "$BODY Open the pull request: https://github.com/${REPO}/compare/main...${BRANCH}?expand=1"
+      - run: python scripts/probe_ishares.py
