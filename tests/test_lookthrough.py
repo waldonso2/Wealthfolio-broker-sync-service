@@ -917,6 +917,12 @@ def test_issuers_spellings_without_commas_dws_sectors_and_a_single_country_fund(
     state.set_fund("a-x", "X", [["US0000000002", "A", "0.5", "", "Oil Gas & Consumable Fuels", "USD"]])  # SPDR
     lookthrough.write_taxonomies(state, wf, depot)
     assert [(a["categoryId"], a["weight"]) for a in fake.assignments] == [("10", 5000)]
+    fake.assignments.clear()
+    fake.categories["industries_gics"] += [{"id": "2030", "name": "Transportation", "parentId": "20"},
+                                           {"id": "203040", "name": "Road & Rail", "parentId": "2030"}]
+    state.set_fund("a-x", "X", [["US0000000002", "A", "0.5", "", "Ground Transportation", "USD"]])  # GICS 2023
+    lookthrough.write_taxonomies(state, wf, depot)
+    assert [(a["categoryId"], a["weight"]) for a in fake.assignments] == [("20", 5000)]
     # iShares' fund finder names a single-country fund's country, also for a fund from the shipped list.
     monkeypatch.setattr(lookthrough, "KNOWN", {"IE00BZCQB185": "280510"})
     rows = {"1": {"isin": "IE00BZCQB185", "productPageUrl": "/de/produkte/280510/x", "aladdinCountry": "Indien"},

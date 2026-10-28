@@ -1121,7 +1121,11 @@ ALIASES = {"communication": "communication services", "telecommunication service
            "technologie": "information technology", "industrieunternehmen": "industrials",
            "verbrauchsgüter": "consumer discretionary", "finanzdienstleister": "financials",
            "telekommunikation": "communication services", "versorgungsunternehmen": "utilities",
-           "material": "materials"}
+           "material": "materials",
+           # GICS 2023 names the issuers use, where Wealthfolio's taxonomy still has the earlier ones
+           "airlines": "passenger airlines", "automobile components": "auto components",
+           "ground transportation": "road & rail", "marine transportation": "marine",
+           "personal care products": "personal products"}
 # A country as ISO 3166-1 alpha-2, as Wealthfolio keys its regions (``country_US``): the issuers' spellings that
 # aren't Wealthfolio's English name - German ones (iShares' German download, DWS, VanEck) and English variants.
 # A two-letter code (Vanguard) is taken as it is. Names Wealthfolio has, in English, need no entry.
