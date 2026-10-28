@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.35.1
+
+- **The shipped iShares product list is filled:** 1,238 iShares funds with their product numbers, read by the weekly workflow from the Dutch, Italian and Spanish fund finders. X-Ray now finds the holdings of every listed iShares ETF without asking a fund finder.
+
 ## 0.35.0
 
 - **iShares product numbers ship with the service:**
