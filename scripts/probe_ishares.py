@@ -1,4 +1,4 @@
-"""Temporary probe round 6."""
+"""Temporary probe round 7."""
 import json
 import re
 from pathlib import Path
@@ -6,7 +6,7 @@ import httpx
 
 OUT = Path("probe-files"); OUT.mkdir(exist_ok=True)
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-http = httpx.Client(timeout=60, follow_redirects=True, headers={"User-Agent": UA, "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"})
+http = httpx.Client(timeout=90, follow_redirects=True, headers={"User-Agent": UA, "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"})
 
 def save(name, url, **kw):
     try:
@@ -17,34 +17,26 @@ def save(name, url, **kw):
     if name: (OUT / name).write_bytes(r.content)
     return r
 
-# Vanguard: port ids from the product list, ISINs and holdings over GraphQL
-page = http.get("https://www.vanguard.co.uk/professional/product").text
-ports = sorted(set(re.findall(r"/product/(?:etf|mf)/[a-z-]+/(\d{4})/", page)))
-print("vanguard ports", len(ports), ports[:20])
 GQL = "https://www.vanguard.co.uk/gpx/graphql"
 ids_q = 'query($portIds: [String!]!) { funds(portIds: $portIds) { portId profile { fundFullName identifiers(altIds: ["ISIN"]) { altIdCode altIdValue } } } }'
-hold_q = ('query($portIds: [String!], $lastItemKey: String) { borHoldings(portIds: $portIds) { holdings(limit: 1500, lastItemKey: $lastItemKey) '
-          '{ items { issuerName securityLongDescription marketValuePercentage ticker sedol1 securityType bloombergIsoCountry gicsSectorDescription } totalHoldings lastItemKey } } }')
-daily_q = ('query($portIds: [String!], $lastItemKey: String) { borHoldings(portIds: $portIds) { dailyHoldings(limit: 1500, lastItemKey: $lastItemKey) '
-           '{ items { securityLongDescription securityType isin marketValuePercentage } totalHoldings lastItemKey } } }')
-for hdr in ({}, {"X-Consumer-ID": "uk2"}):
-    save(f"vanguard-ids-{len(hdr)}.json", GQL, method="POST", json={"query": ids_q, "variables": {"portIds": ports[:300] or ["9505"]}}, headers=hdr)
-save("vanguard-hold.json", GQL, method="POST", json={"query": hold_q, "variables": {"portIds": ["9505"]}}, headers={"X-Consumer-ID": "uk2"})
-save("vanguard-daily.json", GQL, method="POST", json={"query": daily_q, "variables": {"portIds": ["9505"]}}, headers={"X-Consumer-ID": "uk2"})
-save("vanguard-de-ids.json", "https://www.de.vanguard/gpx/graphql", method="POST", json={"query": ids_q, "variables": {"portIds": ["9505", "9510"]}}, headers={"X-Consumer-ID": "de2"})
-# VanEck: chunks of the fund-page app, and the holdings block on the page
-b = http.get("https://www.vaneck.com/static/ReactApps/FundPagesNewDesignEU/dist/bundle.js").text
-cids = sorted(set(re.findall(r"(\d{3,4}):1", b)))
-for cid in cids:
+found = {}
+for lo in range(0, 10000, 1000):
+    r = save("", GQL, method="POST", json={"query": ids_q, "variables": {"portIds": [f"{n:04d}" for n in range(lo, lo + 1000)]}},
+             headers={"X-Consumer-ID": "uk2"})
     try:
-        c = http.get(f"https://www.vaneck.com/static/ReactApps/FundPagesNewDesignEU/dist/{cid}.bundle.js")
-    except httpx.HTTPError:
-        continue
-    if c.status_code == 200 and re.search(r"(?i)holding", c.text):
-        (OUT / f"vaneck-{cid}.js").write_bytes(c.content)
-p = save("vaneck-holdings.html", "https://www.vaneck.com/de/de/anlagen/semiconductor-etf/positionen/")
-for m in re.finditer(r"<ve-holdingsblock[^>]*>|<ve-indexholdingsblock[^>]*>", p.text):
-    print("block", m.group(0)[:400])
-# L&G scripts
-save("lgim-fund_centre.js", "https://fundcentres.landg.com/static//cms_resources/fund_centre_42.js?version=69558")
-save("lgim-fundExplorer.js", "https://fundcentres.landg.com/assets/bundles/latest-pointer/lgim/js/fundExplorer.js")
+        for f in (r.json().get("data") or {}).get("funds") or []:
+            for i in (f.get("profile") or {}).get("identifiers") or []:
+                found[i["altIdValue"]] = (f["portId"], f["profile"]["fundFullName"])
+    except Exception as e:
+        print("err", lo, e, r.text[:200] if r is not None else "")
+print("vanguard isins", len(found), list(found.items())[:5])
+(OUT / "vanguard-isins.json").write_text(json.dumps(found))
+for isin in ("IE00B8GKDB10",):
+    print("high div", found.get(isin))
+# VanEck holdings block and the fund list
+save("vaneck-holdings.json", "https://www.vaneck.com/Main/HoldingsBlock/GetContent/?blockid=194732&pageid=233164&ticker=UCTSMH")
+save("vaneck-fundlisting.html", "https://www.vaneck.com/de/de/fundlisting/")
+# L&G fund explorer module
+js = save("lgim-explorer.js", "https://fundcentres.landg.com/assets/bundles/versions/26.10-195-4963d446/lgim/js/fundExplorer.js")
+if js is not None:
+    print(sorted(set(re.findall(r'["\'`](/srp/[^"\'`]+|/api/[^"\'`]+)["\'`]', js.text)))[:40])
