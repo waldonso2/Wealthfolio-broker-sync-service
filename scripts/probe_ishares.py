@@ -1,5 +1,5 @@
-"""Temporary probe round 7."""
-import json
+"""Temporary probe round 8: VanEck ISIN -> page, L&G fund page data."""
+import html
 import re
 from pathlib import Path
 import httpx
@@ -17,26 +17,21 @@ def save(name, url, **kw):
     if name: (OUT / name).write_bytes(r.content)
     return r
 
-GQL = "https://www.vanguard.co.uk/gpx/graphql"
-ids_q = 'query($portIds: [String!]!) { funds(portIds: $portIds) { portId profile { fundFullName identifiers(altIds: ["ISIN"]) { altIdCode altIdValue } } } }'
-found = {}
-for lo in range(0, 10000, 1000):
-    r = save("", GQL, method="POST", json={"query": ids_q, "variables": {"portIds": [f"{n:04d}" for n in range(lo, lo + 1000)]}},
-             headers={"X-Consumer-ID": "uk2"})
-    try:
-        for f in (r.json().get("data") or {}).get("funds") or []:
-            for i in (f.get("profile") or {}).get("identifiers") or []:
-                found[i["altIdValue"]] = (f["portId"], f["profile"]["fundFullName"])
-    except Exception as e:
-        print("err", lo, e, r.text[:200] if r is not None else "")
-print("vanguard isins", len(found), list(found.items())[:5])
-(OUT / "vanguard-isins.json").write_text(json.dumps(found))
-for isin in ("IE00B8GKDB10",):
-    print("high div", found.get(isin))
-# VanEck holdings block and the fund list
-save("vaneck-holdings.json", "https://www.vaneck.com/Main/HoldingsBlock/GetContent/?blockid=194732&pageid=233164&ticker=UCTSMH")
-save("vaneck-fundlisting.html", "https://www.vaneck.com/de/de/fundlisting/")
-# L&G fund explorer module
-js = save("lgim-explorer.js", "https://fundcentres.landg.com/assets/bundles/versions/26.10-195-4963d446/lgim/js/fundExplorer.js")
-if js is not None:
-    print(sorted(set(re.findall(r'["\'`](/srp/[^"\'`]+|/api/[^"\'`]+)["\'`]', js.text)))[:40])
+r = save("vaneck-factsheets.html", "https://www.vaneck.com/de/de/factsheets/etfs/")
+t = html.unescape(r.text)
+print("isins", len(set(re.findall(r"\b(?:IE|NL|LU)[A-Z0-9]{9}\d\b", t))))
+for m in re.finditer(r"<ve-[a-z-]+[^>]*data-blockid[^>]*>", t):
+    print("block", m.group(0)[:300])
+    b = re.search(r'data-blockid="(\d+)"', m.group(0)); p = re.search(r'data-pageid="(\d+)"', m.group(0))
+    tag = re.match(r"<ve-([a-z-]+?)(?:block)?\b", m.group(0)).group(1)
+    if b and p:
+        for name in ("FactSheetsBlock", "DocumentsBlock", "FundListingBlock", "FundsListBlock"):
+            save(f"vaneck-{name}.json", f"https://www.vaneck.com/Main/{name}/GetContent/?blockid={b.group(1)}&pageid={p.group(1)}")
+save("vaneck-overview.html", "https://www.vaneck.com/de/de/anlagen/semiconductor-etf/ueberblick/")
+lg = save("lgim-page.html", "https://fundcentres.landg.com/en/uk/institutional/fund-centre/ETF/Cyber-Security/")
+lt = html.unescape(lg.text)
+for m in re.finditer(r'data-(?:fund|share|isin|part_id|part_type|placement)[a-z_-]*="[^"]+"', lt):
+    pass
+print(sorted(set(re.findall(r'data-part_type="([^"]+)"', lt))))
+for m in list(re.finditer(r"IE00BYPLS672|ISPY|fundId|fund_id|shareClassId", lt))[:8]:
+    print("LG..", lt[max(0, m.start() - 200):m.end() + 200].replace("\n", " "))
