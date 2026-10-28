@@ -18,6 +18,7 @@ interfaces are unverified, and a swap ETF's list would be its collateral basket,
 from __future__ import annotations
 
 import csv
+import html
 import io
 import json
 import logging
@@ -186,6 +187,28 @@ HANETF_DOC = "https://hanetf.com/wp-content/assets/upload/Holdings-{code}-{isin}
 # the TER of a fund whose issuer lists none (Xtrackers, Invesco, Vanguard, VanEck, UBS, …), by ISIN.
 FINANZFLUSS = "https://www.finanzfluss.de/informer/etf/{isin}/"
 FINANZFLUSS_TER = re.compile(r"Gesamtkostenquote \(TER\) von (\d+(?:,\d+)?)\s*%")
+# The same page breaks the fund down: countries (ISO code, weight in %) and its own industries (German name, weight).
+FINANZFLUSS_COUNTRY = re.compile(r'sr-only[^>]*>([A-Z]{2})</span>.*?<progress[^>]*\svalue="([\d.]+)"', re.S)
+FINANZFLUSS_SECTOR = re.compile(r'class="label[^"]*">([^<]+)</div>.*?<progress[^>]*\svalue="([\d.]+)"', re.S)
+FALLBACK_BELOW = 5000  # basis points: an issuer's list covering less than half takes Finanzfluss' breakdown
+# Finanzfluss' industries -> GICS sector, by the first word part that matches (checked in this order); a name none
+# matches stays unassigned and is listed under "Ohne passende Kategorie".
+FINANZFLUSS_SECTORS = (
+    (("kommunikationsgerät", "halbleiter", "software", "hardware", "it-", "elektron", "technologie"),
+     "Information Technology"),
+    (("bank", "versicher", "kredit", "finanz", "kapitalm", "börse", "vermögensverwalt"), "Financials"),
+    (("pharma", "biotech", "medizin", "gesundheit", "life science", "biowissenschaft"), "Health Care"),
+    (("lebensmittel", "getränk", "tabak", "haushalt", "körperpflege", "basiskonsum", "drogerie"), "Consumer Staples"),
+    (("fahrzeug", "automob", "zykl", "einzelhandel", "hotel", "restaurant", "freizeit", "bekleid", "luxus",
+      "gebrauchsg", "verbraucherdienst"), "Consumer Discretionary"),
+    (("medien", "telekom", "unterhaltung", "kommunikation"), "Communication Services"),
+    (("baustoff", "chemi", "metall", "bergbau", "rohstoff", "verpack", "papier", "material", "stahl", "gold"),
+     "Materials"),
+    (("öl", "gas", "energie", "kohle"), "Energy"),
+    (("versorg", "strom", "wasser"), "Utilities"),
+    (("immobil", "reit"), "Real Estate"),
+    (("industrie", "luft", "raumfahrt", "verteidigung", "maschinen", "transport", "logistik", "bau", "elektrische",
+      "investitionsg", "gewerbl", "dienstleist"), "Industrials"))
 HANETF_LIST = "https://hanetf.com/wp-content/assets/upload/productlist-all-all-all-all.xlsx"  # ISIN, TER (a share)
 # The product page's "Daten herunterladen" (10/2026): an Excel 2003 XML workbook of the fund, by product number;
 # the holdings are its sheet "Holdings". The page's old CSV address answers with the page itself since then.
@@ -333,6 +356,25 @@ def locations(rows: list[list[str]]) -> list[list[str]]:
         if len(row) > 2 and re.fullmatch(r"[A-Z]{2}", row[2].strip()) and (w := _number(row[1])) is not None:
             out.append([row[2].strip(), str(w / 100)])
     return out
+
+
+def finanzfluss_page(page: str) -> dict:
+    """TER, countries and industries of a Finanzfluss ETF page; the industries as GICS sectors where one fits."""
+    def block(start: str, end: str) -> str:
+        i = page.find(start)
+        j = page.find(end, i + 1) if i >= 0 else -1
+        return page[i:j] if i >= 0 and j > i else ""
+
+    ter = _ter({"ter": m.group(1)}) if (m := FINANZFLUSS_TER.search(page)) else None
+    regions = [[code, str(Decimal(w) / 100)] for code, w in FINANZFLUSS_COUNTRY.findall(block(">Länder", ">Regionen"))]
+    sectors = [[_gics(html.unescape(name).strip()), str(Decimal(w) / 100)]
+               for name, w in FINANZFLUSS_SECTOR.findall(block(">Branchen", ">Anlageklassen"))]
+    return {"ter": ter, "regions": regions, "sectors": sectors}
+
+
+def _gics(name: str) -> str:
+    lower = name.lower()
+    return next((sector for parts, sector in FINANZFLUSS_SECTORS if any(p in lower for p in parts)), name)
 
 
 def parse_file(data: bytes) -> tuple[Constituent, ...]:
@@ -735,9 +777,10 @@ class Sources:
             self._ter.setdefault(isin, ter)
         return lines
 
-    def finanzfluss_ter(self, isin: str) -> Decimal | None:
-        page = (self._get(FINANZFLUSS.format(isin=isin.lower()), "Finanzfluss") or b"").decode(errors="replace")
-        return _ter({"ter": m.group(1)}) if (m := FINANZFLUSS_TER.search(page)) else None
+    def finanzfluss(self, isin: str) -> dict:
+        """The fund's page at Finanzfluss: {ter, regions: [[code, w]], sectors: [[GICS sector, w]]}."""
+        return finanzfluss_page((self._get(FINANZFLUSS.format(isin=isin.lower()), "Finanzfluss") or b"")
+                                .decode(errors="replace"))
 
     def hanetf_ters(self) -> None:
         """Every HANetf fund's TER from its product list (once a pass; the TER column is a share, not percent)."""
@@ -989,23 +1032,25 @@ def _update(state: State, depot: Depot, sources: Sources, force: bool, deadline:
 
 
 def _fill_ters(state: State, depot: Depot, sources: Sources, deadline: float, only: str, force: bool) -> None:
-    """A fund whose issuer lists no TER gets Finanzfluss' (also an uploaded one); the user's own stays first."""
+    """Every fund's Finanzfluss page, every ``TER_DAYS``: its TER where the issuer lists none (the user's own stays
+    first), and its countries and industries - the last resort for Wealthfolio's taxonomies (``_write_asset``)."""
     funds = state.funds()
     for p in depot.positions:
         st = status(state, p["id"])
         if (only and p["id"] != only) or not p["isin"] or not (p["id"] in funds or is_fund(p, st)):
             continue
-        if (st.get("ter") and st.get("ter_source") != "Finanzfluss") or (
-                not force and _days(st.get("ter_asked")) < TER_DAYS):
-            continue  # the issuer's, or Finanzfluss asked lately (with or without an answer)
+        if not force and _days(st.get("ter_asked")) < TER_DAYS:
+            continue  # asked lately (with or without an answer)
         if time.monotonic() > deadline:
             break
         try:
-            ter = sources.finanzfluss_ter(p["isin"])
+            ff = sources.finanzfluss(p["isin"])
         except SourceError as e:
-            log.info("look-through: no TER from Finanzfluss for %s: %s", p["isin"], e)
+            log.info("look-through: nothing from Finanzfluss for %s: %s", p["isin"], e)
             continue
-        found = {"ter": str(ter), "ter_source": "Finanzfluss", "ter_at": now()} if ter is not None else {}
+        found: dict = {"ff_regions": ff["regions"], "ff_sectors": ff["sectors"]}
+        if ff["ter"] is not None and not (st.get("ter") and st.get("ter_source") != "Finanzfluss"):
+            found |= {"ter": str(ff["ter"]), "ter_source": "Finanzfluss", "ter_at": now()}
         set_status(state, p["id"], ter_asked=now(), **found)
 
 
@@ -1210,12 +1255,16 @@ def write_taxonomies(state: State, wf, depot: Depot) -> Written:
     # A line without a country takes the one another issuer names for the same company (iShares names none).
     known = {xray.plain(line[1]): line[3] for f in funds.values() for line in f["constituents"] if line[3]}
     for p in depot.positions:
-        fund = funds.get(p["id"])
-        if not fund:
+        fund, st = funds.get(p["id"]), status(state, p["id"])
+        fallback = [["", "", w, code, "", ""] for code, w in st.get("ff_regions") or []] + [
+            ["", "", w, "", sector, ""] for sector, w in st.get("ff_sectors") or []]
+        if not fund and not fallback:
             continue
         try:
-            _write_asset(wf, p["id"], _lines(fund["constituents"], status(state, p["id"]), known), categories,
-                         unmatched, result)
+            used = _write_asset(wf, p["id"], _lines(fund["constituents"], st, known) if fund else [], categories,
+                                unmatched, result, fallback)
+            if used != st.get("from_finanzfluss", []):
+                set_status(state, p["id"], from_finanzfluss=used)  # shown at the fund's card
         except WealthfolioError:  # one fund Wealthfolio refuses never keeps the others out
             log.exception("look-through: countries and sectors of %s not written", p["id"])
     result.unmatched = sorted(unmatched)[:20]
@@ -1234,10 +1283,15 @@ def _lines(constituents: list[list[str]], st: dict, known: dict[str, str]) -> li
 
 
 def _write_asset(wf, asset_id: str, constituents: list[list[str]], categories: dict[str, dict[str, str]],
-                 unmatched: set[str], result: Written) -> None:
-    existing = wf.asset_assignments(asset_id)
+                 unmatched: set[str], result: Written, fallback: list[list[str]] | None = None) -> list[str]:
+    """Write the asset's taxonomies; returns those that took Finanzfluss' breakdown."""
+    existing, used = wf.asset_assignments(asset_id), list[str]()
     for tax, attr, _ in TAXONOMIES:
-        new = _bp(constituents, 3 if attr == "country" else 4, categories[tax], unmatched)
+        column = 3 if attr == "country" else 4
+        new = _bp(constituents, column, categories[tax], unmatched)
+        alt = _bp(fallback or [], column, categories[tax], unmatched)  # Finanzfluss' breakdown of the whole fund
+        if sum(w for _, w in new) < FALLBACK_BELOW and sum(w for _, w in alt) > sum(w for _, w in new):
+            new, used = alt, [*used, tax]  # the issuer's list names too little: the last resort
         current = [a for a in existing if a.get("taxonomyId") == tax]
         if any(str(a.get("source", "")).upper() not in ("AUTO", SOURCE) for a in current):
             result.manual += 1
@@ -1253,6 +1307,7 @@ def _write_asset(wf, asset_id: str, constituents: list[list[str]], categories: d
         wf.replace_assignments(asset_id, tax, [{"assetId": asset_id, "taxonomyId": tax, "categoryId": c,
                                                 "weight": w, "source": SOURCE} for c, w in new])
         result.written += 1
+    return used
 
 
 def remove_taxonomies(wf) -> int:

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.43.0
+
+- Countries and sectors into Wealthfolio, last resort: Finanzfluss' breakdown of the whole fund (countries by ISO code; its industries mapped to the GICS sectors). Taken for a fund only where its issuer's list covers less than half (L&G, uploaded lists without countries or sectors, …); the fund's card then says the values come from Finanzfluss. Finanzfluss is now read for every fund every 30 days (with the TER, which an issuer's still takes precedence over).
+
 ## 0.42.2
 
 - Sectors into Wealthfolio: the GICS 2023 names the issuers use ("Airlines", "Automobile Components", "Ground Transportation", "Marine Transportation", "Personal Care Products") find Wealthfolio's categories, which still carry the earlier names.

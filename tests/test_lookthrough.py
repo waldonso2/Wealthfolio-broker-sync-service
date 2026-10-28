@@ -451,7 +451,8 @@ def test_one_position_can_be_fetched_alone_and_lists_are_due_again_the_next_day(
 
     state = State(tmp_path)
     assert lookthrough.update(state, depot, sources(answer), force=True, only="IE0000000017").fetched == 1
-    assert len(asked) == 1 and "999999" in asked[0]  # only that fund's list was asked for
+    lists = [a for a in asked if "finanzfluss" not in a]  # and its Finanzfluss page, once a month
+    assert len(lists) == 1 and "999999" in lists[0]  # only that fund's list was asked for
     assert lookthrough.REFRESH_DAYS < 1  # the daily timer finds yesterday's list due
 
 
@@ -870,7 +871,8 @@ def test_a_fund_without_the_issuers_ter_gets_finanzfluss_and_asks_again_only_aft
     lookthrough.update(state, depot, s)
     assert lookthrough.ter(lookthrough.status(state, "a-ubs")) == (D("0.0022"), "Finanzfluss")
     assert lookthrough.ter(lookthrough.status(state, "a-own")) == (D("0.002"), "SPDR")  # the issuer's stays
-    assert asked == ["https://www.finanzfluss.de/informer/etf/lu0000000000/"]
+    assert sorted(asked) == ["https://www.finanzfluss.de/informer/etf/ie0000000017/",  # its breakdown
+                             "https://www.finanzfluss.de/informer/etf/lu0000000000/"]
     asked.clear()
     lookthrough.update(state, depot, s)
     assert asked == []  # asked lately
@@ -930,3 +932,37 @@ def test_issuers_spellings_without_commas_dws_sectors_and_a_single_country_fund(
     s, asked = issuers({"product-screener": httpx.Response(200, json=rows)})
     assert s.fund_country("IE00BZCQB185") == [["Indien", "1"]] and s.fund_country("US0378331005") == []
     assert len(asked) == 1  # read once a pass, and only for a fund of the shipped list
+
+
+# Fabricated, in the layout of a Finanzfluss ETF page (its country and industry blocks).
+FF_PAGE = ('"text":"Der Example Fonds hat eine Gesamtkostenquote (TER) von 0,22%." <h3>Länder</h3>'
+           + "".join(f'<span class="sr-only">{c}</span><p class="country-name">{n}</p>'
+                     f'<progress class="progress-bar" value="{w}" max="100">{w}</progress>'
+                     for c, n, w in (("US", "Vereinigte Staaten", "70"), ("DE", "Deutschland", "20")))
+           + "<h3>Regionen</h3> <h3>Branchen</h3>"
+           + "".join(f'<div class="label ml-[8px]">{n}</div><progress class="progress-bar" value="{w}" max="100">'
+                     for n, w in (("Halbleiter", "50"), ("Fahrzeuge &amp; Komponenten", "30"), ("Exotisches", "5")))
+           + "<h3>Anlageklassen</h3>")
+
+
+def test_finanzfluss_breaks_down_a_fund_whose_list_names_no_countries_or_sectors(tmp_path):
+    ff = lookthrough.finanzfluss_page(FF_PAGE)
+    assert ff["ter"] == D("0.0022") and ff["regions"] == [["US", "0.7"], ["DE", "0.2"]]
+    assert ff["sectors"] == [["Information Technology", "0.5"], ["Consumer Discretionary", "0.3"],
+                             ["Exotisches", "0.05"]]
+    state = State(tmp_path)
+    state.set_fund("a-lg", "L&G", [["~A", "A CORP", "0.6", "", "", "USD"], ["~B", "B CORP", "0.4", "", "", "USD"]])
+    lookthrough.set_status(state, "a-lg", ff_regions=ff["regions"], ff_sectors=ff["sectors"])
+    state.set_fund("a-own", "Own", [["US0000000002", "C", "0.9", "Germany", "Industrials", "EUR"]])
+    lookthrough.set_status(state, "a-own", ff_regions=[["US", "1"]], ff_sectors=[])
+    depot = Depot(positions=[{"id": k, "isin": "", "name": k, "currency": "EUR", "value": D(1)}
+                             for k in ("a-lg", "a-own")])
+    fake, wf = _wf()
+    r = lookthrough.write_taxonomies(state, wf, depot)
+    mine = sorted((a["assetId"], a["categoryId"], a["weight"]) for a in fake.assignments)
+    # L&G's list names nothing: Finanzfluss' breakdown; the own fund's list covers more than Finanzfluss: its own.
+    assert mine == [("a-lg", "45", 5000), ("a-lg", "country_DE", 2000), ("a-lg", "country_US", 7000),
+                    ("a-own", "20", 9000), ("a-own", "country_DE", 9000)]
+    assert "Exotisches" in r.unmatched
+    assert lookthrough.status(state, "a-lg")["from_finanzfluss"] == ["regions", "industries_gics"]
+    assert not lookthrough.status(state, "a-own").get("from_finanzfluss")

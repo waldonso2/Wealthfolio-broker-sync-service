@@ -1096,6 +1096,9 @@ EN: dict[str, str] = {
     "Produktseite bei iShares für {name}": "iShares product page for {name}",
     "Positionsliste für {name} (CSV, XLSX oder XLS)": "Holdings list for {name} (CSV, XLSX or XLS)",
     "Abruf fehlgeschlagen": "Fetch failed",
+    "In Wealthfolio stammen {what} dieses ETFs von Finanzfluss, weil die Liste des Anbieters zu wenig davon nennt.":
+        "In Wealthfolio, {what} of this ETF come from Finanzfluss, as the issuer's list names too little of them.",
+    "Länder und Sektoren": "countries and sectors", "die Länder": "the countries", "die Sektoren": "the sectors",
     "{n} von {m}: {name}": "{n} of {m}: {name}",
     "Alle {n}": "All {n}",
     "ETFs ({n})": "ETFs ({n})",
