@@ -45,14 +45,15 @@ from .xray import Constituent
 
 log = logging.getLogger(__name__)
 
-WEIGHT = ("weight (%)", "gewichtung (%)", "weighting", "gewichtung", "weight", "anteil (%)", "% of net assets")
-NAME = ("name", "bezeichnung", "emittent", "security name")
+WEIGHT = ("weight (%)", "gewichtung (%)", "weighting", "gewichtung", "weight", "anteil (%)", "% of net assets",
+          "percent of fund", "constituent weight (base)")
+NAME = ("name", "bezeichnung", "emittent", "security name", "security description", "wertpapiere")
 ISIN = ("isin",)
 TICKER = ("ticker", "emittententicker")
 EXCHANGE = ("exchange", "börse")
-COUNTRY = ("location", "standort", "country", "land", "sitz")
+COUNTRY = ("location", "standort", "country", "land", "sitz", "trade country name", "exposure country")
 SECTOR = ("sector", "sektor", "industry classification", "branche")
-CURRENCY = ("market currency", "marktwährung", "currency", "währung")
+CURRENCY = ("market currency", "marktwährung", "currency", "währung", "trading currency")
 
 
 def _text(data: bytes) -> str:
@@ -89,6 +90,25 @@ def _header(line: str) -> tuple[str, list[str]] | None:
     return (delimiter, header) if _column(header, WEIGHT) is not None and _column(header, NAME) is not None else None
 
 
+def _key(isin: str, ticker: str, exchange: str, name: str) -> str:
+    """A constituent's key: its ISIN when valid, else ticker and exchange, else its name."""
+    code = isin.strip().upper()
+    # shortcut: without an ISIN, funds of different issuers only meet by ticker or name; OpenFIGI later.
+    return code if len(code) == 12 and code.isalnum() and valid_isin(code) else (
+        f"{ticker}:{exchange}".upper() if ticker else name.strip().upper())
+
+
+def records(rows: list[dict], source: str) -> tuple[Constituent, ...]:
+    """Constituents from an issuer's JSON rows ({isin, name, weight, country, sector, currency, ticker}); weights
+    in percent or as a share, like ``parse``."""
+    found = [(r, w) for r in rows if (w := _number(str(r.get("weight") or ""))) and str(r.get("name") or "").strip()]
+    scale = Decimal(100) if sum(w for _, w in found) > Decimal("1.5") else Decimal(1)
+    lines = tuple(Constituent(_key(str(r.get("isin") or ""), str(r.get("ticker") or ""), "", str(r["name"])),
+                              str(r["name"]).strip(), w / scale, str(r.get("country") or ""),
+                              str(r.get("sector") or ""), str(r.get("currency") or "")) for r, w in found)
+    return _usable(lines, source)
+
+
 def parse(data: bytes) -> tuple[Constituent, ...]:
     text = _text(data)
     lines = text.splitlines()
@@ -108,11 +128,8 @@ def parse(data: bytes) -> tuple[Constituent, ...]:
         w = _number(cell(row, weight))
         if not w or not cell(row, name):  # footer, empty and zero lines
             continue
-        code = cell(row, isin).upper()
-        # shortcut: without an ISIN, funds of different issuers only meet by ticker or name; OpenFIGI later.
-        key = code if len(code) == 12 and code.isalnum() and valid_isin(code) else (
-            f"{cell(row, ticker)}:{cell(row, exchange)}".upper() if cell(row, ticker) else cell(row, name).upper())
-        found.append((key, cell(row, name), w, row))
+        found.append((_key(cell(row, isin), cell(row, ticker), cell(row, exchange), cell(row, name)), cell(row, name),
+                      w, row))
     if not found:
         raise ValueError(N_("Die Positionsliste enthält keine Zeile mit Gewichtung."))
     # Weights in percent (iShares, most issuers) or already as a share.
@@ -122,14 +139,47 @@ def parse(data: bytes) -> tuple[Constituent, ...]:
 
 
 # ── fetching ─────────────────────────────────────────────────────────────────
-HOSTS = ("www.ishares.com", "www.blackrock.com", "etf.dws.com")
+HOSTS = ("www.ishares.com", "www.blackrock.com", "etf.dws.com", "www.ssga.com", "www.amundietf.de",
+         "dng-api.invesco.com", "www.vanguard.co.uk", "www.vaneck.com", "europe.ark-funds.com",
+         "fundcentres.lgim.com", "fundcentres.landg.com", "hanetf.com")
 BROWSER = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 MAX_BYTES = 20 * 1024 * 1024
 MAX_COLUMN = 16384  # Excel's last column, XFD
 REFRESH_DAYS = 0.75  # daily: the timer runs once a day, so the next day's run must find a list due
 NONE_DAYS = 30  # an ISIN no source knows is asked again after this
 PAUSE = 1.5  # seconds between two requests to an issuer: iShares answers a burst with HTTP 429
-DWS = "https://etf.dws.com/etfdata/export/GBR/ENG/excel/product/constituent/{isin}/"
+DWS = "https://etf.dws.com/etfdata/export/DEU/DEU/excel/product/constituent/{isin}/"
+# SPDR: the fund finder names each fund's ISIN and ticker (in its KID links); the daily holdings are an XLSX by ticker.
+SPDR_FINDER = ("https://www.ssga.com/bin/v1/ssmp/fund/fundfinder?country=de&language=de&role=individual&product=etfs"
+               "&ui=fund-finder")
+SPDR_DOC = "https://www.ssga.com/library-content/products/fund-data/etfs/emea/holdings-daily-emea-en-{ticker}.xlsx"
+SPDR_KID = re.compile(r"isin=([A-Z]{2}[A-Z0-9]{10})&[^\"]*?ticker=([a-z0-9]+-[a-z0-9]+)")
+# Amundi (and Lyxor): the product API answers a fund's composition by ISIN.
+AMUNDI = "https://www.amundietf.de/mapi/ProductAPI/getProductsData"
+# Invesco: the holdings of the fund and of its index by ISIN; a swap ETF's own list is its collateral basket, so
+# the index's list (the exposure the swap delivers) is taken first.
+INVESCO = "https://dng-api.invesco.com/cache/v1/accounts/en_GB/shareclasses/{isin}/holdings/{kind}?idType=isin"
+# Vanguard: its product API (GraphQL) by portfolio id - the ISIN's id from the shipped list, else from the API itself.
+VANGUARD = "https://www.vanguard.co.uk/gpx/graphql"
+VANGUARD_HEADERS = {"X-Consumer-ID": "uk2"}  # the consumer the site's own pages send
+VANGUARD_IDS = ('query($portIds: [String!]!) { funds(portIds: $portIds) { portId profile { '
+                'identifiers(altIds: ["ISIN"]) { altIdCode altIdValue } } } }')
+VANGUARD_HOLDINGS = ('query($portIds: [String!], $lastItemKey: String) { borHoldings(portIds: $portIds) { '
+                     'holdings(limit: 1500, lastItemKey: $lastItemKey) { items { issuerName securityLongDescription '
+                     'marketValuePercentage ticker bloombergIsoCountry gicsSectorDescription } lastItemKey } } }')
+# VanEck: each fund page's holdings block answers JSON by block, page and fund ticker; which fund an ISIN is comes
+# from its holdings page (the shipped list, else every fund page of the site's list once a pass).
+VANECK = "https://www.vaneck.com"
+VANECK_LIST = VANECK + "/de/de/factsheets/etfs/"
+VANECK_PAGE = VANECK + "/de/de/anlagen/{slug}/positionen/"
+VANECK_HOLDINGS = VANECK + "/Main/HoldingsBlock/GetContent/?blockid={block}&pageid={page}&ticker={ticker}"
+# ARK Europe (also the Rize ETFs): each fund page names its ISIN; the full holdings are an XLSX below the page.
+ARK = "https://europe.ark-funds.com"
+ARK_LIST = ARK + "/de/funds/"
+ARK_DOC = ARK + "/funds/{fund}/full-fund-holdings-download/"
+# HANetf: the holdings XLSX lies under the fund's code and ISIN (the code from the shipped list - HANetf's site
+# answers automatic requests with a bot check, its files don't).
+HANETF_DOC = "https://hanetf.com/wp-content/assets/upload/Holdings-{code}-{isin}-all-all.xlsx"
 # The product page's "Daten herunterladen" (10/2026): an Excel 2003 XML workbook of the fund, by product number;
 # the holdings are its sheet "Holdings". The page's old CSV address answers with the page itself since then.
 ISHARES_DOC = ("https://www.blackrock.com/varnish-api/uk-retail01-product-data/product-data/api/v1/get-fund-document"
@@ -171,6 +221,15 @@ class SourceError(Exception):
 
 class NoSource(Exception):
     """No source knows this ISIN (a stock, or a fund of another issuer): upload only."""
+
+
+# L&G: a fund's daily holdings CSV ("Fundholdings.csv") keeps its document id; the user saves its address once.
+LGIM_DOC = re.compile(r"^https://fundcentres\.(?:lgim|landg)\.com/srp/documents-id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+                      r"[0-9a-f]{4}-[0-9a-f]{12}/[A-Za-z0-9._-]{1,80}$")
+
+
+def lgim_doc(url: str) -> bool:
+    return bool(LGIM_DOC.match(url.strip()))
 
 
 def ishares_page(url: str) -> tuple[str, str] | None:
@@ -316,6 +375,9 @@ def finder_rows(rows: object) -> Iterator[tuple[str, tuple[str, str], dict]]:
 # read the finders' megabytes for a fund in it. A number never changes, so the file only grows.
 PRODUCTS_FILE = Path(__file__).with_name("ishares_products.json")
 KNOWN: dict[str, str] = json.loads(PRODUCTS_FILE.read_text()) if PRODUCTS_FILE.exists() else {}
+# The same for other issuers whose source needs an id of their own: {issuer: {ISIN: id}} (Vanguard's portfolio ids).
+FUNDS_FILE = Path(__file__).with_name("fund_products.json")
+PRODUCTS: dict[str, dict[str, str]] = json.loads(FUNDS_FILE.read_text()) if FUNDS_FILE.exists() else {}
 
 
 class Sources:
@@ -331,6 +393,11 @@ class Sources:
         self.finder_error = ""  # why the fund finder gave no products this pass: an unknown ISIN may still be iShares'
         self.limited = ""  # iShares said "too many requests" (429): nothing more is asked this pass
         self.last: tuple[str, str] | None = None  # the product the last fetch found, kept with the fund
+        self.note = ""  # what the last list is, if it is no plain holdings list (a swap ETF's basket)
+        self._spdr: dict[str, str] | None = None
+        self._vanguard: dict[str, str] | None = None
+        self._vaneck: dict[str, str] | None = None
+        self._ark: dict[str, str] | None = None
         self._sent = 0.0
 
     @property
@@ -420,7 +487,7 @@ class Sources:
     def close(self) -> None:
         self._http.close()
 
-    def _get(self, url: str, source: str) -> bytes | None:
+    def _get(self, url: str, source: str, body: dict | None = None, headers: dict | None = None) -> bytes | None:
         """The body, or None for 404; read no more than ``MAX_BYTES``. Requests are spaced by ``PAUSE``; after a
         429 none is sent this pass."""
         if self.limited:
@@ -428,12 +495,12 @@ class Sources:
         time.sleep(max(0.0, self._sent + PAUSE - time.monotonic()))
         self._sent = time.monotonic()
         try:
-            with self._http.stream("GET", url) as r:
+            with self._http.stream("POST" if body else "GET", url, json=body, headers=headers) as r:
                 if r.status_code == 404:
                     return None
                 if r.status_code == 429:
-                    self.limited = (f"{source}: zu viele Anfragen (HTTP 429) - iShares wird beim nächsten Abruf "
-                                    "wieder gefragt.")
+                    self.limited = (f"{source}: zu viele Anfragen (HTTP 429) - beim nächsten Abruf wird wieder "
+                                    "gefragt.")
                     raise SourceError(self.limited)
                 if r.status_code >= 400:
                     raise SourceError(f"{source}: HTTP {r.status_code}")
@@ -458,27 +525,193 @@ class Sources:
         except ValueError as e:
             raise SourceError(f"iShares: {e}") from e
 
+    def document(self, url: str, source: str) -> tuple[Constituent, ...]:
+        """A holdings file at an address the user saved (L&G)."""
+        data = self._get(url, source)
+        if not data or data.lstrip()[:1] == b"<":
+            raise SourceError(f"{source}: keine Positionsliste unter der gespeicherten Adresse.")
+        return self._file(data, source)
+
+    def _file(self, data: bytes, source: str) -> tuple[Constituent, ...]:
+        try:
+            return _usable(parse_file(data), source)
+        except ValueError as e:
+            raise SourceError(f"{source}: {e}") from e
+
     def xtrackers(self, isin: str) -> tuple[Constituent, ...] | None:
         data = self._get(DWS.format(isin=isin), "Xtrackers")
         if not data or data[:2] != b"PK":  # no XLSX: not one of theirs
             return None
+        return self._file(data, "Xtrackers")
+
+    def spdr(self, isin: str) -> tuple[Constituent, ...] | None:
+        if self._spdr is None:  # the fund finder once a pass: ISIN -> ticker
+            finder = (self._get(SPDR_FINDER, "SPDR-Fondsfinder") or b"").decode(errors="replace")
+            self._spdr = dict(SPDR_KID.findall(finder))
+        if not (ticker := self._spdr.get(isin)):
+            return None
+        data = self._get(SPDR_DOC.format(ticker=ticker), "SPDR")
+        if not data or data[:2] != b"PK":
+            raise SourceError(f"SPDR: keine Positionsliste zu {ticker.upper()}.")
+        return self._file(data, "SPDR")
+
+    def amundi(self, isin: str) -> tuple[Constituent, ...] | None:
+        body = {"context": {"countryCode": "DEU", "languageCode": "de", "userProfileName": "RETAIL"},
+                "productIds": [isin], "productType": "PRODUCT", "characteristics": ["FUND_REPLICATION_METHODOLOGY"],
+                "composition": {"compositionFields": ["isin", "name", "weight", "currency", "sector", "countryOfRisk",
+                                                      "bbg"]}}
         try:
-            return _usable(parse_file(data), "Xtrackers")
+            product = (json.loads(self._get(AMUNDI, "Amundi", body) or b"{}").get("products") or [{}])[0]
         except ValueError as e:
-            raise SourceError(f"Xtrackers: {e}") from e
+            raise SourceError("Amundi: Antwort ist kein JSON.") from e
+        rows = [{**r.get("compositionCharacteristics", {}), "weight": r.get("weight")}
+                for r in (product.get("composition") or {}).get("compositionData") or []]
+        if not rows:
+            return None
+        if "swap" in str((product.get("characteristics") or {}).get("FUND_REPLICATION_METHODOLOGY", "")).lower():
+            self.note = "swap"
+        return records([{**r, "country": r.get("countryOfRisk"), "ticker": r.get("bbg")} for r in rows], "Amundi")
+
+    def _graphql(self, query: str, variables: dict) -> dict:
+        try:
+            answer = json.loads(self._get(VANGUARD, "Vanguard", {"query": query, "variables": variables},
+                                          VANGUARD_HEADERS) or b"{}")
+        except ValueError as e:
+            raise SourceError("Vanguard: Antwort ist kein JSON.") from e
+        return answer.get("data") or {}
+
+    def vanguard_port(self, isin: str) -> str | None:
+        if port := PRODUCTS.get("Vanguard", {}).get(isin):
+            return port
+        if self._vanguard is None:  # not shipped yet: every id once a pass
+            self._vanguard = self.vanguard_ids()
+        return self._vanguard.get(isin)
+
+    def vanguard_ids(self) -> dict[str, str]:
+        """ISIN -> portfolio id of every Vanguard fund: the ids are four digits, asked a thousand at a time."""
+        found: dict[str, str] = {}
+        for start in range(0, 10000, 1000):
+            for f in self._graphql(VANGUARD_IDS, {"portIds": [f"{n:04d}" for n in range(start, start + 1000)]}
+                                   ).get("funds") or []:
+                for i in (f.get("profile") or {}).get("identifiers") or []:
+                    if valid_isin(str(i.get("altIdValue") or "")):
+                        found.setdefault(str(i["altIdValue"]), str(f.get("portId")))
+        return found
+
+    def vanguard(self, isin: str) -> tuple[Constituent, ...] | None:
+        if not (port := self.vanguard_port(isin)):
+            return None
+        items: list[dict] = []
+        key = None
+        for _ in range(20):  # pages of 1500 lines
+            page = ((self._graphql(VANGUARD_HOLDINGS, {"portIds": [port], "lastItemKey": key}).get("borHoldings")
+                     or [{}])[0] or {}).get("holdings") or {}
+            items += page.get("items") or []
+            if not (key := page.get("lastItemKey")):
+                break
+        return records([{"name": r.get("issuerName") or r.get("securityLongDescription"),
+                         "weight": r.get("marketValuePercentage"), "ticker": r.get("ticker"),
+                         "country": r.get("bloombergIsoCountry"), "sector": r.get("gicsSectorDescription")}
+                        for r in items], "Vanguard") if items else None
+
+    def vaneck_ids(self) -> dict[str, str]:
+        """ISIN -> "block:page:ticker" of every VanEck fund whose holdings page names its ISIN."""
+        found: dict[str, str] = {}
+        listing = (self._get(VANECK_LIST, "VanEck") or b"").decode(errors="replace")
+        for slug in sorted(set(re.findall(r'href="/de/de/anlagen/([a-z0-9-]+)/"', listing))):
+            page = (self._get(VANECK_PAGE.format(slug=slug), "VanEck") or b"").decode(errors="replace")
+            block = re.search(r'<ve-holdingsblock[^>]*data-blockid="(\d+)"[^>]*data-pageid="(\d+)"', page)
+            ticker = re.search(r"<ve-fundticker[^>]*>([A-Z0-9]+)<", page)
+            if block and ticker:
+                for code in set(re.findall(r"\b(?:IE|NL|LU)[A-Z0-9]{9}\d\b", page)):
+                    if valid_isin(code):
+                        found.setdefault(code, f"{block[1]}:{block[2]}:{ticker[1]}")
+        return found
+
+    def vaneck(self, isin: str) -> tuple[Constituent, ...] | None:
+        if not (fund := PRODUCTS.get("VanEck", {}).get(isin)):
+            if self._vaneck is None:
+                self._vaneck = self.vaneck_ids()
+            if not (fund := self._vaneck.get(isin)):
+                return None
+        block, page, ticker = fund.split(":")
+        try:
+            data = json.loads(self._get(VANECK_HOLDINGS.format(block=block, page=page, ticker=ticker), "VanEck")
+                              or b"{}").get("data") or {}
+        except ValueError as e:
+            raise SourceError("VanEck: Antwort ist kein JSON.") from e
+        rows = data.get("Holdings") or []
+        return records([{"name": r.get("HoldingName"), "weight": r.get("Weight"), "ticker": r.get("Label"),
+                         "country": r.get("Country"), "sector": r.get("Sector"), "currency": r.get("CurrencyCode")}
+                        for r in rows], "VanEck") if rows else None
+
+    def ark_ids(self) -> dict[str, str]:
+        """ISIN -> "<kind>/<slug>" of every fund on ARK Europe's fund list."""
+        found: dict[str, str] = {}
+        listing = (self._get(ARK_LIST, "ARK") or b"").decode(errors="replace")
+        for fund in sorted(set(re.findall(r'href="/de/funds/([a-z-]+/[a-z0-9-]+)/"', listing))):
+            page = (self._get(f"{ARK_LIST}{fund}/", "ARK") or b"").decode(errors="replace")
+            for code in set(re.findall(r"\bIE[A-Z0-9]{9}\d\b", page)):
+                if valid_isin(code):
+                    found.setdefault(code, fund)
+        return found
+
+    def ark(self, isin: str) -> tuple[Constituent, ...] | None:
+        if not (fund := PRODUCTS.get("ARK", {}).get(isin)):
+            if self._ark is None:
+                self._ark = self.ark_ids()
+            if not (fund := self._ark.get(isin)):
+                return None
+        data = self._get(ARK_DOC.format(fund=fund), "ARK")
+        if not data or data[:2] != b"PK":
+            raise SourceError(f"ARK: keine Positionsliste zu {fund}.")
+        return self._file(data, "ARK")
+
+    def hanetf(self, isin: str) -> tuple[Constituent, ...] | None:
+        # shortcut: only the shipped codes - a fund HANetf launches later needs the list renewed (its product list
+        # sits behind the bot check)
+        if not (code := PRODUCTS.get("HANetf", {}).get(isin)):
+            return None
+        data = self._get(HANETF_DOC.format(code=code, isin=isin), "HANetf")
+        if not data or data[:2] != b"PK":
+            raise SourceError(f"HANetf: keine Positionsliste zu {code}.")
+        return self._file(data, "HANetf")
+
+    def invesco(self, isin: str) -> tuple[Constituent, ...] | None:
+        error: SourceError | None = None
+        for kind in ("index", "fund"):
+            try:
+                rows = json.loads(self._get(INVESCO.format(isin=isin, kind=kind), "Invesco") or b"{}").get("holdings")
+            except SourceError as e:  # an ISIN Invesco doesn't know answers 500
+                error = e
+                continue
+            except ValueError:
+                rows = None
+            if rows:
+                return records(rows, "Invesco")
+        if error and "HTTP 5" not in str(error):
+            raise error
+        return None
 
 
 def fetch(sources: Sources, isin: str, page: str = "", *, product: tuple[str, str] | None = None,
-          search: bool = True) -> tuple[tuple[Constituent, ...], str]:
+          search: bool = True, by: str = "") -> tuple[tuple[Constituent, ...], str]:
     """The holdings of the fund with ``isin`` (or at the iShares product ``page``, or the ``product`` found before)
-    and the source's name. ``search``: ask the site's search when the fund finder fails (only for iShares funds -
-    a search per stock costs requests and gets the pass refused)."""
+    and the source's name. ``by``: the issuer the name says - its own source is asked first. ``search``: ask the
+    iShares site's search when the fund finder fails (only for iShares funds - a search per stock costs requests
+    and gets the pass refused)."""
+    sources.note = ""
+    if page and lgim_doc(page):
+        return sources.document(page, "L&G"), "L&G"
+    if by in FETCHERS and isin and not page and not product:
+        if lines := getattr(sources, FETCHERS[by])(isin):
+            return lines, by
+        raise NoSource(isin)
     product = product or (ishares_page(page) if page else
                           sources.ishares_product(isin, search=search) if isin else None)
     sources.last = product
     if product:
         return sources.ishares(*product), "iShares"
-    # shortcut: only iShares for now (#144); Sources.xtrackers works - call it here again to bring Xtrackers back
     raise NoSource(isin)
 
 
@@ -573,9 +806,37 @@ def _days(at: str | None) -> float:
     return (datetime.now(UTC) - datetime.fromisoformat(at)).total_seconds() / 86400 if at else 1e9
 
 
+# The issuers a fund's name in Wealthfolio names; those of FETCHERS are fetched by ISIN.
+ISSUERS = {"iShares": r"\bishares\b", "SPDR": r"\bspdr\b|state street", "Xtrackers": r"x-?trackers",
+           "Amundi": r"\bamundi\b|\blyxor\b", "Invesco": r"\binvesco\b", "Vanguard": r"\bvanguard\b",
+           "L&G": r"\bl ?& ?g\b|legal ?& ?general", "VanEck": r"\bvan ?eck\b", "WisdomTree": r"wisdom ?tree",
+           "HSBC": r"\bhsbc\b", "UBS": r"\bubs\b", "Franklin": r"\bfranklin\b",
+           "J.P. Morgan": r"\bjpm\b|j\.? ?p\.? ?morgan", "Fidelity": r"\bfidelity\b", "Global X": r"\bglobal ?x\b",
+           "Deka": r"\bdeka\b", "First Trust": r"first trust", "ARK": r"\bark\b|\brize\b",
+           "BNP Paribas": r"\bbnp\b",
+           "HANetf": r"\bhan-?etf\b|future of defence|\bemqq\b"}
+FETCHERS = {"Xtrackers": "xtrackers", "SPDR": "spdr", "Amundi": "amundi", "Invesco": "invesco", "Vanguard": "vanguard",
+            "VanEck": "vaneck", "ARK": "ark", "HANetf": "hanetf"}
+FUND_NAME = re.compile(r"\b(?:etf|ucits|fonds|fund|index|msci|ftse|s&p ?500|stoxx|nasdaq)\b", re.I)
+
+
+def issuer(position: dict, st: dict) -> str:
+    """The fund's issuer, as far as we can tell: the source of its list, a saved iShares page, else its name."""
+    if st.get("source") and st["source"] != "Upload":
+        return st["source"]
+    if st.get("url"):
+        return "L&G" if lgim_doc(st["url"]) else "iShares"
+    return (next((k for k, pattern in ISSUERS.items() if re.search(pattern, position["name"], re.I)), "")
+            or next((k for k, ids in PRODUCTS.items() if position.get("isin") in ids), ""))
+
+
+def is_fund(position: dict, st: dict) -> bool:
+    """A fund rather than a stock: it has a list, or its name says so (ETF, UCITS, an index or an issuer)."""
+    return bool(st.get("source") or st.get("url") or issuer(position, st) or FUND_NAME.search(position["name"]))
+
+
 def is_ishares(position: dict, st: dict) -> bool:
-    """An iShares fund, as far as we can tell: by its name in Wealthfolio, or a list or page from iShares."""
-    return "ishares" in position["name"].lower() or st.get("source") == "iShares" or bool(st.get("url"))
+    return issuer(position, st) == "iShares"
 
 
 def update(state: State, depot: Depot, sources: Sources, *, force: bool = False, budget: float = BUDGET,
@@ -595,37 +856,55 @@ def update(state: State, depot: Depot, sources: Sources, *, force: bool = False,
         due = {"ok": REFRESH_DAYS, "none": NONE_DAYS, "error": REFRESH_DAYS}.get(st.get("status", ""), 0)
         if not force and _days(st.get("at")) < due:
             continue
+        by = issuer(p, st)
         try:
             if not (p["isin"] or st.get("url")):
-                if not is_ishares(p, st):
+                if not is_fund(p, st):
                     continue
-                raise SourceError("Wealthfolio kennt keine ISIN zu diesem ETF - trag unter „Einstellungen dieses "
-                                  "ETFs“ seine Produktseite bei iShares ein.")
+                hint = " Trag unter „Einstellungen dieses ETFs“ seine Produktseite bei iShares ein."
+                raise SourceError("Wealthfolio kennt keine ISIN zu diesem ETF." + (hint if by == "iShares" else ""))
             known = tuple(st["product"]) if st.get("product") and not st.get("url") else None
-            lines, source = fetch(sources, p["isin"], st.get("url", ""), product=known,
-                                  search=is_ishares(p, st))
+            lines, source = fetch(sources, p["isin"], st.get("url", ""), product=known, search=by == "iShares", by=by)
         except NoSource:
-            if is_ishares(p, st):
-                e = SourceError(f"iShares kennt die ISIN {p['isin']} nicht (Fondsfinder und Suche) - trag unter "
-                                "„Einstellungen dieses ETFs“ seine Produktseite bei iShares ein.")
-                set_status(state, p["id"], status="error", error=str(e))
-                result.errors.append(f"{p['name']}: {e}")
+            if is_fund(p, st):
+                _failed(state, p, result, SourceError(_unknown(by, p["isin"])))
                 continue
             set_status(state, p["id"], status="none", source="", error="")
             result.none += 1
         except SourceError as e:
             set_status(state, p["id"], status="error", error=str(e))
-            if is_ishares(p, st):  # a stock the search couldn't check isn't shown, so it isn't counted either
+            if is_fund(p, st):  # a stock the search couldn't check isn't shown, so it isn't counted either
                 result.errors.append(f"{p['name']}: {e}")
         else:
             state.set_fund(p["id"], p["name"], rows(lines))
             ter = sources.ter(p["isin"]) if source == "iShares" else None
             set_status(state, p["id"], status="ok", source=source, error="", lines=len(lines), product=sources.last,
+                       note=sources.note,
                        **({"ter": str(ter), "ter_source": source, "ter_at": now()} if ter is not None else {}))
             result.fetched += 1
     record(state, fetched=result.fetched, none=result.none, failed=len(result.errors),
            finder=sources.finder_error)
     return result
+
+
+def _unknown(by: str, isin: str) -> str:
+    """Why a fund got no list: its issuer doesn't know the ISIN, or there is no source for its issuer yet."""
+    if by == "iShares":
+        return (f"iShares kennt die ISIN {isin} nicht (Fondsfinder und Suche) - trag unter „Einstellungen dieses "
+                "ETFs“ seine Produktseite bei iShares ein.")
+    if by in FETCHERS:
+        return f"{by} kennt die ISIN {isin} nicht."
+    if by == "L&G":
+        return ("L&G: trag unter „Einstellungen dieses ETFs“ einmal die Adresse seiner Positionsliste ein "
+                "(Fundholdings.csv) - danach holt der Dienst sie jeden Tag selbst.")
+    upload = " Lade seine Positionsliste unter „Einstellungen dieses ETFs“ hoch."
+    return (f"Für {by} gibt es keinen automatischen Abruf.{upload}" if by else
+            f"Der Anbieter dieses ETFs ist unbekannt - kein automatischer Abruf.{upload}")
+
+
+def _failed(state: State, p: dict, result: Result, e: SourceError) -> None:
+    set_status(state, p["id"], status="error", error=str(e))
+    result.errors.append(f"{p['name']}: {e}")
 
 
 def record(state: State, **values) -> None:

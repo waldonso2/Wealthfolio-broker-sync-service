@@ -1054,8 +1054,15 @@ EN: dict[str, str] = {
         "{fetched} holdings lists fetched, {none} without a source (upload), {failed} failed.",
     "Positionslisten abrufen": "Fetch holdings lists",
     "Meldung": "Finding",
-    "Das ist keine Produktseite von iShares (https://www.ishares.com/…/products/<Nummer>/<Name>).":
-        "That is not an iShares product page (https://www.ishares.com/…/products/<number>/<name>).",
+    ("Das ist keine Produktseite von iShares (https://www.ishares.com/…/products/<Nummer>/<Name>) und keine "
+     "Positionsliste von L&G (https://fundcentres.lgim.com/srp/documents-id/…)."): (
+        "That is neither an iShares product page (https://www.ishares.com/…/products/<number>/<name>) nor an L&G "
+        "holdings list (https://fundcentres.lgim.com/srp/documents-id/…)."),
+    ("L&G: Öffne auf der Seite des ETFs den Download der Positionsliste (Fundholdings.csv), kopier seine Adresse und "
+     "trag sie hier ein - einmal genügt, danach holt der Dienst die Liste jeden Tag selbst."): (
+        "L&G: on the ETF's page, copy the address of the holdings list download (Fundholdings.csv) and enter it here "
+        "- once is enough; after that the service fetches the list itself every day."),
+    "Adresse der Positionsliste bei L&G für {name}": "Address of the L&G holdings list for {name}",
     "Erst den automatischen Abruf einschalten.": "Turn on automatic fetching first.",
     "Die Positionslisten konnten nicht geholt werden - siehe Protokoll.":
         "The holdings lists could not be fetched - see the log.",
@@ -1166,6 +1173,24 @@ EN: dict[str, str] = {
     "ohne ISIN": "no ISIN",
     "noch keine Positionsliste": "no holdings list yet",
     "Abruf fehlgeschlagen {when}: {error}": "Fetch failed {when}: {error}",
+    "Kein ETF in Wealthfolio gefunden.": "No ETF found in Wealthfolio.",
+    ("Dieser Anbieter lässt keinen automatischen Abruf zu: Lade die Positionsliste von der Seite des ETFs herunter "
+     "(CSV oder Excel) und hier hoch. Sie gilt, bis du eine neue hochlädst."): (
+        "This issuer allows no automatic fetching: download the holdings list from the ETF's page (CSV or Excel) and "
+        "upload it here. It counts until you upload a new one."),
+    ("Welche Aktien in deinen ETFs stecken und wie sie sich mit deinen Einzelwerten addieren. Die Positionslisten "
+     "holt der Dienst jeden Morgen selbst bei den Anbietern (iShares, Xtrackers, SPDR, Amundi, Invesco, Vanguard, "
+     "VanEck, ARK)."): (
+        "Which stocks are in your ETFs and how they add up with your single holdings. The service fetches the "
+        "holdings lists itself every morning from the issuers (iShares, Xtrackers, SPDR, Amundi, Invesco, Vanguard, "
+        "VanEck, ARK)."),
+    "{funds} ETFs durchleuchtet · {open} ohne Positionsliste · {singles} Einzelwerte": (
+        "{funds} ETFs looked through · {open} without a holdings list · {singles} single holdings"),
+    "Nicht in der Tabelle, weil ihre Positionsliste noch fehlt: {names}.": (
+        "Not in the table because their holdings list is still missing: {names}."),
+    ("Synthetischer ETF (Swap): die Liste ist der Wertpapierkorb des Fonds, nicht der Index, dessen Wertentwicklung "
+     "er liefert."): ("Synthetic ETF (swap): the list is the fund's basket of securities, not the index whose "
+                     "performance it delivers."),
     "Kein iShares-ETF in Wealthfolio gefunden.": "No iShares ETF found in Wealthfolio.",
     "Die Positionen werden beim Öffnen der Seite aus Wealthfolio gelesen, höchstens alle 10 Minuten.":
         "The positions are read from Wealthfolio when the page opens, at most every 10 minutes.",

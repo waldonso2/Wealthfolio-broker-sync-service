@@ -103,7 +103,6 @@ def lookthrough_page(request: Request, ctx: Ctx, top: int = TOPS[0]):
     funds = state.funds()
     holdings = lookthrough.holdings(state, depot)
     rows = xray.exposures(holdings)
-    stocks = [r for r in rows if r.key != xray.UNASSIGNED]
     with_list = sorted((h for h in holdings if h.id in funds), key=lambda h: -h.value)
     total = sum((p["value"] for p in depot.positions), Decimal(0))
     limits = lookthrough.limits(c.xray_limits)
@@ -111,11 +110,16 @@ def lookthrough_page(request: Request, ctx: Ctx, top: int = TOPS[0]):
     cost = lookthrough.cost(state, depot, c)
     found = xray.findings(holdings, limits, depot.base, depot.cash, cost.rate)
     status = {p["id"]: lookthrough.status(state, p["id"]) for p in depot.positions}
-    # shortcut: only iShares for now (#144) - every other position is hidden, it still counts in the matrix
-    ishares = [p for p in depot.positions if p["id"] in funds or lookthrough.is_ishares(p, status[p["id"]])]
+    etfs = [p for p in depot.positions if p["id"] in funds or lookthrough.is_fund(p, status[p["id"]])]
+    pending = [p for p in etfs if p["id"] not in funds]
+    # The matrix holds stocks only: a fund still without its list is named below it, never a row of its own.
+    waiting = {p["isin"] or p["id"] for p in pending}
+    stocks = [r for r in rows if r.key != xray.UNASSIGNED and r.key not in waiting]
     return ctx.render(
         request, "lookthrough.html", wf_error=ctx.depot_error, positions=depot.positions, funds=funds,
-        status=status, ishares=ishares, hidden=len(depot.positions) - len(ishares), last=lookthrough.last_pass(state),
+        status=status, etfs=etfs, pending=pending, singles=len(depot.positions) - len(etfs),
+        issuers={p["id"]: lookthrough.issuer(p, status[p["id"]]) for p in etfs},
+        auto={"iShares", *lookthrough.FETCHERS}, last=lookthrough.last_pass(state),
         total=total, top=TOP, tops=TOPS, matrix_top=top if top in TOPS else TOPS[0],
         matrix=_matrix(stocks, with_list, total), columns=with_list[:COLUMNS],
         more_funds=len(with_list) > COLUMNS, count=len(stocks),
@@ -217,14 +221,17 @@ def lookthrough_ter(request: Request, ctx: Ctx, asset_id: str = Form(...), ter: 
 
 @router.post("/lookthrough/source")
 def lookthrough_source(request: Request, ctx: Ctx, asset_id: str = Form(...), url: str = Form("")):
-    """The iShares product page of a fund, so the fetch finds its holdings; empty: forget it."""
+    """The iShares product page of a fund, or L&G's address of its holdings CSV, so the fetch finds its holdings;
+    empty: forget it."""
     if _position(ctx, asset_id) is None:
         return redirect(request, "/lookthrough", tr(request, "Unbekannte Position - bitte die Seite neu laden."),
                         "error")
     url = url.strip()
-    if url and (len(url) > 300 or not lookthrough.ishares_page(url)):
+    if url and (len(url) > 300 or not (lookthrough.ishares_page(url) or lookthrough.lgim_doc(url))):
         return redirect(request, "/lookthrough", tr(request, "Das ist keine Produktseite von iShares "
-                                                             "(https://www.ishares.com/…/products/<Nummer>/<Name>)."),
+                                                             "(https://www.ishares.com/…/products/<Nummer>/<Name>) und "
+                                                             "keine Positionsliste von L&G "
+                                                             "(https://fundcentres.lgim.com/srp/documents-id/…)."),
                         "error")
     lookthrough.set_status(ctx.state, asset_id, url=url, status="")  # due at the next fetch
     return redirect(request, "/lookthrough", tr(request, "Gespeichert."))

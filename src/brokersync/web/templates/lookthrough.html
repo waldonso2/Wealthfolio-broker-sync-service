@@ -19,8 +19,9 @@
 {% endfor %}{% endmacro %}
 <div class="card">
   <h1>{{ _("X-Ray") }}</h1>
-  <p>{{ _("Welche Aktien in deinen iShares-ETFs stecken und wie sie sich mit deinen anderen Positionen addieren. Die Positionslisten holt der Dienst jeden Morgen selbst bei iShares; andere ETFs zählen vorerst als eine Position.") }}</p>
-  {% if positions %}<p>{{ _("{funds} iShares-ETFs durchleuchtet · {open} ohne Positionsliste · {hidden} weitere Positionen ausgeblendet (zählen als je eine Position)", funds=fund_list | length, open=ishares | length - fund_list | length, hidden=hidden) }}</p>{% endif %}
+  <p>{{ _("Welche Aktien in deinen ETFs stecken und wie sie sich mit deinen Einzelwerten addieren. Die Positionslisten holt der Dienst jeden Morgen selbst bei den Anbietern (iShares, Xtrackers, SPDR, Amundi, Invesco, Vanguard, VanEck, ARK).") }}</p>
+  {% if positions %}<p>{{ _("{funds} ETFs durchleuchtet · {open} ohne Positionsliste · {singles} Einzelwerte", funds=fund_list | length, open=pending | length, singles=singles) }}</p>{% endif %}
+  {% if pending %}<p class="muted">{{ _("Nicht in der Tabelle, weil ihre Positionsliste noch fehlt: {names}.", names=pending | map(attribute="name") | join(", ")) }}</p>{% endif %}
   {% if last.at %}<p class="muted">{{ _("Letzter Abruf {when}: {fetched} Positionslisten geholt, {failed} fehlgeschlagen.", when=last.at | local, fetched=last.fetched or 0, failed=last.failed or 0) }}</p>{% endif %}
   {% if last.error %}<p class="error" role="alert">{{ _("Der Abruf ist abgebrochen: {error}", error=last.error | redact) }}</p>{% endif %}
   {% if last.finder %}<p class="muted">{{ _("iShares nennt zu einer ISIN gerade keine Produktnummer ({error}). Trag bei einem ETF ohne Liste einmal seine Produktseite unter „Einstellungen dieses ETFs“ ein - danach holt der Dienst seine Liste selbst.", error=last.finder | redact) }}</p>{% endif %}
@@ -69,10 +70,11 @@
 </div>
 {% endif %}
 
-{% for p in ishares %}{% set f = funds.get(p.id) %}{% set st = status[p.id] %}{% set lines = largest.get(p.id, []) %}
+{% for p in etfs %}{% set f = funds.get(p.id) %}{% set st = status[p.id] %}{% set lines = largest.get(p.id, []) %}{% set by = issuers[p.id] %}
 <div class="card">
   <h2>{{ p.name }}</h2>
-  <p class="muted">{{ p.isin or _("ohne ISIN") }} · {{ p.value | money }} EUR ({{ pct(p.value / total) }}){% if f %} · {{ _("{n} Positionen von {source}, Stand {when}", n=lines | length, source=st.source or "iShares", when=f.at | local) }}{% else %} · {{ _("noch keine Positionsliste") }}{% endif %}</p>
+  <p class="muted">{{ p.isin or _("ohne ISIN") }} · {{ p.value | money }} EUR ({{ pct(p.value / total) }}){% if f %} · {{ _("{n} Positionen von {source}, Stand {when}", n=lines | length, source=st.source or by or "iShares", when=f.at | local) }}{% else %} · {{ _("noch keine Positionsliste") }}{% endif %}</p>
+  {% if f and st.note == "swap" %}<p class="muted">{{ _("Synthetischer ETF (Swap): die Liste ist der Wertpapierkorb des Fonds, nicht der Index, dessen Wertentwicklung er liefert.") }}</p>{% endif %}
   {% if st.status == "error" %}<p class="error" role="alert">{{ _("Abruf fehlgeschlagen {when}: {error}", when=st.at | local, error=st.error | redact) }}</p>{% endif %}
   <form method="post" action="/lookthrough/fetch" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}"><button class="secondary" {% if reading %}disabled{% endif %} aria-label="{{ _('Positionsliste von {name} jetzt abrufen', name=p.name) }}">{{ _("Jetzt abrufen") }}</button></form>
   {% if f %}
@@ -89,21 +91,32 @@
   </details>{% endif %}
   {% endif %}
   <details{% if not f %} open{% endif %}><summary>{{ _("Einstellungen dieses ETFs") }}</summary>
-    {% if not f and p.isin %}<p>{{ _("Ohne Liste: Such den ETF bei iShares, öffne den Treffer und füg die Adresse seiner Seite hier ein - einmal genügt.") }} <a href="https://www.ishares.com/de/privatanleger/de/produkte/produktliste#/?productView=all&amp;search={{ p.isin | urlencode }}" target="_blank" rel="noopener noreferrer">{{ _("Bei iShares suchen ({isin})", isin=p.isin) }}</a></p>{% endif %}
-    <form method="post" action="/lookthrough/source" class="inline-form">
+    {% if not f and p.isin and by == "iShares" %}<p>{{ _("Ohne Liste: Such den ETF bei iShares, öffne den Treffer und füg die Adresse seiner Seite hier ein - einmal genügt.") }} <a href="https://www.ishares.com/de/privatanleger/de/produkte/produktliste#/?productView=all&amp;search={{ p.isin | urlencode }}" target="_blank" rel="noopener noreferrer">{{ _("Bei iShares suchen ({isin})", isin=p.isin) }}</a></p>{% endif %}
+    {% if by == "iShares" %}<form method="post" action="/lookthrough/source" class="inline-form">
             <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
             <label>{{ _("Produktseite bei iShares für {name}", name=p.name) }} <input type="url" name="url" value="{{ st.url or '' }}" maxlength="300" placeholder="https://www.ishares.com/de/privatanleger/de/produkte/…"></label>
             <div class="actions"><button class="secondary">{{ _("Speichern") }}</button></div>
-          </form>
+          </form>{% elif by == "L&G" %}<p>{{ _("L&G: Öffne auf der Seite des ETFs den Download der Positionsliste (Fundholdings.csv), kopier seine Adresse und trag sie hier ein - einmal genügt, danach holt der Dienst die Liste jeden Tag selbst.") }}</p>
+    <form method="post" action="/lookthrough/source" class="inline-form">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
+            <label>{{ _("Adresse der Positionsliste bei L&G für {name}", name=p.name) }} <input type="url" name="url" value="{{ st.url or '' }}" maxlength="300" placeholder="https://fundcentres.lgim.com/srp/documents-id/…/Fundholdings.csv"></label>
+            <div class="actions"><button class="secondary">{{ _("Speichern") }}</button></div>
+          </form>{% endif %}
     <form method="post" action="/lookthrough/ter" class="inline-form">
             <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
             <label>{{ _("Laufende Kosten (TER, % im Jahr) für {name}, leer: vom Anbieter", name=p.name) }} <input type="text" name="ter" inputmode="decimal" maxlength="10" value="{{ typed(st.ter_manual, true) }}"></label>
             <div class="actions"><button class="secondary">{{ _("Speichern") }}</button></div>
           </form>
+    {% if by not in auto %}<p>{{ _("Dieser Anbieter lässt keinen automatischen Abruf zu: Lade die Positionsliste von der Seite des ETFs herunter (CSV oder Excel) und hier hoch. Sie gilt, bis du eine neue hochlädst.") }}</p>
+    <form method="post" action="/lookthrough/upload" enctype="multipart/form-data" class="inline-form">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
+            <label>{{ _("Positionsliste für {name} (CSV oder XLSX)", name=p.name) }} <input type="file" name="file" accept=".csv,.xlsx,text/csv" required></label>
+            <div class="actions"><button>{{ _("Hochladen") }}</button></div>
+          </form>{% endif %}
   </details>
 </div>
 {% endfor %}
-{% if positions and not ishares %}<div class="card"><p class="muted">{{ _("Kein iShares-ETF in Wealthfolio gefunden.") }}</p></div>{% endif %}
+{% if positions and not etfs %}<div class="card"><p class="muted">{{ _("Kein ETF in Wealthfolio gefunden.") }}</p></div>{% endif %}
 {% if not positions and not reading %}<div class="card"><p class="muted">{{ _("Keine Positionen in Wealthfolio.") }}</p></div>{% endif %}
 
 {% if positions %}
