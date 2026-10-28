@@ -1,4 +1,4 @@
-"""Temporary probe round 29: where each issuer's answers carry the TER."""
+"""Temporary probe round 30: TER at Invesco, Xtrackers, Vanguard, VanEck."""
 import json
 import re
 import sys
@@ -10,9 +10,8 @@ import httpx  # noqa: E402
 from brokersync import lookthrough as l  # noqa: E402
 
 OUT = Path("probe-files"); OUT.mkdir(exist_ok=True)
-UA = l.BROWSER
-http = httpx.Client(timeout=90, follow_redirects=True, headers={"User-Agent": UA, "Accept-Language": "de-DE,de;q=0.9"})
-PAT = re.compile(r"ter\b|fee|charge|expense|ocf|kosten|ongoing|tcr|gesamtkosten", re.I)
+http = httpx.Client(timeout=90, follow_redirects=True, headers={"User-Agent": l.BROWSER, "Accept-Language": "de-DE,de;q=0.9"})
+PAT = re.compile(r"ter\b|fee|charge|expense|ocf|kosten|ongoing|tcr", re.I)
 
 
 def get(name, url, **kw):
@@ -38,63 +37,46 @@ def keys(obj, path=""):
 
 
 def text(t, n=4):
-    for m in list(re.finditer(r"TER|Gesamtkostenquote|Laufende Kosten|Ongoing charges|Total expense", t))[:n]:
-        print("   TXT ..", re.sub(r"<[^>]+>", " ", t[max(0, m.start() - 150):m.end() + 250]).replace("\n", " ")[:400])
+    for m in list(re.finditer(r"TER\b|Gesamtkostenquote|Laufende Kosten|Ongoing charges|Total expense|OCF", t))[:n]:
+        print("   TXT ..", re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", t[max(0, m.start() - 100):m.end() + 200]))[:300])
 
 
-# iShares screener: the first row's TER-like keys
-r = get("ish.json", l.ISHARES_SCREENERS[0])
-try:
-    rows = r.json()
-    first = next(iter(rows.values())) if isinstance(rows, dict) else rows[0]
-    print("   ishares keys", sorted(first)[:80]); keys(first)
-    for code, product, row in l.finder_rows(rows):
-        if code == "IE00B4L5Y983":
-            keys(row); print("   ter()", l._ter(row)); break
-except Exception as e:
-    print("   ishares", type(e).__name__, e)
-# SPDR finder
-r = get("spdr.json", l.SPDR_FINDER)
-try:
-    d = r.json()["data"]["funds"]["etfs"]["datas"]
-    print("   spdr keys", sorted(d[0])); keys(d[0])
-except Exception as e:
-    print("   spdr", type(e).__name__, e)
-# Amundi with likely characteristics
-for ch in (["TER"], ["ONGOING_CHARGES"], ["TER", "ONGOING_CHARGES", "MANAGEMENT_FEE", "TOTAL_EXPENSE_RATIO", "FEES"]):
-    body = {"context": {"countryCode": "DEU", "languageCode": "de", "userProfileName": "RETAIL"},
-            "productIds": ["LU1681043599"], "productType": "PRODUCT", "characteristics": ch}
-    r = get("amundi.json", l.AMUNDI, json=body)
-    if r is not None:
-        print("   ", r.text[:600])
-# Invesco shareclass
-for u in ("https://dng-api.invesco.com/cache/v1/accounts/en_GB/shareclasses/IE00B60SX394?idType=isin",
-          "https://dng-api.invesco.com/cache/v1/accounts/en_GB/shareclasses/IE00B60SX394/details?idType=isin"):
-    r = get("invesco.json", u)
+r = get("invesco.json", "https://dng-api.invesco.com/cache/v1/accounts/en_GB/shareclasses/IE00B60SX394?idType=isin")
+if r is not None:
+    print("   ", r.text[:3000])
+for u in ("https://etf.dws.com/api/pdp/de-de/etf/IE00BJ0KDQ92", "https://etf.dws.com/api/pdp/de-de/IE00BJ0KDQ92",
+          "https://etf.dws.com/api/de-de/products/IE00BJ0KDQ92", "https://etf.dws.com/api/products/IE00BJ0KDQ92"):
+    r = get("dws.json", u)
     if r is not None and r.status_code == 200:
+        print("   ", r.text[:500])
         try:
             keys(r.json())
         except ValueError:
-            print("   ", r.text[:300])
-# Vanguard GraphQL: guess fields, errors name valid ones
-for q in ('{ funds(portIds: ["9505"]) { portId profile { ocf expenseRatio } } }',
-          '{ funds(portIds: ["9505"]) { portId profile { fundFeesAndCharges { ocf } } } }',
-          '{ funds(portIds: ["9505"]) { portId costs { ocf } } }',
-          '{ __type(name: "FundProfile") { fields { name } } }',
-          '{ __type(name: "Fund") { fields { name } } }'):
+            pass
+r = get("dwsnuxt.html", "https://etf.dws.com/de-de/IE00BJ0KDQ92-msci-world-ucits-etf-1c/")
+if r is not None:
+    print("   urls", sorted(set(re.findall(r'https://etf\.dws\.com/api/[^"\s]+', r.text)))[:20])
+    print("   js", sorted(set(re.findall(r'/_nuxt/[\w.-]+\.js', r.text)))[:10])
+for q in ('{ funds(portIds: ["9505"]) { portId profile { fundFact { ocf } } } }',
+          '{ funds(portIds: ["9505"]) { portId profile { ocfValue } } }',
+          '{ funds(portIds: ["9505"]) { portId profile { totalExpenseRatio } } }',
+          '{ funds(portIds: ["9505"]) { portId profile { fees { ocf } } } }',
+          '{ funds(portIds: ["9505"]) { portId profile { primaryExchange expenseRatioDate ongoingCharge ocfFee } } }',
+          '{ funds(portIds: ["9505"]) { portId fees { ocf } } }',
+          '{ funds(portIds: ["9505"]) { portId ocf } }'):
     r = get("vg.json", l.VANGUARD, json={"query": q}, headers=l.VANGUARD_HEADERS)
     if r is not None:
-        print("   ", r.text[:900])
-# Xtrackers: the xlsx's first rows, and the product page
-r = get("dws.xlsx", l.DWS.format(isin="IE00BJ0KDQ92"))
-if r is not None and r.content[:2] == b"PK":
-    for row in l.xlsx_rows(r.content)[:6]:
-        print("   dws", row[:8])
-r = get("dws.html", "https://etf.dws.com/de-de/IE00BJ0KDQ92-msci-world-ucits-etf-1c/")
+        print("   ", re.sub(r"\s+", " ", r.text)[:500])
+r = get("vgpage.html", "https://www.vanguard.co.uk/professional/product/etf/equity/9505/ftse-all-world-ucits-etf-usd-accumulating")
 if r is not None: text(r.text)
-# VanEck / ARK pages
-r = get("vaneck.html", "https://www.vaneck.com/de/de/anlagen/gold-miners-etf/ueberblick/")
-if r is not None: text(r.text)
-r = get("ark.html", l.ARK + "/de/funds/active-etfs/artificial-intelligence-robotics/")
-if r is not None: text(r.text)
-r = get("hanetf.html", "https://hanetf.com/wp-content/assets/upload/productlist-all-all-all-all.xlsx")
+fund = l.PRODUCTS.get("VanEck", {}).get("IE00BQQP9F84") or next(iter(l.PRODUCTS.get("VanEck", {}).values()), "")
+print("   vaneck id", fund)
+r = get("vanecklist.html", l.VANECK_LIST)
+if r is not None:
+    links = sorted(set(re.findall(r'/de/de/anlagen/[\w-]+/', r.text)))[:3]
+    print("   links", links)
+    for link in links[:1]:
+        p = get("vaneckpage.html", l.VANECK + link + "ueberblick/")
+        if p is not None: text(p.text)
+        p = get("vaneckpage2.html", l.VANECK + link)
+        if p is not None: text(p.text)
