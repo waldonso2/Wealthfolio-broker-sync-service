@@ -1,4 +1,4 @@
-"""Temporary probe round 25: L&G share class page and its scripts -> where the holdings document comes from."""
+"""Temporary probe round 27: UBS ETF page -> where the constituents download comes from."""
 import re
 from pathlib import Path
 from urllib.parse import urljoin
@@ -6,8 +6,9 @@ import httpx
 
 OUT = Path("probe-files"); OUT.mkdir(exist_ok=True)
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-http = httpx.Client(timeout=90, follow_redirects=True, headers={"User-Agent": UA, "Accept-Language": "en-GB,en;q=0.9"})
-WORDS = ("9f3a4ebd", "Fundholdings", "fundholdings", "documents-id", "holdings", "srp/api", "pageSections", "partId")
+http = httpx.Client(timeout=90, follow_redirects=True, headers={"User-Agent": UA, "Accept-Language": "de-CH,de;q=0.9",
+                                                               "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"})
+WORDS = ("Constituents", "constituents", "Holdings", "holdings", "UBSFunds", "/api/", "\\.json", "fundgate", "xls")
 
 
 def get(name, url):
@@ -24,20 +25,19 @@ def scan(t):
     for w in WORDS:
         ms = list(re.finditer(w, t))
         print("  ", w, len(ms))
-        for m in ms[:4]:
-            print("     ..", t[max(0, m.start() - 250):m.end() + 350].replace("\n", " "))
+        for m in ms[:5]:
+            print("     ..", t[max(0, m.start() - 250):m.end() + 300].replace("\n", " "))
 
 
-r = get("lg-fe.js", "https://fundcentres.landg.com/assets/bundles/latest-pointer/lgim/js/fundExplorer.js")
-u = re.search(r'var u="([^"]+)"', r.text).group(1)
-seen, todo = set(), [u]
-WORDS = WORDS + ("documents/", "api/", "Holdings", "inline-document", "documentType")
-while todo and len(seen) < 40:
-    u = todo.pop(0)
-    if u in seen: continue
-    seen.add(u)
-    j = get(f"lg-b{len(seen)}.js", u)
-    if j is None or j.status_code != 200: continue
-    print("== bundle", u); scan(j.text)
-    for m in re.findall(r'["\'(](\.{0,2}/[\w./-]+\.js)["\')]', j.text):
-        todo.append(urljoin(u, m))
+r = get("ubs-page.html", "https://www.ubs.com/ch/de/assetmanagement/funds/etf/"
+        "lu0629459743-ubs-msci-world-socially-responsible-ucits-etf-pd001.html")
+if r is not None and r.status_code == 200:
+    scan(r.text)
+    scripts = sorted(set(re.findall(r'<script[^>]+src="([^"]+)"', r.text)))
+    print("scripts", scripts)
+    for n, s in enumerate(scripts[:25]):
+        j = get(f"ubs-js-{n}.js", urljoin(str(r.url), s))
+        if j is not None and j.status_code == 200 and any(w in j.text for w in ("onstituents", "oldings")):
+            print("== script", s); scan(j.text)
+else:
+    print(r.text[:1500] if r is not None else "")
