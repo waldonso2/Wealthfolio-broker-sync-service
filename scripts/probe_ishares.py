@@ -1,4 +1,5 @@
-"""Temporary probe round 5."""
+"""Temporary probe round 6."""
+import json
 import re
 from pathlib import Path
 import httpx
@@ -16,27 +17,34 @@ def save(name, url, **kw):
     if name: (OUT / name).write_bytes(r.content)
     return r
 
-js = save("vanguard-92755.js", "https://www.vanguard.co.uk/92755.74374ac7c10596a7.js")
-rt = http.get("https://www.vanguard.co.uk/runtime.46f27ca601d8f023.js").text
-chunks = dict(re.findall(r'(\d+):"([0-9a-f]{16})"', rt))
-# chunks the app names together with holdings
-hits = 0
-for cid, h in chunks.items():
+# Vanguard: port ids from the product list, ISINs and holdings over GraphQL
+page = http.get("https://www.vanguard.co.uk/professional/product").text
+ports = sorted(set(re.findall(r"/product/(?:etf|mf)/[a-z-]+/(\d{4})/", page)))
+print("vanguard ports", len(ports), ports[:20])
+GQL = "https://www.vanguard.co.uk/gpx/graphql"
+ids_q = 'query($portIds: [String!]!) { funds(portIds: $portIds) { portId profile { fundFullName identifiers(altIds: ["ISIN"]) { altIdCode altIdValue } } } }'
+hold_q = ('query($portIds: [String!], $lastItemKey: String) { borHoldings(portIds: $portIds) { holdings(limit: 1500, lastItemKey: $lastItemKey) '
+          '{ items { issuerName securityLongDescription marketValuePercentage ticker sedol1 securityType bloombergIsoCountry gicsSectorDescription } totalHoldings lastItemKey } } }')
+daily_q = ('query($portIds: [String!], $lastItemKey: String) { borHoldings(portIds: $portIds) { dailyHoldings(limit: 1500, lastItemKey: $lastItemKey) '
+           '{ items { securityLongDescription securityType isin marketValuePercentage } totalHoldings lastItemKey } } }')
+for hdr in ({}, {"X-Consumer-ID": "uk2"}):
+    save(f"vanguard-ids-{len(hdr)}.json", GQL, method="POST", json={"query": ids_q, "variables": {"portIds": ports[:300] or ["9505"]}}, headers=hdr)
+save("vanguard-hold.json", GQL, method="POST", json={"query": hold_q, "variables": {"portIds": ["9505"]}}, headers={"X-Consumer-ID": "uk2"})
+save("vanguard-daily.json", GQL, method="POST", json={"query": daily_q, "variables": {"portIds": ["9505"]}}, headers={"X-Consumer-ID": "uk2"})
+save("vanguard-de-ids.json", "https://www.de.vanguard/gpx/graphql", method="POST", json={"query": ids_q, "variables": {"portIds": ["9505", "9510"]}}, headers={"X-Consumer-ID": "de2"})
+# VanEck: chunks of the fund-page app, and the holdings block on the page
+b = http.get("https://www.vaneck.com/static/ReactApps/FundPagesNewDesignEU/dist/bundle.js").text
+cids = sorted(set(re.findall(r"(\d{3,4}):1", b)))
+for cid in cids:
     try:
-        c = http.get(f"https://www.vanguard.co.uk/{cid}.{h}.js")
+        c = http.get(f"https://www.vaneck.com/static/ReactApps/FundPagesNewDesignEU/dist/{cid}.bundle.js")
     except httpx.HTTPError:
         continue
-    if re.search(r"(?i)fund-?holdings|holdingDetails|borHoldings|FundHoldings", c.text):
-        (OUT / f"vanguard-chunk-{cid}.js").write_bytes(c.content); hits += 1
-print("vanguard chunks with holdings", hits)
-for isin in ("IE0032077012", "IE00B3YCGJ38"):
-    for kind in ("fund", "index"):
-        save(f"invesco-{isin}-{kind}.json", f"https://dng-api.invesco.com/cache/v1/accounts/en_GB/shareclasses/{isin}/holdings/{kind}?idType=isin")
-save("vaneck-bundle.js", "https://www.vaneck.com/static/ReactApps/FundPagesNewDesignEU/dist/bundle.js")
-save("vaneck-common.js", "https://www.vaneck.com/Static/us/js/dist/fund-pages-common.js")
-lg = save("lgim-page.html", "https://fundcentres.landg.com/en/uk/institutional/fund-centre/ETF/Cyber-Security/")
-for s in sorted(set(re.findall(r'<script[^>]+src="([^"]+)"', lg.text)))[:15]:
-    u = s if s.startswith("http") else "https://fundcentres.landg.com" + s
-    r = save("", u)
-    if r is not None and ("srp/api" in r.text or "holding" in r.text.lower()):
-        (OUT / ("lgim-" + re.sub(r"[^a-z0-9.]", "_", s.lower())[-60:])).write_bytes(r.content)
+    if c.status_code == 200 and re.search(r"(?i)holding", c.text):
+        (OUT / f"vaneck-{cid}.js").write_bytes(c.content)
+p = save("vaneck-holdings.html", "https://www.vaneck.com/de/de/anlagen/semiconductor-etf/positionen/")
+for m in re.finditer(r"<ve-holdingsblock[^>]*>|<ve-indexholdingsblock[^>]*>", p.text):
+    print("block", m.group(0)[:400])
+# L&G scripts
+save("lgim-fund_centre.js", "https://fundcentres.landg.com/static//cms_resources/fund_centre_42.js?version=69558")
+save("lgim-fundExplorer.js", "https://fundcentres.landg.com/assets/bundles/latest-pointer/lgim/js/fundExplorer.js")
