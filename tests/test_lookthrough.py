@@ -327,6 +327,22 @@ def test_countries_and_sectors_go_into_wealthfolio_without_touching_the_users_ow
     assert [a["source"] for a in fake.assignments] == ["MANUAL"]
 
 
+def test_german_country_and_sector_names_and_iso_codes_find_wealthfolios_categories(tmp_path):
+    state = State(tmp_path)
+    state.set_fund("a-world", "World", [["US0000000002", "A", "0.4", "Vereinigte Staaten von Amerika",
+                                         "Informationstechnologie", "USD"],
+                                        ["US0000000010", "B", "0.3", "US", "IT", "USD"],  # Vanguard: ISO codes
+                                        ["DE0000000001", "C", "0.2", "Deutschland", "Industrie", "EUR"],
+                                        ["IT0000000001", "D", "0.1", "IT", "", "EUR"]])  # Italy, no Wealthfolio
+    depot = Depot(positions=[{"id": "a-world", "isin": "", "name": "World", "currency": "EUR", "value": D(1)}])
+    fake, wf = _wf()
+    r = lookthrough.write_taxonomies(state, wf, depot)
+    mine = sorted((a["taxonomyId"], a["categoryId"], a["weight"]) for a in fake.assignments)
+    assert ("regions", "country_US", 7000) in mine and ("regions", "country_DE", 2000) in mine
+    assert ("industries_gics", "45", 7000) in mine and ("industries_gics", "20", 2000) in mine
+    assert r.unmatched == ["IT"]  # Italy is no category of this fake: unassigned, never "Information Technology"
+
+
 def test_a_run_writes_the_taxonomies_when_turned_on(tmp_path):
     from .fakes import FakeWealthfolio
     from .test_sync import setup

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.41.0
+
+- X-Ray is fast again with large ETFs: the page renders only the rows it shows - the overall matrix its top 10 (25, 50, 100 or all on request), each ETF its 10 largest positions, all of them only when asked (`?fund=`). With 15 funds of up to 3000 lines the page went from 6.7 MB to 0.1 MB. A fund's weights are computed once per page, not once per pair of funds.
+- The ETF cards sit in one folded card "ETFs", each ETF folded again.
+- Countries and sectors into Wealthfolio: countries are found by ISO code (`country_US`) - also as German names ("Vereinigte Staaten von Amerika", "Deutschland") and bare codes ("US") - and sectors also under German names ("Informationstechnologie"), so far fewer lines stay unassigned.
+
 ## 0.40.0
 
 - X-Ray reads the TER of every ETF whose issuer lists none (Xtrackers, Invesco, Vanguard, VanEck, UBS, uploaded lists, …) from its page at Finanzfluss, by ISIN; asked again after 30 days, also when Finanzfluss had none. An issuer's TER and one typed by hand still come first.
