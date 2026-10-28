@@ -1,4 +1,4 @@
-"""Temporary probe round 36: does Finanzfluss' ETF page carry a country and sector breakdown? Snippets only."""
+"""Temporary probe round 37: Finanzfluss' country and sector blocks (raw HTML around them, and as text)."""
 import re
 import sys
 
@@ -8,11 +8,14 @@ import httpx  # noqa: E402
 from brokersync import lookthrough as l  # noqa: E402
 
 http = httpx.Client(timeout=60, follow_redirects=True, headers={"User-Agent": l.BROWSER, "Accept-Language": "de-DE"})
-for isin in ("ie00byplS672".lower(), "lu0629459743", "ie00bmc38736"):
+for isin in ("lu0629459743", "ie00bmc38736"):
     t = http.get(l.FINANZFLUSS.format(isin=isin)).text
-    print("##", isin, len(t))
-    for w in ("Länder", "Branchen", "Sektoren", "Regionen", "countries", "sectors", "Vereinigte Staaten", "Technologie"):
-        ms = list(re.finditer(w, t))
-        print("  ", w, len(ms))
-        for m in ms[:3]:
-            print("     ..", re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", t[max(0, m.start() - 150):m.end() + 300]))[:320])
+    print("##", isin)
+    for w in (">\\s*Länder\\s*<", ">\\s*Branchen\\s*<", "US Vereinigte Staaten"):
+        m = re.search(w, t)
+        if not m:
+            print("  no", w); continue
+        raw = t[m.start():m.start() + 2500]
+        print("  RAW", w, raw[:1800].replace("\n", " "))
+        print("  TXT", re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " | ", t[m.start():m.start() + 9000]))[:1800])
+    print("  sonstige", [t[m.start() - 80:m.end() + 80] for m in re.finditer("Sonstige", t)][:3])
