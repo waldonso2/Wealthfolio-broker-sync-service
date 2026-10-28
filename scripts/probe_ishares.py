@@ -18,18 +18,13 @@ def get(name, url):
     if name: (OUT / name).write_bytes(r.content)
     return r
 
-for ls in (38, 4):
-    r = get(f"lg-lit-{ls}.json", f"{B}/srp/api/literature-structure/{ls}/?audience=79&share_classes=893&language=1")
-    if r is None or r.status_code != 200:
-        continue
-    print("   ", r.text[:1500])
-    try:
-        rows = r.json().get("data") or []
-    except ValueError:
-        continue
-    for row in rows:
-        q = "&".join([f"lit_types={t}" for t in row.get("lit_types", [])])
-        d = get(f"lg-doc-{ls}-{row.get('set_id')}.json", f"{B}/srp/api/documents/?audience=79&share_classes=893&language=1&{q}&date_from=")
-        if d is not None and d.status_code == 200:
-            hit = [x for x in re.findall(r"documents-id/[0-9a-f-]{36}/[^\"']+", d.text)]
-            print("     ", row.get("display_name"), row.get("lit_types"), hit[:4])
+for u in ("/en/uk/institutional/fund-centre/ETF/Cyber-Security/IE00BYPLS672/", "/en/uk/institutional/fund-centre/ETF/Cyber-Security/"):
+    r = get("lg-scpage.html", B + u)
+    t = r.text
+    for w in ("9f3a4ebd", "Fundholdings", "fundholdings", "holdings", "pageSections", "partId"):
+        ms = list(re.finditer(w, t))
+        print("  ", w, len(ms))
+        for m in ms[:2]:
+            print("     ..", t[max(0, m.start() - 300):m.end() + 300].replace("\n", " "))
+    break
+raise SystemExit
