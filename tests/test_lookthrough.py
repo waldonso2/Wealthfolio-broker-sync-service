@@ -539,7 +539,8 @@ def test_only_ishares_funds_are_searched_a_429_stops_the_pass_and_a_found_produc
     assert "HTTP 429" in lookthrough.status(state, "a-etf2")["error"]
     asked.clear()
     lookthrough.update(state, depot, Sources(transport=httpx.MockTransport(answer)), force=True, only="a-etf")
-    assert len(asked) == 1 and "portfolioId=308858&" in asked[0]  # no finder, no search: the kept product
+    issuer = [a for a in asked if "finanzfluss" not in a]  # its TER: Finanzfluss, as iShares listed none here
+    assert len(issuer) == 1 and "portfolioId=308858&" in issuer[0]  # no finder, no search: the kept product
 
     def limited(request: httpx.Request) -> httpx.Response:
         asked.append(str(request.url))
@@ -839,3 +840,21 @@ def test_an_lgim_fund_is_read_daily_from_the_address_the_user_saved(tmp_path):
     lookthrough.update(state, Depot(positions=[p]), s)
     st = lookthrough.status(state, "a-lg")
     assert st["status"] == "ok" and lookthrough.issuer(p, st) == "L&G"
+
+
+def test_a_fund_without_the_issuers_ter_gets_finanzfluss_and_asks_again_only_after_a_month(tmp_path):
+    state = State(tmp_path)
+    depot = Depot(positions=[
+        {"id": "a-ubs", "isin": "LU0000000000", "name": "UBS Example UCITS ETF", "currency": "EUR", "value": D(9)},
+        {"id": "a-own", "isin": "IE0000000017", "name": "Example UCITS ETF", "currency": "EUR", "value": D(8)}])
+    lookthrough.set_status(state, "a-ubs", status="upload")
+    lookthrough.set_status(state, "a-own", status="upload", ter="0.002", ter_source="SPDR")
+    faq = '"text":"Der Example Fonds hat eine Gesamtkostenquote (TER) von 0,22%. Das bedeutet …"'
+    s, asked = issuers({"finanzfluss.de/informer/etf/lu0000000000/": httpx.Response(200, text=faq)})
+    lookthrough.update(state, depot, s)
+    assert lookthrough.ter(lookthrough.status(state, "a-ubs")) == (D("0.0022"), "Finanzfluss")
+    assert lookthrough.ter(lookthrough.status(state, "a-own")) == (D("0.002"), "SPDR")  # the issuer's stays
+    assert asked == ["https://www.finanzfluss.de/informer/etf/lu0000000000/"]
+    asked.clear()
+    lookthrough.update(state, depot, s)
+    assert asked == []  # asked lately
