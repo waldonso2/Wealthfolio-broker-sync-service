@@ -24,10 +24,9 @@ def save(name, url, **kw):
         print("   body", r.content[:300])
     return r
 
-save("ark-download.bin", "https://europe.ark-funds.com/funds/active-etfs/artificial-intelligence-robotics/full-fund-holdings-download/")
-r = save("ark-funds.html", "https://europe.ark-funds.com/de/funds/")
-links = sorted(set(re.findall(r'href="(/de/funds/[a-z-]+/[a-z0-9-]+/)"', r.text)))
-print("ark funds", links)
-for l in links:
-    p = http.get("https://europe.ark-funds.com" + l).text
-    print("  ", l, sorted(set(re.findall(r"\bIE[A-Z0-9]{9}\d\b", p)))[:4], bool(re.search("full-fund-holdings-download", p)))
+r = save("wt-com.html", "https://www.wisdomtree.com/de/products/equities/wisdomtree-europe-defence-ucits-etf---eur-acc")
+if r is not None:
+    t = html.unescape(r.text)
+    for w in ("csv", "CSV", "holding", "Holding", "IE0002Y8CX98", "api/"):
+        for m in list(re.finditer(w, t))[:3]: print("WT..", w, t[max(0, m.start() - 200):m.end() + 200].replace("\n", " "))
+raise SystemExit
