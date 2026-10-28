@@ -96,6 +96,11 @@
             <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
             <label>{{ _("Produktseite bei iShares für {name}", name=p.name) }} <input type="url" name="url" value="{{ st.url or '' }}" maxlength="300" placeholder="https://www.ishares.com/de/privatanleger/de/produkte/…"></label>
             <div class="actions"><button class="secondary">{{ _("Speichern") }}</button></div>
+          </form>{% elif by == "L&G" %}<p>{{ _("L&G: Öffne auf der Seite des ETFs den Download der Positionsliste (Fundholdings.csv), kopier seine Adresse und trag sie hier ein - einmal genügt, danach holt der Dienst die Liste jeden Tag selbst.") }}</p>
+    <form method="post" action="/lookthrough/source" class="inline-form">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">
+            <label>{{ _("Adresse der Positionsliste bei L&G für {name}", name=p.name) }} <input type="url" name="url" value="{{ st.url or '' }}" maxlength="300" placeholder="https://fundcentres.lgim.com/srp/documents-id/…/Fundholdings.csv"></label>
+            <div class="actions"><button class="secondary">{{ _("Speichern") }}</button></div>
           </form>{% endif %}
     <form method="post" action="/lookthrough/ter" class="inline-form">
             <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="asset_id" value="{{ p.id }}">

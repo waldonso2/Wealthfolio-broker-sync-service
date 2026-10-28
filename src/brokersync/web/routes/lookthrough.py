@@ -221,14 +221,17 @@ def lookthrough_ter(request: Request, ctx: Ctx, asset_id: str = Form(...), ter: 
 
 @router.post("/lookthrough/source")
 def lookthrough_source(request: Request, ctx: Ctx, asset_id: str = Form(...), url: str = Form("")):
-    """The iShares product page of a fund, so the fetch finds its holdings; empty: forget it."""
+    """The iShares product page of a fund, or L&G's address of its holdings CSV, so the fetch finds its holdings;
+    empty: forget it."""
     if _position(ctx, asset_id) is None:
         return redirect(request, "/lookthrough", tr(request, "Unbekannte Position - bitte die Seite neu laden."),
                         "error")
     url = url.strip()
-    if url and (len(url) > 300 or not lookthrough.ishares_page(url)):
+    if url and (len(url) > 300 or not (lookthrough.ishares_page(url) or lookthrough.lgim_doc(url))):
         return redirect(request, "/lookthrough", tr(request, "Das ist keine Produktseite von iShares "
-                                                             "(https://www.ishares.com/…/products/<Nummer>/<Name>)."),
+                                                             "(https://www.ishares.com/…/products/<Nummer>/<Name>) und "
+                                                             "keine Positionsliste von L&G "
+                                                             "(https://fundcentres.lgim.com/srp/documents-id/…)."),
                         "error")
     lookthrough.set_status(ctx.state, asset_id, url=url, status="")  # due at the next fetch
     return redirect(request, "/lookthrough", tr(request, "Gespeichert."))

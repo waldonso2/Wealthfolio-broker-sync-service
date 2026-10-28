@@ -206,3 +206,15 @@ def test_the_overlap_of_two_funds_is_a_heatmap_and_no_sector_is_shown(tmp_path):
     assert heat.count('class="num heat-5">90</td>') == 2  # the same list twice: 90 % held twice, darkest
     assert heat.count('class="num self">') == 2 and '<th scope="row" title=' in heat
     assert '<th scope="col">Sektor</th>' not in page and "United States · IT" not in page
+
+
+def test_an_lgim_address_is_saved_and_anything_else_refused(tmp_path):
+    from brokersync import lookthrough
+
+    client, token = _client(tmp_path)
+    url = "https://fundcentres.lgim.com/srp/documents-id/00000000-0000-4000-8000-000000000000/Fundholdings.csv"
+    client.post("/lookthrough/source", data={"csrf": token, "asset_id": FUND, "url": url})
+    assert lookthrough.status(State(tmp_path), FUND)["url"] == url
+    page = client.post("/lookthrough/source", data={"csrf": token, "asset_id": FUND,
+                                                     "url": "https://example.com/x.csv"}).text
+    assert "keine Positionsliste von L&amp;G" in page and lookthrough.status(State(tmp_path), FUND)["url"] == url
