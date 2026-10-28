@@ -53,7 +53,8 @@ print(f"{len(products)} products ({len(products) - len(lookthrough.KNOWN)} new) 
 if not sys.argv[1:]:  # the other issuers whose source needs an id of its own
     funds = {k: dict(v) for k, v in lookthrough.PRODUCTS.items()}
     sources = lookthrough.Sources()
-    for issuer, ids in (("Vanguard", sources.vanguard_ids), ("VanEck", sources.vaneck_ids)):
+    for issuer, ids in (("Vanguard", sources.vanguard_ids), ("VanEck", sources.vaneck_ids),
+                        ("ARK", sources.ark_ids)):
         try:
             for isin, fund in ids().items():
                 funds.setdefault(issuer, {}).setdefault(isin, fund)

@@ -167,7 +167,7 @@ def test_a_funds_top_25_show_under_it_and_the_rest_folded(tmp_path):
     assert top.index("Example 59 Inc") < top.index("Example 58 Inc") and "Example 34 Inc" not in top  # top 25
     assert "Example 34 Inc" in rest.split("Einstellungen dieses ETFs")[0]  # folded, on the same page
     assert "<h1>X-Ray</h1>" in page and "Gesamt: Aktien über alle Positionen" in page
-    assert "/lookthrough/upload" not in page  # no upload: every issuer is fetched
+    assert "/lookthrough/upload" in page  # an issuer without automatic fetching: its list is uploaded
     matrix = client.get("/lookthrough?top=50").text.split("Weitere Aktien über alle Positionen")[0]
     assert '<strong aria-current="page">Top 50</strong>' in matrix and "Example 10 Inc" in matrix  # 50th of 60
 

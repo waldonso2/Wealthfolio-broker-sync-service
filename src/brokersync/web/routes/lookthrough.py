@@ -118,7 +118,8 @@ def lookthrough_page(request: Request, ctx: Ctx, top: int = TOPS[0]):
     return ctx.render(
         request, "lookthrough.html", wf_error=ctx.depot_error, positions=depot.positions, funds=funds,
         status=status, etfs=etfs, pending=pending, singles=len(depot.positions) - len(etfs),
-        issuers={p["id"]: lookthrough.issuer(p, status[p["id"]]) for p in etfs}, last=lookthrough.last_pass(state),
+        issuers={p["id"]: lookthrough.issuer(p, status[p["id"]]) for p in etfs},
+        auto={"iShares", *lookthrough.FETCHERS}, last=lookthrough.last_pass(state),
         total=total, top=TOP, tops=TOPS, matrix_top=top if top in TOPS else TOPS[0],
         matrix=_matrix(stocks, with_list, total), columns=with_list[:COLUMNS],
         more_funds=len(with_list) > COLUMNS, count=len(stocks),
