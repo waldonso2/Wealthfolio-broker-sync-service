@@ -156,20 +156,24 @@ def test_costs_need_a_ter_and_a_fee_model_and_go_into_the_fire_calculator(tmp_pa
     assert "Ohne Kosten" not in page  # overridden by the user
 
 
-def test_a_funds_top_25_show_under_it_and_the_rest_folded(tmp_path):
+def test_a_funds_top_10_show_under_it_and_the_rest_only_on_request(tmp_path):
     client, token = _client(tmp_path)
     many = "ISIN,Name,Weight (%)\n" + "".join(f",Example {n:02d} Inc,{(n + 1) / 100}\n" for n in range(60))
     client.post("/lookthrough/upload", data={"csrf": token, "asset_id": FUND},
                 files={"file": ("holdings.csv", many.encode(), "text/csv")})
     page = client.get("/lookthrough").text
     fund = page.split(f"<caption class=\"sr-only\">Positionen von {FUND}")[1]
-    top, rest = fund.split("Alle 60 Positionen")[:2]
-    assert top.index("Example 59 Inc") < top.index("Example 58 Inc") and "Example 34 Inc" not in top  # top 25
-    assert "Example 34 Inc" in rest.split("Einstellungen dieses ETFs")[0]  # folded, on the same page
+    top = fund.split(f"Alle 60 Positionen von {FUND} zeigen")[0]
+    assert top.index("Example 59 Inc") < top.index("Example 58 Inc") and "Example 49 Inc" not in top  # top 10
+    assert "Example 34 Inc" not in page  # the rest isn't sent: a page with large funds stays small
+    full = client.get(f"/lookthrough?fund={FUND}").text
+    assert "Example 00 Inc" in full and "Nur die größten 10 zeigen" in full
     assert "<h1>X-Ray</h1>" in page and "Gesamt: Aktien über alle Positionen" in page
     assert "/lookthrough/upload" in page  # an issuer without automatic fetching: its list is uploaded
-    matrix = client.get("/lookthrough?top=50").text.split("Weitere Aktien über alle Positionen")[0]
+    matrix = client.get("/lookthrough?top=50").text
     assert '<strong aria-current="page">Top 50</strong>' in matrix and "Example 10 Inc" in matrix  # 50th of 60
+    assert "Example 09 Inc</td>" not in matrix.split("Aktien über alle Positionen</caption>")[1].split("</table>")[0]
+    assert "Example 00 Inc" in client.get("/lookthrough?top=all").text
 
 
 def test_every_fund_is_shown_with_the_reason_a_list_is_missing_and_stays_out_of_the_matrix(tmp_path):
@@ -178,14 +182,14 @@ def test_every_fund_is_shown_with_the_reason_a_list_is_missing_and_stays_out_of_
     client, token = _client(tmp_path)
     page = client.get("/lookthrough").text
     assert "0 ETFs durchleuchtet · 0 ohne Positionsliste · 1 Einzelwerte" in page  # its name says no fund
-    assert f"<h2>{FUND}" not in page and "Kein ETF in Wealthfolio gefunden." in page
+    assert f"<h3>{FUND}" not in page and "Kein ETF in Wealthfolio gefunden." in page
     state = State(tmp_path)
     lookthrough.set_status(state, FUND, url="https://www.ishares.com/uk/a/en/products/123456/x-etf", status="error",
                            error="iShares: HTTP 403")
     lookthrough.record(state, fetched=0, none=0, failed=1, finder="iShares-Fondsfinder: HTTP 403")
     page = client.get("/lookthrough").text
     assert "0 ETFs durchleuchtet · 1 ohne Positionsliste · 0 Einzelwerte" in page
-    assert f"<h2>{FUND}" in page and f"weil ihre Positionsliste noch fehlt: {FUND}." in page
+    assert f"<h3>{FUND}" in page and f"weil ihre Positionsliste noch fehlt: {FUND}." in page
     assert "Gesamt: Aktien über alle Positionen" not in page  # a fund without its list is never a row of its own
     assert "Abruf fehlgeschlagen" in page and "iShares: HTTP 403" in page and "Fondsfinder: HTTP 403" in page
     assert "produktliste#/?productView=all&amp;search=" in page and "<details open>" in page  # find it, paste it

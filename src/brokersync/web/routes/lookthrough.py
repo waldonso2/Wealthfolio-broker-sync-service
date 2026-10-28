@@ -75,7 +75,7 @@ def _position(ctx: AppContext, asset_id: str) -> dict | None:
 
 
 TOP = 10  # rows shown at first under each fund; the rest folded
-TOPS = (10, 25, 50, 100)  # the overall matrix: the user's choice
+TOPS = ("10", "25", "50", "100", "all")  # the overall matrix: the user's choice; the page renders only these rows
 COLUMNS = 4  # the largest funds get a column of the matrix of their own, the others share "weitere ETFs"
 
 
@@ -93,7 +93,7 @@ def _matrix(rows: list[xray.Exposure], funds: list[xray.Holding], total: Decimal
 
 
 @router.get("/lookthrough", response_class=HTMLResponse)
-def lookthrough_page(request: Request, ctx: Ctx, top: int = TOPS[0]):
+def lookthrough_page(request: Request, ctx: Ctx, top: str = TOPS[0], fund: str = ""):
     if time.time() - ctx.depot_at > READ_SECONDS:
         from .overview import launch
 
@@ -115,13 +115,14 @@ def lookthrough_page(request: Request, ctx: Ctx, top: int = TOPS[0]):
     # The matrix holds stocks only: a fund still without its list is named below it, never a row of its own.
     waiting = {p["isin"] or p["id"] for p in pending}
     stocks = [r for r in rows if r.key != xray.UNASSIGNED and r.key not in waiting]
+    top = top if top in TOPS else TOPS[0]
     return ctx.render(
         request, "lookthrough.html", wf_error=ctx.depot_error, positions=depot.positions, funds=funds,
         status=status, etfs=etfs, pending=pending, singles=len(depot.positions) - len(etfs),
         issuers={p["id"]: lookthrough.issuer(p, status[p["id"]]) for p in etfs},
         auto={"iShares", *lookthrough.FETCHERS}, last=lookthrough.last_pass(state),
-        total=total, top=TOP, tops=TOPS, matrix_top=top if top in TOPS else TOPS[0],
-        matrix_open="top" in request.query_params,
+        total=total, top=TOP, tops=TOPS, top_choice=top, matrix_top=len(stocks) if top == "all" else int(top),
+        matrix_open="top" in request.query_params, full=fund if fund in funds else "",
         matrix=_matrix(stocks, with_list, total), columns=with_list[:COLUMNS],
         more_funds=len(with_list) > COLUMNS, count=len(stocks),
         largest={k: sorted(f["constituents"], key=lambda c: -Decimal(c[2])) for k, f in funds.items()},

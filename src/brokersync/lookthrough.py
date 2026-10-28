@@ -1060,13 +1060,39 @@ def new_risks(state: State, found: list[xray.Finding]) -> list[xray.Finding]:
 
 # ── into Wealthfolio's taxonomies ────────────────────────────────────────────
 SOURCE = "BROKERSYNC"  # the assignments' source: ours; AUTO is Yahoo's, anything else the user's
-# The issuers' names that differ from Wealthfolio's category names (all lower case).
-ALIASES = {"usa": "united states", "united states of america": "united states", "us": "united states",
-           "uk": "united kingdom", "great britain": "united kingdom", "korea (south)": "south korea",
-           "korea, republic of": "south korea", "korea": "south korea", "netherlands (the)": "netherlands",
-           "russian federation": "russia", "taiwan, province of china": "taiwan", "hong kong sar": "hong kong",
-           "communication": "communication services", "telecommunication services": "communication services",
-           "telecommunications": "communication services", "it": "information technology"}
+# The issuers' sector names that differ from Wealthfolio's GICS sectors (all lower case), German ones included -
+# iShares' German download and DWS name them in German.
+ALIASES = {"communication": "communication services", "telecommunication services": "communication services",
+           "telecommunications": "communication services", "it": "information technology",
+           "informationstechnologie": "information technology", "finanzwesen": "financials",
+           "finanzen": "financials", "gesundheitswesen": "health care", "gesundheitsversorgung": "health care",
+           "gesundheit": "health care", "industrie": "industrials", "nicht-basiskonsumgüter": "consumer discretionary",
+           "zyklische konsumgüter": "consumer discretionary", "basiskonsumgüter": "consumer staples",
+           "nichtzyklische konsumgüter": "consumer staples", "kommunikation": "communication services",
+           "kommunikationsdienste": "communication services", "energie": "energy", "materialien": "materials",
+           "roh-, hilfs- & betriebsstoffe": "materials", "grundstoffe": "materials", "versorger": "utilities",
+           "versorgungsbetriebe": "utilities", "immobilien": "real estate"}
+# A country as ISO 3166-1 alpha-2, as Wealthfolio keys its regions (``country_US``): the issuers' spellings that
+# aren't Wealthfolio's English name - German ones (iShares' German download, DWS, VanEck) and English variants.
+# A two-letter code (Vanguard) is taken as it is. Names Wealthfolio has, in English, need no entry.
+COUNTRIES = {
+    "usa": "us", "united states of america": "us", "vereinigte staaten": "us", "vereinigte staaten von amerika": "us",
+    "uk": "gb", "great britain": "gb", "vereinigtes königreich": "gb", "großbritannien": "gb",
+    "korea": "kr", "korea (south)": "kr", "korea, republic of": "kr", "south korea": "kr", "republic of korea": "kr",
+    "südkorea": "kr", "korea (süd)": "kr", "republik korea": "kr", "netherlands (the)": "nl", "niederlande": "nl",
+    "russian federation": "ru", "russland": "ru", "russische föderation": "ru", "taiwan, province of china": "tw",
+    "taiwan (republik china)": "tw", "hong kong sar": "hk", "hongkong": "hk", "czech republic": "cz",
+    "tschechien": "cz", "tschechische republik": "cz", "türkiye": "tr", "turkey": "tr", "türkei": "tr",
+    "kanada": "ca", "frankreich": "fr", "deutschland": "de", "schweiz": "ch", "indien": "in", "brasilien": "br",
+    "australien": "au", "spanien": "es", "italien": "it", "schweden": "se", "dänemark": "dk", "norwegen": "no",
+    "finnland": "fi", "irland": "ie", "belgien": "be", "österreich": "at", "singapur": "sg", "neuseeland": "nz",
+    "mexiko": "mx", "südafrika": "za", "saudi-arabien": "sa", "vereinigte arabische emirate": "ae", "katar": "qa",
+    "indonesien": "id", "philippinen": "ph", "polen": "pl", "griechenland": "gr", "kolumbien": "co",
+    "argentinien": "ar", "ungarn": "hu", "luxemburg": "lu", "kaimaninseln": "ky", "cayman-inseln": "ky",
+    "insel man": "im", "ägypten": "eg", "zypern": "cy", "estland": "ee", "lettland": "lv", "litauen": "lt",
+    "slowenien": "si", "slowakei": "sk", "rumänien": "ro", "kroatien": "hr", "marokko": "ma", "kenia": "ke",
+    "kasachstan": "kz", "britische jungferninseln": "vg", "jordanien": "jo", "bangladesch": "bd", "island": "is",
+    "china (volksrepublik)": "cn", "volksrepublik china": "cn", "macao": "mo", "makau": "mo"}
 # Taxonomy, the line's attribute, and which of its categories count (countries; the GICS sectors).
 TAXONOMIES = (("regions", "country", lambda c: str(c.get("id", "")).startswith("country_")),
               ("industries_gics", "sector", lambda c: not c.get("parentId")))
@@ -1086,7 +1112,7 @@ def _bp(lines: list[list[str]], attr: int, categories: dict[str, str], unmatched
         name = line[attr].strip().lower()
         if not name:
             continue
-        category = categories.get(ALIASES.get(name, name))
+        category = categories.get(COUNTRIES.get(name, name) if attr == 3 else ALIASES.get(name, name))
         if category is None:
             unmatched.add(line[attr].strip())
             continue
@@ -1104,6 +1130,7 @@ def write_taxonomies(state: State, wf, depot: Depot) -> Written:
     result, unmatched = Written(), set[str]()
     categories = {tax: {str(c.get("name", "")).lower(): c["id"] for c in wf.taxonomy_categories(tax) if counts(c)}
                   for tax, _, counts in TAXONOMIES}
+    categories["regions"].update({c[len("country_"):].lower(): c for c in list(categories["regions"].values())})
     funds = state.funds()
     for p in depot.positions:
         fund = funds.get(p["id"])

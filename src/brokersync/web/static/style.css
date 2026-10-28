@@ -134,7 +134,9 @@ details[open] > summary::before { transform: rotate(90deg); }
 details pre { max-width: 100%; overflow-x: auto; }
 details.panel { margin-top: 0; }
 details.panel > summary { color: var(--text); font-size: 14px; display: flex; flex-wrap: wrap; column-gap: 8px; }
-details.panel > summary h2 { margin: 0; }
+details.panel > summary h2, details.panel > summary h3 { margin: 0; }
+details.panel > summary h3 { font-family: var(--serif); font-size: 15px; }
+section.fund { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
 details.panel > summary .muted { flex-basis: 100%; }
 
 /* Tables */
