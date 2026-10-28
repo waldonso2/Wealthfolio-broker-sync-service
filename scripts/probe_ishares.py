@@ -24,16 +24,10 @@ def save(name, url, **kw):
         print("   body", r.content[:300])
     return r
 
-r = save("ark-arki.html", "https://europe.ark-funds.com/de/funds/active-etfs/artificial-intelligence-robotics/")
-t = html.unescape(r.text)
-for w in ("NVIDIA", "Tesla", "TESLA", "IE000"):
-    for m in list(re.finditer(w, t))[:2]: print("ARK..", t[max(0, m.start() - 250):m.end() + 150].replace("\n", " "))
-save("hanetf-list.html", "https://hanetf.com/product-list/")
-sm = save("hanetf-sitemap.xml", "https://hanetf.com/sitemap_index.xml")
-for u in re.findall(r"<loc>([^<]+)</loc>", sm.text if sm is not None else "")[:30]:
-    print("   sitemap", u)
-    if "product" in u or "fund" in u or "etf" in u:
-        sub = save("", u)
-        if sub is not None:
-            locs = re.findall(r"<loc>([^<]+)</loc>", sub.text)
-            print("   ", len(locs), [l for l in locs if "defence" in l or "emqq" in l][:5])
+save("ark-download.bin", "https://europe.ark-funds.com/funds/active-etfs/artificial-intelligence-robotics/full-fund-holdings-download/")
+r = save("ark-funds.html", "https://europe.ark-funds.com/de/funds/")
+links = sorted(set(re.findall(r'href="(/de/funds/[a-z-]+/[a-z0-9-]+/)"', r.text)))
+print("ark funds", links)
+for l in links:
+    p = http.get("https://europe.ark-funds.com" + l).text
+    print("  ", l, sorted(set(re.findall(r"\bIE[A-Z0-9]{9}\d\b", p)))[:4], bool(re.search("full-fund-holdings-download", p)))
