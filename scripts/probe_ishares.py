@@ -1,60 +1,100 @@
-"""Temporary probe round 28: L&G fund page -> page sections -> parts -> holdings document."""
-import html
+"""Temporary probe round 29: where each issuer's answers carry the TER."""
 import json
 import re
+import sys
 from pathlib import Path
-from urllib.parse import urljoin
-import httpx
+
+sys.path.insert(0, "src")
+import httpx  # noqa: E402
+
+from brokersync import lookthrough as l  # noqa: E402
 
 OUT = Path("probe-files"); OUT.mkdir(exist_ok=True)
-UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-http = httpx.Client(timeout=90, follow_redirects=True, headers={"User-Agent": UA, "Accept-Language": "en-GB,en;q=0.9"})
-B = "https://fundcentres.landg.com"
+UA = l.BROWSER
+http = httpx.Client(timeout=90, follow_redirects=True, headers={"User-Agent": UA, "Accept-Language": "de-DE,de;q=0.9"})
+PAT = re.compile(r"ter\b|fee|charge|expense|ocf|kosten|ongoing|tcr|gesamtkosten", re.I)
 
 
-def get(name, url):
+def get(name, url, **kw):
     try:
-        r = http.get(url)
+        r = http.request("POST" if "json" in kw else "GET", url, **kw)
     except httpx.HTTPError as e:
-        print("##", name, url, type(e).__name__); return None
-    print("##", name, r.status_code, r.headers.get("content-type", ""), len(r.content), str(r.url)[:250])
-    if name: (OUT / name).write_bytes(r.content)
+        print("##", name, type(e).__name__); return None
+    print("##", name, r.status_code, r.headers.get("content-type", ""), len(r.content), str(r.url)[:160])
+    (OUT / name).write_bytes(r.content)
     return r
 
 
-def hits(t):
-    return sorted(set(re.findall(r"[^\"'\s]*(?:documents-id|Fundholdings|fundholdings)[^\"'\s]*", t)))[:10]
+def keys(obj, path=""):
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            p = f"{path}.{k}"
+            if PAT.search(str(k)):
+                print("   KEY", p, "=", json.dumps(v)[:200])
+            keys(v, p)
+    elif isinstance(obj, list):
+        for v in obj[:2]:
+            keys(v, path + "[]")
 
 
-fc = get("lg-fc47.json", f"{B}/srp/api/fund-centre/47?audience=79&language=1")
-t = fc.text
-for m in list(re.finditer("Cyber", t))[:3]:
-    print("  ..", t[max(0, m.start() - 600):m.end() + 600])
-urls = sorted(set(u for u in re.findall(r'"fundPageURL":\s*"([^"]+)"', t) if "yber" in u))
-print("fund pages", urls)
-for u in urls[:1]:
-    p = get("lg-fundpage.html", urljoin(B, u))
-    page = p.text
-    route = re.search(r'data-route-id="(\d+)"', page)
-    print("route", route and route.group(1), "hits", hits(page))
-    for m in re.finditer(r"data-config='(.*?)'\s", page, re.S):
+def text(t, n=4):
+    for m in list(re.finditer(r"TER|Gesamtkostenquote|Laufende Kosten|Ongoing charges|Total expense", t))[:n]:
+        print("   TXT ..", re.sub(r"<[^>]+>", " ", t[max(0, m.start() - 150):m.end() + 250]).replace("\n", " ")[:400])
+
+
+# iShares screener: the first row's TER-like keys
+r = get("ish.json", l.ISHARES_SCREENERS[0])
+try:
+    rows = r.json()
+    first = next(iter(rows.values())) if isinstance(rows, dict) else rows[0]
+    print("   ishares keys", sorted(first)[:80]); keys(first)
+    for code, product, row in l.finder_rows(rows):
+        if code == "IE00B4L5Y983":
+            keys(row); print("   ter()", l._ter(row)); break
+except Exception as e:
+    print("   ishares", type(e).__name__, e)
+# SPDR finder
+r = get("spdr.json", l.SPDR_FINDER)
+try:
+    d = r.json()["data"]["funds"]["etfs"]["datas"]
+    print("   spdr keys", sorted(d[0])); keys(d[0])
+except Exception as e:
+    print("   spdr", type(e).__name__, e)
+# Amundi with likely characteristics
+for ch in (["TER"], ["ONGOING_CHARGES"], ["TER", "ONGOING_CHARGES", "MANAGEMENT_FEE", "TOTAL_EXPENSE_RATIO", "FEES"]):
+    body = {"context": {"countryCode": "DEU", "languageCode": "de", "userProfileName": "RETAIL"},
+            "productIds": ["LU1681043599"], "productType": "PRODUCT", "characteristics": ch}
+    r = get("amundi.json", l.AMUNDI, json=body)
+    if r is not None:
+        print("   ", r.text[:600])
+# Invesco shareclass
+for u in ("https://dng-api.invesco.com/cache/v1/accounts/en_GB/shareclasses/IE00B60SX394?idType=isin",
+          "https://dng-api.invesco.com/cache/v1/accounts/en_GB/shareclasses/IE00B60SX394/details?idType=isin"):
+    r = get("invesco.json", u)
+    if r is not None and r.status_code == 200:
         try:
-            c = json.loads(html.unescape(m.group(1)))
+            keys(r.json())
         except ValueError:
-            continue
-        if "pageSections" not in c:
-            continue
-        print("config keys", sorted(c))
-        print("fund", {k: c.get(k) for k in ("fundId", "banner", "shareClassesPart", "infoPartId", "routeId")})
-        for s in c["pageSections"]:
-            print("  section", json.dumps(s)[:300])
-        fund = c.get("fundId")
-        for s in c["pageSections"]:
-            pid = s.get("data") if isinstance(s.get("data"), int) else s.get("partId")
-            if not pid:
-                continue
-            for sc in ("", "&share_class_id=893"):
-                q = f"{B}/srp/api/part?id={pid}&audience=79&route={route and route.group(1)}&version=live&languageId=1&fund_id={fund}{sc}"
-                r = get(f"lg-part-{pid}{'-sc' if sc else ''}.txt", q)
-                if r is not None:
-                    print("     ", s.get("key"), "hits", hits(r.text), r.text[:200].replace("\n", " "))
+            print("   ", r.text[:300])
+# Vanguard GraphQL: guess fields, errors name valid ones
+for q in ('{ funds(portIds: ["9505"]) { portId profile { ocf expenseRatio } } }',
+          '{ funds(portIds: ["9505"]) { portId profile { fundFeesAndCharges { ocf } } } }',
+          '{ funds(portIds: ["9505"]) { portId costs { ocf } } }',
+          '{ __type(name: "FundProfile") { fields { name } } }',
+          '{ __type(name: "Fund") { fields { name } } }'):
+    r = get("vg.json", l.VANGUARD, json={"query": q}, headers=l.VANGUARD_HEADERS)
+    if r is not None:
+        print("   ", r.text[:900])
+# Xtrackers: the xlsx's first rows, and the product page
+r = get("dws.xlsx", l.DWS.format(isin="IE00BJ0KDQ92"))
+if r is not None and r.content[:2] == b"PK":
+    for row in l.xlsx_rows(r.content)[:6]:
+        print("   dws", row[:8])
+r = get("dws.html", "https://etf.dws.com/de-de/IE00BJ0KDQ92-msci-world-ucits-etf-1c/")
+if r is not None: text(r.text)
+# VanEck / ARK pages
+r = get("vaneck.html", "https://www.vaneck.com/de/de/anlagen/gold-miners-etf/ueberblick/")
+if r is not None: text(r.text)
+r = get("ark.html", l.ARK + "/de/funds/active-etfs/artificial-intelligence-robotics/")
+if r is not None: text(r.text)
+r = get("hanetf.html", "https://hanetf.com/wp-content/assets/upload/productlist-all-all-all-all.xlsx")
