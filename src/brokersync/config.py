@@ -81,8 +81,12 @@ class Config:
     # GitHub every ``update_interval`` seconds. In the host tier, so it works while the data is locked.
     auto_update: bool = False
     update_interval: int = 60
-    # Page Darstellung: "de" / "en". Light or dark follows the device (header switch until a reload, #123).
+    # Page Darstellung: "de" / "en"; the font ("" = the one chosen in Wealthfolio, "sans", "serif", "mono") and the
+    # colours ("system" = the device's, "light", "dark"); the header's symbol turns them round until logout (#123).
+    # Not "ui_theme": a fixed scheme stored under that name before #123 stays ignored.
     ui_language: str = "de"
+    ui_font: str = ""
+    ui_scheme: str = "system"
     # Page Dienste (#145): what the sync writes into Wealthfolio besides the flags above (``SERVICES``). None: set
     # up before the page existed - all of it on, as it ran; a new install starts with {} (``security.migrate``).
     services: dict[str, bool] | None = None

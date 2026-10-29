@@ -266,9 +266,20 @@ def test_navigation_groups_the_settings(tmp_path):
     assert 'href="/duplicates"' not in index and client.get("/duplicates").status_code == 404
     assert 'href="/transfers"' not in index
 
+    # Grouped like Wealthfolio's settings: uppercase group titles, rows with icon, line and chevron.
+    groups = re.findall(r'<h2 class="settings-group" id="group-\d+">([^<]+)</h2>', index)
+    assert groups == ["Allgemein", "Verbindung", "Sicherheit", "Daten", "Über"]
+    assert index.count('class="title"') == index.count("<li><a href=") and 'href="/about"' in index
+    assert 'class="settings-side"' not in index  # the list is the navigation there
+
     page = client.get("/securities").text
-    assert 'class="subnav"' in page and 'href="/securities" aria-current="page"' in page
+    side = re.search(r'<nav class="settings-side" aria-label="Einstellungen">(.*?)</nav>', page, re.S).group(1)
+    assert 'href="/securities" aria-current="page"' in side and 'href="/about"' in side
+    assert re.findall(r'<p class="settings-group"[^>]*>([^<]+)</p>', side) == groups
+    assert 'class="settings-back" href="/settings"' in page and 'class="subnav"' not in page
     assert 'href="/settings" aria-current="page"' in page
+    assert 'aria-current="page"' in client.get("/brokers/fake").text.split('class="settings-side"')[1].split(
+        "</nav>")[0]
 
     State(tmp_path).add_unknown("fake", "x1", "ODD", "2026-01-02", {"eventType": "ODD"})
     page = client.get("/unknown").text

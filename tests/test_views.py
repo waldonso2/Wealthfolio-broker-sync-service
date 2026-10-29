@@ -165,7 +165,7 @@ def test_the_language_is_chosen_on_the_page_appearance_light_or_dark_in_the_head
     r = client.post("/theme", data={"csrf": token, "next": "/check"}, follow_redirects=False)
     assert (r.status_code, r.headers["location"]) == (303, "/check")
     for path in ("/", "/check", "/settings"):  # every page, not only the one it was clicked on
-        assert '<html lang="de" data-font="mono" data-flip>' in client.get(path).text
+        assert '<html lang="de" data-font="mono" data-theme="system" data-flip>' in client.get(path).text
     assert 'aria-pressed="true"' in client.get("/broker").text
     client.post("/theme", data={"csrf": token, "next": "/"})
     assert "data-flip" not in client.get("/broker").text  # and back
@@ -177,7 +177,70 @@ def test_the_language_is_chosen_on_the_page_appearance_light_or_dark_in_the_head
     r = client.post("/appearance", data={"csrf": token, "language": "en"})
     assert "Saved." in r.text and '<html lang="en"' in r.text and 'aria-label="Switch light/dark"' in r.text
     assert config_mod.load(tmp_path).ui_language == "en"
-    assert "Unknown choice" in client.post("/appearance", data={"csrf": token, "language": "fr"}).text
+    r = client.post("/appearance", data={"csrf": token, "language": "fr"})
+    assert r.status_code == 422 and "Language: unknown choice." in r.text
+
+
+def _html(page: str) -> str:
+    return re.search(r"<html[^>]*>", page).group(0)
+
+
+def test_font_and_theme_are_chosen_on_the_page_appearance(tmp_path):
+    from brokersync import config as config_mod
+
+    from .test_safe_mode import make as make_safe
+
+    client, _, token = make_safe(tmp_path, safe=False)
+    page = client.get("/appearance").text
+    # Wealthfolio's tiles as radios: "Wie Wealthfolio" first and chosen, its "Aa" in Wealthfolio's font.
+    assert re.findall(r'name="font" value="([a-z]*)"', page) == ["auto", "sans", "serif", "mono"]
+    assert 'name="font" value="auto" checked' in page and "Wie Wealthfolio (Mono)" in page
+    assert '<span class="tile-face font-mono" aria-hidden="true">Aa</span>' in page
+    assert re.findall(r'name="scheme" value="([a-z]+)"', page) == ["light", "dark", "system"]
+    assert 'name="scheme" value="system" checked' in page and "<script" not in page
+    assert _html(page) == '<html lang="de" data-font="mono" data-theme="system">'
+
+    r = client.post("/appearance", data={"csrf": token, "language": "de", "font": "serif", "scheme": "dark"})
+    assert "Gespeichert." in r.text and _html(r.text) == '<html lang="de" data-font="serif" data-theme="dark">'
+    c = config_mod.load(tmp_path)
+    assert (c.ui_font, c.ui_scheme) == ("serif", "dark")
+    assert 'name="font" value="serif" checked' in r.text and 'name="scheme" value="dark" checked' in r.text
+    # The header's symbol turns a fixed scheme round on the server; "system" in the CSS (data-flip).
+    client.post("/theme", data={"csrf": token, "next": "/"})
+    assert _html(client.get("/").text) == '<html lang="de" data-font="serif" data-theme="light" data-flip>'
+    client.post("/theme", data={"csrf": token, "next": "/"})
+
+    for bad in ({"font": "comic"}, {"scheme": "sepia"}, {"font": "font-sans"}):
+        r = client.post("/appearance", data={"csrf": token, "language": "de", **bad})
+        assert r.status_code == 422 and "unbekannte Auswahl" in r.text and 'role="alert"' in r.text
+    c = config_mod.load(tmp_path)
+    assert (c.ui_font, c.ui_scheme, c.ui_language) == ("serif", "dark", "de")  # nothing of a bad form saved
+    assert client.post("/appearance", data={"csrf": token, "language": "en", "font": "x"}).status_code == 422
+    assert config_mod.load(tmp_path).ui_language == "de"
+    # A form without the fields (the language only) keeps them; back to Wealthfolio's font.
+    client.post("/appearance", data={"csrf": token, "language": "de"})
+    assert _html(client.get("/").text) == '<html lang="de" data-font="serif" data-theme="dark">'
+    client.post("/appearance", data={"csrf": token, "language": "de", "font": "auto", "scheme": "system"})
+    assert _html(client.get("/").text) == '<html lang="de" data-font="mono" data-theme="system">'
+    assert config_mod.load(tmp_path).ui_font == ""
+
+
+def test_the_page_about(tmp_path):
+    from brokersync import __version__
+    from brokersync.web.routes.settings import ABOUT_LINKS
+
+    from .test_safe_mode import make as make_safe
+
+    client, _, _ = make_safe(tmp_path, safe=False)
+    page = client.get("/about").text
+    assert "<h2>Wealthfolio Companion</h2>" in page and f"Version {__version__}" in page
+    assert '<img class="app-icon" src="/static/icon.svg"' in page
+    for key in ("repo", "docs", "issues", "security", "license", "pytr", "fints", "sc"):
+        assert f'href="{ABOUT_LINKS[key]}" rel="noopener noreferrer"' in page, key
+    assert "Fehler melden" in page and "Sicherheitslücke melden" in page and "Datenschutz:" in page
+    assert ABOUT_LINKS["repo"].startswith("https://github.com/waldonso2/")
+    assert 'href="/about" aria-current="page"' in page  # in the settings sidebar
+    assert '<a href="/about">Über</a>' in client.get("/broker").text  # and in the footer
 
 
 def test_a_saved_fixed_colour_scheme_of_before_is_ignored(tmp_path):
@@ -204,7 +267,7 @@ def test_the_colours_meet_wcag_aa_in_both_schemes():
 
     css = (Path(__file__).parent.parent / "src" / "brokersync" / "web" / "static" / "style.css").read_text()
     light = dict(re.findall(r"--([a-z-]+): (#[0-9a-f]{6})", css.split("@media")[0]))
-    switched = css.split(":root[data-flip] {")[1]
+    switched = css.split("@media (prefers-color-scheme: light) {")[1]
     dark = dict(re.findall(r"--([a-z-]+): (#[0-9a-f]{6})", switched.split("}")[0]))
 
     def lum(h):

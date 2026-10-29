@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ lang | default('de') }}" data-font="{{ font | default('mono') }}"{% if request.session.get("flip") %} data-flip{% endif %}>
+<html lang="{{ lang | default('de') }}" data-font="{{ font | default('mono') }}" data-theme="{{ scheme | default('system') }}"{% if request.session.get("flip") %} data-flip{% endif %}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -11,13 +11,15 @@
 {% block head %}{% endblock %}
 </head>
 {% from "_icons.html" import icon %}
-<body{% if request.session.get("user") %} class="has-tabs"{% endif %}>
+{% set user = request.session.get("user") %}
+{% set path = request.url.path %}
+{% set in_broker = user and (path == "/broker" or path.startswith("/check") or path == "/unknown") %}
+{% set in_settings = user and (path == "/settings" or path.startswith("/brokers") or path in (settings_pages or []) | map(attribute=0) | list) %}
+{% set settings_layout = in_settings and path != "/settings" %}
+<body class="{% if user %}has-tabs{% endif %}{% if settings_layout %} settings-wide{% endif %}">
 <header><div class="wrap">
   <a class="brand" href="/">Broker Sync <span class="version">v{{ version }}</span></a>
-  {% if request.session.get("user") %}
-  {% set path = request.url.path %}
-  {% set in_broker = path == "/broker" or path.startswith("/check") or path == "/unknown" %}
-  {% set in_settings = path == "/settings" or path.startswith("/brokers") or path in settings_pages | map(attribute=0) | list %}
+  {% if user %}
   <nav class="main" aria-label="{{ _('Hauptmenü') }}">
     <a href="/"{% if path == "/" or path.startswith("/services/") %} aria-current="page"{% endif %}>{{ icon("toggle") }}<span>{{ _("Dienste") }}</span></a>
     <a href="/broker"{% if in_broker %} aria-current="page"{% endif %}>{{ icon("bank") }}<span>{{ _("Broker") }}</span>{% if nav_unknown %} <span class="count" aria-label="{{ _('{n} offen', n=nav_unknown) }}">{{ nav_unknown }}</span>{% endif %}</a>
@@ -29,12 +31,22 @@
   {% endif %}
 </div></header>
 <main class="wrap">
-  {% if request.session.get("user") and in_settings and path != "/settings" %}
-  <nav class="subnav" aria-label="{{ _('Einstellungen') }}">
-    {% for href, title, hint in settings_pages %}<a href="{{ href }}"{% if path == href or (href == "/brokers" and path.startswith("/brokers")) %} aria-current="page"{% endif %}>{{ _(title) }}</a>{% endfor %}
+  {% if settings_layout %}
+  {# Wealthfolio's settings layout: the groups as a sidebar beside the page on wide screens; on phones the list of
+     /settings is the navigation and each page links back to it. #}
+  <div class="settings-layout">
+  <nav class="settings-side" aria-label="{{ _('Einstellungen') }}">
+    {% for group, pages in settings_groups %}
+    <p class="settings-group" id="side-{{ loop.index }}">{{ _(group) }}</p>
+    <ul aria-labelledby="side-{{ loop.index }}">
+      {% for href, title, hint, _g, symbol in pages %}<li><a href="{{ href }}"{% if path == href or (href == "/brokers" and path.startswith("/brokers")) %} aria-current="page"{% endif %}>{{ icon(symbol) }}<span>{{ _(title) }}</span></a></li>{% endfor %}
+    </ul>
+    {% endfor %}
   </nav>
+  <div class="settings-main">
+  <a class="settings-back" href="/settings">{{ icon("chevron-left") }}{{ _("Einstellungen") }}</a>
   {% endif %}
-  {% if request.session.get("user") and in_broker %}
+  {% if in_broker %}
   <nav class="subnav" aria-label="{{ _('Broker') }}">
     <a href="/broker"{% if path == "/broker" %} aria-current="page"{% endif %}>{{ _("Status") }}</a>
     <a href="/check"{% if path.startswith("/check") %} aria-current="page"{% endif %}>{{ _("Prüfung") }}</a>
@@ -43,7 +55,8 @@
   {% endif %}
   {% if flash %}<div class="flash {{ flash.level }}" role="{{ 'alert' if flash.level == 'error' else 'status' }}">{{ flash.text }}</div>{% endif %}
   {% block content %}{% endblock %}
+  {% if settings_layout %}</div></div>{% endif %}
 </main>
-<footer class="wrap"><p class="muted">{% if db_encrypted() %}{{ _("Version {version} · alle Daten verschlüsselt · nur lesender Zugriff auf die Broker", version=version) }}{% else %}{{ _("Version {version} · Zugangsdaten und Einstellungen verschlüsselt, die Sync-Datenbank nicht · nur lesender Zugriff auf die Broker", version=version) }}{% endif %}</p></footer>
+<footer class="wrap"><p class="muted">{% if db_encrypted() %}{{ _("Version {version} · alle Daten verschlüsselt · nur lesender Zugriff auf die Broker", version=version) }}{% else %}{{ _("Version {version} · Zugangsdaten und Einstellungen verschlüsselt, die Sync-Datenbank nicht · nur lesender Zugriff auf die Broker", version=version) }}{% endif %}{% if user %} · <a href="/about">{{ _("Über") }}</a>{% endif %}</p></footer>
 </body>
 </html>

@@ -1,11 +1,16 @@
 {% extends "base.html" %}{% block title %}{{ _("Einstellungen") }}{% endblock %}
+{% from "_icons.html" import icon %}
 {% block content %}
-<div class="card">
-  <h1>{{ _("Einstellungen") }}</h1>
+<h1 class="settings-title">{{ _("Einstellungen") }}</h1>
+{# Wealthfolio's settings list: per group its uppercase title and one card of rows (icon, title, line, chevron) #}
+{% for group, pages in settings_groups %}
+<section class="settings-section" aria-labelledby="group-{{ loop.index }}">
+  <h2 class="settings-group" id="group-{{ loop.index }}">{{ _(group) }}</h2>
   <ul class="settings-index">
-    {% for href, title, hint in settings_pages %}
-    <li><a href="{{ href }}">{{ _(title) }}</a><span class="muted">{{ _(hint) }}</span></li>
+    {% for href, title, hint, _g, symbol in pages %}
+    <li><a href="{{ href }}">{{ icon(symbol) }}<span class="grow"><span class="title">{{ _(title) }}</span><span class="muted">{{ _(hint) }}</span></span>{{ icon("chevron-right") }}</a></li>
     {% endfor %}
   </ul>
-</div>
+</section>
+{% endfor %}
 {% endblock %}

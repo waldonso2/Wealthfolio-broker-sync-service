@@ -197,21 +197,63 @@ def logos_page(request: Request):
 LANGUAGES = {"de": "Deutsch", "en": "English"}
 
 
+# "auto" (stored as ""): the font chosen in Wealthfolio - an empty form field would read as a missing one.
+FONTS = ("auto", "sans", "serif", "mono")
+SCHEMES = ("system", "light", "dark")
+
+
 @router.get("/appearance", response_class=HTMLResponse)
 def appearance_page(request: Request, ctx: Ctx):
-    return ctx.render(request, "appearance.html", cfg=ctx.cfg(), languages=LANGUAGES)
+    c = ctx.cfg()
+    return _appearance_form(request, ctx, c.ui_font, c.ui_scheme, c.ui_language)
+
+
+def _appearance_form(request: Request, ctx: AppContext, font: str, scheme: str, lang: str, *, error: str = "",
+                     status: int = 200) -> HTMLResponse:
+    response = ctx.render(request, "appearance.html", chosen_font=font, chosen_scheme=scheme, chosen_lang=lang,
+                          languages=LANGUAGES, error=error)
+    response.status_code = status
+    return response
 
 
 @router.post("/appearance")
-def appearance_save(request: Request, ctx: Ctx, language: str = Form("de")):
-    if language not in LANGUAGES:
-        return redirect(request, "/appearance", tr(request, "Unbekannte Auswahl."), "error")
+def appearance_save(request: Request, ctx: Ctx, language: str = Form("de"), font: str | None = Form(None),
+                    scheme: str | None = Form(None)):
+    c = ctx.cfg()
+    font = (c.ui_font or "auto") if font is None else font  # a form without the field keeps what is stored
+    scheme = c.ui_scheme if scheme is None else scheme
+    try:
+        inputs.choice(language, tuple(LANGUAGES), N_("Sprache"))
+        inputs.choice(font, FONTS, N_("Schrift"))
+        inputs.choice(scheme, SCHEMES, N_("Theme"))
+    except inputs.Invalid as e:
+        return _appearance_form(request, ctx, c.ui_font, c.ui_scheme, c.ui_language, error=e.text(ctx.language()),
+                                status=422)
 
     def change(c) -> None:
-        c.ui_language = language
+        c.ui_language, c.ui_font, c.ui_scheme = language, "" if font == "auto" else font, scheme
 
     ctx.update(change)
     return redirect(request, "/appearance", tr(request, "Gespeichert."))  # already in the language just chosen
+
+
+# ── about ───────────────────────────────────────────────────────────────────
+# Every address the page *Über* links to, in one place (the coming rename changes only these).
+ABOUT_LINKS = {
+    "repo": updates.REPO,
+    "docs": f"{updates.REPO}#readme",
+    "security": f"{updates.REPO}/blob/main/SECURITY.md",
+    "license": f"{updates.REPO}/blob/main/LICENSE",
+    "issues": "https://github.com/waldonso2/wealthfolio-importer-addon/issues/new",
+    "pytr": "https://github.com/pytr-org/pytr",
+    "fints": "https://github.com/raphaelm/python-fints",
+    "sc": "https://github.com/ScalableCapital/scalable-cli",
+}
+
+
+@router.get("/about", response_class=HTMLResponse)
+def about_page(request: Request, ctx: Ctx):
+    return ctx.render(request, "about.html", links=ABOUT_LINKS)
 
 
 # ── updates ─────────────────────────────────────────────────────────────────
