@@ -537,3 +537,23 @@ def test_the_start_date_begins_at_midnight_german_time():
     assert start.astimezone(UTC).isoformat() == "2025-12-31T23:00:00+00:00"
     summer = Syncer._start(config_mod.BrokerConfig(start_date="2026-07-01"))
     assert summer.astimezone(UTC).isoformat() == "2026-06-30T22:00:00+00:00"
+
+
+def test_an_equal_deposit_after_one_synced_before_is_booked(tmp_path):
+    """#134 H1: a deposit equal to one the sync booked a run before (within the 36 h window) is a booking of its
+    own, not that one."""
+    from dataclasses import replace
+
+    class Again(FakeBroker):
+        def get_transactions(self, since):
+            txs = super().get_transactions(None)
+            deposit = next(t for t in txs if t.kind == Kind.DEPOSIT)
+            return [*txs, replace(deposit, id=deposit.id + "-b")]
+
+    wf = FakeWealthfolio()
+    syncer, _ = setup(tmp_path, wf)
+    syncer.run()
+    syncer.adapters = {"fake": Again}
+    [r] = syncer.run()
+    assert r.created == 1
+    assert [a["activityType"] for a in wf.activities].count("DEPOSIT") == 2

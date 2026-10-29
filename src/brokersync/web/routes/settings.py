@@ -148,7 +148,7 @@ def notifications_save(request: Request, ctx: Ctx, server: str = Form(...), topi
             return redirect(request, "/notifications", tr(request, "Testnachricht konnte nicht gesendet werden."),
                             "error")
         return redirect(request, "/notifications", tr(request, "Testnachricht gesendet."))
-    return redirect(request, "/", tr(request, "Benachrichtigungen gespeichert."))
+    return redirect(request, "/broker", tr(request, "Benachrichtigungen gespeichert."))
 
 
 # ── securities ──────────────────────────────────────────────────────────────

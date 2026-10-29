@@ -929,10 +929,9 @@ EN: dict[str, str] = {
         "Scalable CLI",
     "Läuft in einer Sandbox (Landlock): kein Zugriff auf data/ und den Schlüssel.":
         "Runs in a sandbox (Landlock): no access to data/ and the key.",
-    "Ohne Sandbox: Der Kernel kann kein Landlock. sc bekommt trotzdem weder Schlüssel noch Einstellungen "
-    "des Dienstes.":
-        "Without a sandbox: the kernel has no Landlock. sc still gets neither the key nor the service's "
-        "settings.",
+    "Ohne Sandbox: Der Kernel kann kein Landlock. sc läuft als Dienst-Benutzer und könnte dessen Schlüssel und "
+    "Daten lesen.":
+        "Without a sandbox: the kernel has no Landlock. sc runs as the service user and could read its key and data.",
     "Nicht gesetzt, und ohne TPM: Ein Backup des Containers enthält Schlüssel und Daten. "
     "Master-Passphrase setzen oder die Backups verschlüsseln.":
         "Not set, and no TPM: a backup of the container holds key and data. Set a master passphrase or "

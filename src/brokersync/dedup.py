@@ -86,9 +86,10 @@ class ExistingIndex:
     def find(self, ref: str, payloads: list[dict]) -> str | None:
         """Id of the existing activity (from another source) this transaction already is, or None.
 
-        Activities this service created itself (they carry ``ref``) are not a
-        match: the sync re-sends the whole transaction and Wealthfolio rejects
-        the parts that exist as duplicates, so an interrupted run is completed.
+        Activities this service created itself (they carry a ``[SYNC …]`` reference) are not a
+        match: its own ones are re-sent whole and Wealthfolio rejects the parts that exist as
+        duplicates, so an interrupted run is completed; another transaction's (two equal card
+        payments within the window) are that one, never this one.
         """
         tag = ref.strip()
         for e in self.existing:
@@ -105,7 +106,7 @@ class ExistingIndex:
         is_cash = not symbol or is_cash_symbol(symbol)
 
         def same_substance(e: dict) -> bool:
-            if e["id"] in self.used or e.get("accountId") != a["accountId"]:
+            if e["id"] in self.used or e.get("accountId") != a["accountId"] or "[SYNC " in (e.get("comment") or ""):
                 return False
             if e.get("activityType") != a["activityType"] or (e.get("subtype") or None) != a.get("subtype"):
                 return False

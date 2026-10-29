@@ -90,8 +90,8 @@ def status(data_dir: Path, *, secure: bool) -> list[Check]:
     out.append(_connection(secure))
     out.append(Check(N_("Scalable CLI"), True, N_("Läuft in einer Sandbox (Landlock): kein Zugriff auf data/ und "
                                                   "den Schlüssel.") if sandbox.supported() else
-                     N_("Ohne Sandbox: Der Kernel kann kein Landlock. sc bekommt trotzdem weder Schlüssel noch "
-                        "Einstellungen des Dienstes."), warn=not sandbox.supported()))
+                     N_("Ohne Sandbox: Der Kernel kann kein Landlock. sc läuft als Dienst-Benutzer und "
+                        "könnte dessen Schlüssel und Daten lesen."), warn=not sandbox.supported()))
     loose = _loose_permissions(d)
     out.append(Check(N_("Dateirechte"), not loose, N_("Nur der Dienst-Benutzer kann data/ lesen.") if not loose
                      else N_("Für andere lesbar: {files}"), params={"files": ", ".join(loose)} if loose else {}))
