@@ -40,11 +40,23 @@ def newer(latest: str, current: str) -> bool:
     return bool(a and b and a > b)
 
 
+HOPS = 3  # a renamed repository answers with one more redirect to its new name first
+
+
 def latest(http: httpx.Client) -> str | None:
-    """The newest release's version (``0.27.0``), None when GitHub doesn't say."""
-    r = http.get(f"{RELEASES}/latest", follow_redirects=False)
-    m = re.search(r"/releases/tag/v(\d+\.\d+\.\d+)$", r.headers.get("location", ""))
-    return m.group(1) if m else None
+    """The newest release's version (``0.27.0``), None when GitHub doesn't say. Redirects are followed only
+    within github.com (the repository may be renamed), up to the first ``/releases/tag/v…``."""
+    url = f"{RELEASES}/latest"
+    for _ in range(HOPS):
+        location = http.get(url, follow_redirects=False).headers.get("location", "")
+        m = re.search(r"/releases/tag/v(\d+\.\d+\.\d+)$", location)
+        if m:
+            return m.group(1)
+        target = httpx.URL(url).join(location) if location else None
+        if target is None or target.scheme != "https" or target.host != "github.com":
+            return None
+        url = str(target)
+    return None
 
 
 def available(state: State, current: str) -> str | None:
