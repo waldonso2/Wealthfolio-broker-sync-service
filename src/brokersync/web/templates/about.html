@@ -8,7 +8,7 @@
     <img class="app-icon" src="/static/icon.svg" alt="" width="48" height="48">
     <div>
       <h2>Wealthfolio Companion</h2>
-      <p class="muted">{{ _("Version {version}", version=version) }}</p>
+      <p class="muted">{{ _("Version {version}", version=version) }}{% if stage(version) %} <span class="stage">{{ _(stage(version)) }}</span>{% endif %}</p>
     </div>
   </div>
   <p class="muted">{{ _("Holt die Buchungen deiner Broker und Banken und schreibt sie ohne Duplikate in dein selbst gehostetes Wealthfolio – dazu Länder und Sektoren, ISINs, Logos und X-Ray.") }}</p>

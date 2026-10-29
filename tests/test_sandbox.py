@@ -33,11 +33,11 @@ def test_the_program_reads_and_writes_only_what_it_may(tmp_path):
 
 
 def test_sc_gets_no_key_and_no_service_settings(tmp_path, monkeypatch):
-    monkeypatch.setenv("CREDENTIALS_DIRECTORY", "/run/credentials/wealthfolio-broker-sync.service")
-    monkeypatch.setenv("BROKERSYNC_DATA", str(tmp_path))
-    monkeypatch.setenv("BROKERSYNC_KEY_SOURCE", "systemd-creds")
+    monkeypatch.setenv("CREDENTIALS_DIRECTORY", "/run/credentials/wealthfolio-companion.service")
+    monkeypatch.setenv("COMPANION_DATA", str(tmp_path))
+    monkeypatch.setenv("COMPANION_KEY_SOURCE", "systemd-creds")
     monkeypatch.setenv("LANG", "de_DE.UTF-8")
     cli = ScCli({})
     env = cli._env()
-    assert "CREDENTIALS_DIRECTORY" not in env and not [k for k in env if k.startswith("BROKERSYNC")]
+    assert "CREDENTIALS_DIRECTORY" not in env and not [k for k in env if k.startswith("COMPANION")]
     assert env["LANG"] == "de_DE.UTF-8" and env["HOME"] == str(cli.home) and env["TMPDIR"] == str(cli.home)

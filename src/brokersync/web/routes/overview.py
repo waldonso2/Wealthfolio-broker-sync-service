@@ -26,7 +26,7 @@ from ..i18n import N_, translate
 log = logging.getLogger(__name__)
 router = APIRouter()
 
-TIMER = "wealthfolio-broker-sync-run.timer"
+TIMER = "wealthfolio-companion-run.timer"
 
 
 @router.get("/broker", response_class=HTMLResponse)

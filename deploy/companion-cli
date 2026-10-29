@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Runs a command of the service the way the services run: as the user companion,
+# with the service's key handed over by systemd (the key itself stays root-only).
+#   companion-cli security-status
+set -euo pipefail
+CONF=/etc/systemd/system/wealthfolio-companion.service.d/10-key.conf
+args=()
+while IFS= read -r line; do
+  args+=(-p "$line")
+done < <(grep -E '^(LoadCredential|LoadCredentialEncrypted|Environment)=' "$CONF")
+exec systemd-run --quiet --wait --pipe --collect \
+  -p User=companion -p Group=companion -p UMask=0077 \
+  -p Environment=COMPANION_DATA=/opt/wealthfolio-companion/data \
+  -p Environment=COMPANION_RUNTIME=/run/wealthfolio-companion \
+  -p Environment=COMPANION_TLS=1 \
+  "${args[@]}" /opt/wealthfolio-companion/venv/bin/wealthfolio-companion "$@"

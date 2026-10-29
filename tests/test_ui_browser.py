@@ -39,7 +39,7 @@ def site(tmp_path_factory):
 
     mp.setattr(vault, "PASSWORD_HASH", {"time_cost": 1, "memory_cost": 1024, "parallelism": 1})
     mp.setattr(crypto, "ARGON2", {"time_cost": 1, "memory_cost": 1024, "parallelism": 1})
-    mp.setenv("BROKERSYNC_RECALC_WAIT", "0")
+    mp.setenv("COMPANION_RECALC_WAIT", "0")
     import httpx
 
     from brokersync import lookthrough
@@ -50,7 +50,7 @@ def site(tmp_path_factory):
     mp.setattr(lookthrough, "PRODUCTS", {})
     mp.setattr(lookthrough, "Sources", lambda: real(transport=httpx.MockTransport(lambda r: httpx.Response(404))))
     tmp = tmp_path_factory.mktemp("ui")
-    mp.setenv("BROKERSYNC_RUNTIME", str(tmp / "no-runtime"))
+    mp.setenv("COMPANION_RUNTIME", str(tmp / "no-runtime"))
     client, _, _ = make(tmp / "data")
     first_password(client)
     token = csrf(client, "/setup/wealthfolio")

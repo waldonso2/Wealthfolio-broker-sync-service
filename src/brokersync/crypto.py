@@ -12,11 +12,11 @@ bytes the service never keeps in ``data/``:
 
 Where the host key comes from, in this order:
 
-1. ``$CREDENTIALS_DIRECTORY/brokersync-key`` - systemd hands it to the service
-   (``LoadCredentialEncrypted=`` from ``/etc/wealthfolio-broker-sync/key.cred``,
+1. ``$CREDENTIALS_DIRECTORY/companion-key`` - systemd hands it to the service
+   (``LoadCredentialEncrypted=`` from ``/etc/wealthfolio-companion/key.cred``,
    encrypted with ``systemd-creds``; or ``LoadCredential=`` from a root-only file
    where systemd-creds can't encrypt). The service user can't read the source.
-2. ``$BROKERSYNC_KEY_FILE``.
+2. ``$COMPANION_KEY_FILE``.
 3. ``data/secret.key`` - only for development and tests, and for an
    installation not migrated yet (``deploy/setup.sh`` moves it out).
 
@@ -24,7 +24,7 @@ Files are AES-256-GCM: ``MAGIC | nonce (12) | ciphertext+tag``; the file's
 purpose is authenticated data, so a file can't be swapped for another.
 
 The passphrase never touches the disk. Unlocking keeps its argon2id result in
-``$BROKERSYNC_RUNTIME/unlock.key`` (``/run`` - RAM, gone after a restart, not in
+``$COMPANION_RUNTIME/unlock.key`` (``/run`` - RAM, gone after a restart, not in
 backups), shared by the web UI and the timer.
 """
 
@@ -45,8 +45,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 MAGIC = b"BSE1"
-KEY_NAME = "brokersync-key"
-DEFAULT_RUNTIME = Path("/run/wealthfolio-broker-sync")
+KEY_NAME = "companion-key"
+DEFAULT_RUNTIME = Path("/run/wealthfolio-companion")
 # argon2id for the master passphrase (RFC 9106's second recommendation: 64 MiB, t=3).
 ARGON2 = {"time_cost": 3, "memory_cost": 64 * 1024, "parallelism": 4}
 MIN_PASSPHRASE = 12
@@ -72,9 +72,9 @@ def host_key_source(data_dir: Path) -> str:
     """Where the host key comes from: systemd-creds, systemd, file, data (development/not migrated)."""
     cred = os.environ.get("CREDENTIALS_DIRECTORY")
     if cred and (Path(cred) / KEY_NAME).is_file():
-        return os.environ.get("BROKERSYNC_KEY_SOURCE", "systemd")
-    if os.environ.get("BROKERSYNC_KEY_FILE"):
-        return "container" if os.environ.get("BROKERSYNC_CONTAINER") else "file"
+        return os.environ.get("COMPANION_KEY_SOURCE", "systemd")
+    if os.environ.get("COMPANION_KEY_FILE"):
+        return "container" if os.environ.get("COMPANION_CONTAINER") else "file"
     return "data"
 
 
@@ -82,11 +82,11 @@ def _host_material(data_dir: Path) -> bytes:
     cred = os.environ.get("CREDENTIALS_DIRECTORY")
     if cred and (Path(cred) / KEY_NAME).is_file():
         return (Path(cred) / KEY_NAME).read_bytes().strip()
-    if os.environ.get("BROKERSYNC_KEY_FILE"):
-        path = Path(os.environ["BROKERSYNC_KEY_FILE"])
+    if os.environ.get("COMPANION_KEY_FILE"):
+        path = Path(os.environ["COMPANION_KEY_FILE"])
         if not path.is_file():
             raise KeyMissing(f"Der Schlüssel des Dienstes fehlt: {path} gibt es nicht. Im Container als Secret "
-                             "brokersync-key übergeben (deploy/docker-compose.example.yml).")
+                             "companion-key übergeben (deploy/docker-compose.example.yml).")
         material = path.read_bytes().strip()
         if len(material) < 32:
             raise KeyMissing(f"Der Schlüssel in {path} ist zu kurz (mindestens 32 Zeichen, z. B. openssl rand "
@@ -98,7 +98,7 @@ def _host_material(data_dir: Path) -> bytes:
     if any((Path(data_dir) / f).exists() for f in ("secrets.enc", "config.enc", "keyring.json")):
         raise KeyMissing(
             "Der Schlüssel des Dienstes fehlt. Den Dienst über systemd starten (er bekommt den Schlüssel als "
-            "Credential) bzw. Befehle mit brokersync-cli ausführen."
+            "Credential) bzw. Befehle mit companion-cli ausführen."
         )
     # A new development or test setup: a key of its own.
     Path(data_dir).mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -137,7 +137,7 @@ def passphrase_enabled(data_dir: Path) -> bool:
 
 
 def _runtime() -> Path | None:
-    d = Path(os.environ.get("BROKERSYNC_RUNTIME", DEFAULT_RUNTIME))
+    d = Path(os.environ.get("COMPANION_RUNTIME", DEFAULT_RUNTIME))
     return d if d.is_dir() and os.access(d, os.W_OK) else None
 
 

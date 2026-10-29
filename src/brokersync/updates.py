@@ -2,9 +2,9 @@
 
 Only the redirect of GitHub's ``releases/latest`` page is read (no API, no token, nothing about
 the user is sent). The answer is kept in ``meta`` (``UPDATE``); the overview shows a newer
-version, and a newly found one is notified once. ``BROKERSYNC_UPDATE_CHECK=0`` turns it off.
+version, and a newly found one is notified once. ``COMPANION_UPDATE_CHECK=0`` turns it off.
 Installing is the user's ``update`` in the container's console, or - switched on on the page *Updates* - the
-container's own updater (``deploy/brokersync-autoupdate``, root, every minute), which asks ``due``.
+container's own updater (``deploy/companion-autoupdate``, root, every minute), which asks ``due``.
 """
 
 from __future__ import annotations
@@ -23,16 +23,23 @@ from .state import State
 
 log = logging.getLogger(__name__)
 
-REPO = "https://github.com/waldonso2/Wealthfolio-broker-sync-service"
+REPO = "https://github.com/waldonso2/wealthfolio-companion"
 RELEASES = f"{REPO}/releases"
 EVERY = timedelta(days=1)
 MIN_INTERVAL, MAX_INTERVAL = 60, 86400  # seconds between two questions of the updater
 KEY = meta_keys.UPDATE()
 
 
+VERSION = r"\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?"  # PEP 440 releases and pre-releases (0.1.0a1, 0.1.0b2, 0.1.0rc1)
+PRE = {"a": 0, "b": 1, "rc": 2}  # a release itself sorts after all of its pre-releases
+
+
 def _parse(version: str) -> tuple[int, ...] | None:
-    m = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", version.strip())
-    return tuple(int(x) for x in m.groups()) if m else None
+    m = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:(a|b|rc)(\d+))?", version.strip())
+    if not m:
+        return None
+    pre = (PRE[m.group(4)], int(m.group(5))) if m.group(4) else (len(PRE), 0)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)), *pre)
 
 
 def newer(latest: str, current: str) -> bool:
@@ -49,7 +56,7 @@ def latest(http: httpx.Client) -> str | None:
     url = f"{RELEASES}/latest"
     for _ in range(HOPS):
         location = http.get(url, follow_redirects=False).headers.get("location", "")
-        m = re.search(r"/releases/tag/v(\d+\.\d+\.\d+)$", location)
+        m = re.search(rf"/releases/tag/v({VERSION})$", location)
         if m:
             return m.group(1)
         target = httpx.URL(url).join(location) if location else None
@@ -68,7 +75,7 @@ def available(state: State, current: str) -> str | None:
 def check(state: State, current: str, *, http: httpx.Client | None = None) -> str | None:
     """Asks GitHub when the last answer is older than a day; returns a newer version found for the
     first time (to notify once), else None. Never raises: no answer only means no hint."""
-    if os.environ.get("BROKERSYNC_UPDATE_CHECK", "1") == "0":
+    if os.environ.get("COMPANION_UPDATE_CHECK", "1") == "0":
         return None
     stored = json.loads(state.meta(KEY) or "{}")
     if stored.get("checked") and datetime.now(UTC) - when(stored["checked"]) < EVERY:

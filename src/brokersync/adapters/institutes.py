@@ -15,7 +15,7 @@ from functools import cache
 from pathlib import Path
 
 FILE = Path(__file__).with_name("fints_institutes.bin")
-_LABEL = b"wealthfolio-broker-sync/fints-institutes"
+_LABEL = b"wealthfolio-broker-sync/fints-institutes"  # a label, not the product name: never rename
 
 
 def mask(data: bytes) -> bytes:

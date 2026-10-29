@@ -54,7 +54,7 @@ def test_a_login_from_a_new_address_is_notified(tmp_path):
     assert not notifier.sent  # the first sign-in of this address happened with the first password
     other = TestClient(client.app, base_url="http://sync.local:8090", client=("192.168.1.77", 5000))
     other.post("/login", data={"password": PASSWORD})
-    assert [title for title, *_ in notifier.sent] == ["Broker Sync: neue Anmeldung"]
+    assert [title for title, *_ in notifier.sent] == ["Companion: neue Anmeldung"]
     assert "192.168.1.77" in notifier.sent[0][1]
 
 
@@ -84,7 +84,7 @@ def test_the_page_claims_only_the_protection_there_is(tmp_path, monkeypatch):
     monkeypatch.setenv("CREDENTIALS_DIRECTORY", str(creds))
     for source, words in (("systemd-creds-tpm2", "TPM verschlüsselt"), ("systemd-creds", "Host-Secret"),
                           ("systemd", "nur für root lesbar")):
-        monkeypatch.setenv("BROKERSYNC_KEY_SOURCE", source)
+        monkeypatch.setenv("COMPANION_KEY_SOURCE", source)
         checks = {c.label: c for c in security.status(tmp_path, secure=True)}
         assert words in checks["Schlüssel des Dienstes"].text
         assert ("Backup des Containers" in checks["Master-Passphrase"].text) == (source != "systemd-creds-tpm2")

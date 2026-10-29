@@ -37,43 +37,43 @@ def test_the_scheduler_runs_renews_and_stops(monkeypatch):
 
 
 def test_in_the_container_the_key_comes_only_from_the_secret(tmp_path, monkeypatch):
-    monkeypatch.setenv("BROKERSYNC_CONTAINER", "1")
-    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(tmp_path / "missing"))
-    with pytest.raises(crypto.KeyMissing, match="Secret brokersync-key"):
+    monkeypatch.setenv("COMPANION_CONTAINER", "1")
+    monkeypatch.setenv("COMPANION_KEY_FILE", str(tmp_path / "missing"))
+    with pytest.raises(crypto.KeyMissing, match="Secret companion-key"):
         crypto.host_key(tmp_path / "data")
     assert not (tmp_path / "data" / "secret.key").exists()  # never a key in data/
     short = tmp_path / "short"
     short.write_text("abc")
-    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(short))
+    monkeypatch.setenv("COMPANION_KEY_FILE", str(short))
     with pytest.raises(crypto.KeyMissing, match="zu kurz"):
         crypto.host_key(tmp_path / "data")
     good = tmp_path / "key"
     good.write_text("k" * 44)
-    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(good))
+    monkeypatch.setenv("COMPANION_KEY_FILE", str(good))
     assert crypto.host_key_source(tmp_path) == "container"
     checks = {c.label: c for c in security.status(tmp_path, secure=True)}
     assert checks["Schlüssel des Dienstes"].ok and "Secret des Containers" in checks["Schlüssel des Dienstes"].text
 
 
 def test_tls_is_on_in_the_container_unless_switched_off(monkeypatch, tmp_path):
-    monkeypatch.delenv("BROKERSYNC_TLS", raising=False)
-    monkeypatch.delenv("BROKERSYNC_CONTAINER", raising=False)
+    monkeypatch.delenv("COMPANION_TLS", raising=False)
+    monkeypatch.delenv("COMPANION_CONTAINER", raising=False)
     assert not container.tls_enabled()
-    monkeypatch.setenv("BROKERSYNC_CONTAINER", "1")
+    monkeypatch.setenv("COMPANION_CONTAINER", "1")
     assert container.tls_enabled()
-    monkeypatch.setenv("BROKERSYNC_TLS_DIR", str(tmp_path / "tls"))
+    monkeypatch.setenv("COMPANION_TLS_DIR", str(tmp_path / "tls"))
     assert (container.certificate() / "cert.pem").exists()
     assert not container._cert_changed()  # still fresh: nothing renewed
-    monkeypatch.setenv("BROKERSYNC_TLS", "off")
+    monkeypatch.setenv("COMPANION_TLS", "off")
     assert not container.tls_enabled() and container.certificate() is None
 
 
 def test_without_its_key_the_container_does_not_start(tmp_path, monkeypatch, capsys):
     from brokersync.cli import main
 
-    monkeypatch.setenv("BROKERSYNC_DATA", str(tmp_path))
-    monkeypatch.setenv("BROKERSYNC_CONTAINER", "1")
-    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(tmp_path / "missing"))
+    monkeypatch.setenv("COMPANION_DATA", str(tmp_path))
+    monkeypatch.setenv("COMPANION_CONTAINER", "1")
+    monkeypatch.setenv("COMPANION_KEY_FILE", str(tmp_path / "missing"))
     assert main(["container"]) == 2
 
 
@@ -83,10 +83,10 @@ def test_the_container_migrates_prints_the_setup_code_and_serves(tmp_path, monke
     key = tmp_path / "key"
     key.write_text("k" * 44)
     data = tmp_path / "data"
-    monkeypatch.setenv("BROKERSYNC_DATA", str(data))
-    monkeypatch.setenv("BROKERSYNC_CONTAINER", "1")
-    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(key))
-    monkeypatch.setenv("BROKERSYNC_TLS", "off")
+    monkeypatch.setenv("COMPANION_DATA", str(data))
+    monkeypatch.setenv("COMPANION_CONTAINER", "1")
+    monkeypatch.setenv("COMPANION_KEY_FILE", str(key))
+    monkeypatch.setenv("COMPANION_TLS", "off")
     served = []
     monkeypatch.setattr("brokersync.web.serve.serve", lambda d, **kw: served.append(kw))
     monkeypatch.setattr(container, "scheduler", lambda stop, **kw: None)
@@ -105,7 +105,7 @@ def test_the_updates_page_says_how_a_container_is_updated(tmp_path, monkeypatch)
     from .helpers import first_password
     from .test_web import make
 
-    monkeypatch.setenv("BROKERSYNC_CONTAINER", "1")
+    monkeypatch.setenv("COMPANION_CONTAINER", "1")
     client, _, _ = make(tmp_path)
     first_password(client)
     page = client.get("/updates").text

@@ -1,17 +1,17 @@
-# Wealthfolio Broker Sync next to Wealthfolio (waldonso2/wealthfolio-importer-addon#148).
+# Wealthfolio Companion next to Wealthfolio (waldonso2/wealthfolio-importer-addon#148).
 #
-#   openssl rand -base64 32 > brokersync.key   # once; keep a copy - without it the data is lost
-#   sudo chown 10001:10001 brokersync.key && sudo chmod 600 brokersync.key   # the container's user reads it
+#   openssl rand -base64 32 > companion.key   # once; keep a copy - without it the data is lost
+#   sudo chown 10001:10001 companion.key && sudo chmod 600 companion.key   # the container's user reads it
 #   docker compose -f docker-compose.example.yml up -d
-#   docker compose logs brokersync        # the one-time setup code for the first password
+#   docker compose logs companion        # the one-time setup code for the first password
 #   https://<this computer>:8443          # the UI; in it, Wealthfolio's address is http://wealthfolio:8088
 #
 # Update: docker compose pull && docker compose up -d (the data stays in the volume, it is migrated at start).
 services:
-  brokersync:
-    image: ghcr.io/waldonso2/wealthfolio-broker-sync:latest
-    container_name: brokersync
-    hostname: brokersync            # the name in the UI's certificate
+  companion:
+    image: ghcr.io/waldonso2/wealthfolio-companion:latest
+    container_name: companion
+    hostname: companion            # the name in the UI's certificate
     restart: unless-stopped
     ports:
       - "8443:8443"
@@ -19,17 +19,17 @@ services:
     environment:
       TZ: Europe/Berlin
       # More names for the certificate (comma-separated), e.g. the computer's name in your network:
-      # BROKERSYNC_CERT_NAMES: "nas.fritz.box"
+      # COMPANION_CERT_NAMES: "nas.fritz.box"
       # Behind a reverse proxy with its own TLS: plain HTTP on 8090 and the proxy's header believed.
-      # BROKERSYNC_TLS: "off"
-      # BROKERSYNC_TRUST_PROXY: "172.18.0.5"   # the proxy's IP address as this container sees it
-      # BROKERSYNC_ALLOWED_HOSTS: "brokersync.example.com"
-      # BROKERSYNC_RUN_AT: "06:00"     # daily fetch, German time (plus up to 45 minutes)
+      # COMPANION_TLS: "off"
+      # COMPANION_TRUST_PROXY: "172.18.0.5"   # the proxy's IP address as this container sees it
+      # COMPANION_ALLOWED_HOSTS: "companion.example.com"
+      # COMPANION_RUN_AT: "06:00"     # daily fetch, German time (plus up to 45 minutes)
     secrets:
-      - brokersync-key
+      - companion-key
     volumes:
-      - brokersync-data:/data
-      - brokersync-tls:/tls
+      - companion-data:/data
+      - companion-tls:/tls
     read_only: true
     tmpfs:
       - /tmp:size=64M,mode=1777
@@ -61,10 +61,10 @@ services:
       - no-new-privileges:true
 
 secrets:
-  brokersync-key:
-    file: ./brokersync.key
+  companion-key:
+    file: ./companion.key
 
 volumes:
-  brokersync-data:
-  brokersync-tls:
+  companion-data:
+  companion-tls:
   wealthfolio-data:

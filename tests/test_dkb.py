@@ -62,7 +62,7 @@ def test_scheduled_run_notifies_and_waits_for_the_app(fake):
     told = []
     a.on_user_action = told.append
     a.login()
-    assert told == ["Bitte bestätige den Zugriff des Wealthfolio Broker Sync in der DKB-App."]
+    assert told == ["Bitte bestätige den Zugriff von Wealthfolio Companion in der DKB-App."]
     assert FakeFinTS.instances[-1].polls == 3
 
 

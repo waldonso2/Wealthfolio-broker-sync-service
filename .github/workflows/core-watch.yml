@@ -1,6 +1,6 @@
 name: Engine watch
 
-# ct/wealthfolio-broker-sync.sh pins community-scripts/core (the install/update engine, run as
+# ct/wealthfolio-companion.sh pins community-scripts/core (the install/update engine, run as
 # root on the Proxmox host) to a commit. Once a week: when core's main has moved on, open an
 # issue to review the changes and move the pin deliberately.
 
@@ -24,7 +24,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          PIN=$(grep -oE 'community-scripts/core/[0-9a-f]{40}' ct/wealthfolio-broker-sync.sh | cut -d/ -f3)
+          PIN=$(grep -oE 'community-scripts/core/[0-9a-f]{40}' ct/wealthfolio-companion.sh | cut -d/ -f3)
           MAIN=$(git ls-remote https://github.com/community-scripts/core refs/heads/main | cut -f1)
           echo "pinned $PIN, main $MAIN"
           [ -n "$PIN" ] && [ -n "$MAIN" ] || { echo "pin or main not found"; exit 1; }
@@ -35,5 +35,5 @@ jobs:
 
           Changes: https://github.com/community-scripts/core/compare/$PIN...$MAIN
 
-          Review them (the engine runs as root on the Proxmox host), then set the new commit in \`ct/wealthfolio-broker-sync.sh\` and run a test install."
+          Review them (the engine runs as root on the Proxmox host), then set the new commit in \`ct/wealthfolio-companion.sh\` and run a test install."
           fi

@@ -28,7 +28,7 @@ def ca_certificate():
     if not path:
         raise HTTPException(404, "Kein CA-Zertifikat vorhanden.")
     return Response(path.read_bytes(), media_type="application/x-x509-ca-cert",
-                    headers={"Content-Disposition": 'attachment; filename="wealthfolio-broker-sync-ca.crt"'})
+                    headers={"Content-Disposition": 'attachment; filename="wealthfolio-companion-ca.crt"'})
 
 
 @router.get("/healthz")
@@ -40,10 +40,10 @@ def healthz(request: Request):
 @router.get("/metrics", response_class=PlainTextResponse)
 def metrics(ctx: Ctx) -> str:
     """Prometheus text format (OPS-04 of #85): runs per broker and outcome, the last run of each. After the UI
-    login, or with ``BROKERSYNC_METRICS_TOKEN`` as bearer token (``app.require_login``). No amounts, no names."""
+    login, or with ``COMPANION_METRICS_TOKEN`` as bearer token (``app.require_login``). No amounts, no names."""
     counts = ctx.state.run_counts()
-    lines = ["# HELP brokersync_runs_total Fetches per broker and outcome.", "# TYPE brokersync_runs_total counter"]
-    lines += [f'brokersync_runs_total{{broker="{b}",status="{s}"}} {n}' for b, s, n in counts]
+    lines = ["# HELP companion_runs_total Fetches per broker and outcome.", "# TYPE companion_runs_total counter"]
+    lines += [f'companion_runs_total{{broker="{b}",status="{s}"}} {n}' for b, s, n in counts]
     last = {b: r for b in sorted({b for b, _, _ in counts}) if (r := ctx.state.last_run(b))}
     gauges = {
         "last_run_timestamp_seconds": ("Start of the last fetch (Unix time).",
@@ -54,10 +54,10 @@ def metrics(ctx: Ctx) -> str:
         "last_run_failed_bookings": ("Bookings the last fetch could not book.", lambda r: r.failed),
     }
     for name, (text, value) in gauges.items():
-        lines += [f"# HELP brokersync_{name} {text}", f"# TYPE brokersync_{name} gauge"]
-        lines += [f'brokersync_{name}{{broker="{b}"}} {v}' for b, r in last.items() if (v := value(r)) is not None]
-    lines += ["# HELP brokersync_unknown_events Unknown bookings waiting on the page Unbekannt.",
-              "# TYPE brokersync_unknown_events gauge", f"brokersync_unknown_events {ctx.state.unknown_count()}"]
+        lines += [f"# HELP companion_{name} {text}", f"# TYPE companion_{name} gauge"]
+        lines += [f'companion_{name}{{broker="{b}"}} {v}' for b, r in last.items() if (v := value(r)) is not None]
+    lines += ["# HELP companion_unknown_events Unknown bookings waiting on the page Unbekannt.",
+              "# TYPE companion_unknown_events gauge", f"companion_unknown_events {ctx.state.unknown_count()}"]
     return "\n".join(lines) + "\n"
 
 
@@ -153,7 +153,7 @@ def _new_client(ctx, client: str) -> None:
         c = ctx.cfg()
         if c.ntfy_topic:
             (ctx.notifier or Notifier(c.ntfy_server, c.ntfy_topic, c.ntfy_token)).send(
-                "Broker Sync: neue Anmeldung", f"Anmeldung an der Oberfläche von {client} - zum ersten Mal von dort. "
+                "Companion: neue Anmeldung", f"Anmeldung an der Oberfläche von {client} - zum ersten Mal von dort. "
                 "Warst du das nicht, das Passwort ändern.", link=f"{c.public_url}/security" if c.public_url else None,
                 tags="warning")
     except Exception:  # a notification never stops a login

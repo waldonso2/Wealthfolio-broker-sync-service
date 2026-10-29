@@ -1,6 +1,6 @@
-"""Command line: ``brokersync serve`` (web UI, HTTPS), ``brokersync run`` (one sync, for the timer), the helpers
-``deploy/setup.sh`` uses (``renew-cert``, ``migrate``) and ``backup``/``restore`` (#109). One function per command
-(``COMMANDS``)."""
+"""Command line: ``wealthfolio-companion serve`` (web UI, HTTPS), ``wealthfolio-companion run`` (one sync, for the
+timer), the helpers ``deploy/setup.sh`` uses (``renew-cert``, ``migrate``) and ``backup``/``restore`` (#109).
+One function per command (``COMMANDS``)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from .config import data_dir
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="brokersync", description="Wealthfolio Broker Sync")
+    parser = argparse.ArgumentParser(prog="wealthfolio-companion", description="Wealthfolio Companion")
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="cmd", required=True)
     serve_cmd = sub.add_parser("serve", help="run the web UI")
@@ -32,7 +32,7 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("reset-ui-password", help="forget the web UI password; prints the code to set a new one")
     sub.add_parser("setup-code", help="a new one-time code for setting the first web UI password")
     sc = sub.add_parser("install-sc", help="install or update Scalable's official CLI (sc), signature-checked")
-    sc.add_argument("--dir", default="/opt/wealthfolio-broker-sync/bin")
+    sc.add_argument("--dir", default="/opt/wealthfolio-companion/bin")
     cert = sub.add_parser("make-cert",
                           help="create or renew the TLS certificate of the web UI (signed by the container's own CA)")
     cert.add_argument("--dir", default=TLS_DIR)
@@ -46,7 +46,7 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("rotate-key", help="re-encrypt everything for a new host key, read from stdin (deploy/setup.sh)")
     sub.add_parser("recover", help="finish or undo a re-encryption that was interrupted (also on every start)")
     sub.add_parser("security-status", help="what is protected how (the page Sicherheit)")
-    sub.add_parser("backup", help="data/ as an encrypted archive to stdout: brokersync-cli backup > file.tar.gz")
+    sub.add_parser("backup", help="data/ as an encrypted archive to stdout: companion-cli backup > file.tar.gz")
     sub.add_parser("restore", help="data/ from such an archive on stdin, after checking it opens with this "
                                    "container's key; the web UI must be stopped")
     due = sub.add_parser("update-due", help="for the container's updater: whether to ask GitHub now, and the newer "
@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     return COMMANDS[args.cmd](args)
 
 
-TLS_DIR = "/etc/wealthfolio-broker-sync/tls"
+TLS_DIR = "/etc/wealthfolio-companion/tls"
 
 
 def _serve(args) -> int:
@@ -101,7 +101,7 @@ def _make_cert(args) -> int:
 
 
 def _renew_cert(args) -> int:
-    """#92: daily (wealthfolio-broker-sync-cert.timer) - after an address change, a fitting certificate within 24 h."""
+    """#92: daily (wealthfolio-companion-cert.timer) - after an address change, a fitting certificate within 24 h."""
     import socket
     import subprocess
     from pathlib import Path
@@ -119,7 +119,7 @@ def _renew_cert(args) -> int:
     for f in directory.glob("*.pem"):
         f.chmod(0o600)
     if not args.no_restart and (directory / "cert.pem").read_bytes() != before:
-        subprocess.run(["systemctl", "try-restart", "wealthfolio-broker-sync"], timeout=120, check=False)
+        subprocess.run(["systemctl", "try-restart", "wealthfolio-companion"], timeout=120, check=False)
     return 0
 
 
@@ -184,7 +184,7 @@ def _setup_code(args) -> int:
         vault.update(forget)
         print("Web UI password removed.")
     elif vault.load().get("ui_password_hash"):
-        print("The web UI password is set already; to choose a new one: brokersync-reset-password",
+        print("The web UI password is set already; to choose a new one: companion-reset-password",
               file=sys.stderr)
         return 1
     # Printed here, on the console only - never logged.
@@ -210,12 +210,12 @@ def _backup(args) -> int:
     from .backup import write
 
     if sys.stdout.isatty():
-        print("Redirect the archive into a file: brokersync-cli backup > backup.tar.gz", file=sys.stderr)
+        print("Redirect the archive into a file: companion-cli backup > backup.tar.gz", file=sys.stderr)
         return 2
     names = write(data_dir(), sys.stdout.buffer)
     sys.stdout.buffer.flush()
     print(f"Backed up {len(names)} files - they open only with this container's key "
-          "(/etc/wealthfolio-broker-sync) and the master passphrase, if set.", file=sys.stderr)
+          "(/etc/wealthfolio-companion) and the master passphrase, if set.", file=sys.stderr)
     return 0
 
 
@@ -231,7 +231,7 @@ def _restore(args) -> int:
 
 
 def _update_due(args) -> int:
-    """Asked every minute by deploy/brokersync-autoupdate (root, through brokersync-cli): only the host tier is
+    """Asked every minute by deploy/companion-autoupdate (root, through companion-cli): only the host tier is
     read, so it works while the data is locked."""
     from . import updates
     from .config import load_notify
@@ -258,7 +258,7 @@ def _update_done(args) -> int:
     ok = not args.failed
     text = (f"Version {args.new} ist installiert (vorher {args.old})." if ok else
             f"Das automatische Update auf {args.new} ist fehlgeschlagen - Version {args.old} läuft weiter. "
-            "Details: journalctl -u wealthfolio-broker-sync-update")
+            "Details: journalctl -u wealthfolio-companion-update")
     Notifier(cfg.ntfy_server, cfg.ntfy_topic, cfg.ntfy_token, details=cfg.ntfy_details).send(
         "Update installiert" if ok else "Update fehlgeschlagen", text,
         link=f"{cfg.public_url.rstrip('/')}/updates" if cfg.public_url else None,
@@ -281,7 +281,7 @@ COMMANDS = {"serve": _serve, "run": _run, "reset-ui-password": _setup_code, "set
 
 
 class JsonFormatter(logging.Formatter):
-    """One JSON object per line (``BROKERSYNC_LOG_FORMAT=json``, OPS-04 of #85) - already redacted by the
+    """One JSON object per line (``COMPANION_LOG_FORMAT=json``, OPS-04 of #85) - already redacted by the
     handler's filter, like the plain lines."""
 
     def format(self, record: logging.LogRecord) -> str:
@@ -294,7 +294,7 @@ class JsonFormatter(logging.Formatter):
 
 def setup_logging() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    if os.environ.get("BROKERSYNC_LOG_FORMAT", "").lower() == "json":
+    if os.environ.get("COMPANION_LOG_FORMAT", "").lower() == "json":
         for handler in logging.getLogger().handlers:
             handler.setFormatter(JsonFormatter())
     redact.install()
@@ -313,7 +313,7 @@ def _notify_locked() -> None:
     cfg = config_mod.load_notify(data_dir())
     link = f"{cfg.public_url.rstrip('/')}/unlock" if cfg.public_url else None
     Notifier(cfg.ntfy_server, cfg.ntfy_topic, cfg.ntfy_token).send(
-        "Broker Sync gesperrt", "Nach einem Neustart: Bitte in der Weboberfläche die Master-Passphrase eingeben, "
+        "Companion gesperrt", "Nach einem Neustart: Bitte in der Weboberfläche die Master-Passphrase eingeben, "
         "sonst ruft der Dienst nichts ab.", link=link, priority="high", tags="lock")
 
 

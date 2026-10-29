@@ -22,9 +22,9 @@ log = logging.getLogger(__name__)
 
 def known_hosts(data_dir: Path, certfile: str | None) -> set[str]:
     """The names the UI answers to besides IP addresses (#107): this machine's, the certificate's, the public
-    URL's (read when asked: it can change) and ``BROKERSYNC_ALLOWED_HOSTS`` (comma-separated)."""
+    URL's (read when asked: it can change) and ``COMPANION_ALLOWED_HOSTS`` (comma-separated)."""
     names = {socket.gethostname(), "localhost"}
-    names |= {n.strip() for n in os.environ.get("BROKERSYNC_ALLOWED_HOSTS", "").split(",") if n.strip()}
+    names |= {n.strip() for n in os.environ.get("COMPANION_ALLOWED_HOSTS", "").split(",") if n.strip()}
     if certfile and Path(certfile).exists():
         from cryptography import x509
 
@@ -72,10 +72,10 @@ def redirect_app(https_port: int, hosts: Hosts | None = None):
 
 def proxy_options() -> dict:
     """Behind a reverse proxy every client has the proxy's address, so five wrong passwords anywhere would
-    lock everyone out. ``BROKERSYNC_TRUST_PROXY`` names the proxy (address, comma-separated for several):
+    lock everyone out. ``COMPANION_TRUST_PROXY`` names the proxy (address, comma-separated for several):
     only its ``X-Forwarded-For`` is believed, then the brake counts per real client (#90). Unset: no header
     is believed - the default, direct access."""
-    trusted = os.environ.get("BROKERSYNC_TRUST_PROXY", "").strip()
+    trusted = os.environ.get("COMPANION_TRUST_PROXY", "").strip()
     return {"proxy_headers": True, "forwarded_allow_ips": trusted} if trusted else {"proxy_headers": False}
 
 
@@ -93,7 +93,7 @@ def serve(data_dir: Path, *, host: str, port: int, certfile: str | None, keyfile
     if not secure:
         log.warning("web UI without TLS: passwords cross the network in plain text")
     servers = [uvicorn.Server(c) for c in configs]
-    ui_lock = hold_ui_lock(data_dir)  # brokersync-cli restore refuses to run under a running UI (#109)
+    ui_lock = hold_ui_lock(data_dir)  # companion-cli restore refuses to run under a running UI (#109)
 
     async def main():
         async def stop_together():

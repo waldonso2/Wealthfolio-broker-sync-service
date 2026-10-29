@@ -1,15 +1,15 @@
-"""Running as a Docker/Podman container (waldonso2/wealthfolio-importer-addon#148): ``brokersync container``.
+"""Running as a Docker/Podman container (waldonso2/wealthfolio-importer-addon#148): ``wealthfolio-companion container``.
 
 What systemd does in the LXC happens here in one process:
 
-- the key comes from a container secret (``BROKERSYNC_KEY_FILE``, ``/run/secrets/brokersync-key`` in the image);
+- the key comes from a container secret (``COMPANION_KEY_FILE``, ``/run/secrets/companion-key`` in the image);
   without it nothing starts - a key is never made in ``data/`` (``crypto.KeyMissing``);
 - ``migrate`` (and ``recover``, by ``cli.main``) before anything reads the data;
 - the first setup code is printed to the container's log while no UI password is set (``docker logs``);
-- the UI certificate from the container's own CA in ``BROKERSYNC_TLS_DIR`` (renewed at every start and, when it is
+- the UI certificate from the container's own CA in ``COMPANION_TLS_DIR`` (renewed at every start and, when it is
   due, by the scheduler - then the process ends and the container's restart policy brings it back with it), or plain
-  HTTP behind a reverse proxy with ``BROKERSYNC_TLS=off``;
-- the daily fetch (``wealthfolio-broker-sync-run.timer`` in the LXC) as a thread: ``RUN_AT`` German time plus up to
+  HTTP behind a reverse proxy with ``COMPANION_TLS=off``;
+- the daily fetch (``wealthfolio-companion-run.timer`` in the LXC) as a thread: ``RUN_AT`` German time plus up to
   ``JITTER`` minutes, under the same sync lock as every other run.
 
 Updates are a new image (``docker compose pull``): the page *Updates* says so instead of offering to install.
@@ -38,8 +38,8 @@ TLS_DIR = "/tls"
 
 
 def active() -> bool:
-    """Running in the container image (it sets BROKERSYNC_CONTAINER)."""
-    return bool(os.environ.get("BROKERSYNC_CONTAINER"))
+    """Running in the container image (it sets COMPANION_CONTAINER)."""
+    return bool(os.environ.get("COMPANION_CONTAINER"))
 
 
 def next_run(now: datetime, at: str = RUN_AT, jitter: float = 0.0) -> datetime:
@@ -54,7 +54,8 @@ def next_run(now: datetime, at: str = RUN_AT, jitter: float = 0.0) -> datetime:
 
 
 def run_once() -> None:
-    """One scheduled run, as the LXC's timer starts it (``brokersync run``); a failure only goes to the log."""
+    """One scheduled run, as the LXC's timer starts it (``wealthfolio-companion run``); a failure only goes to the
+    log."""
     from .cli import _run
 
     class Args:
@@ -67,17 +68,17 @@ def run_once() -> None:
 
 
 def tls_enabled() -> bool:
-    """TLS of the UI: on unless ``BROKERSYNC_TLS`` says off (in the LXC the unit sets it to 1)."""
-    value = os.environ.get("BROKERSYNC_TLS", "").lower()
+    """TLS of the UI: on unless ``COMPANION_TLS`` says off (in the LXC the unit sets it to 1)."""
+    value = os.environ.get("COMPANION_TLS", "").lower()
     return value not in ("off", "0", "no") and (bool(value) or active())
 
 
 def _tls_dir() -> Path:
-    return Path(os.environ.get("BROKERSYNC_TLS_DIR", TLS_DIR))
+    return Path(os.environ.get("COMPANION_TLS_DIR", TLS_DIR))
 
 
 def certificate() -> Path | None:
-    """The UI certificate for this container's name and the extra names; None with ``BROKERSYNC_TLS=off``."""
+    """The UI certificate for this container's name and the extra names; None with ``COMPANION_TLS=off``."""
     if not tls_enabled():
         return None
     from .tls import ensure_certificate, extra_names
@@ -85,7 +86,7 @@ def certificate() -> Path | None:
     directory = _tls_dir()
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     names, ips = extra_names(directory)
-    extra = [n.strip() for n in os.environ.get("BROKERSYNC_CERT_NAMES", "").split(",") if n.strip()]
+    extra = [n.strip() for n in os.environ.get("COMPANION_CERT_NAMES", "").split(",") if n.strip()]
     try:
         own = [socket.gethostbyname(socket.gethostname())]
     except OSError:
@@ -118,7 +119,7 @@ def _cert_changed() -> bool:
 
 
 def main(args) -> int:
-    """``brokersync container``: migrate, first setup code, certificate, scheduler, web UI."""
+    """``wealthfolio-companion container``: migrate, first setup code, certificate, scheduler, web UI."""
     from . import crypto
     from .cli import _setup_code
     from .security import migrate
@@ -140,7 +141,7 @@ def main(args) -> int:
         _setup_code(Code())  # printed to the container's log, never logged by the service itself
     tls = certificate()
     stop = threading.Event()
-    threading.Thread(target=scheduler, args=(stop,), kwargs={"at": os.environ.get("BROKERSYNC_RUN_AT", RUN_AT),
+    threading.Thread(target=scheduler, args=(stop,), kwargs={"at": os.environ.get("COMPANION_RUN_AT", RUN_AT),
                                                               "renew": _cert_changed if tls else None},
                      daemon=True, name="scheduler").start()
     try:

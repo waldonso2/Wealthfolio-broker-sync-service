@@ -1,4 +1,4 @@
-"""brokersync-cli backup / restore (#109)."""
+"""companion-cli backup / restore (#109)."""
 
 import fcntl
 import io
@@ -90,7 +90,7 @@ def test_the_commands(tmp_path, monkeypatch, capsysbinary):
 
     syncer, _ = setup(tmp_path, FakeWealthfolio())
     syncer.run()
-    monkeypatch.setenv("BROKERSYNC_DATA", str(tmp_path))
+    monkeypatch.setenv("COMPANION_DATA", str(tmp_path))
     assert cli.main(["backup"]) == 0
     archive = capsysbinary.readouterr().out
     assert archive[:2] == b"\x1f\x8b"  # gzip

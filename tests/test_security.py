@@ -136,10 +136,10 @@ def test_an_installation_of_0_8_is_migrated(tmp_path):
 def test_the_key_comes_from_systemd_and_is_required_once_data_exists(tmp_path, monkeypatch):
     creds = tmp_path / "creds"
     creds.mkdir()
-    (creds / "brokersync-key").write_bytes(base64.urlsafe_b64encode(b"k" * 32))
+    (creds / "companion-key").write_bytes(base64.urlsafe_b64encode(b"k" * 32))
     data = tmp_path / "data"
     monkeypatch.setenv("CREDENTIALS_DIRECTORY", str(creds))
-    monkeypatch.setenv("BROKERSYNC_KEY_SOURCE", "systemd-creds")
+    monkeypatch.setenv("COMPANION_KEY_SOURCE", "systemd-creds")
     Vault(data).update(lambda d: d.__setitem__("wealthfolio_password", "pw"))
     assert not (data / "secret.key").exists()
     assert crypto.host_key_source(data) == "systemd-creds"
@@ -256,9 +256,9 @@ def test_a_locked_timer_run_says_so(tmp_path, monkeypatch):
     crypto.lock(tmp_path)
     sent = []
     monkeypatch.setattr(Notifier, "send", lambda self, title, message, **kw: sent.append((title, kw["link"])))
-    monkeypatch.setenv("BROKERSYNC_DATA", str(tmp_path))
+    monkeypatch.setenv("COMPANION_DATA", str(tmp_path))
     assert cli.main(["run"]) == 1
-    assert sent == [("Broker Sync gesperrt", "https://sync:8443/unlock")]
+    assert sent == [("Companion gesperrt", "https://sync:8443/unlock")]
 
 
 # ── web UI ──────────────────────────────────────────────────────────────────
@@ -330,9 +330,9 @@ def test_the_brake_keeps_ipv6_neighbours_together_has_a_global_limit_and_a_size_
 def test_behind_a_named_proxy_its_forwarded_header_is_believed(monkeypatch):
     from brokersync.web.serve import proxy_options
 
-    monkeypatch.delenv("BROKERSYNC_TRUST_PROXY", raising=False)
+    monkeypatch.delenv("COMPANION_TRUST_PROXY", raising=False)
     assert proxy_options() == {"proxy_headers": False}
-    monkeypatch.setenv("BROKERSYNC_TRUST_PROXY", "192.168.1.2")
+    monkeypatch.setenv("COMPANION_TRUST_PROXY", "192.168.1.2")
     assert proxy_options() == {"proxy_headers": True, "forwarded_allow_ips": "192.168.1.2"}
 
 
@@ -414,21 +414,21 @@ def test_the_certificate_comes_from_the_containers_ca_and_browsers_can_verify_it
     from brokersync.tls import ensure_certificate
 
     d = tmp_path / "tls"
-    out = ensure_certificate(d, ["wealthfolio-broker-sync"], ["192.168.178.110", "2003:ce::1", "fd1e::1", "nonsense"])
+    out = ensure_certificate(d, ["wealthfolio-companion"], ["192.168.178.110", "2003:ce::1", "fd1e::1", "nonsense"])
     assert "New certificate" in out and "CA SHA-256" in out
     for f in ("ca-key.pem", "key.pem", "cert.pem", "ca.pem"):
         assert stat.S_IMODE((d / f).stat().st_mode) == 0o600
     ca_pem, chain = (d / "ca.pem").read_bytes(), (d / "cert.pem").read_bytes()
     _verify(ca_pem, chain, x509.IPAddress(ipaddress.ip_address("192.168.178.110")))
-    _verify(ca_pem, chain, x509.DNSName("wealthfolio-broker-sync"))
+    _verify(ca_pem, chain, x509.DNSName("wealthfolio-companion"))
     leaf = x509.load_pem_x509_certificate(chain)
     ips = {str(i) for i in leaf.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
            .get_values_for_type(x509.IPAddress)}
     assert ips == {"192.168.178.110", "fd1e::1", "127.0.0.1"}  # no public address in a local certificate
     # Kept while it fits; a new address needs a new CA (#92) - the old one may sign only the old address.
-    assert "valid until" in ensure_certificate(d, ["wealthfolio-broker-sync"], ["192.168.178.110", "2003:ce::1",
+    assert "valid until" in ensure_certificate(d, ["wealthfolio-companion"], ["192.168.178.110", "2003:ce::1",
                                                                               "fd1e::1"])
-    out = ensure_certificate(d, ["wealthfolio-broker-sync"], ["192.168.178.111"])
+    out = ensure_certificate(d, ["wealthfolio-companion"], ["192.168.178.111"])
     assert "New certificate" in out and "New CA" in out and (d / "ca.pem").read_bytes() != ca_pem
     _verify((d / "ca.pem").read_bytes(), (d / "cert.pem").read_bytes(),
             x509.IPAddress(ipaddress.ip_address("192.168.178.111")))
@@ -523,7 +523,7 @@ def test_the_ca_certificate_can_be_downloaded_and_is_explained(tmp_path, monkeyp
     (creds / "tls.ca").write_bytes((tmp_path / "tls" / "ca.pem").read_bytes())
     (creds / "tls.crt").write_bytes((tmp_path / "tls" / "cert.pem").read_bytes())
     monkeypatch.setenv("CREDENTIALS_DIRECTORY", str(creds))
-    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(tmp_path / "tls" / "ca-key.pem"))  # any key will do here
+    monkeypatch.setenv("COMPANION_KEY_FILE", str(tmp_path / "tls" / "ca-key.pem"))  # any key will do here
     client = logged_in(tmp_path / "data", secure=True)
     r = client_for(tmp_path / "data", secure=True).get("/ca.crt")  # no login needed
     assert r.status_code == 200 and r.content == (creds / "tls.ca").read_bytes()
@@ -556,7 +556,7 @@ def test_a_new_host_key_re_encrypts_everything_and_the_old_one_no_longer_opens_i
     old_key.write_bytes(base64.urlsafe_b64encode(b"o" * 32))
     new_key.write_bytes(base64.urlsafe_b64encode(b"n" * 32))
     data = tmp_path / "data"
-    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(old_key))
+    monkeypatch.setenv("COMPANION_KEY_FILE", str(old_key))
     wf = FakeWealthfolio()
     syncer, _ = setup(data, wf)
     syncer.run()
@@ -567,12 +567,12 @@ def test_a_new_host_key_re_encrypts_everything_and_the_old_one_no_longer_opens_i
     # Only staged: until setup.sh stores the new key, the old one opens everything (#91).
     assert Vault(data).load()["wealthfolio_password"] and security.recover(data) == "undone"
     security.rotate_host_key(data, new_key.read_bytes())
-    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(new_key))  # setup.sh stored it: the switch
+    monkeypatch.setenv("COMPANION_KEY_FILE", str(new_key))  # setup.sh stored it: the switch
     assert security.recover(data) == "finished" and not list(data.glob("*.rekey"))
-    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(old_key))
+    monkeypatch.setenv("COMPANION_KEY_FILE", str(old_key))
     with pytest.raises(Exception):  # noqa: B017 - the old key opens nothing any more
         Vault(data).load()
-    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(new_key))
+    monkeypatch.setenv("COMPANION_KEY_FILE", str(new_key))
     assert Vault(data).load()["wealthfolio_password"]
     assert config_mod.load(data).brokers["fake"].enabled and config_mod.load_notify(data).public_url
     assert State(data).runs("fake")
@@ -586,7 +586,7 @@ def test_rotation_needs_the_service_unlocked_and_a_real_key(tmp_path, monkeypatc
 
     from brokersync import cli
 
-    monkeypatch.setenv("BROKERSYNC_DATA", str(tmp_path))
+    monkeypatch.setenv("COMPANION_DATA", str(tmp_path))
     config_mod.save(tmp_path, config_mod.Config())
     monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(b"short\n")))
     assert cli.main(["rotate-key"]) == 1 and "zu kurz" in capsys.readouterr().err
@@ -614,7 +614,7 @@ def test_unknown_events_keep_no_account_or_depot_numbers(tmp_path):
 def _filled(tmp_path, monkeypatch):
     key = tmp_path / "host.key"
     key.write_bytes(base64.urlsafe_b64encode(b"h" * 32))
-    monkeypatch.setenv("BROKERSYNC_KEY_FILE", str(key))
+    monkeypatch.setenv("COMPANION_KEY_FILE", str(key))
     data = tmp_path / "data"
     syncer, _ = setup(data, FakeWealthfolio())
     syncer.run()
@@ -680,7 +680,7 @@ def test_a_new_host_key_that_was_never_stored_is_undone_on_the_next_start(tmp_pa
 
     data = _filled(tmp_path, monkeypatch)
     security.rotate_host_key(data, base64.urlsafe_b64encode(b"n" * 32))
-    monkeypatch.setenv("BROKERSYNC_DATA", str(data))
+    monkeypatch.setenv("COMPANION_DATA", str(data))
     assert cli.main(["recover"]) == 0
     assert not list(data.glob("*.rekey")) and not (data / security.JOURNAL).exists()
     _all_readable(data)
@@ -707,22 +707,22 @@ def test_only_known_names_reach_the_ui_and_the_redirect(tmp_path, monkeypatch):
     from brokersync.web.gate import Hosts
     from brokersync.web.serve import known_hosts, redirect_app
 
-    monkeypatch.setenv("BROKERSYNC_ALLOWED_HOSTS", "sync.example.org")
+    monkeypatch.setenv("COMPANION_ALLOWED_HOSTS", "sync.example.org")
     config_mod.save(tmp_path, config_mod.Config(public_url="https://depot.home.arpa:8443"))
     names = known_hosts(tmp_path, None)
     assert {"localhost", "sync.example.org", "depot.home.arpa"} <= names
-    hosts = Hosts(lambda: names | {"wealthfolio-broker-sync"})
-    for ok in ("192.168.1.51:8443", "[fd00::5]:8443", "localhost", "wealthfolio-broker-sync.fritz.box:8443",
-               "wealthfolio-broker-sync", "sync.example.org"):
+    hosts = Hosts(lambda: names | {"wealthfolio-companion"})
+    for ok in ("192.168.1.51:8443", "[fd00::5]:8443", "localhost", "wealthfolio-companion.fritz.box:8443",
+               "wealthfolio-companion", "sync.example.org"):
         assert hosts.allows(ok), ok
-    for bad in ("evil.example", "wealthfolio-broker-sync.evil.example", "", "depot.home.arpa.evil.example"):
+    for bad in ("evil.example", "wealthfolio-companion.evil.example", "", "depot.home.arpa.evil.example"):
         assert not hosts.allows(bad), bad
 
     from brokersync.web.app import create_app
 
     app = create_app(tmp_path, hosts=hosts)
     r = TestClient(app, base_url="http://evil.example").get("/login")
-    assert r.status_code == 400 and "BROKERSYNC_ALLOWED_HOSTS" in r.text
+    assert r.status_code == 400 and "COMPANION_ALLOWED_HOSTS" in r.text
     assert TestClient(app, base_url="http://192.168.1.51:8090").get("/healthz").status_code == 200
     sent = []
 
@@ -753,27 +753,27 @@ def test_the_units_are_hardened_and_the_run_has_a_time_limit():
     from pathlib import Path
 
     units = Path(__file__).parent.parent / "deploy" / "systemd"
-    for name in ("wealthfolio-broker-sync.service", "wealthfolio-broker-sync-run.service"):
+    for name in ("wealthfolio-companion.service", "wealthfolio-companion-run.service"):
         text = (units / name).read_text()
         for option in ("SystemCallFilter=@system-service", "SystemCallErrorNumber=EPERM", "ProtectProc=invisible",
                        "RemoveIPC=true", "NoNewPrivileges=true", "CapabilityBoundingSet=\n"):
             assert option in text, (name, option)
-    assert "TimeoutStartSec=45min" in (units / "wealthfolio-broker-sync-run.service").read_text()
+    assert "TimeoutStartSec=45min" in (units / "wealthfolio-companion-run.service").read_text()
 
 
 def test_a_cookie_of_an_earlier_password_signs_in_nobody(tmp_path):
-    """brokersync-reset-password while the web UI runs: a copied cookie of before is not valid again once a
+    """companion-reset-password while the web UI runs: a copied cookie of before is not valid again once a
     new password is set - the session is bound to the password."""
     client = logged_in(tmp_path)
     stolen = dict(client.cookies)
     import os
 
     from brokersync import cli
-    os.environ["BROKERSYNC_DATA"] = str(tmp_path)
+    os.environ["COMPANION_DATA"] = str(tmp_path)
     try:
         cli.main(["reset-ui-password"])
     finally:
-        os.environ.pop("BROKERSYNC_DATA")
+        os.environ.pop("COMPANION_DATA")
     first_password(client, "ein-ganz-neues-pw")
     thief = TestClient(client.app, base_url="http://sync.local", cookies=stolen)
     assert thief.get("/", follow_redirects=False).headers["location"] == "/login"
@@ -831,7 +831,7 @@ def test_a_damaged_setup_code_is_like_an_expired_one(tmp_path):
 
 
 def test_json_logs_are_redacted_like_the_plain_ones(monkeypatch, capsys):
-    """OPS-04: BROKERSYNC_LOG_FORMAT=json - one JSON object per line, IBANs masked as always."""
+    """OPS-04: COMPANION_LOG_FORMAT=json - one JSON object per line, IBANs masked as always."""
     import logging
 
     from brokersync import cli
@@ -840,7 +840,7 @@ def test_json_logs_are_redacted_like_the_plain_ones(monkeypatch, capsys):
     old = root.handlers[:]
     root.handlers = []
     try:
-        monkeypatch.setenv("BROKERSYNC_LOG_FORMAT", "json")
+        monkeypatch.setenv("COMPANION_LOG_FORMAT", "json")
         cli.setup_logging()
         logging.getLogger("brokersync.test").warning("paid to %s", "DE89370400440532013000")
         line = capsys.readouterr().err.strip().splitlines()[-1]

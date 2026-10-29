@@ -44,7 +44,7 @@ jobs:
       - run: pytest -q --cov=brokersync --cov-report=term:skip-covered --cov-fail-under=90
 
   performance:
-    # Measured and reported on the run's summary page (KENNZAHLEN.md), never failing the build.
+    # Measured and reported on the run's summary page (METRICS.md), never failing the build.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -84,9 +84,9 @@ jobs:
         with:
           persist-credentials: false
       - name: shellcheck
-        run: shellcheck ct/*.sh install/*.sh deploy/setup.sh deploy/brokersync-reset-password deploy/brokersync-cli deploy/brokersync-autoupdate scripts/*.sh
+        run: shellcheck ct/*.sh install/*.sh deploy/setup.sh deploy/companion-reset-password deploy/companion-cli deploy/companion-autoupdate scripts/*.sh
       - name: catalog JSON
-        run: python3 -m json.tool json/wealthfolio-broker-sync.json > /dev/null
+        run: python3 -m json.tool json/wealthfolio-companion.json > /dev/null
       - name: install from the release tarball layout, like deploy/setup.sh
         run: |
           git archive --format=tar.gz --prefix=app/ HEAD > /tmp/app.tar.gz
@@ -95,7 +95,7 @@ jobs:
           /tmp/venv/bin/pip install --quiet --require-hashes --only-binary :all: -r /tmp/rel/app/requirements.txt
           /tmp/venv/bin/pip install --quiet --no-deps --no-build-isolation /tmp/rel/app
           /tmp/venv/bin/pip check
-          /tmp/venv/bin/brokersync --version
+          /tmp/venv/bin/wealthfolio-companion --version
 
   docker:
     # The container image (#148): built from the Dockerfile as published, then the smoke test - no key: no start;
@@ -105,8 +105,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: docker build -t brokersync:ci .
-      - run: scripts/docker_smoke.sh brokersync:ci
+      - run: docker build -t companion:ci .
+      - run: scripts/docker_smoke.sh companion:ci
 
   workflows:
     # The workflows themselves: injection, permissions, cache poisoning (zizmor).

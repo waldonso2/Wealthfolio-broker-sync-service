@@ -200,8 +200,8 @@ def needs_rehash(stored: str) -> bool:
 
 # ── one-time setup code for the first password (#89) ────────────────────────
 # Without it anyone in the LAN - or any web page open in a browser there - could set the UI password
-# before its owner. The code is shown on the container's console only (install, ``brokersync-cli
-# setup-code``, ``brokersync-reset-password``), never logged; the vault keeps only its hash.
+# before its owner. The code is shown on the container's console only (install, ``companion-cli
+# setup-code``, ``companion-reset-password``), never logged; the vault keeps only its hash.
 SETUP_CODE_HOURS = 24
 
 

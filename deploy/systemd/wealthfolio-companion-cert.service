@@ -1,18 +1,18 @@
 [Unit]
-Description=Wealthfolio Broker Sync - certificate of the web UI for the current name and addresses
+Description=Wealthfolio Companion - certificate of the web UI for the current name and addresses
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-# Root: it writes /etc/wealthfolio-broker-sync/tls (root only) and restarts the web UI when the certificate changed.
+# Root: it writes /etc/wealthfolio-companion/tls (root only) and restarts the web UI when the certificate changed.
 User=root
-ExecStart=/opt/wealthfolio-broker-sync/venv/bin/brokersync renew-cert
-Environment=BROKERSYNC_DATA=/opt/wealthfolio-broker-sync/data
+ExecStart=/opt/wealthfolio-companion/venv/bin/wealthfolio-companion renew-cert
+Environment=COMPANION_DATA=/opt/wealthfolio-companion/data
 UMask=0077
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/etc/wealthfolio-broker-sync/tls
+ReadWritePaths=/etc/wealthfolio-companion/tls
 ProtectHome=true
 PrivateTmp=true
 PrivateDevices=true

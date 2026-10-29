@@ -64,7 +64,7 @@ _REGISTERED = bytes.fromhex("530fc37fcb51d2d113f4a5d844b700dd96336ab95cbe14e2af"
 
 
 def product_id() -> str:
-    pad = hashlib.sha256(b"wealthfolio-broker-sync/fints").digest()
+    pad = hashlib.sha256(b"wealthfolio-broker-sync/fints").digest()  # a label, not the product name: never rename
     value = bytes(a ^ b for a, b in zip(_REGISTERED, pad, strict=False)).decode()
     redact.register(value)  # never in a log line or on screen
     return value
@@ -216,7 +216,7 @@ class FintsAdapter(BrokerAdapter):
         if self._pending is None:
             return result
         if self._pending.decoupled and self.on_user_action:
-            self.on_user_action(f"Bitte bestätige den Zugriff des Wealthfolio Broker Sync in der {self.app}.")
+            self.on_user_action(f"Bitte bestätige den Zugriff von Wealthfolio Companion in der {self.app}.")
             deadline = time.monotonic() + DECOUPLED_WAIT
             while time.monotonic() < deadline:
                 time.sleep(DECOUPLED_POLL)

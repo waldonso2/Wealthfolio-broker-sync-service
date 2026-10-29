@@ -237,7 +237,7 @@ class TradeRepublicAdapter(BrokerAdapter):
         if not phone or not pin:
             raise AdapterError("Telefonnummer und PIN fehlen - bitte in den Broker-Einstellungen eintragen.")
         # pytr keeps cookies in a file; it lives only while this adapter does.
-        self._tmp = tempfile.TemporaryDirectory(prefix="brokersync-tr-")
+        self._tmp = tempfile.TemporaryDirectory(prefix="companion-tr-")
         cookies = Path(self._tmp.name) / "cookies.txt"
         fd = os.open(cookies, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as f:
@@ -264,7 +264,7 @@ class TradeRepublicAdapter(BrokerAdapter):
         if self.on_user_action:
             # Scheduled run: ask on the phone and wait for it (pytr polls until
             # Trade Republic's deadline, about two minutes).
-            self.on_user_action("Bitte bestätige die Anmeldung des Wealthfolio Broker Sync in der Trade-Republic-App.")
+            self.on_user_action("Bitte bestätige die Anmeldung von Wealthfolio Companion in der Trade-Republic-App.")
             self.complete_login("")
             return
         raise AuthRequired(Challenge("confirm", "Bestätige die Anmeldung in der Trade-Republic-App."))

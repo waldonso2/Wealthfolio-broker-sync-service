@@ -403,7 +403,7 @@ class ComdirectAdapter(BrokerAdapter):
                 self.session["push_without_link"] = True
                 raise AuthRequired(Challenge("confirm", "Bitte die comdirect-Anmeldung in der Weboberfläche "
                                                         "bestätigen."))
-            self.on_user_action("Bitte bestätige die Anmeldung des Wealthfolio Broker Sync in der "
+            self.on_user_action("Bitte bestätige die Anmeldung von Wealthfolio Companion in der "
                                 "comdirect photoTAN-App.")
             if not self._wait_push(PUSH_WAIT):
                 raise AuthRequired(Challenge("confirm", "Die Anmeldung wurde nicht rechtzeitig in der photoTAN-App "

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# The container's updater (wealthfolio-companion-update.timer, root, every minute). Switched on and timed on
+# the page Updates: it asks the service (companion-cli update-due) whether GitHub is due and whether a newer
+# release is out, then runs the same update as `update` in the console - unattended (PHS_SILENT=1), with its
+# check of every file against the release's SHA256SUMS - and reports how it went (companion-cli update-done).
+set -euo pipefail
+
+STATE=/var/lib/wealthfolio-companion-update
+BIN=/opt/wealthfolio-companion/venv/bin/wealthfolio-companion
+RETRY=3600 # a version that failed is tried again after an hour, not every minute
+install -d -m 700 "$STATE"
+now="$(date +%s)"
+
+# A fetch going on keeps its files: the update replaces the program under it.
+systemctl is-active --quiet wealthfolio-companion-run.service && exit 0
+
+last="$(cat "$STATE/checked" 2>/dev/null || echo 0)"
+answer="$(/usr/local/bin/companion-cli update-due --since "$((now - last))")" || exit 0
+grep -qx checked <<<"$answer" || exit 0
+echo "$now" >"$STATE/checked"
+# A release or a PEP 440 pre-release (0.1.0, 0.1.0a1, 0.1.0rc2).
+version="$(sed -n 's/^install \([0-9][0-9.]*\(a\|b\|rc\)\{0,1\}[0-9]*\)$/\1/p' <<<"$answer")"
+[[ -n "$version" ]] || exit 0
+
+if [[ "$(cat "$STATE/failed" 2>/dev/null)" == "$version" ]] &&
+  ((now - $(stat -c %Y "$STATE/failed") < RETRY)); then
+  exit 0
+fi
+
+old="$("$BIN" --version)"
+echo "Installing version $version (installed: $old)"
+if PHS_SILENT=1 /usr/bin/update && [[ "$("$BIN" --version)" == "$version" ]]; then
+  rm -f "$STATE/failed"
+  /usr/local/bin/companion-cli update-done --from "$old" --to "$version"
+else
+  echo "$version" >"$STATE/failed"
+  /usr/local/bin/companion-cli update-done --from "$old" --to "$version" --failed || true
+  exit 1
+fi

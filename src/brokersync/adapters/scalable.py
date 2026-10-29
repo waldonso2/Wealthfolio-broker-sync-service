@@ -66,13 +66,13 @@ from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, Credenti
 log = logging.getLogger(__name__)
 BERLIN = ZoneInfo("Europe/Berlin")
 
-# Where install-sc puts the binary; BROKERSYNC_SC overrides, else sc on the PATH.
-DEFAULT_SC = "/opt/wealthfolio-broker-sync/bin/sc"
+# Where install-sc puts the binary; COMPANION_SC overrides, else sc on the PATH.
+DEFAULT_SC = "/opt/wealthfolio-companion/bin/sc"
 CONFIG_TOML = '[auth]\nsession_backend = "file"\nsigning_key_backend = "file"\n'
 # Files the CLI keeps in its config directory that make up the session.
 SESSION_FILES = ("session.json", "auth-signing-key.json", "broker_context.json", "state.json")
 COMMAND_TIMEOUT = 120
-# What of the service's environment ``sc`` gets (#93); everything else (CREDENTIALS_DIRECTORY, BROKERSYNC_*) not.
+# What of the service's environment ``sc`` gets (#93); everything else (CREDENTIALS_DIRECTORY, COMPANION_*) not.
 PASS_ENV: tuple[str, ...] = ("LANG", "LC_ALL", "TZ")
 # More paths ``sc`` may write (tests: the fake's control directory).
 EXTRA_WRITE: tuple[str, ...] = ()
@@ -121,7 +121,7 @@ def summary(items: list[dict]) -> str:
 
 
 def sc_binary() -> str:
-    explicit = os.environ.get("BROKERSYNC_SC")
+    explicit = os.environ.get("COMPANION_SC")
     if explicit:
         return explicit
     if Path(DEFAULT_SC).exists():
@@ -387,7 +387,7 @@ class ScCli:
     """Runs ``sc`` with its config directory in a private temporary directory."""
 
     def __init__(self, files: dict[str, str]):
-        self._tmp = tempfile.TemporaryDirectory(prefix="brokersync-sc-")
+        self._tmp = tempfile.TemporaryDirectory(prefix="companion-sc-")
         self.home = Path(self._tmp.name)
         self.config_dir = self.home / "config" / "scalable-cli"
         self.config_dir.mkdir(parents=True, mode=0o700)
@@ -408,7 +408,7 @@ class ScCli:
                 if (self.config_dir / name).is_file()}
 
     def _env(self) -> dict[str, str]:
-        """Only what ``sc`` needs (#93): never ``CREDENTIALS_DIRECTORY`` or ``BROKERSYNC_*`` of the service."""
+        """Only what ``sc`` needs (#93): never ``CREDENTIALS_DIRECTORY`` or ``COMPANION_*`` of the service."""
         env = {k: os.environ[k] for k in PASS_ENV if k in os.environ}
         env.update(PATH="/usr/local/bin:/usr/bin:/bin", HOME=str(self.home), XDG_CONFIG_HOME=str(self.home / "config"),
                    TMPDIR=str(self.home), NO_COLOR="1", TERM="dumb")

@@ -33,7 +33,7 @@ def test_versions_compare_as_numbers():
 
 
 def test_asked_once_a_day_and_a_new_version_reported_once(tmp_path, monkeypatch):
-    monkeypatch.setenv("BROKERSYNC_UPDATE_CHECK", "1")
+    monkeypatch.setenv("COMPANION_UPDATE_CHECK", "1")
     state, calls = State(tmp_path), []
     assert updates.check(state, "0.26.1", http=github("v0.27.0", calls)) == "0.27.0"
     assert updates.available(state, "0.26.1") == "0.27.0"
@@ -50,7 +50,7 @@ def test_asked_once_a_day_and_a_new_version_reported_once(tmp_path, monkeypatch)
 
 
 def test_github_not_reachable_keeps_what_was_known(tmp_path, monkeypatch):
-    monkeypatch.setenv("BROKERSYNC_UPDATE_CHECK", "1")
+    monkeypatch.setenv("COMPANION_UPDATE_CHECK", "1")
     state = State(tmp_path)
     state.set_meta(meta_keys.UPDATE(), json.dumps({"version": "0.27.0", "checked": "2020-01-01T00:00:00+00:00"}))
     assert updates.check(state, "0.26.1", http=github(None, [])) is None
@@ -58,14 +58,14 @@ def test_github_not_reachable_keeps_what_was_known(tmp_path, monkeypatch):
 
 
 def test_turned_off_asks_nothing(tmp_path, monkeypatch):
-    monkeypatch.setenv("BROKERSYNC_UPDATE_CHECK", "0")
+    monkeypatch.setenv("COMPANION_UPDATE_CHECK", "0")
     calls: list = []
     assert updates.check(State(tmp_path), "0.26.1", http=github("v9.0.0", calls)) is None
     assert calls == []
 
 
 def test_a_run_notifies_a_new_release_once(tmp_path, monkeypatch):
-    monkeypatch.setenv("BROKERSYNC_UPDATE_CHECK", "1")
+    monkeypatch.setenv("COMPANION_UPDATE_CHECK", "1")
     monkeypatch.setattr(updates, "latest", lambda http: "99.0.0")
     notifier = RecordingNotifier()
     syncer = Syncer(tmp_path, notifier=notifier)
@@ -99,7 +99,7 @@ def test_the_updater_asks_only_when_switched_on_and_its_time_is_up():
 def test_the_updater_reads_its_switch_from_the_host_tier_and_reports_the_result(tmp_path, monkeypatch, capsys):
     from brokersync import cli, config
 
-    monkeypatch.setenv("BROKERSYNC_DATA", str(tmp_path))
+    monkeypatch.setenv("COMPANION_DATA", str(tmp_path))
     config.update(tmp_path, lambda c: (setattr(c, "auto_update", True), setattr(c, "update_interval", 120)))
     assert config.load_notify(tmp_path).auto_update and config.load_notify(tmp_path).update_interval == 120
     monkeypatch.setattr(updates, "latest", lambda http: "99.0.0")
@@ -134,11 +134,11 @@ def test_the_page_updates_switches_it_on_with_a_bounded_interval(tmp_path):
 
 
 def test_a_renamed_repository_is_followed_only_within_github():
-    renamed = "https://github.com/waldonso2/wealthfolio-companion/releases/latest"
+    renamed = "https://github.com/waldonso2/renamed-again/releases/latest"
 
     def answer(location):
         def handler(request):
-            if request.url.path.endswith("Wealthfolio-broker-sync-service/releases/latest"):
+            if request.url.path.endswith("wealthfolio-companion/releases/latest"):
                 return httpx.Response(301, headers={"location": location})
             return httpx.Response(302, headers={"location": "/waldonso2/wealthfolio-companion/releases/tag/v1.0.0"})
         return httpx.Client(transport=httpx.MockTransport(handler))
@@ -146,3 +146,24 @@ def test_a_renamed_repository_is_followed_only_within_github():
     assert updates.latest(answer(renamed)) == "1.0.0"
     assert updates.latest(answer("https://example.org/releases/latest")) is None  # never another host
     assert updates.latest(answer("http://github.com/x/releases/latest")) is None  # https only
+
+
+def test_pre_releases_sort_before_their_release():
+    """PEP 440: 0.1.0a1 < 0.1.0a2 < 0.1.0b1 < 0.1.0rc1 < 0.1.0 < 0.1.1a1."""
+    order = ["0.1.0a1", "0.1.0a2", "0.1.0a10", "0.1.0b1", "0.1.0rc1", "0.1.0", "0.1.1a1", "0.2.0"]
+    for i, older in enumerate(order):
+        for later in order[i + 1:]:
+            assert updates.newer(later, older) and not updates.newer(older, later), (older, later)
+    assert not updates.newer("0.1.0a1", "0.1.0a1")
+    assert not updates.newer("0.1.0dev1", "0.1.0a1") and not updates.newer("0.1.0a", "0.0.1")  # not ours: no hint
+
+
+def test_the_latest_release_may_be_a_pre_release():
+    def client(tag):
+        location = f"/waldonso2/wealthfolio-companion/releases/tag/{tag}"
+        return httpx.Client(transport=httpx.MockTransport(
+            lambda request: httpx.Response(302, headers={"location": location})))
+
+    assert updates.latest(client("v0.1.0a2")) == "0.1.0a2"
+    assert updates.latest(client("v0.1.0rc1")) == "0.1.0rc1"
+    assert updates.latest(client("v0.1.0-beta")) is None

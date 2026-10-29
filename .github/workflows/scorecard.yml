@@ -1,6 +1,6 @@
 name: Scorecard
 
-# OpenSSF Scorecard (0-10, KENNZAHLEN.md): the repository's security practices. Only a report -
+# OpenSSF Scorecard (0-10, METRICS.md): the repository's security practices. Only a report -
 # the results show under Security → Code scanning and on the run's page; nothing here fails a build.
 on:
   push:
