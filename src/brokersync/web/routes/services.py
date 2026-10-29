@@ -6,10 +6,13 @@ settings it needs, and it turns on by itself once they are saved (``settle``, ca
 
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from ... import config as config_mod
+from ... import meta_keys
 from ..context import AppContext, Ctx, redirect, tr
 from ..i18n import N_
 
@@ -25,6 +28,9 @@ SERVICES = [
     ("logos", N_("Logos"), N_("setzt die Logos der Wertpapiere von logo.dev in Wealthfolio"), "/logos"),
     ("spending", N_("Ausgaben-Tracker"),
      N_("nimmt die Verrechnungskonten deiner Banken in Wealthfolios Ausgaben-Auswertung auf"), "/brokers"),
+    ("xray", N_("X-Ray in Wealthfolio"),
+     N_("legt die Fondslisten für das X-Ray-Addon in Wealthfolio ab; Beträge bleiben in Wealthfolio"),
+     "/lookthrough?settings=1#xray-settings"),
 ]
 NAMES = {key: name for key, name, _, _ in SERVICES}
 
@@ -63,8 +69,9 @@ def services_page(request: Request, ctx: Ctx):
     c = ctx.cfg()
     services = [{"key": key, "name": name, "text": text, "href": href, "on": c.service(key)}
                 for key, name, text, href in SERVICES]
+    xray = json.loads(ctx.state.meta(meta_keys.XRAY_ADDON_STATUS()) or "{}")  # the last write for the addon
     return ctx.render(request, "services.html", services=services,
-                      pending=request.session.get("enable_service"))
+                      pending=request.session.get("enable_service"), xray=xray)
 
 
 @router.post("/services/{key}")

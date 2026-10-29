@@ -91,13 +91,16 @@ class Config:
         """Whether the service ``key`` of the page *Dienste* is on."""
         if key in _FLAGS:
             return bool(getattr(self, _FLAGS[key]))
-        return True if self.services is None else self.services.get(key, False)
+        if self.services is None:
+            return key not in NEW_SERVICES  # set up before the page: what ran stays on, what is new starts off
+        return self.services.get(key, False)
 
     def set_service(self, key: str, on: bool) -> None:
         if key in _FLAGS:
             setattr(self, _FLAGS[key], on)
             return
-        services = dict.fromkeys(SERVICES, True) if self.services is None else dict(self.services)
+        services = ({k: k not in NEW_SERVICES for k in SERVICES} if self.services is None
+                    else dict(self.services))
         services[key] = on
         self.services = services
 
@@ -110,7 +113,9 @@ class Config:
 
 
 # The services of the page *Dienste* without a flag of their own (#145), and those that have one.
-SERVICES = ("sync", "isin", "spending")
+SERVICES = ("sync", "isin", "spending", "xray")
+# Services that came after the page: off for an installation set up before it too.
+NEW_SERVICES = ("xray",)
 _FLAGS = {"taxonomies": "lookthrough_write", "logos": "logos_enabled"}
 
 # The host tier (notify.enc): readable while the data is locked - ntfy and the automatic update.

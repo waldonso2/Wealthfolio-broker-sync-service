@@ -16,12 +16,12 @@ def test_a_new_install_starts_with_every_service_off_an_old_one_keeps_them(tmp_p
     new.mkdir()
     security.migrate(new)
     c = config_mod.load(new)
-    assert not any(c.service(k) for k in ("sync", "taxonomies", "isin", "logos", "spending"))
+    assert not any(c.service(k) for k in ("sync", "taxonomies", "isin", "logos", "spending", "xray"))
     c.set_service("isin", True)
     assert c.services == {"isin": True}
     old_cfg = config_mod.load(old)
     old_cfg.set_service("sync", False)
-    assert old_cfg.services == {"sync": False, "isin": True, "spending": True}
+    assert old_cfg.services == {"sync": False, "isin": True, "spending": True, "xray": False}
 
 
 def test_switching_on_sends_to_the_settings_and_turns_on_once_they_are_saved(tmp_path):

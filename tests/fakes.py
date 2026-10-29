@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import uuid
 from urllib.parse import unquote
 
@@ -50,6 +51,11 @@ class FakeWealthfolio:
                                                {"id": "20", "name": "Industrials", "parentId": None}]}
         self.assignments: list[dict] = []
         self.spending: dict | None = {"enabled": False, "accountIds": [], "excludedCategoryIds": []}  # None: no tracker
+        # Addon storage (#146) per (addon id, key); None: a Wealthfolio before 3.11. ``storage_fail``: keys whose
+        # writes and deletes fail, ``storage_log``: (method, key) in order.
+        self.storage: dict[tuple[str, str], str] | None = {}
+        self.storage_fail: set[str] = set()
+        self.storage_log: list[tuple[str, str]] = []
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -64,6 +70,28 @@ class FakeWealthfolio:
         return (p["accountId"], p["activityType"], p["activityDate"], (p.get("asset") or {}).get("symbol"),
                 p.get("quantity"), p.get("unitPrice"), p.get("amount"), p.get("fee"), p["currency"],
                 p.get("comment"))
+
+    def _storage(self, request: httpx.Request, addon: str, key: str) -> httpx.Response:
+        """Wealthfolio's addon storage, with its checks (crates/core/src/addons/service.rs)."""
+        if self.storage is None:
+            return httpx.Response(404, text="Not Found")
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", key):
+            return httpx.Response(400, json={"message": "Invalid storage key"})
+        self.storage_log.append((request.method, key))
+        if request.method == "GET":
+            return httpx.Response(200, content=json.dumps(self.storage.get((addon, key))).encode(),
+                                  headers={"content-type": "application/json"})
+        if key in self.storage_fail:
+            return httpx.Response(500, json={"message": "storage failed"})
+        if request.method == "DELETE":
+            self.storage.pop((addon, key), None)
+            return httpx.Response(204)
+        value = json.loads(request.content)["value"]
+        payload = json.dumps({"addon_id": addon, "key": key, "value": value}, ensure_ascii=False, separators=(",", ":"))
+        if len(payload.encode()) > 250_000:
+            return httpx.Response(400, json={"message": "Invalid storage value: too large to sync"})
+        self.storage[(addon, key)] = value
+        return httpx.Response(204)
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -195,6 +223,8 @@ class FakeWealthfolio:
             if request.method == "PUT":
                 self.spending.update(json.loads(request.content))
             return httpx.Response(200, json=self.spending)
+        if path.startswith("/api/v1/addons/storage/"):
+            return self._storage(request, *path.split("/")[-2:])
         if path == "/api/v1/holdings":
             return httpx.Response(200, json=self.holdings(request.url.params["accountId"]))
         if path == "/api/v1/activities/search":

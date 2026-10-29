@@ -60,6 +60,11 @@ def template_gettext(context, text: str, **params) -> Markup:
 # Abruf = fetch, Buchung = booking, Anmeldung = login, Anfangsbestand = opening position, Tresor = vault.
 EN: dict[str, str] = {
     # ── navigation, frame ──
+    "X-Ray in Wealthfolio": "X-Ray in Wealthfolio",
+    "Fehler: {error}": "Error: {error}",
+    "legt die Fondslisten für das X-Ray-Addon in Wealthfolio ab; Beträge bleiben in Wealthfolio":
+        "stores the funds' lists for the X-Ray addon in Wealthfolio; amounts stay in Wealthfolio",
+    "Zuletzt abgelegt: {when}": "Last stored: {when}",
     # Page Dienste (#145)
     "Die Anmeldung läuft gerade schon - bitte kurz warten.": "The login is already in progress - please wait a moment.",
     "Dienste": "Services",

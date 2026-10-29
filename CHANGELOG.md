@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.45.0
+
+- New service *X-Ray in Wealthfolio* on the page *Dienste* (off, also for existing installations): after each X-Ray pass the funds' holdings lists go into Wealthfolio's addon storage for the new X-Ray addon, which shows X-Ray inside Wealthfolio. Only the issuers' lists and the assets' names and ISINs are written, never amounts. Needs Wealthfolio 3.11 or later; with an older one the card says so.
+- The data contract between the service and the addon is `contract/xray/` (storage layout and shared computation cases).
+
 ## 0.44.2
 
 More fixes from the code review in #134:

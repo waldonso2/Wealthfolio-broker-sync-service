@@ -58,8 +58,13 @@ ISIN = MetaKey("isin", "text", False,
                "the ISIN the sync set on a Wealthfolio asset, once (assets.complete_isins, #140)")
 SPENDING = MetaKey("spending", "json", False,
                    "cash accounts the sync put into Wealthfolio's spending tracker: [account id] (spending.py, #134)")
+XRAY_ADDON_STATUS = MetaKey("xray-addon:status", "json", False,
+                            "the last write for the X-Ray addon: {at, ok, written, deleted, skipped, error} (#146)")
+XRAY_ADDON_STALE = MetaKey("xray-addon:stale", "json", False,
+                           "addon storage keys still to delete for the X-Ray addon: [key] (xray_addon.py, #146)")
 
 ALL = (ASSETS_LEARNED, CASH_ASSETS_REPAIRED, REFETCH, SAVINGS_ACCOUNT, DIVIDEND_TAX, HISTORY_START, POSITIONS,
        RETIRED_NOTICE, LOGO, LOGOS_LAST, PROGRESS, CHECKLIST_HIDDEN, UPDATE, AUTO_UPDATE, FUND, FUNDS_LAST,
-       XRAY_ACCEPTED, XRAY_NOTIFIED, TAXONOMIES_LAST, SPENDING, ISIN, FUNDS_PROGRESS)
+       XRAY_ACCEPTED, XRAY_NOTIFIED, TAXONOMIES_LAST, SPENDING, ISIN, FUNDS_PROGRESS, XRAY_ADDON_STATUS,
+       XRAY_ADDON_STALE)
 BROKER_KEYS = tuple(k for k in ALL if k.per_broker)

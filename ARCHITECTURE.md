@@ -62,6 +62,7 @@ flowchart TB
   sync --> lookthrough["lookthrough.py<br/>Positionslisten der ETFs, Taxonomien (wahlweise)"]
   lookthrough --> xray["xray.py<br/>X-Ray, Überschneidung, Klumpenrisiken"]
   lookthrough --> costs["costs.py<br/>Kosten von Kauf bis Verkauf"]
+  lookthrough --> xrayaddon["xray_addon.py<br/>Fondslisten in Wealthfolios Addon-Speicher (wahlweise)"]
   web --> fire["fire.py<br/>FIRE mit deutschen Netto-Werten"]
   sync --> state["state.py"] & vault["vault.py"] & config["config.py"]
   web --> duplicates["duplicates.py<br/>Bereinigung"]
