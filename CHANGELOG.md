@@ -11,6 +11,7 @@ Fixes from the code review in #134:
 - Wealthfolio's activity list is read to the end even when an answer carries no total.
 - N26 and Enable Banking stop after 1000 pages instead of fetching for ever.
 - After saving the notifications the page *Broker* opens, like after every other save.
+- *Sicherheit* no longer claims that `sc` without Landlock can't read the key: without the sandbox it runs as the service user.
 
 ## 0.44.0
 
