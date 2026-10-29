@@ -19,7 +19,7 @@
   {% set in_broker = path == "/broker" or path.startswith("/check") or path == "/unknown" %}
   {% set in_settings = path == "/settings" or path.startswith("/brokers") or path in settings_pages | map(attribute=0) | list %}
   <nav class="main" aria-label="{{ _('Hauptmenü') }}">
-    <a href="/"{% if path == "/" %} aria-current="page"{% endif %}>{{ icon("toggle") }}<span>{{ _("Dienste") }}</span></a>
+    <a href="/"{% if path == "/" or path.startswith("/services/") %} aria-current="page"{% endif %}>{{ icon("toggle") }}<span>{{ _("Dienste") }}</span></a>
     <a href="/broker"{% if in_broker %} aria-current="page"{% endif %}>{{ icon("bank") }}<span>{{ _("Broker") }}</span>{% if nav_unknown %} <span class="count" aria-label="{{ _('{n} offen', n=nav_unknown) }}">{{ nav_unknown }}</span>{% endif %}</a>
     <a href="/lookthrough"{% if path.startswith("/lookthrough") %} aria-current="page"{% endif %}>{{ icon("layers") }}<span>{{ _("X-Ray") }}</span></a>
     <a href="/settings"{% if in_settings %} aria-current="page"{% endif %}>{{ icon("settings") }}<span>{{ _("Einstellungen") }}</span></a>

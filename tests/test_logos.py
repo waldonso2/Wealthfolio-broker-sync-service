@@ -190,16 +190,21 @@ def test_page_saves_the_key_in_the_vault_and_fetches(tmp_path):
     client = TestClient(app, base_url="http://sync.local:8090")
     first_password(client)
     Vault(tmp_path).update(lambda d: d.__setitem__("wealthfolio_password", PASSWORD))
-    token = csrf(client, "/logos")
-    r = client.post("/logos", data={"csrf": token, "fetch": "1"})
-    assert "Erst einschalten" in r.text
-    r = client.post("/logos", data={"csrf": token, "enabled": "1", "token": TOKEN, "fetch": "1"})
-    assert "1 Logos gesetzt" in r.text and "a1" in wf.logos
+    r = client.get("/logos", follow_redirects=False)  # the service's page now (#151)
+    assert r.status_code == 303 and r.headers["location"] == "/services/logos"
+    token = csrf(client, "/services/logos")
+    Vault(tmp_path).update(lambda d: d.__setitem__("wealthfolio_checked", True))
+    r = client.post("/services/logos/run", data={"csrf": token})
+    assert "Erst einschalten" in r.text and not wf.logos
+    client.post("/services/logos/settings", data={"csrf": token, "token": TOKEN})
+    client.post("/services/logos", data={"csrf": token, "back": "page"})
     assert config_mod.load(tmp_path).logos_enabled
     assert Vault(tmp_path).load()["logo_dev_token"] == TOKEN
-    page = client.get("/logos").text
-    assert TOKEN not in page and "(gespeichert)" in page and "Letzter Durchlauf" in page
-    client.post("/logos", data={"csrf": token, "enabled": "1", "remove_token": "1"})
+    r = client.post("/services/logos/run", data={"csrf": token})
+    assert "1 Logos gesetzt" in r.text and "a1" in wf.logos
+    page = client.get("/services/logos").text
+    assert TOKEN not in page and "(gespeichert)" in page and "1 gesetzt" in page
+    client.post("/services/logos/settings", data={"csrf": token, "remove_token": "1"})
     assert "logo_dev_token" not in Vault(tmp_path).load()
 
 

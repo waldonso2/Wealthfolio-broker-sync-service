@@ -92,12 +92,17 @@ def _matrix(rows: list[xray.Exposure], funds: list[xray.Holding], total: Decimal
     return out
 
 
-@router.get("/lookthrough", response_class=HTMLResponse)
-def lookthrough_page(request: Request, ctx: Ctx, top: str = TOPS[0], fund: str = ""):
+def read_soon(request: Request, ctx: AppContext) -> None:
+    """The depot's positions read again in the background when older than ``READ_SECONDS``."""
     if time.time() - ctx.depot_at > READ_SECONDS:
         from .overview import launch
 
         launch(ctx, N_("X-Ray"), lambda lang: _read(ctx, ctx.cfg()), language(request))
+
+
+@router.get("/lookthrough", response_class=HTMLResponse)
+def lookthrough_page(request: Request, ctx: Ctx, top: str = TOPS[0], fund: str = ""):
+    read_soon(request, ctx)
     c = ctx.cfg()
     depot, state = ctx.depot, ctx.state
     funds = state.funds()
@@ -136,7 +141,6 @@ def lookthrough_page(request: Request, ctx: Ctx, top: str = TOPS[0], fund: str =
         ters={p["id"]: lookthrough.ter(lookthrough.status(state, p["id"])) for p in depot.positions},
         cost_fields=COST_FIELDS, brokers=[k for k in c.brokers if k in ctx.adapters],
         typed=lambda raw, percent: _typed(raw, percent, language(request)),
-        written=json.loads(state.meta(meta_keys.TAXONOMIES_LAST()) or "null"),
         reading=ctx.running.is_set() and ctx.job in (N_("X-Ray"), N_("Positionslisten abrufen")),
         progress=json.loads(state.meta(meta_keys.FUNDS_PROGRESS()) or "{}") if ctx.running.is_set() else {},
         read_at=datetime.fromtimestamp(ctx.depot_at, UTC) if ctx.depot_at else None)
@@ -152,8 +156,8 @@ def lookthrough_refresh(request: Request, ctx: Ctx):
 
 @router.post("/lookthrough/settings")
 async def lookthrough_settings(request: Request, ctx: Ctx):
-    """Writing into Wealthfolio on or off, and the limits of the cluster risks - the whole form checked before
-    anything is saved."""
+    """The limits of the cluster risks - the whole form checked before anything is saved. Writing countries and
+    sectors into Wealthfolio is the service's page now (/services/taxonomies, #151)."""
     form = await request.form()
     saved: dict[str, str] = {}
     try:
@@ -167,11 +171,7 @@ async def lookthrough_settings(request: Request, ctx: Ctx):
     except inputs.Invalid as e:
         return redirect(request, "/lookthrough", e.text(language(request)), "error")
 
-    def change(c) -> None:
-        c.lookthrough_write = bool(form.get("write"))
-        c.xray_limits = saved
-
-    ctx.update(change)
+    ctx.update(lambda c: setattr(c, "xray_limits", saved))
     return redirect(request, "/lookthrough", tr(request, "Gespeichert."))
 
 
@@ -261,25 +261,6 @@ def lookthrough_fetch(request: Request, ctx: Ctx, asset_id: str = Form("")):
         return text, "warn" if result.errors else "ok"
 
     return start_job(request, ctx, N_("Positionslisten abrufen"), work, "/lookthrough")
-
-
-@router.post("/lookthrough/taxonomies/remove")
-def lookthrough_remove(request: Request, ctx: Ctx):
-    """Take the service's countries and sectors out of Wealthfolio again, and stop writing them."""
-    ctx.update(lambda c: setattr(c, "lookthrough_write", False))
-    from .overview import start_job
-
-    def work(lang: str) -> tuple[str, str]:
-        try:
-            n = ctx.syncer.remove_taxonomies()
-        except AlreadyRunning:
-            return translate("Ein Abruf läuft gerade - bitte gleich noch einmal.", lang), "warn"
-        except WealthfolioError as e:
-            return translate("Wealthfolio: {error}", lang, error=str(e)), "error"
-        ctx.state.delete_meta(meta_keys.TAXONOMIES_LAST())
-        return translate("{n} Zuordnungen aus Wealthfolio entfernt.", lang, n=n), "ok"
-
-    return start_job(request, ctx, N_("Zuordnungen entfernen"), work, "/lookthrough")
 
 
 @router.post("/lookthrough/upload")

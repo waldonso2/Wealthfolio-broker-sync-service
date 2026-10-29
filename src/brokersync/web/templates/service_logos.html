@@ -1,0 +1,31 @@
+{% extends "_service.html" %}
+{% block status %}
+{% if last %}
+<p>{{ _("{when}: {set} gesetzt, {none} ohne Logo bei logo.dev, {failed} fehlgeschlagen", when=last.at | local, set=last.set, none=last.none, failed=last.failed) }}{% if last.open %}{{ _(", {n} beim nächsten Abruf", n=last.open) }}{% endif %}.{% if last.message %} {{ last.message | redact }}{% endif %}</p>
+{% else %}<p class="muted">{{ _("Noch kein Durchlauf.") }}</p>{% endif %}
+<p>{{ _('Wealthfolio zeigt für Wertpapiere, die unter ihrer ISIN geführt werden, meist kein Logo. Eingeschaltet holt der Dienst nach jedem Abruf die Logos bei <a href="https://www.logo.dev" target="_blank" rel="noopener">logo.dev</a> und setzt sie in Wealthfolio als eigenes Logo des Wertpapiers (ab Wealthfolio 3.8.0).') }}</p>
+<ul>
+  <li>{{ _("Nur die ISINs deiner Wertpapiere gehen an logo.dev – keine Bestände, Beträge oder Konten.") }}</li>
+  <li>{{ _("Ein Logo, das du in Wealthfolio selbst gesetzt hast, bleibt unangetastet.") }}</li>
+  <li>{{ _("Jedes Logo wird einmal gesetzt. Entfernst du es in Wealthfolio, setzt der Dienst es nicht wieder.") }}</li>
+  <li>{{ _("Hat logo.dev für eine ISIN kein Logo, fragt der Dienst erst nach 30 Tagen wieder.") }}</li>
+</ul>
+<p class="muted">{{ _('Logos von <a href="https://logo.dev" target="_blank" rel="noopener">Logo.dev</a>.') }}</p>
+{% endblock %}
+{% block settings %}{% from "_forms.html" import invalid, error with context %}
+<div class="card">
+  <h2>{{ _("Einstellungen") }}</h2>
+  <form method="post" action="/services/logos/settings">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="token">{{ _("logo.dev-Schlüssel (Publishable Key, <code>pk_…</code>)") }}</label>
+    <input type="password" id="token" name="token" autocomplete="off" placeholder="{{ _('•••••••• (gespeichert)') if has_token else '' }}"{{ invalid("token") }}>
+    {{ error("token") }}
+    <div class="muted">{{ _("Kostenlos nach Anmeldung bei logo.dev. Der Schlüssel liegt verschlüsselt im Tresor des Dienstes.") }}</div>
+    {% if has_token %}<label class="check"><input type="checkbox" name="remove_token" value="1"> {{ _("Schlüssel entfernen") }}</label>{% endif %}
+    <div class="actions"><button>{{ _("Speichern") }}</button></div>
+  </form>
+</div>
+{% endblock %}
+{% block actions %}{% from "_service_parts.html" import run with context %}
+{{ run(_("Jetzt ausführen")) }}
+{% endblock %}

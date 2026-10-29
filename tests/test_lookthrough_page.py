@@ -87,11 +87,12 @@ def test_limits_are_checked_and_saved_and_a_risk_can_be_accepted(tmp_path):
     # One fund, nothing else: a single stock of 100 % and too few stocks.
     page = client.get("/lookthrough").text
     assert "Klumpenrisiken" in page and "So gewollt" in page and "100,00 %" in page
-    r = client.post("/lookthrough/settings", data={"csrf": token, "write": "on", "stock": "abc"})
-    assert "Zahl" in r.text and not config_mod.load(tmp_path).lookthrough_write
+    assert 'href="/services/taxonomies"' in page and 'name="write"' not in page  # the service's page now (#151)
+    r = client.post("/lookthrough/settings", data={"csrf": token, "stock": "abc"})
+    assert "Zahl" in r.text and not config_mod.load(tmp_path).xray_limits
     r = client.post("/lookthrough/settings", data={"csrf": token, "write": "on", "stock": "12,5", "effective": "1"})
     c = config_mod.load(tmp_path)
-    assert c.lookthrough_write and c.xray_limits == {"stock": "0.125", "effective": "1"}
+    assert not c.lookthrough_write and c.xray_limits == {"stock": "0.125", "effective": "1"}
     assert 'value="12,50"' in r.text
     r = client.post("/lookthrough/accept", data={"csrf": token, "key": f"stock:{FUND}"})
     assert "Keine Klumpenrisiken über deinen Grenzen." in r.text and "So gewollt (1)" in r.text

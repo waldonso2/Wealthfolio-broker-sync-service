@@ -29,21 +29,29 @@ def test_switching_on_sends_to_the_settings_and_turns_on_once_they_are_saved(tmp
     first_password(client)
     config_mod.update(tmp_path, lambda c: setattr(c, "services", {}))
     page = client.get("/").text
-    assert 'role="switch" aria-checked="false"' in page and 'href="/logos"' in page
+    assert 'role="switch" aria-checked="false"' in page
+    for key in ("sync", "taxonomies", "isin", "logos", "spending", "xray"):  # every gear: the service's page (#151)
+        assert f'href="/services/{key}"' in page
     token = csrf(client, "/")
     r = client.post("/services/logos", data={"csrf": token}, follow_redirects=False)
-    assert r.headers["location"] == "/setup/wealthfolio"  # Wealthfolio first
+    assert r.headers["location"] == "/services/logos"  # its page names what is missing
+    assert 'href="/setup/wealthfolio"' in client.get("/services/logos").text  # Wealthfolio first
     Vault(tmp_path).update(lambda d: d.__setitem__("wealthfolio_checked", True))
     r = client.post("/services/logos", data={"csrf": token}, follow_redirects=False)
-    assert r.headers["location"] == "/logos" and not config_mod.load(tmp_path).logos_enabled
+    assert r.headers["location"] == "/services/logos" and not config_mod.load(tmp_path).logos_enabled
+    page = client.get("/services/logos").text
+    assert "schaltet sich ein" in page and 'href="/services/logos#token"' in page
     assert "schaltet sich ein" in client.get("/").text
-    client.post("/logos", data={"csrf": token, "token": "abc_123"})  # its settings saved: on now
+    client.post("/services/logos/settings", data={"csrf": token, "token": "abc_123"})  # saved: on now
     assert config_mod.load(tmp_path).logos_enabled
     r = client.post("/services/logos", data={"csrf": token})
     assert "Logos ist ausgeschaltet." in r.text and not config_mod.load(tmp_path).logos_enabled
+    r = client.post("/services/logos", data={"csrf": token, "back": "page"}, follow_redirects=False)
+    assert r.headers["location"] == "/services/logos" and config_mod.load(tmp_path).logos_enabled
     r = client.post("/services/isin", data={"csrf": token})
     assert "ISIN ergänzen ist eingeschaltet." in r.text and config_mod.load(tmp_path).service("isin")
     assert client.post("/services/nope", data={"csrf": token}).status_code == 200  # an error message, nothing set
+    assert "Unbekannter Dienst" in client.get("/services/nope").text
 
 
 def test_broker_sync_off_fetches_no_broker(tmp_path):

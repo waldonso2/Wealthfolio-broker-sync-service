@@ -37,7 +37,9 @@ def test_only_a_missing_isin_is_added_and_everything_else_is_kept(tmp_path):
     # Removed by the user: not set again.
     aapl["metadata"] = profile
     assert assets.complete_isins(state, client(wf), learned) == 0
-    assert state.meta(meta_keys.ISIN("AAPL")) == APPLE
+    assert assets.completed(state)["AAPL"]["isin"] == APPLE and assets.completed(state)["AAPL"]["at"]
+    state.set_meta(meta_keys.ISIN("OLD"), SAP)  # stored before 0.47.0: the bare ISIN
+    assert assets.completed(state)["OLD"] == {"isin": SAP, "at": ""}
 
 
 def test_a_run_completes_isins_and_a_refusal_never_fails_a_broker(tmp_path):

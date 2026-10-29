@@ -1,0 +1,25 @@
+{% extends "_service.html" %}
+{% block status %}
+{% if tracked %}<p>{{ _("Vom Dienst in Wealthfolios Ausgaben-Tracker aufgenommen: {names}.", names=tracked | join(", ")) }}</p>
+{% else %}<p class="muted">{{ _("Noch kein Konto vom Dienst aufgenommen.") }}</p>{% endif %}
+<p class="muted">{{ _("Kategorien vergibt Wealthfolio mit seinen Regeln (Ausgaben → Regeln) anhand von Empfänger und Verwendungszweck. Wealthfolio wertet nur Konten vom Typ Bargeld aus; eigene Überträge und Wertpapierabrechnungen zählen dort als Sparen, nicht als Ausgabe. Konten, die du in Wealthfolio selbst gewählt hast, bleiben.") }}</p>
+{% endblock %}
+{% block settings %}{% from "_forms.html" import invalid, error with context %}
+<div class="card" id="accounts">
+  <h2>{{ _("Einstellungen") }}</h2>
+  {% if wf_error %}<p class="error" role="alert">{{ _("Wealthfolio nicht erreichbar: {error}", error=wf_error | redact) }}</p>{% endif %}
+  {% if rows %}
+  <form method="post" action="/services/spending/settings">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <fieldset{{ invalid("broker") }}><legend>{{ _("Verrechnungskonten im Ausgaben-Tracker") }}</legend>
+    {% for r in rows %}<label class="check"><input type="checkbox" name="broker" value="{{ r.key }}"{% if r.on %} checked{% endif %}> {{ _("{broker}: {account}", broker=r.label, account=r.account) }}</label>{% endfor %}
+    </fieldset>
+    {{ error("broker") }}
+    <div class="actions"><button>{{ _("Speichern") }}</button></div>
+  </form>
+  {% else %}<p class="muted">{{ _("Noch kein Broker mit Verrechnungskonto.") }} <a href="/brokers">{{ _("Broker einrichten") }}</a></p>{% endif %}
+</div>
+{% endblock %}
+{% block actions %}{% from "_service_parts.html" import run with context %}
+{{ run(_("Jetzt ausführen")) }}
+{% endblock %}

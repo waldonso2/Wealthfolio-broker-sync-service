@@ -1,0 +1,30 @@
+{% extends "_service.html" %}
+{% block status %}
+{% if done %}
+<div class="table"><table>
+  <caption class="sr-only">{{ _("Ergänzte ISINs") }}</caption>
+  <thead><tr><th scope="col">{{ _("Wertpapier") }}</th><th scope="col">{{ _("ISIN") }}</th><th scope="col">{{ _("Ergänzt") }}</th></tr></thead>
+  <tbody>
+  {% for d in done %}
+  <tr><td data-label="{{ _('Wertpapier') }}">{{ d.name }}</td><td data-label="{{ _('ISIN') }}"><code>{{ d.isin }}</code></td>
+    <td data-label="{{ _('Ergänzt') }}">{{ d.at | local if d.at else "–" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<p class="muted">{{ _("Noch keine ISIN ergänzt.") }}</p>{% endif %}
+<h3>{{ _("Ohne ISIN") }}</h3>
+{% if depot_error %}<p class="error" role="alert">{{ _("Wealthfolio nicht erreichbar: {error}", error=depot_error | redact) }}</p>
+{% elif not read %}<p class="muted">{{ _("Die Positionen werden gerade aus Wealthfolio gelesen.") }}</p>
+{% elif without %}<p>{{ _("Für diese Wertpapiere kennt der Dienst noch keine ISIN:") }}</p>
+<ul>{% for p in without %}<li>{{ p.name }}</li>{% endfor %}</ul>
+{% else %}<p class="muted">{{ _("Jedes Wertpapier im Depot hat eine ISIN.") }}</p>{% endif %}
+{% endblock %}
+{% block settings %}
+<div class="card">
+  <h2>{{ _("Einstellungen") }}</h2>
+  <p><a href="/securities">{{ _("ISIN fehlt? Selbst zuordnen") }}</a></p>
+</div>
+{% endblock %}
+{% block actions %}{% from "_service_parts.html" import run with context %}
+{{ run(_("Jetzt ergänzen")) }}
+{% endblock %}

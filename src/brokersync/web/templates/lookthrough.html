@@ -184,14 +184,12 @@
   <form method="post" action="/lookthrough/refresh" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><p class="muted grow">{{ _("Die Positionen werden beim Öffnen der Seite aus Wealthfolio gelesen, höchstens alle 10 Minuten.") }}</p><button class="secondary" {% if reading %}disabled{% endif %}>{{ _("Neu lesen") }}</button></form>
   <form method="post" action="/lookthrough/settings">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label class="check"><input type="checkbox" name="write"{% if cfg.lookthrough_write %} checked{% endif %}> {{ _("Länder und Sektoren der ETFs in Wealthfolio eintragen, damit seine eigenen Auswertungen durch die ETFs sehen. Ersetzt nur Yahoos automatische Werte, nie deine eigenen Zuordnungen.") }}</label>
     <div class="row">
       {% for key, label, percent in limit_fields %}<label>{{ _(label) }} <input type="text" name="{{ key }}" inputmode="decimal" value="{{ (limits[key] * 100) | money if percent else limits[key] | int }}"></label>{% endfor %}
     </div>
     <div class="actions"><button>{{ _("Speichern") }}</button></div>
   </form>
-  {% if written %}<p class="muted">{{ _("Zuletzt in Wealthfolio eingetragen {when}: {written} geändert, {manual} mit deinen eigenen Zuordnungen gelassen.", when=written.at | local, written=written.written, manual=written.manual) }}{% if written.unmatched %} {{ _("Ohne passende Kategorie: {names}.", names=written.unmatched | join(", ")) }}{% endif %}</p>
-  <form method="post" action="/lookthrough/taxonomies/remove" class="actions"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary">{{ _("Aus Wealthfolio entfernen") }}</button></form>{% endif %}
+  <p class="muted"><a href="/services/taxonomies">{{ _("Länder und Sektoren der ETFs in Wealthfolio eintragen: Dienst Länder & Sektoren") }}</a> · <a href="/services/xray">{{ _("Fondslisten für das X-Ray-Addon: Dienst X-Ray in Wealthfolio") }}</a></p>
   </details>
 </div>
 <div class="card">

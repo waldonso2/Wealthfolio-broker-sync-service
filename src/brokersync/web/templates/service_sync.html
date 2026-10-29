@@ -1,0 +1,30 @@
+{% extends "_service.html" %}
+{% block status %}
+{% set LIGHT = {"green": _("alles in Ordnung"), "yellow": _("bitte ansehen"), "red": _("Handlungsbedarf"), "grey": _("noch kein Abruf")} %}
+{% if brokers %}
+<div class="table"><table>
+  <caption class="sr-only">{{ _("Broker und letzter Abruf") }}</caption>
+  <thead><tr><th scope="col">{{ _("Broker") }}</th><th scope="col">{{ _("Zustand") }}</th><th scope="col">{{ _("Letzter Abruf") }}</th></tr></thead>
+  <tbody>
+  {% for b in brokers %}
+  <tr><td data-label="{{ _('Broker') }}"><a href="/broker#broker-{{ b.key }}">{{ b.label }}</a></td>
+    <td data-label="{{ _('Zustand') }}"><span class="light {{ b.light }}" role="img" aria-label="{{ _('Status: {s}', s=LIGHT[b.light]) }}" title="{{ LIGHT[b.light] }}"></span> {{ b.reasons | map("first") | join(", ") }}</td>
+    <td data-label="{{ _('Letzter Abruf') }}">{% if b.last %}{{ _("{when}: {n} neu", when=b.last.started_at | local, n=b.last.created) }}{% else %}{{ _("Noch nie abgerufen") }}{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<p class="muted">{{ _("Noch kein Broker eingerichtet.") }}</p>{% endif %}
+{% endblock %}
+{% block settings %}
+<div class="card">
+  <h2>{{ _("Einstellungen") }}</h2>
+  <p>{{ _("Abrufmodus: {mode}", mode=_("Sicher – jeder Abruf mit deiner Anmeldung") if safe_mode else _("Automatisch – der Timer ruft täglich ab")) }} · <a href="/security">{{ _("Abrufmodus ändern") }}</a></p>
+  <p><a href="/brokers">{{ _("Broker einrichten") }}</a></p>
+</div>
+{% endblock %}
+{% block actions %}
+<form method="post" action="/run" class="actions">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <button {% if busy or not on %}disabled{% endif %}>{{ _("Jetzt ausführen") }}</button>{% if not on %}<span class="muted">{{ _("Erst einschalten.") }}</span>{% endif %}
+</form>
+{% endblock %}

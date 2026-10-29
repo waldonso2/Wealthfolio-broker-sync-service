@@ -1,0 +1,30 @@
+{% extends "_service.html" %}
+{% block status %}
+{% if status and status.unsupported %}<p class="error" role="alert">{{ _("Wealthfolio zu alt: der Addon-Speicher kommt erst mit Wealthfolio 3.11.0.") }}</p>
+{% elif status and status.ok %}<p>{{ _("Zuletzt abgelegt: {when}", when=status.at | local) }}{% if status.skipped %} · {{ _("unverändert") }}{% else %} · {{ _("{written} geschrieben, {deleted} gelöscht", written=status.written, deleted=status.deleted) }}{% endif %}</p>
+{% elif status %}<p class="error" role="alert">{{ _("Fehler: {error}", error=status.error | redact) }}</p>
+{% else %}<p class="muted">{{ _("Noch nichts abgelegt.") }}</p>{% endif %}
+{% if stale %}<p class="muted">{{ _("{n} alte Einträge werden beim nächsten Mal gelöscht.", n=stale) }}</p>{% endif %}
+{% if depot_error %}<p class="error" role="alert">{{ _("Wealthfolio nicht erreichbar: {error}", error=depot_error | redact) }}</p>
+{% elif not read %}<p class="muted">{{ _("Die Positionen werden gerade aus Wealthfolio gelesen.") }}</p>
+{% else %}
+<p>{{ _("Fonds mit Liste: {n}", n=funds | length) }}{% if funds %} – {{ funds | join(", ") }}{% endif %}</p>
+{% if missing %}
+<div class="table"><table>
+  <caption class="sr-only">{{ _("Fonds ohne Liste") }}</caption>
+  <thead><tr><th scope="col">{{ _("Fonds") }}</th><th scope="col">{{ _("Grund") }}</th></tr></thead>
+  <tbody>{% for m in missing %}<tr><td data-label="{{ _('Fonds') }}">{{ m.name }}</td><td data-label="{{ _('Grund') }}">{{ m.reason | redact }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endif %}
+{% endif %}
+{% endblock %}
+{% block settings %}
+<div class="card">
+  <h2>{{ _("Addon installieren") }}</h2>
+  <p>{{ _('Das Addon rechnet X-Ray in Wealthfolio aus diesen Listen und den Werten deiner Positionen. <a href="https://github.com/waldonso2/wealthfolio-companion-addon-xray/releases/latest" target="_blank" rel="noopener noreferrer">Neueste Version herunterladen</a> (die ZIP-Datei), dann in Wealthfolio: Einstellungen → Add-ons → aus Datei installieren.') }}</p>
+</div>
+{% endblock %}
+{% block actions %}{% from "_service_parts.html" import run, remove with context %}
+{{ run(_("Jetzt ablegen")) }}
+{{ remove(_("Ja, die abgelegten Fondslisten entfernen und den Dienst ausschalten")) }}
+{% endblock %}
