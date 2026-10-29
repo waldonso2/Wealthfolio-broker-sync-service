@@ -1,0 +1,69 @@
+# Wealthfolio Broker Sync next to Wealthfolio (waldonso2/wealthfolio-importer-addon#148).
+#
+#   openssl rand -base64 32 > brokersync.key && chmod 600 brokersync.key   # once; keep a copy - without it the data is lost
+#   docker compose -f docker-compose.example.yml up -d
+#   docker compose logs brokersync        # the one-time setup code for the first password
+#   https://<this computer>:8443          # the UI; in it, Wealthfolio's address is http://wealthfolio:8088
+#
+# Update: docker compose pull && docker compose up -d (the data stays in the volume, it is migrated at start).
+services:
+  brokersync:
+    image: ghcr.io/waldonso2/wealthfolio-broker-sync:latest
+    container_name: brokersync
+    hostname: brokersync            # the name in the UI's certificate
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+      - "8090:8090"
+    environment:
+      TZ: Europe/Berlin
+      # More names for the certificate (comma-separated), e.g. the computer's name in your network:
+      # BROKERSYNC_CERT_NAMES: "nas.fritz.box"
+      # Behind a reverse proxy with its own TLS: plain HTTP on 8090 and the proxy's header believed.
+      # BROKERSYNC_TLS: "off"
+      # BROKERSYNC_TRUST_PROXY: "1"
+      # BROKERSYNC_ALLOWED_HOSTS: "brokersync.example.com"
+      # BROKERSYNC_RUN_AT: "06:00"     # daily fetch, German time (plus up to 45 minutes)
+    secrets:
+      - brokersync-key
+    volumes:
+      - brokersync-data:/data
+      - brokersync-tls:/tls
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    # Wealthfolio runs elsewhere already: remove depends_on and the service below, enter its address in the UI.
+    depends_on:
+      - wealthfolio
+
+  wealthfolio:
+    image: wealthfolio/wealthfolio:latest
+    container_name: wealthfolio
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    volumes:
+      - wealthfolio-data:/data
+    environment:
+      WF_LISTEN_ADDR: "0.0.0.0:8088"
+      WF_DB_PATH: /data/wealthfolio.db
+      WF_SECRET_KEY: "${WF_SECRET_KEY:?openssl rand -base64 32}"
+      WF_AUTH_PASSWORD_HASH: "${WF_AUTH_PASSWORD_HASH:?see Wealthfolio's compose.yml}"
+      WF_CORS_ALLOW_ORIGINS: "${WF_CORS_ALLOW_ORIGINS:-http://localhost:8088}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+    security_opt:
+      - no-new-privileges:true
+
+secrets:
+  brokersync-key:
+    file: ./brokersync.key
+
+volumes:
+  brokersync-data:
+  brokersync-tls:
+  wealthfolio-data:

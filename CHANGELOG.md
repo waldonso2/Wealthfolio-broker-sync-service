@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.46.0
+
+- Runs as a Docker container too (#148): `ghcr.io/waldonso2/wealthfolio-broker-sync` for amd64 and arm64, signed with cosign and with build provenance; `deploy/docker-compose.example.yml` starts it next to Wealthfolio. The key comes as a container secret - without it nothing starts, and no key is ever made in the data volume. Migration, the first setup code (in the log), the UI certificate and the daily fetch happen in the container itself; it runs without root and with a read-only file system. Updates are a new image (`docker compose pull`); the page *Updates* says so.
+- The README is shorter, with a diagram of how the service, Wealthfolio and the X-Ray addon work together; the details per bank, the functions and the operation are in `docs/`.
+
 ## 0.45.0
 
 - New service *X-Ray in Wealthfolio* on the page *Dienste* (off, also for existing installations): after each X-Ray pass the funds' holdings lists go into Wealthfolio's addon storage for the new X-Ray addon, which shows X-Ray inside Wealthfolio. Only the issuers' lists and the assets' names and ISINs are written, never amounts. Needs Wealthfolio 3.11 or later; with an older one the card says so.

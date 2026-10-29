@@ -47,6 +47,8 @@ KEY_DETAILS = {
     "systemd": N_("Außerhalb von data/, nur für root lesbar; der Dienst bekommt ihn beim Start (systemd-creds "
                   "konnte hier nicht verschlüsseln)."),
     "file": N_("Aus BROKERSYNC_KEY_FILE."),
+    "container": N_("Als Secret des Containers außerhalb von data/ (kein TPM): Wer das Volume und das Secret kopiert, "
+                    "kann die Daten öffnen - dagegen hilft die Master-Passphrase."),
     "data": N_("Liegt in data/ neben den verschlüsselten Daten - wer data/ kopiert, kann alles entschlüsseln. "
                "Ein Update richtet das ein."),
 }
@@ -56,7 +58,8 @@ def status(data_dir: Path, *, secure: bool) -> list[Check]:
     d = Path(data_dir)
     out: list[Check] = []
     source = crypto.host_key_source(d)
-    out.append(Check(N_("Schlüssel des Dienstes"), source in ("systemd-creds-tpm2", "systemd-creds", "systemd", "file"),
+    protected = ("systemd-creds-tpm2", "systemd-creds", "systemd", "file", "container")
+    out.append(Check(N_("Schlüssel des Dienstes"), source in protected,
                      KEY_DETAILS.get(source, KEY_DETAILS["systemd"])))
     if crypto.passphrase_enabled(d):
         out.append(Check(N_("Master-Passphrase"), True, N_("Gesetzt: Ohne sie sind Zugangsdaten, Einstellungen und "

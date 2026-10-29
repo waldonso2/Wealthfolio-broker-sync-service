@@ -1,0 +1,7 @@
+*
+!requirements.txt
+!pyproject.toml
+!README.md
+!LICENSE
+!src/
+src/**/__pycache__

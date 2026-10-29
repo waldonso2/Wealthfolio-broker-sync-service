@@ -384,9 +384,11 @@ class Syncer:
         """Once a day: a newer release is shown on the overview and notified once (updates.py)."""
         version = updates.check(self.state, __version__)
         if version and not cfg.auto_update:  # switched on, the updater installs it and says so itself
+            from .container import active
+
+            how = "docker compose pull && docker compose up -d" if active() else "In der Konsole des Containers: update"
             self.notifier(cfg).send("Update verfügbar", f"Version {version} ist erschienen (installiert: "
-                                    f"{__version__}). In der Konsole des Containers: update", link=updates.RELEASES,
-                                    tags="arrow_up")
+                                    f"{__version__}). {how}", link=updates.RELEASES, tags="arrow_up")
 
     def cleanup(self) -> None:
         """Close runs a dead process left at 'running', unless a sync is in progress."""
