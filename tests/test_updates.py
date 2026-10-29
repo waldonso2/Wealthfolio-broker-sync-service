@@ -131,3 +131,18 @@ def test_the_page_updates_switches_it_on_with_a_bounded_interval(tmp_path):
     State(tmp_path).set_meta(meta_keys.AUTO_UPDATE(), json.dumps(
         {"from": "0.33.2", "to": "0.34.0", "ok": False, "at": datetime.now(UTC).isoformat()}))
     assert "Update auf 0.34.0 fehlgeschlagen, Version 0.33.2 läuft weiter" in client.get("/updates").text
+
+
+def test_a_renamed_repository_is_followed_only_within_github():
+    renamed = "https://github.com/waldonso2/wealthfolio-companion/releases/latest"
+
+    def answer(location):
+        def handler(request):
+            if request.url.path.endswith("Wealthfolio-broker-sync-service/releases/latest"):
+                return httpx.Response(301, headers={"location": location})
+            return httpx.Response(302, headers={"location": "/waldonso2/wealthfolio-companion/releases/tag/v1.0.0"})
+        return httpx.Client(transport=httpx.MockTransport(handler))
+
+    assert updates.latest(answer(renamed)) == "1.0.0"
+    assert updates.latest(answer("https://example.org/releases/latest")) is None  # never another host
+    assert updates.latest(answer("http://github.com/x/releases/latest")) is None  # https only

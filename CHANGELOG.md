@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.48.1
+
+- The update check follows a redirect within github.com to the first release tag, so it keeps finding new versions once the repository is renamed (Wealthfolio Companion); never another host, https only.
+
 ## 0.48.0
 
 - *Einstellungen* look and work like Wealthfolio's: the pages in groups (Allgemein, Verbindung, Sicherheit, Daten, Über) with uppercase titles; on phones `/settings` is a list of rows with icon, title, one line and a chevron, and each page links back to it; from 1024px a sidebar beside the page. It replaces the sub-bar of the settings pages.
