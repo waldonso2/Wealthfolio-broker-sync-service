@@ -87,11 +87,11 @@ def test_overview_shows_three_runs_and_folds_the_rest(tmp_path):
 
 def test_fonts_are_served_from_the_container(tmp_path):
     client, _, _ = make(tmp_path)
-    for name in ("inter.woff2", "merriweather-700.woff2"):
+    for name in ("jetbrains-mono.woff2",):
         r = client.get(f"/static/fonts/{name}")
         assert r.status_code == 200 and r.content[:4] == b"wOF2"
     css = client.get("/static/style.css").text
-    assert "/static/fonts/inter.woff2" in css and "http" not in css.split("*/", 1)[1]  # nothing from outside
+    assert "/static/fonts/jetbrains-mono.woff2" in css and "http" not in css.split("*/", 1)[1]  # nothing from outside
 
 
 def test_overview_card_has_two_buttons_and_the_reasons_link_to_their_page(tmp_path):
