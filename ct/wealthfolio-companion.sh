@@ -109,7 +109,9 @@ msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 # The one-time code for the first password (only this console shows it): without it nobody else in the
 # network can choose the password before you do.
-SETUP_CODE="$(pct exec "$CTID" -- /usr/local/bin/companion-cli setup-code 2>/dev/null | sed -n 's/^Setup code.*: //p')"
+# stdin from /dev/null: the engine may run this with stdin closed, and systemd-run --pipe then fails with 208
+# (EXIT_STDIN); a missing code must never fail the finished install - the line below says how to get it.
+SETUP_CODE="$( (pct exec "$CTID" -- /usr/local/bin/companion-cli setup-code </dev/null 2>/dev/null || true) | sed -n 's/^Setup code.*: //p')"
 echo -e "${INFO}${YW}Open the web UI and choose its password (the certificate comes from the container's own CA: confirm the browser warning once, or import /ca.crt):${CL}"
 HOST="$IP"
 [[ "$HOST" == *:* ]] && HOST="[$HOST]"  # an IPv6 address goes in brackets in a URL
