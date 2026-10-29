@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.46.1
+
+- Looks like Wealthfolio's Classic theme: JetBrains Mono instead of Inter and Merriweather, semibold headings in the same font, sizes in rem on Wealthfolio's type scale (the browser's text size scales the whole UI), its card colour and shadow, pill buttons and fields 2.75rem high, switches in its primary colour, the overlap heatmap in its sage ramp.
+- The icon uses Wealthfolio's brown instead of blue.
+
 ## 0.46.0
 
 - Runs as a Docker container too (#148): `ghcr.io/waldonso2/wealthfolio-broker-sync` for amd64 and arm64, signed with cosign and with build provenance; `deploy/docker-compose.example.yml` starts it next to Wealthfolio. The key comes as a container secret - without it nothing starts, and no key is ever made in the data volume. Migration, the first setup code (in the log), the UI certificate and the daily fetch happen in the container itself; it runs without root and with a read-only file system. Updates are a new image (`docker compose pull`); the page *Updates* says so.
