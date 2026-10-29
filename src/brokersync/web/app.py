@@ -15,6 +15,7 @@ from __future__ import annotations
 import html
 import logging
 import os
+import re
 import secrets
 import time
 from pathlib import Path
@@ -147,8 +148,11 @@ def _error_pages(app: FastAPI, ctx: AppContext) -> None:
         title = ERROR_TITLES.get(exc.status_code, N_("Fehler"))
         message = exc.detail if isinstance(exc.detail, str) and exc.status_code != 404 else ""
         back = "/" if request.method == "GET" else request.headers.get("referer", "/")
+        base = str(request.base_url)
+        back = "/" + back[len(base):] if back.startswith(base) else back
+        # Only a path of this site: "//host" or "/\host" would lead a browser elsewhere.
         response = ctx.render(request, "error.html", title=title, message=message,
-                              back=back if back.startswith(("/", str(request.base_url))) else "/")
+                              back=back if re.fullmatch(r"/(?![/\\])[^\s]*", back) else "/")
         response.status_code = exc.status_code
         return response
 

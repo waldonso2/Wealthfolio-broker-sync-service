@@ -10,6 +10,7 @@ from functools import partial
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile as StarletteUpload
 
 from ... import config as config_mod
@@ -119,7 +120,8 @@ async def broker_save(request: Request, ctx: Ctx, key: str):
         from .broker_login import start_login  # this POST starts the login with the new credentials (#99)
 
         request.session["flash"] = {"text": tr(request, "Gespeichert. Jetzt beim Broker anmelden."), "level": "ok"}
-        return start_login(request, ctx, key, False)
+        # The login talks to the bank for up to minutes: in the thread pool, never on the event loop.
+        return await run_in_threadpool(start_login, request, ctx, key, False)
     return redirect(request, "/broker", tr(request, "Gespeichert."))
 
 

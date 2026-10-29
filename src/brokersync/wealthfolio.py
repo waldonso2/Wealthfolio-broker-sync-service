@@ -288,8 +288,9 @@ class WealthfolioClient:
             body = r.json()
             data = body.get("data", [])
             out.extend(data)
-            total = body.get("meta", {}).get("totalRowCount", len(out))
-            if not data or len(out) >= total:
+            total = body.get("meta", {}).get("totalRowCount")
+            # Without a total: on while pages come full, so no older activity is missed silently.
+            if not data or (len(out) >= total if total is not None else len(data) < page_size):
                 return out
             page += 1
 

@@ -47,6 +47,8 @@ REMIND_DAYS = (7, 1)
 # Asked for when the bank names no maximum (PSD2 allows 180 days, many banks 90).
 DEFAULT_CONSENT_DAYS = 90
 BALANCE_ORDER = ("CLBD", "ITBD", "XPCD", "CLAV", "ITAV", "OPBD")
+# At most this many pages of transactions: a bank whose continuation key never ends stops the fetch.
+MAX_PAGES = 1000
 Amount = namedtuple("Amount", "amount currency")
 
 FIELDS: list[CredentialField] = [
@@ -245,13 +247,15 @@ class EnableBankingAdapter(BrokerAdapter):
         self.history_start = start
         uid, key = self._account(), None
         raw: list[dict] = []
-        while True:
+        for _ in range(MAX_PAGES):  # a continuation key that never ends would else loop for ever
             params = {"date_from": start.isoformat(), **({"continuation_key": key} if key else {})}
             page = self._call("GET", f"/accounts/{uid}/transactions", params=params)
             raw += page.get("transactions") or []
             key = page.get("continuation_key")
             if not key:
                 break
+        else:
+            raise AdapterError(f"{self.label}: die Bank liefert immer weitere Seiten - Abruf abgebrochen.")
         booked = [t for t in raw if (t.get("status") or "BOOK").upper() not in ("PDNG", "PENDING")]
         log.info("%s (PSD2): %d Umsätze seit %s (%d vorgemerkte übersprungen)", self.label, len(booked),
                  start.isoformat(), len(raw) - len(booked))

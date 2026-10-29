@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.44.1
+
+Fixes from the code review in #134:
+
+- A booking equal to one the sync booked shortly before (two equal card payments or deposits within 36 hours) is booked; it was taken for the earlier one and never booked. The sync's own activities are never a match for another transaction.
+- Saving a broker's new credentials starts the login in the background thread pool: the whole UI no longer stands still while the bank answers.
+- The back link of an error page only leads to a path of this site (a Referer like `//host` was taken).
+- A login link from the bank is shown only as `https://`.
+- Wealthfolio's activity list is read to the end even when an answer carries no total.
+- N26 and Enable Banking stop after 1000 pages instead of fetching for ever.
+- After saving the notifications the page *Broker* opens, like after every other save.
+
 ## 0.44.0
 
 - New start page *Dienste* (#145): every service that writes into Wealthfolio - broker sync, countries & sectors, ISINs, logos, spending tracker - with an iOS-like switch and a gear to its settings. A new install starts with everything off; switching a service on that still lacks something opens its settings and turns it on once they are saved. Existing installs keep what runs today.

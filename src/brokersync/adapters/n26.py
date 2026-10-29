@@ -38,6 +38,8 @@ CLIENT = "Basic " + base64.b64encode(b"nativeweb:").decode()
 # The app confirmation: asked every POLL seconds, up to POLLS times per click on "bestätigt".
 POLL, POLLS = 5, 12
 PAGE = 200
+# At most this many pages of transactions: 200 000 bookings, far beyond any account.
+MAX_PAGES = 1000
 FIRST_DAYS = 90  # without a start date
 
 
@@ -170,13 +172,15 @@ class N26Adapter(BrokerAdapter):
         last = int(datetime.combine(today + timedelta(days=1), datetime.min.time(), BERLIN).timestamp() * 1000)
         raw: list[dict] = []
         params: dict = {"from": first, "to": last, "limit": PAGE}
-        while True:
+        for _ in range(MAX_PAGES):  # an answer that ignores lastId would else loop for ever
             page = self._get("/api/smrt/transactions", **params)
             items = page if isinstance(page, list) else []
             raw += items
             if len(items) < PAGE:
                 break
             params["lastId"] = items[-1]["id"]
+        else:
+            raise AdapterError("N26 liefert immer weitere Seiten - Abruf abgebrochen.")
         booked = [t for t in raw if not t.get("pending")]
         log.info("N26: %d Umsätze seit %s (%d vorgemerkte übersprungen)", len(booked), start.isoformat(),
                  len(raw) - len(booked))

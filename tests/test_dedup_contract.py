@@ -46,3 +46,15 @@ def test_index_sees_activities_appended_after_a_find_and_keeps_the_window_edge()
     index.existing += [dep(3, "2026-05-02T12:00:00Z", "20"), dep(4, "2026-05-10T12:00:01Z", "30")]
     assert index.find("[SYNC x:3]", payload("2026-05-01T00:00:00Z", "20")) == "e3"
     assert index.find("[SYNC x:4]", payload("2026-05-09T00:00:00Z", "30")) is None
+
+
+def test_another_transactions_activity_of_the_sync_is_never_a_match():
+    """Two equal card payments within the window (#134 H1): the second is its own booking, not the first."""
+    first = {"id": "s1", "accountId": "c", "activityType": "WITHDRAWAL", "date": "2026-03-01T08:00:00Z",
+             "amount": "4.50", "currency": "EUR", "comment": "Bäckerei [SYNC x:1]"}
+    index = ExistingIndex([first])
+    payload = [{"accountId": "c", "activityType": "WITHDRAWAL", "activityDate": "2026-03-01T09:00:00Z",
+                "amount": "4.50", "currency": "EUR"}]
+    assert index.find("[SYNC x:2]", payload) is None
+    index.existing.append({**first, "id": "i1", "comment": "Bäckerei"})  # an import of it still matches
+    assert index.find("[SYNC x:2]", payload) == "i1"

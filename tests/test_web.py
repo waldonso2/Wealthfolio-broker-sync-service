@@ -405,3 +405,13 @@ def test_metrics_after_login_or_with_the_token_only(tmp_path, monkeypatch):
     monkeypatch.setenv("BROKERSYNC_METRICS_TOKEN", "short")  # too short to count
     assert client.get("/metrics", headers={"Authorization": "Bearer short"},
                       follow_redirects=False).status_code == 303
+
+
+def test_the_error_pages_back_link_stays_on_this_site(tmp_path):
+    """#134 L1: a Referer of another site ("//host", "/\\host") never becomes the back link."""
+    client, _, _ = make(tmp_path)
+    first_password(client)
+    for referer, back in (("//evil.example/x", "/"), ("/\\evil.example", "/"), ("https://evil.example/", "/"),
+                          ("http://sync.local:8090/brokers", "/brokers"), ("/security", "/security")):
+        r = client.post("/run", data={"csrf": "forged"}, headers={"referer": referer})
+        assert r.status_code == 400 and f'href="{back}"' in r.text, referer
