@@ -27,10 +27,11 @@
   --radius: 0.625rem; --control: 2.75rem; --tabbar: 4rem; --shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   color-scheme: light;
 }
-/* Colour scheme: the device's, turned the other way while the session says so (header symbol, POST /theme,
-   #123) - no script; a new session (after logging out) starts in the device's colours again. */
+/* Colour scheme (#123, page Darstellung): data-theme="light"/"dark" is fixed - the server already turned it round
+   when the header's symbol (POST /theme) says so; "system" is the device's, turned the other way while the
+   session says so (data-flip). No script; a new session (after logging out) starts without the turn. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-flip]) {
+  :root:not([data-flip]):not([data-theme=light]), :root[data-theme=dark] {
     --bg: #100f0f; --card: #1d1c1b; --line: #272625; --line-2: #353431; --text: #cfcec4; --muted: #9d9c97;
     --primary: #cfcec4; --on-primary: #100f0f; --accent: #66a0c8;
     --ok: #879a39; --warn: #d0a215; --error: #e0614f; --grey: #7a7974; --heat: #879a39; --heat-max: 45%;
@@ -38,7 +39,7 @@
   }
 }
 @media (prefers-color-scheme: light) {
-  :root[data-flip] {
+  :root[data-flip]:not([data-theme=light]):not([data-theme=dark]), :root[data-theme=dark] {
     --bg: #100f0f; --card: #1d1c1b; --line: #272625; --line-2: #353431; --text: #cfcec4; --muted: #9d9c97;
     --primary: #cfcec4; --on-primary: #100f0f; --accent: #66a0c8;
     --ok: #879a39; --warn: #d0a215; --error: #e0614f; --grey: #7a7974; --heat: #879a39; --heat-max: 45%;
@@ -50,6 +51,9 @@
 :root, :root[data-font=mono] { --font: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 :root[data-font=sans] { --font: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif; }
 :root[data-font=serif] { --font: "Merriweather", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif; }
+.font-mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.font-sans { font-family: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif; }
+.font-serif { font-family: "Merriweather", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif; }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -185,13 +189,6 @@ nav.subnav::-webkit-scrollbar { display: none; }
 nav.subnav a { flex: none; padding: 0.375rem 0.75rem; border: 1px solid var(--line); border-radius: 9999px; text-decoration: none;
   color: var(--muted); background: var(--card); }
 nav.subnav a[aria-current] { border-color: var(--text); color: var(--text); font-weight: 600; }
-ul.settings-index { list-style: none; padding: 0; margin: 0; }
-ul.settings-index li { border-bottom: 1px solid var(--line); }
-ul.settings-index li:last-child { border-bottom: none; }
-ul.settings-index li { padding: 0.625rem 0; position: relative; }
-ul.settings-index a::after { content: ""; position: absolute; inset: 0; } /* the whole row is the link */
-ul.settings-index a { display: block; text-decoration: none; color: var(--text); font-weight: 600; }
-ul.settings-index .muted { display: block; font-weight: 400; margin-top: 1px; }
 ol.steps { padding-left: 1.375rem; margin: 0; } ol.steps li { margin: 0.375rem 0; }
 
 /* Phones: every table row becomes a block, each cell with its column name (data-label). */
@@ -301,3 +298,82 @@ button.switch[aria-checked=true] span { left: 1.25rem; }
 
 /* Service pages (#151, /services/<key>): the head card holds an h1 instead of the Dienste page's h2. */
 .card.service h1 { margin: 0 0 0.25rem; }
+
+/* Settings like Wealthfolio's settings-layout: groups with an uppercase title (phones text-xs font-semibold
+   tracking-widest, the sidebar text-sm font-light); the index is a card of rows per group (icon, title, one line,
+   chevron); from 1024px (its lg) a 15rem sidebar beside the page, the layout wider (max-w-6xl). */
+.settings-group { color: var(--muted); font-size: 0.75rem; line-height: 1rem; font-weight: 600; letter-spacing: 0.1em;
+  text-transform: uppercase; margin: 1.5rem 0 0.75rem; padding: 0 0.5rem; }
+.settings-section:first-of-type .settings-group { margin-top: 1rem; }
+ul.settings-index { list-style: none; padding: 0; margin: 0; background: var(--card); border: 1px solid var(--line);
+  border-radius: 1rem; box-shadow: var(--shadow); overflow: hidden; }
+ul.settings-index li + li { border-top: 1px solid var(--line); }
+ul.settings-index a { display: flex; align-items: center; gap: 0.75rem; padding: 1rem; color: var(--text); text-decoration: none; }
+ul.settings-index a:hover { background: color-mix(in srgb, var(--line) 40%, transparent); }
+ul.settings-index a:focus-visible { outline-offset: -2px; }
+ul.settings-index svg { width: 1.25rem; height: 1.25rem; flex: none; color: var(--muted); }
+ul.settings-index svg:last-child { width: 1rem; height: 1rem; }
+ul.settings-index .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+ul.settings-index .title { font-size: 1rem; line-height: 1.5rem; font-weight: 500; }
+ul.settings-index .muted { font-size: 0.875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-side { display: none; }
+a.settings-back { display: inline-flex; align-items: center; gap: 0.25rem; margin-top: 0.5rem; color: var(--muted);
+  text-decoration: none; font-weight: 500; min-height: 2.75rem; }
+a.settings-back svg { width: 1rem; height: 1rem; }
+@media (min-width: 1024px) {
+  body.settings-wide .wrap { max-width: 72rem; }
+  .settings-layout { display: flex; gap: 2.5rem; align-items: flex-start; }
+  .settings-main { flex: 1; min-width: 0; }
+  a.settings-back { display: none; }
+  .settings-side { display: block; width: 15rem; flex: none; position: sticky; top: 5rem; padding-top: 1rem;
+    max-height: calc(100dvh - 6rem); overflow-y: auto; }
+  .settings-side .settings-group { font-size: 0.875rem; line-height: 1.25rem; font-weight: 300; margin: 1.5rem 0 0.5rem; }
+  .settings-side .settings-group:first-child { margin-top: 0; }
+  .settings-side ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+  .settings-side a { display: flex; align-items: center; gap: 0.5rem; height: 2.25rem; padding: 0 0.5rem; border-radius: 0.375rem;
+    color: var(--text); text-decoration: none; font-weight: 500; }
+  .settings-side a:hover { background: color-mix(in srgb, var(--line) 50%, transparent); }
+  .settings-side a[aria-current] { background: var(--line); }
+  .settings-side a:focus-visible { outline-offset: -2px; }
+  .settings-side svg { width: 1rem; height: 1rem; flex: none; }
+  .settings-side span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+/* Page Darstellung: Wealthfolio's tiles - the radio is the control and its dot, the tile its label. */
+fieldset.tiles { border: 0; padding: 0; margin: 1.25rem 0 0; min-width: 0; }
+fieldset.tiles legend { font-size: 1rem; line-height: 1.5rem; font-weight: 600; letter-spacing: -0.025em; padding: 0; }
+.tile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin-top: 0.5rem; }
+@media (min-width: 640px) { .tile-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } .tile-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+label.tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; margin: 0;
+  padding: 0.75rem; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--bg); cursor: pointer; }
+label.tile:hover { border-color: var(--muted); }
+label.tile:has(input:checked) { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+label.tile:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+label.tile input { position: absolute; top: 0.5rem; right: 0.5rem; margin: 0; width: 1rem; height: 1rem; }
+label.tile input:focus-visible { outline: none; }
+.tile-face { font-size: 1.875rem; line-height: 2.75rem; font-weight: 500; }
+.tile-name { font-size: 0.875rem; font-weight: 500; text-align: center; }
+/* the theme previews: a small window drawn in the scheme's own colours (decoration, no text) */
+.preview { display: block; width: 100%; max-width: 8rem; height: 4.5rem; border-radius: 0.5rem; padding: 0.5rem;
+  border: 1px solid #dad8ce; background: #fffcf0; }
+.preview span { display: block; border-radius: 9999px; height: 0.375rem; background: #dad8ce; margin-bottom: 0.375rem; }
+.preview .bar { width: 45%; height: 0.5rem; background: #100f0f; }
+.preview .short { width: 60%; }
+.preview.dark { border-color: #353431; background: #100f0f; }
+.preview.dark span { background: #353431; }
+.preview.dark .bar { background: #cfcec4; }
+.preview.system { background: linear-gradient(90deg, #fffcf0 50%, #100f0f 50%); }
+.preview.system span { background: linear-gradient(90deg, #dad8ce 50%, #353431 50%); width: 100%; }
+.preview.system .bar { background: linear-gradient(90deg, #100f0f 50%, #cfcec4 50%); width: 100%; }
+
+/* Page Über, like Wealthfolio's about page */
+.about-head { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.about-head h2 { font-size: 1.25rem; margin: 0; }
+.about-head p { margin: 0; }
+img.app-icon { width: 3rem; height: 3rem; border-radius: 0.375rem; padding: 0.375rem; background: var(--bg);
+  border: 1px solid var(--line); box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1); }
+.card.about hr { border: 0; border-top: 1px solid var(--line); margin: 1.5rem 0; }
+.button.small { min-height: 2.25rem; padding: 0.375rem 0.75rem; font-size: 0.875rem; }
+.button svg { width: 1rem; height: 1rem; flex: none; }
+.card.about p a { color: var(--muted); text-decoration: underline; text-underline-offset: 4px; }
+.card.about p a:hover { color: var(--text); }

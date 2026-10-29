@@ -1,0 +1,31 @@
+{% extends "base.html" %}{% from "_icons.html" import icon %}{% block title %}{{ _("Über") }}{% endblock %}
+{% block content %}
+{% macro out(href, symbol, text) %}<a class="button secondary small" href="{{ href }}" rel="noopener noreferrer">{{ icon(symbol) }}{{ text }}</a>{% endmacro %}
+{% macro plain(href, text) %}<a href="{{ href }}" rel="noopener noreferrer">{{ text }}</a>{% endmacro %}
+<h1>{{ _("Über") }}</h1>
+<div class="card about">
+  <div class="about-head">
+    <img class="app-icon" src="/static/icon.svg" alt="" width="48" height="48">
+    <div>
+      <h2>Wealthfolio Companion</h2>
+      <p class="muted">{{ _("Version {version}", version=version) }}</p>
+    </div>
+  </div>
+  <p class="muted">{{ _("Holt die Buchungen deiner Broker und Banken und schreibt sie ohne Duplikate in dein selbst gehostetes Wealthfolio – dazu Länder und Sektoren, ISINs, Logos und X-Ray.") }}</p>
+  <div class="actions">
+    {{ out(links.docs, "globe", _("Website")) }}
+    {{ out(links.docs, "file-text", _("Doku")) }}
+    {{ out(links.repo, "external", "GitHub") }}
+  </div>
+  <hr>
+  <p class="muted">{{ _("Fragen oder einen Fehler gefunden?") }}</p>
+  <div class="actions">
+    {{ out(links.issues, "alert", _("Fehler melden")) }}
+    {{ out(links.security, "shield-alert", _("Sicherheitslücke melden")) }}
+  </div>
+  <hr>
+  <p class="muted">{{ plain(links.license, _("Lizenz: MIT")) }} <span aria-hidden="true">•</span>
+    {{ _("Danksagungen:") }} {{ plain(links.pytr, "pytr") }}, {{ plain(links.fints, "python-fints") }}, {{ plain(links.sc, "Scalable CLI") }}</p>
+  <p class="muted"><strong>{{ _("Datenschutz:") }}</strong> {{ _("Der Dienst sendet Daten nur an deine Broker und Banken (bei PSD2-Banken über Enable Banking), an dein Wealthfolio, an deinen ntfy-Server (wenn Benachrichtigungen eingerichtet sind), an die Seiten der ETF-Anbieter und an Finanzfluss (die ISINs deiner Fonds), an logo.dev (ISINs, nur wenn Logos an ist) und an GitHub (Suche nach Updates, Download der Scalable CLI) – sonst nirgendwohin.") }}</p>
+</div>
+{% endblock %}

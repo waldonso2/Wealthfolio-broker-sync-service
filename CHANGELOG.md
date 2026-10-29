@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.48.0
+
+- *Einstellungen* look and work like Wealthfolio's: the pages in groups (Allgemein, Verbindung, Sicherheit, Daten, Über) with uppercase titles; on phones `/settings` is a list of rows with icon, title, one line and a chevron, and each page links back to it; from 1024px a sidebar beside the page. It replaces the sub-bar of the settings pages.
+- *Darstellung* like Wealthfolio's: the font as tiles "Aa" (Wie Wealthfolio - the default, the font read from Wealthfolio -, Sans, Serif, Mono), the theme as tiles with a small preview (Hell, Dunkel, System), then the language; stored as `Config.ui_font` / `ui_scheme`, an unknown value comes back with 422. The header's symbol still turns the colours round until logout, also a fixed theme.
+- New page *Über* (`/about`, also linked in the footer): Wealthfolio Companion, its version, what it does, links to the docs and GitHub, where to report a bug or a vulnerability, licence, credits and which hosts the service sends data to.
+
 ## 0.47.0
 
 - Every service on *Dienste* has its own page `/services/<key>` (waldonso2/wealthfolio-importer-addon#151), all built the same way: name, switch and what it writes into Wealthfolio (with what is still missing and a link), its status, its settings, and *Jetzt ausführen* as a background job - the same step a run calls, under the sync lock. *Aus Wealthfolio entfernen* (countries & sectors, X-Ray in Wealthfolio) asks for a confirmation, switches the service off and removes only what it wrote. The gears on *Dienste* always lead there, and switching on a service that lacks something opens its page.

@@ -66,8 +66,8 @@ def template_keys() -> dict[str, str]:
 def test_every_ui_text_has_an_english_entry():
     keys = {**python_keys(), **template_keys()}
     # Shown through ``_(value)``: the values of these tables are keys too.
-    for value in [*STATUS_LABEL.values(), *(t for _, title, hint in SETTINGS_PAGES
-                                                                for t in (title, hint)),
+    for value in [*STATUS_LABEL.values(), *(t for _, title, hint, group, _icon in SETTINGS_PAGES
+                                                                for t in (title, hint, group)),
                   audit.source({"comment": "[SYNC x:1]"}), audit.source({})]:
         keys.setdefault(value, "table")
     assert len(keys) > 300  # the extraction found the texts

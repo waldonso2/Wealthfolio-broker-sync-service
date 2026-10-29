@@ -152,8 +152,46 @@ EN: dict[str, str] = {
     "Abgebrochen - der Dienst wurde während des Abrufs beendet (Neustart, Update oder Absturz).":
         "Aborted - the service was stopped during the fetch (restart, update or crash).",
     "Hell/Dunkel umschalten": "Switch light/dark",
-    "Hell oder dunkel: wie das Gerät. Das Symbol oben schaltet bis zum Abmelden um.":
-        "Light or dark: as the device. The symbol at the top switches until you log out.",
+    # Settings layout and the pages Darstellung / Über
+    "Allgemein": "General",
+    "Verbindung": "Connection",
+    "Daten": "Data",
+    "Über": "About",
+    "Schrift, Theme und Sprache": "Font, theme and language",
+    "Version, Links, Datenschutz": "Version, links, privacy",
+    "Schrift, Farben und Sprache dieser Oberfläche.": "Font, colours and language of this interface.",
+    "Schrift": "Font",
+    "Theme": "Theme",
+    "Wie Wealthfolio: die Schrift, die dort unter Einstellungen → Darstellung gewählt ist.":
+        "As Wealthfolio: the font chosen there under Settings → Appearance.",
+    "Wie Wealthfolio ({font})": "As Wealthfolio ({font})",
+    "System folgt dem Gerät. Das Symbol oben kehrt die Farben bis zum Abmelden um.":
+        "System follows the device. The symbol at the top turns the colours round until you log out.",
+    "Hell": "Light",
+    "Dunkel": "Dark",
+    "System": "System",
+    "{label}: unbekannte Auswahl.": "{label}: unknown choice.",
+    "Version {version}": "Version {version}",
+    "Holt die Buchungen deiner Broker und Banken und schreibt sie ohne Duplikate in dein selbst gehostetes "
+    "Wealthfolio – dazu Länder und Sektoren, ISINs, Logos und X-Ray.":
+        "Fetches the transactions of your brokers and banks and writes them, without duplicates, into your "
+        "self-hosted Wealthfolio - plus countries and sectors, ISINs, logos and X-Ray.",
+    "Website": "Website",
+    "Doku": "Docs",
+    "Fragen oder einen Fehler gefunden?": "Have questions or found a bug?",
+    "Fehler melden": "Report a bug",
+    "Sicherheitslücke melden": "Report a vulnerability",
+    "Lizenz: MIT": "Licence: MIT",
+    "Danksagungen:": "Credits:",
+    "Datenschutz:": "Privacy:",
+    "Der Dienst sendet Daten nur an deine Broker und Banken (bei PSD2-Banken über Enable Banking), an dein "
+    "Wealthfolio, an deinen ntfy-Server (wenn Benachrichtigungen eingerichtet sind), an die Seiten der "
+    "ETF-Anbieter und an Finanzfluss (die ISINs deiner Fonds), an logo.dev (ISINs, nur wenn Logos an ist) und "
+    "an GitHub (Suche nach Updates, Download der Scalable CLI) – sonst nirgendwohin.":
+        "The service sends data only to your brokers and banks (PSD2 banks through Enable Banking), your "
+        "Wealthfolio, your ntfy server (when notifications are set up), the ETF issuers' sites and Finanzfluss "
+        "(your funds' ISINs), logo.dev (ISINs, only while Logos is on) and GitHub (update check, download of the "
+        "Scalable CLI) - nowhere else.",
     # ── common words ──
     "Speichern": "Save",
     "Gespeichert.": "Saved.",

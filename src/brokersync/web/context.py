@@ -44,20 +44,33 @@ ACCOUNTS_SECONDS = 60
 STATUS_LABEL = {"ok": N_("OK"), "needs_auth": N_("Anmeldung nötig"), "error": N_("Fehler"), "running": N_("läuft"),
                 "aborted": N_("abgebrochen")}
 
-# The pages under *Einstellungen*: (path, title, what it is for). The header shows the daily pages only (#71).
+# The pages under *Einstellungen*: (path, title, what it is for, group, icon of ``_icons.html``), grouped like
+# Wealthfolio's settings (a sidebar on wide screens, the list of /settings on phones). The header shows the
+# daily pages only (#71).
 SETTINGS_PAGES = [
-    ("/setup/wealthfolio", N_("Wealthfolio"), N_("Adresse und Passwort deines Wealthfolio")),
-    ("/brokers", N_("Broker"), N_("Zugangsdaten, Konten, Startdatum, Anmeldung")),
-    ("/notifications", N_("Benachrichtigungen"), N_("ntfy für TAN-Anfragen und Fehler")),
-    ("/securities", N_("Wertpapiere"), N_("ISIN unter eigenem Symbol führen")),
+    ("/appearance", N_("Darstellung"), N_("Schrift, Theme und Sprache"), N_("Allgemein"), "monitor"),
+    ("/notifications", N_("Benachrichtigungen"), N_("ntfy für TAN-Anfragen und Fehler"), N_("Allgemein"), "bell"),
+    ("/updates", N_("Updates"), N_("Neue Versionen automatisch installieren"), N_("Allgemein"), "download"),
+    ("/setup/wealthfolio", N_("Wealthfolio"), N_("Adresse und Passwort deines Wealthfolio"), N_("Verbindung"),
+     "link"),
+    ("/brokers", N_("Broker"), N_("Zugangsdaten, Konten, Startdatum, Anmeldung"), N_("Verbindung"), "bank"),
     # Only while patterns are saved (waldonso2/wealthfolio-importer-addon#84): each one stays visible and deletable.
-    ("/transfers", N_("Überträge"), N_("Auszahlungen auf eigene Konten erkennen")),
-    ("/updates", N_("Updates"), N_("Neue Versionen automatisch installieren")),
-    ("/security", N_("Sicherheit"), N_("Abrufmodus, Verschlüsselung, Master-Passphrase, Zertifikat")),
-    ("/appearance", N_("Darstellung"), N_("Sprache")),
+    ("/transfers", N_("Überträge"), N_("Auszahlungen auf eigene Konten erkennen"), N_("Verbindung"), "transfer"),
+    ("/security", N_("Sicherheit"), N_("Abrufmodus, Verschlüsselung, Master-Passphrase, Zertifikat"),
+     N_("Sicherheit"), "shield"),
+    ("/securities", N_("Wertpapiere"), N_("ISIN unter eigenem Symbol führen"), N_("Daten"), "tag"),
     # Hidden for now (waldonso2/wealthfolio-importer-addon#84):
-    # ("/duplicates", N_("Duplikate"), N_("Doppelte Buchungen finden und entfernen")),
+    # ("/duplicates", N_("Duplikate"), N_("Doppelte Buchungen finden und entfernen"), N_("Daten"), "copy"),
+    ("/about", N_("Über"), N_("Version, Links, Datenschutz"), N_("Über"), "info"),
 ]
+
+
+def settings_groups(pages: list[tuple[str, str, str, str, str]]) -> list[tuple[str, list]]:
+    """The pages by group, in the order of ``SETTINGS_PAGES``."""
+    groups: dict[str, list] = {}
+    for page in pages:
+        groups.setdefault(page[3], []).append(page)
+    return list(groups.items())
 
 
 @dataclass
@@ -112,18 +125,24 @@ class AppContext:
         nav_unknown = self.state.unknown_count() if request.session.get("user") else 0
         language = self.language()
         try:
-            patterns = bool(self.cfg().transfer_patterns)
+            c: config_mod.Config | None = self.cfg()
         except Exception:  # locked: no settings pages anyway
-            patterns = False
-        pages = [p for p in SETTINGS_PAGES if p[0] != "/transfers" or patterns]
+            c = None
+        pages = [p for p in SETTINGS_PAGES if p[0] != "/transfers" or (c and c.transfer_patterns)]
         try:
-            font = appearance.font(self.state)  # the font chosen in Wealthfolio
+            wf_font = appearance.font(self.state)  # the font chosen in Wealthfolio
         except Exception:  # locked: Wealthfolio's default
-            font = appearance.DEFAULT
+            wf_font = appearance.DEFAULT
+        # The scheme chosen on *Darstellung*; the header's symbol turns a fixed one round here, a "system" one in
+        # the CSS (data-flip, #123).
+        scheme = c.ui_scheme if c else "system"
+        if scheme != "system" and request.session.get("flip"):
+            scheme = "light" if scheme == "dark" else "dark"
         return self.templates.TemplateResponse(request, name, {
             "csrf": request.session["csrf"], "flash": flash, "version": __version__, "adapters": self.adapters,
-            "nav_unknown": nav_unknown, "settings_pages": pages, "lang": language,
-            "reauth": not recent(request), "font": font, **ctx,
+            "nav_unknown": nav_unknown, "settings_pages": pages, "settings_groups": settings_groups(pages),
+            "lang": language, "reauth": not recent(request), "font": (c and c.ui_font) or wf_font,
+            "wf_font": wf_font, "scheme": scheme, **ctx,
         })
 
     @contextmanager

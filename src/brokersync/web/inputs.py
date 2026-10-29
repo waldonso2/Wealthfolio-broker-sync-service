@@ -45,6 +45,13 @@ def text(value: str, label: str, *, max_len: int = MAX_TEXT) -> str:
     return value
 
 
+def choice(value: str, allowed: tuple[str, ...], label: str) -> str:
+    """One of ``allowed``, exactly."""
+    if value not in allowed:
+        raise Invalid("{label}: unbekannte Auswahl.", label=label)
+    return value
+
+
 def http_url(value: str, label: str, *, required: bool = True) -> str:
     """An http(s) address with a host, without user info, query or fragment; trailing slash removed."""
     value = text(value, label).rstrip("/")
