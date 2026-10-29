@@ -62,9 +62,11 @@ XRAY_ADDON_STATUS = MetaKey("xray-addon:status", "json", False,
                             "the last write for the X-Ray addon: {at, ok, written, deleted, skipped, error} (#146)")
 XRAY_ADDON_STALE = MetaKey("xray-addon:stale", "json", False,
                            "addon storage keys still to delete for the X-Ray addon: [key] (xray_addon.py, #146)")
+WEALTHFOLIO_APPEARANCE = MetaKey("wealthfolio:appearance", "json", False,
+                                 "the font the user chose in Wealthfolio: {font: mono|sans|serif, at} (appearance.py)")
 
 ALL = (ASSETS_LEARNED, CASH_ASSETS_REPAIRED, REFETCH, SAVINGS_ACCOUNT, DIVIDEND_TAX, HISTORY_START, POSITIONS,
        RETIRED_NOTICE, LOGO, LOGOS_LAST, PROGRESS, CHECKLIST_HIDDEN, UPDATE, AUTO_UPDATE, FUND, FUNDS_LAST,
        XRAY_ACCEPTED, XRAY_NOTIFIED, TAXONOMIES_LAST, SPENDING, ISIN, FUNDS_PROGRESS, XRAY_ADDON_STATUS,
-       XRAY_ADDON_STALE)
+       XRAY_ADDON_STALE, WEALTHFOLIO_APPEARANCE)
 BROKER_KEYS = tuple(k for k in ALL if k.per_broker)

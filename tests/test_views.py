@@ -5,11 +5,14 @@ import re
 from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlparse
 
+import pytest
+
 from brokersync.state import State
 from brokersync.web import views
 
+from .fakes import PASSWORD
 from .helpers import first_password
-from .test_web import make
+from .test_web import csrf, make
 
 
 def test_dates_and_times_in_german_time_and_format():
@@ -88,12 +91,45 @@ def test_overview_shows_three_runs_and_folds_the_rest(tmp_path):
 def test_fonts_are_served_from_the_container(tmp_path):
     client, _, _ = make(tmp_path)
     css = client.get("/static/style.css").text
-    for weight in (400, 500, 600, 700):  # the static weights Wealthfolio bundles (@fontsource/jetbrains-mono)
-        name = f"jetbrains-mono-latin-{weight}.woff2"
+    names = [f"jetbrains-mono-latin-{w}.woff2" for w in (400, 500, 600, 700)]  # what Wealthfolio bundles (fontsource)
+    names += ["inter-latin-wght.woff2", "merriweather-latin-400.woff2", "merriweather-latin-700.woff2"]
+    for name in names:
         r = client.get(f"/static/fonts/{name}")
         assert r.status_code == 200 and r.content[:4] == b"wOF2"
         assert f"/static/fonts/{name}" in css
     assert "http" not in css.split("*/", 1)[1]  # nothing from outside
+
+
+def _font(page: str) -> str:
+    return re.search(r'<html[^>]* data-font="([a-z]+)"', page).group(1)
+
+
+@pytest.mark.parametrize(("chosen", "shown"), [("font-sans", "sans"), ("font-serif", "serif"), ("font-mono", "mono"),
+                                               ("font-comic", "mono"), (None, "mono")])
+def test_the_ui_uses_the_font_chosen_in_wealthfolio(tmp_path, chosen, shown):
+    client, wf, _ = make(tmp_path)
+    first_password(client)
+    assert _font(client.get("/").text) == "mono"  # nothing read yet: Wealthfolio's default
+    if chosen is None:
+        wf.settings = None  # a Wealthfolio without GET /settings (404)
+    else:
+        wf.settings["font"] = chosen
+    token = csrf(client, "/setup/wealthfolio")
+    client.post("/setup/wealthfolio", data={"csrf": token, "url": "http://wf.local:8080/", "password": PASSWORD})
+    assert _font(client.get("/").text) == shown
+
+
+def test_every_run_reads_the_font_again(tmp_path):
+    client, wf, _ = make(tmp_path)
+    first_password(client)
+    token = csrf(client, "/setup/wealthfolio")
+    client.post("/setup/wealthfolio", data={"csrf": token, "url": "http://wf.local:8080/", "password": PASSWORD})
+    wf.settings["font"] = "font-serif"
+    client.app.inner.state.ctx.syncer.run()
+    assert _font(client.get("/").text) == "serif"
+    wf.password = "changed"  # Wealthfolio unreachable for the run: the font read before stays, nothing fails
+    client.app.inner.state.ctx.syncer.run()
+    assert _font(client.get("/").text) == "serif"
 
 
 def test_overview_card_has_two_buttons_and_the_reasons_link_to_their_page(tmp_path):
@@ -129,7 +165,7 @@ def test_the_language_is_chosen_on_the_page_appearance_light_or_dark_in_the_head
     r = client.post("/theme", data={"csrf": token, "next": "/check"}, follow_redirects=False)
     assert (r.status_code, r.headers["location"]) == (303, "/check")
     for path in ("/", "/check", "/settings"):  # every page, not only the one it was clicked on
-        assert '<html lang="de" data-flip>' in client.get(path).text
+        assert '<html lang="de" data-font="mono" data-flip>' in client.get(path).text
     assert 'aria-pressed="true"' in client.get("/broker").text
     client.post("/theme", data={"csrf": token, "next": "/"})
     assert "data-flip" not in client.get("/broker").text  # and back

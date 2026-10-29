@@ -56,6 +56,8 @@ class FakeWealthfolio:
         self.storage: dict[tuple[str, str], str] | None = {}
         self.storage_fail: set[str] = set()
         self.storage_log: list[tuple[str, str]] = []
+        # GET /settings (Wealthfolio's app settings, camelCase); None: answers 404
+        self.settings: dict | None = {"themeId": "classic", "theme": "light", "font": "font-mono", "language": "en"}
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -219,6 +221,8 @@ class FakeWealthfolio:
             taxonomy_id = path.rsplit("/", 1)[1]
             return httpx.Response(200, json={"taxonomy": {"id": taxonomy_id},
                                              "categories": self.categories.get(taxonomy_id, [])})
+        if path == "/api/v1/settings" and request.method == "GET":
+            return httpx.Response(200, json=self.settings) if self.settings is not None else httpx.Response(404)
         if self.spending is not None and path == "/api/v1/spending/settings":
             if request.method == "PUT":
                 self.spending.update(json.loads(request.content))

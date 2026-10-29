@@ -1,8 +1,9 @@
-/* Wealthfolio's look: its default theme Classic with its default font setting `font-mono` (index.html's
-   <body class="font-mono">, settings default "font-mono"), i.e. JetBrains Mono at the static weights 400-700 it bundles
-   (@fontsource/jetbrains-mono, latin subset); Flexoki palette, rounded cards, pill buttons, sizes in rem on its type
-   scale, phone first. Sizes are rem, so the browser's text size scales everything as Wealthfolio's does. The fonts are
-   served from here (OFL, see fonts/LICENSE-*.txt): the CSP allows nothing from outside. */
+/* Wealthfolio's look: the font the user chose in Wealthfolio (Settings → Appearance, read from its API -
+   appearance.py - as <html data-font>), else its default `font-mono` (theme Classic). The same files as Wealthfolio
+   bundles (fontsource, latin subset): JetBrains Mono at the static weights 400-700, Inter Variable, Merriweather 400
+   and 700; Flexoki palette, rounded cards, pill buttons, sizes in rem on its type scale, phone first. Sizes are rem,
+   so the browser's text size scales everything as Wealthfolio's does. The fonts are served from here (OFL, see
+   fonts/LICENSE-*.txt): the CSP allows nothing from outside. */
 @font-face { font-family: "JetBrains Mono"; src: url("/static/fonts/jetbrains-mono-latin-400.woff2") format("woff2");
   font-weight: 400; font-style: normal; font-display: swap; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 @font-face { font-family: "JetBrains Mono"; src: url("/static/fonts/jetbrains-mono-latin-500.woff2") format("woff2");
@@ -11,6 +12,12 @@
   font-weight: 600; font-style: normal; font-display: swap; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 @font-face { font-family: "JetBrains Mono"; src: url("/static/fonts/jetbrains-mono-latin-700.woff2") format("woff2");
   font-weight: 700; font-style: normal; font-display: swap; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Inter Variable"; src: url("/static/fonts/inter-latin-wght.woff2") format("woff2-variations");
+  font-weight: 100 900; font-style: normal; font-display: swap; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Merriweather"; src: url("/static/fonts/merriweather-latin-400.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: swap; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Merriweather"; src: url("/static/fonts/merriweather-latin-700.woff2") format("woff2");
+  font-weight: 700; font-style: normal; font-display: swap; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
 :root {
   --bg: #fffcf0; --card: #faf8eb; --line: #e7e5da; --line-2: #dad8ce; --text: #100f0f; --muted: #5f5e59;
@@ -18,7 +25,6 @@
   --ok: #4d6108; --warn: #7a5d00; --error: #af3029; --grey: #8a887f; /* WCAG AA (#105) */
   --heat: #8a9c57; --heat-max: 75%;
   --radius: 0.625rem; --control: 2.75rem; --tabbar: 4rem; --shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --font: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   color-scheme: light;
 }
 /* Colour scheme: the device's, turned the other way while the session says so (header symbol, POST /theme,
@@ -40,6 +46,11 @@
   }
 }
 
+/* Wealthfolio's --font-mono / --font-sans / --font-serif stacks */
+:root, :root[data-font=mono] { --font: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+:root[data-font=sans] { --font: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif; }
+:root[data-font=serif] { --font: "Merriweather", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif; }
+
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 /* Wealthfolio's text is text-sm (0.875rem/1.25rem), normal tracking, smoothed */
@@ -57,7 +68,7 @@ h3 { font-size: 0.75rem; line-height: 1rem; font-weight: 500; letter-spacing: 0.
   color: var(--muted); margin: 1.125rem 0 0.5rem; }
 p { margin: 0.5rem 0; }
 .muted, p.muted { color: var(--muted); font-size: 0.8125rem; }
-code, pre { font-family: var(--font); font-size: 0.8125rem; }
+code, pre { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.8125rem; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0.25rem 0 0; }
 
 /* Header: brand; on wide screens also the navigation. */
