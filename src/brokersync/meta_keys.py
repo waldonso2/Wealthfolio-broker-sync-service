@@ -52,7 +52,7 @@ XRAY_NOTIFIED = MetaKey("xray:notified", "json", False, "cluster risks notified 
 TAXONOMIES_LAST = MetaKey("taxonomies:last", "json", False,
                           "look-through: the last write of countries and sectors to Wealthfolio: {written, manual, at}")
 AUTO_UPDATE = MetaKey("auto-update", "json", False,
-                      "the last automatic update (deploy/brokersync-autoupdate): {from, to, ok, at}")
+                      "the last automatic update (deploy/companion-autoupdate): {from, to, ok, at}")
 UPDATE = MetaKey("update", "json", False, "the newest release GitHub named: {version, checked} (updates.py)")
 ISIN = MetaKey("isin", "json", False,
                "the ISIN the sync set on a Wealthfolio asset, once: {isin, at} - a bare ISIN before 0.47.0 "

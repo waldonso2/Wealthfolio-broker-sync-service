@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ _("Entsperren") }} · Wealthfolio Broker Sync</title>
+<title>{{ _("Entsperren") }} · Wealthfolio Companion</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<header><div class="wrap"><span class="brand">Wealthfolio Broker Sync <span class="version">v{{ version }}</span></span></div></header>
+<header><div class="wrap"><span class="brand">Wealthfolio Companion <span class="version">v{{ version }}</span>{% if stage(version) %} <span class="stage">{{ stage(version) }}</span>{% endif %}</span></div></header>
 <main class="wrap">
   {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
   <div class="card">

@@ -20,11 +20,11 @@ from pathlib import Path
 
 from . import crypto
 
-DEFAULT_DATA_DIR = "/opt/wealthfolio-broker-sync/data"
+DEFAULT_DATA_DIR = "/opt/wealthfolio-companion/data"
 
 
 def data_dir() -> Path:
-    return Path(os.environ.get("BROKERSYNC_DATA", DEFAULT_DATA_DIR))
+    return Path(os.environ.get("COMPANION_DATA", DEFAULT_DATA_DIR))
 
 
 @dataclass
@@ -77,7 +77,7 @@ class Config:
     # "auto": sessions are kept, the timer fetches. "safe": every fetch needs a fresh login in the UI, the
     # session is ended after it, the timer only reminds (#85). For all brokers.
     sync_mode: str = "auto"
-    # Page Updates: the container installs a newer release by itself (deploy/brokersync-autoupdate, root), asking
+    # Page Updates: the container installs a newer release by itself (deploy/companion-autoupdate, root), asking
     # GitHub every ``update_interval`` seconds. In the host tier, so it works while the data is locked.
     auto_update: bool = False
     update_interval: int = 60

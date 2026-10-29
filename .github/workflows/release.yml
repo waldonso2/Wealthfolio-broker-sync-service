@@ -50,7 +50,7 @@ jobs:
       - name: Archive and checksums
         if: steps.v.outputs.exists == 'false'
         run: |
-          NAME="wealthfolio-broker-sync-${{ steps.v.outputs.version }}"
+          NAME="wealthfolio-companion-${{ steps.v.outputs.version }}"
           git archive --format=tar.gz --prefix="$NAME/" -o "$NAME.tar.gz" HEAD
           mkdir rel && git archive --format=tar HEAD | tar -x -C rel
           (cd rel && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > SHA256SUMS
@@ -61,16 +61,24 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
-            wealthfolio-broker-sync-${{ steps.v.outputs.version }}.tar.gz
+            wealthfolio-companion-${{ steps.v.outputs.version }}.tar.gz
             SHA256SUMS
       - name: Create release
         if: steps.v.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.v.outputs.version }}
+        # A pre-release (PEP 440 aN/bN/rcN) says so in its title, but is never marked as one on GitHub: releases/latest
+        # skips those, and the update check and the install read that.
         run: |
-          gh release create "v${{ steps.v.outputs.version }}" --title "v${{ steps.v.outputs.version }}" \
-            --notes-file notes.md --target "$GITHUB_SHA" \
-            "wealthfolio-broker-sync-${{ steps.v.outputs.version }}.tar.gz" SHA256SUMS SHA256SUMS.archive
+          TITLE="v$VERSION"
+          case "$VERSION" in
+            *a[0-9]*) TITLE="$TITLE (alpha)" ;;
+            *b[0-9]*) TITLE="$TITLE (beta)" ;;
+            *rc[0-9]*) TITLE="$TITLE (release candidate)" ;;
+          esac
+          gh release create "v$VERSION" --title "$TITLE" --notes-file notes.md --target "$GITHUB_SHA" \
+            "wealthfolio-companion-$VERSION.tar.gz" SHA256SUMS SHA256SUMS.archive
 
   image:
     # The container image (#148), only for a new version: amd64 and arm64 on ghcr.io, tags v<version> and latest,
@@ -85,7 +93,7 @@ jobs:
       attestations: write
       artifact-metadata: write
     env:
-      IMAGE: ghcr.io/${{ github.repository_owner }}/wealthfolio-broker-sync
+      IMAGE: ghcr.io/${{ github.repository_owner }}/wealthfolio-companion
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

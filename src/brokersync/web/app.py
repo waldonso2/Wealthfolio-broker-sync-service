@@ -91,7 +91,7 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         session_key = secrets.token_urlsafe(32)
         vault.update(lambda d: d.__setitem__("ui_session_key", session_key))
 
-    app = FastAPI(title="Wealthfolio Broker Sync", docs_url=None, redoc_url=None, openapi_url=None,
+    app = FastAPI(title="Wealthfolio Companion", docs_url=None, redoc_url=None, openapi_url=None,
                   dependencies=[Depends(csrf_guard)])
     app.state.ctx = ctx
 
@@ -111,7 +111,7 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
         if (not session.get("user") or session.get("pw") != session_tag(secrets_)
                 or now - session.get("seen", 0) > IDLE_SECONDS or now - session.get("since", 0) > MAX_SECONDS):
             # Also a cookie of an earlier password or session version (#96): after a logout, a password change
-            # or brokersync-reset-password it signs in nobody; and none after 30 min idle or 12 h at all.
+            # or companion-reset-password it signs in nobody; and none after 30 min idle or 12 h at all.
             session.clear()
             return RedirectResponse("/login", 303)
         if now - session["seen"] > 60:  # not every request: a page that reloads itself keeps the session anyway
@@ -129,8 +129,8 @@ def _create_app(data_dir: Path, *, wealthfolio, adapters, notifier, run_in_threa
 
 
 def _metrics_token(request: Request) -> bool:
-    """``Authorization: Bearer <BROKERSYNC_METRICS_TOKEN>`` - only a token of at least 32 characters counts."""
-    token = os.environ.get("BROKERSYNC_METRICS_TOKEN", "")
+    """``Authorization: Bearer <COMPANION_METRICS_TOKEN>`` - only a token of at least 32 characters counts."""
+    token = os.environ.get("COMPANION_METRICS_TOKEN", "")
     given = request.headers.get("authorization", "")
     return len(token) >= 32 and secrets.compare_digest(given.encode(), f"Bearer {token}".encode())
 
@@ -165,7 +165,7 @@ def _error_pages(app: FastAPI, ctx: AppContext) -> None:
                               lang, id=error_id)
         back = i18n.translate("Zur Übersicht", lang)
         return HTMLResponse(f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" '
-                            f'content="width=device-width, initial-scale=1"><title>Broker Sync</title>'
+                            f'content="width=device-width, initial-scale=1"><title>Wealthfolio Companion</title>'
                             f'<link rel="stylesheet" href="/static/style.css"></head><body><main class="wrap">'
                             f'<div class="card"><p>{html.escape(text)}</p><p><a href="/">{html.escape(back)}</a>'
                             f'</p></div></main></body></html>', status_code=500)
@@ -186,6 +186,7 @@ def _templates() -> Jinja2Templates:
     # What the footer and *Sicherheit* may claim (#94): the database only where SQLCipher is there.
     templates.env.globals["db_encrypted"] = lambda: state_mod.ENCRYPTED
     templates.env.globals["report_url"] = views.report_url
+    templates.env.globals["stage"] = views.stage
     # Foreign error texts (banks, brokers, Wealthfolio) on a page: never a secret or an account number.
     templates.env.filters["redact"] = lambda text: redact.redact(str(text)) if text else text
     # A stored run message line by line: the service's own (German) lines in the page's language, foreign

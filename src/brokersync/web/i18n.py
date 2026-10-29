@@ -172,6 +172,9 @@ EN: dict[str, str] = {
     "System": "System",
     "{label}: unbekannte Auswahl.": "{label}: unknown choice.",
     "Version {version}": "Version {version}",
+    "Alpha": "Alpha",
+    "Beta": "Beta",
+    "Release Candidate": "Release candidate",
     "Holt die Buchungen deiner Broker und Banken und schreibt sie ohne Duplikate in dein selbst gehostetes "
     "Wealthfolio – dazu Länder und Sektoren, ISINs, Logos und X-Ray.":
         "Fetches the transactions of your brokers and banks and writes them, without duplicates, into your "
@@ -665,8 +668,8 @@ EN: dict[str, str] = {
     "Passwort (mindestens 12 Zeichen)": "Password (at least 12 characters)",
     "Passwort wiederholen": "Repeat the password",
     "Passwort speichern": "Save the password",
-    "Passwort vergessen? In der Konsole des Containers <code>brokersync-reset-password</code> ausführen.":
-        "Forgot the password? Run <code>brokersync-reset-password</code> in the container's console.",
+    "Passwort vergessen? In der Konsole des Containers <code>companion-reset-password</code> ausführen.":
+        "Forgot the password? Run <code>companion-reset-password</code> in the container's console.",
     "Das Passwort braucht mindestens {n} Zeichen, beide Eingaben müssen gleich sein.":
         "The password needs at least {n} characters, and both entries must be the same.",
     "Gerade laufen zu viele Anmeldungen gleichzeitig. Bitte gleich noch einmal versuchen.":
@@ -674,9 +677,9 @@ EN: dict[str, str] = {
     "Der Einrichtungscode stimmt nicht oder ist abgelaufen.": "The setup code is wrong or has expired.",
     "Einrichtungscode": "Setup code",
     "Er stand am Ende der Installation. Einen neuen zeigt die Konsole des Containers: "
-    "<code>brokersync-cli setup-code</code>":
+    "<code>companion-cli setup-code</code>":
         "It was shown at the end of the installation. The container's console shows a new one: "
-        "<code>brokersync-cli setup-code</code>",
+        "<code>companion-cli setup-code</code>",
     "Am besten ein Passwortmanager: ein langes, zufälliges Passwort, das du nirgends sonst benutzt.":
         "Best use a password manager: a long, random password you use nowhere else.",
     "{label}: bitte als Zahl angeben.": "{label}: please enter a number.",
@@ -789,7 +792,7 @@ EN: dict[str, str] = {
     "Außerhalb von data/, nur für root lesbar; der Dienst bekommt ihn beim Start (systemd-creds konnte hier nicht "
     "verschlüsseln).":
         "Outside data/, readable by root only; the service gets it at start (systemd-creds could not encrypt here).",
-    "Aus BROKERSYNC_KEY_FILE.": "From BROKERSYNC_KEY_FILE.",
+    "Aus COMPANION_KEY_FILE.": "From COMPANION_KEY_FILE.",
     "Liegt in data/ neben den verschlüsselten Daten - wer data/ kopiert, kann alles entschlüsseln. Ein Update richtet "
     "das ein.":
         "Kept in data/ next to the encrypted data - whoever copies data/ can decrypt everything. An update sets it "

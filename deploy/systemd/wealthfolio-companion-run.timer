@@ -1,5 +1,5 @@
 [Unit]
-Description=Wealthfolio Broker Sync - daily sync
+Description=Wealthfolio Companion - daily sync
 
 [Timer]
 OnCalendar=*-*-* 06:00:00

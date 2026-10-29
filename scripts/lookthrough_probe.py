@@ -175,7 +175,7 @@ def once() -> list[dict]:
         probe("Vanguard gpx", "https://www.vanguard.co.uk/gpx/graphql", data={"query": "{__typename}"}),
         probe("OpenFIGI", "https://api.openfigi.com/v3/mapping", data=[{"idType": "ID_ISIN", "idValue": SAMPLE_STOCK}]),
         probe("GLEIF", f"https://api.gleif.org/api/v1/lei-records?filter[isin]={SAMPLE_STOCK}",
-              agent="brokersync-probe"),
+              agent="companion-probe"),
     ]
 
 

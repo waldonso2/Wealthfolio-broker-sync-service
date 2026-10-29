@@ -4,8 +4,8 @@ import pytest
 @pytest.fixture(autouse=True)
 def _no_recalc_wait(monkeypatch):
     # The fake Wealthfolio has its holdings at once; don't wait for a recalculation.
-    monkeypatch.setenv("BROKERSYNC_RECALC_WAIT", "0")
-    monkeypatch.setenv("BROKERSYNC_UPDATE_CHECK", "0")  # no test asks GitHub
+    monkeypatch.setenv("COMPANION_RECALC_WAIT", "0")
+    monkeypatch.setenv("COMPANION_UPDATE_CHECK", "0")  # no test asks GitHub
 
 
 @pytest.fixture(autouse=True)
@@ -39,8 +39,8 @@ def _fast_key_derivation(monkeypatch, tmp_path_factory):
 
     monkeypatch.setattr(vault, "PASSWORD_HASH", {"time_cost": 1, "memory_cost": 1024, "parallelism": 1})
     monkeypatch.setattr(crypto, "ARGON2", {"time_cost": 1, "memory_cost": 1024, "parallelism": 1})
-    monkeypatch.setenv("BROKERSYNC_RUNTIME", str(tmp_path_factory.mktemp("no-runtime") / "missing"))
-    for var in ("CREDENTIALS_DIRECTORY", "BROKERSYNC_KEY_FILE", "BROKERSYNC_KEY_SOURCE"):
+    monkeypatch.setenv("COMPANION_RUNTIME", str(tmp_path_factory.mktemp("no-runtime") / "missing"))
+    for var in ("CREDENTIALS_DIRECTORY", "COMPANION_KEY_FILE", "COMPANION_KEY_SOURCE"):
         monkeypatch.delenv(var, raising=False)
     crypto._memory.clear()
 

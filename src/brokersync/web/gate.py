@@ -21,6 +21,7 @@ from fastapi.templating import Jinja2Templates
 
 from .. import __version__, crypto
 from .i18n import N_, template_gettext
+from .views import stage
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ HEADERS = [
 ]
 HSTS = (b"strict-transport-security", b"max-age=31536000")
 UNKNOWN_HOST = ("Unbekannter Name für diese Oberfläche. Über die IP-Adresse geht es weiter; einen eigenen Namen "
-                "erlaubt BROKERSYNC_ALLOWED_HOSTS (siehe README).")
+                "erlaubt COMPANION_ALLOWED_HOSTS (siehe README).")
 # Largest request body: the biggest upload (a 5 MB statement) plus the form around it. Checked before
 # anything is read - also for the login and the first password, which answer without a session.
 MAX_BODY = 6 * 1024 * 1024
@@ -59,7 +60,7 @@ def host_of(raw: str) -> str:
 class Hosts:
     """The names the UI answers to (#107). An IP address always - DNS rebinding needs a name the attacker
     controls -, a name only when it is known: the container's (also with a local suffix like ``.fritz.box``),
-    the certificate's, the public URL's, or one in ``BROKERSYNC_ALLOWED_HOSTS``. ``known`` is asked again
+    the certificate's, the public URL's, or one in ``COMPANION_ALLOWED_HOSTS``. ``known`` is asked again
     when a name isn't found (the public URL can change while the service runs)."""
 
     def __init__(self, known: Callable[[], set[str]]):
@@ -263,6 +264,7 @@ def _locked_app(gate: Gate, templates_dir: Path, static_dir: Path) -> FastAPI:
     templates = Jinja2Templates(directory=templates_dir)
     # No language while locked - the config holding it can't be read: the unlock page is German.
     templates.env.globals["_"] = template_gettext
+    templates.env.globals["stage"] = stage
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     def page(request: Request, error: str = "", status: int = 200) -> HTMLResponse:

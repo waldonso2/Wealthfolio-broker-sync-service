@@ -1,6 +1,6 @@
 {
-  "name": "Wealthfolio Broker Sync",
-  "slug": "wealthfolio-broker-sync",
+  "name": "Wealthfolio Companion",
+  "slug": "wealthfolio-companion",
   "categories": [
     23
   ],
@@ -9,15 +9,15 @@
   "updateable": true,
   "privileged": false,
   "interface_port": 8443,
-  "documentation": "https://github.com/waldonso2/wealthfolio-broker-sync-service#readme",
-  "website": "https://github.com/waldonso2/wealthfolio-broker-sync-service",
+  "documentation": "https://github.com/waldonso2/wealthfolio-companion#readme",
+  "website": "https://github.com/waldonso2/wealthfolio-companion",
   "logo": "https://cdn.jsdelivr.net/gh/selfhst/icons/webp/wealthfolio.webp",
-  "config_path": "/opt/wealthfolio-broker-sync/data/config.enc",
+  "config_path": "/opt/wealthfolio-companion/data/config.enc",
   "description": "Fetches transactions from your brokers and writes them, deduplicated, into your self-hosted Wealthfolio. Set up entirely in the web UI over HTTPS; everything it stores is encrypted, optionally with a master passphrase.",
   "install_methods": [
     {
       "type": "default",
-      "script": "ct/wealthfolio-broker-sync.sh",
+      "script": "ct/wealthfolio-companion.sh",
       "resources": {
         "cpu": 1,
         "ram": 512,
@@ -37,7 +37,7 @@
       "type": "info"
     },
     {
-      "text": "Forgot the web UI password? Run `brokersync-reset-password` in the container console.",
+      "text": "Forgot the web UI password? Run `companion-reset-password` in the container console.",
       "type": "info"
     },
     {
@@ -49,5 +49,5 @@
       "type": "warning"
     }
   ],
-  "repository_url": "https://github.com/waldonso2/wealthfolio-broker-sync-service"
+  "repository_url": "https://github.com/waldonso2/wealthfolio-companion"
 }

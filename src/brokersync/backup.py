@@ -1,7 +1,7 @@
-"""Backup and restore of ``data/`` (#109): ``brokersync-cli backup > file``, ``brokersync-cli restore < file``.
+"""Backup and restore of ``data/`` (#109): ``companion-cli backup > file``, ``companion-cli restore < file``.
 
 An archive holds ``data/<file>`` - the same layout as the backups ``update`` makes - and everything in it stays
-encrypted: it opens only with this container's key (``/etc/wealthfolio-broker-sync``) and, if one is set, the
+encrypted: it opens only with this container's key (``/etc/wealthfolio-companion``) and, if one is set, the
 master passphrase. ``restore`` reads the archive with the current key **before** it touches ``data/``; one
 that doesn't open is refused. The data it replaces is kept as ``data/before-restore-<time>.tar.gz``. The web
 UI must be stopped (it holds ``ui.lock`` while it runs); a sync can't run meanwhile (sync lock).
@@ -37,7 +37,7 @@ class RestoreError(Exception):
 
 
 def hold_ui_lock(data_dir: Path):
-    """Taken by ``brokersync serve`` for its lifetime: a restore refuses to run under a running UI."""
+    """Taken by ``wealthfolio-companion serve`` for its lifetime: a restore refuses to run under a running UI."""
     f = crypto.open_lock(Path(data_dir) / UI_LOCK)
     fcntl.flock(f, fcntl.LOCK_SH)
     return f
@@ -86,7 +86,7 @@ def restore(data_dir: Path, archive: BinaryIO) -> str:
         try:
             fcntl.flock(ui, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as e:
-            raise RestoreError("The web UI is running: systemctl stop wealthfolio-broker-sync first.") from e
+            raise RestoreError("The web UI is running: systemctl stop wealthfolio-companion first.") from e
         with run_lock(d, wait=60):
             tmp = Path(tempfile.mkdtemp(dir=d, prefix=".restore-"))
             try:

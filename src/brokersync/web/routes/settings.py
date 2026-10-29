@@ -152,7 +152,7 @@ def notifications_save(request: Request, ctx: Ctx, server: str = Form(...), topi
     c = ctx.update(change)
     if test:
         n = ctx.notifier or Notifier(c.ntfy_server, c.ntfy_topic, c.ntfy_token)
-        ok = n.send("Wealthfolio Broker Sync", "Testnachricht - Benachrichtigungen funktionieren.",
+        ok = n.send("Wealthfolio Companion", "Testnachricht - Benachrichtigungen funktionieren.",
                     link=c.public_url or None, tags="white_check_mark")
         if not ok:
             return redirect(request, "/notifications", tr(request, "Testnachricht konnte nicht gesendet werden."),

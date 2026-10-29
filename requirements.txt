@@ -13,7 +13,7 @@ anyio==4.15.1 \
 argon2-cffi==25.1.0 \
     --hash=sha256:694ae5cc8a42f4c4e2bf2ca0e64e51e23a040c6a517a85074683d3959e1346c1 \
     --hash=sha256:fdc8b074db390fccb6eb4a3604ae7231f219aa669a2652e0f20e16ba513d5741
-    # via wealthfolio-broker-sync (pyproject.toml)
+    # via wealthfolio-companion (pyproject.toml)
 argon2-cffi-bindings==26.1.0 \
     --hash=sha256:061a6919145bbf282ebf1f9c59d3135d4833c25313c8595c0d68cf7712ddfce2 \
     --hash=sha256:0cc40f7b4050bb93eb67de95d2d759322fc7ce4930b9d645581ecf4913ec651e \
@@ -413,7 +413,7 @@ cryptography==50.0.2 \
     --hash=sha256:f9f6143a8c75945eb960d9eb98905a441394abfa24afaae239d514ffb2586480 \
     --hash=sha256:fa8f5efb344d6908a1ce62f4a24e2e5780f825d6f53f5f50ec5ffacac72936cb \
     --hash=sha256:fdd28f912fccfec1846a94e2e1e8f9b0012f557f0c46fe4f3eb0d7a87afcf90b
-    # via pytr, wealthfolio-broker-sync (pyproject.toml)
+    # via pytr, wealthfolio-companion (pyproject.toml)
 curl-cffi==0.16.3 \
     --hash=sha256:01c31369b1c8063c7e459152c508c90de7a4218aa66ee3a1f575ae37ce44bc5a \
     --hash=sha256:0851e710608122a2716bdee35788bbd7e9d4a0fd42899b2bca9181277095af8e \
@@ -449,11 +449,11 @@ enum-tools==0.12.0 \
 fastapi==0.143.3 \
     --hash=sha256:75e8bd68e2f52f77d29b2879749c257d64de2d85282d25270caf2bfccce5efe5 \
     --hash=sha256:b9ab567ee57afb4454004ce04c889f8f0160ac47946b99795887cd6e88484848
-    # via wealthfolio-broker-sync (pyproject.toml)
+    # via wealthfolio-companion (pyproject.toml)
 fints==5.0.1 \
     --hash=sha256:2799e447c7940152ace67bd8984e17deec31cf4461e46f90ad6b12271a64b6ff \
     --hash=sha256:e48921b56c8fd674d51011e8859c756a030d4a636d6bc05f95e8a97d07188bd6
-    # via wealthfolio-broker-sync (pyproject.toml)
+    # via wealthfolio-companion (pyproject.toml)
 h11==0.16.0 \
     --hash=sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1 \
     --hash=sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86
@@ -465,7 +465,7 @@ httpcore==1.0.9 \
 httpx==0.28.1 \
     --hash=sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc \
     --hash=sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad
-    # via wealthfolio-broker-sync (pyproject.toml)
+    # via wealthfolio-companion (pyproject.toml)
 humanfriendly==10.0 \
     --hash=sha256:1697e1a8a8f550fd43c2865cd84542fc175a61dcb779b6fee18cf6b6ccba1477 \
     --hash=sha256:6b0b831ce8f15f7300721aa49829fc4e83921a9a301cc7f606be6686a2288ddc
@@ -477,11 +477,11 @@ idna==3.20 \
 itsdangerous==2.2.0 \
     --hash=sha256:c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef \
     --hash=sha256:e0050c0b7da1eea53ffaf149c0cfbb5c6e2e2b69c4bef22c81fa6eb73e5f6173
-    # via wealthfolio-broker-sync (pyproject.toml)
+    # via wealthfolio-companion (pyproject.toml)
 jinja2==3.1.6 \
     --hash=sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d \
     --hash=sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67
-    # via wealthfolio-broker-sync (pyproject.toml)
+    # via wealthfolio-companion (pyproject.toml)
 lxml==6.1.3 \
     --hash=sha256:032a0a97eed428bd143c75a11118238546424ceb2fa311cca5f073aa44658dc4 \
     --hash=sha256:05f5bce9af14fd1506997594bd81cee6d9c6b58ea80a39c058327aa6371ed9e9 \
@@ -987,11 +987,11 @@ pyreadline3==3.5.6 ; sys_platform == 'win32' \
 python-multipart==0.0.32 \
     --hash=sha256:be54b7f3fa167bb83e4fcd936b887b708f4e57fe75911c02aebf53efaf8d938e \
     --hash=sha256:ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23
-    # via wealthfolio-broker-sync (pyproject.toml)
+    # via wealthfolio-companion (pyproject.toml)
 pytr==0.4.10 \
     --hash=sha256:41dbb9446d290fc36b21410b5547504088e7fdf49a6e637675c900ec353381d5 \
     --hash=sha256:cfdd2a8f5426b28f59b21405916b0c348d10006f22ff4aefa715b34dfdaa5dd6
-    # via wealthfolio-broker-sync (pyproject.toml)
+    # via wealthfolio-companion (pyproject.toml)
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0 \
     --hash=sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed
@@ -1020,7 +1020,7 @@ sqlcipher3-binary==0.6.0 ; platform_machine == 'x86_64' \
     --hash=sha256:9886d2d30b5bb4e3ddc3a9e2b9e5b65261fa0c748eaf8a584781082312d37cee \
     --hash=sha256:c8a7076a18b4f6fc9b580b0f24aa526d6a47605b1e3e6491ee3e9f2977940d8e \
     --hash=sha256:f9bccb9e942a04bbf920714940c8f9e00134cd655b11ba4c6f1306bcc3504d6c
-    # via wealthfolio-broker-sync (pyproject.toml)
+    # via wealthfolio-companion (pyproject.toml)
 sqlcipher3-wheels==0.5.7 ; platform_machine == 'aarch64' \
     --hash=sha256:0016d95db710d81e599fe49b2d0ac9d925d229152f065608d5a15d47597f0ed2 \
     --hash=sha256:023e4540c50b5c44a1ffe40b6f73cb39275bb4b796ed063e8c7d6856dbf29c89 \
@@ -1150,7 +1150,7 @@ sqlcipher3-wheels==0.5.7 ; platform_machine == 'aarch64' \
     --hash=sha256:fc837ae4a8bb0ad4f170c8961d2db9828d1f6674507a7bca946cc0f6068c9942 \
     --hash=sha256:fd6fcf72da1d5b9134dc3ee1f1b5d912396093f6762abaa0cde8d4f8960dbe6b \
     --hash=sha256:fe9fcd2773efe18018a060a369d92f2026a8ecd0e22b8f20ce42214b0d659665
-    # via wealthfolio-broker-sync (pyproject.toml)
+    # via wealthfolio-companion (pyproject.toml)
 starlette==1.8.0 \
     --hash=sha256:1565dc0b35d5737a271ed1e0e04e949f4e81198799f216d2667b0a0fb9cf9522 \
     --hash=sha256:dfdd6b29c26483288088d990eee59631dedadd66ce20d203402a7ca8e3c4656f
@@ -1174,7 +1174,7 @@ urllib3==2.8.0 \
 uvicorn==0.54.0 \
     --hash=sha256:505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf \
     --hash=sha256:a2e33cbfaa0306f8e6b0c13e0cb89d7d7a2da3e62b90c66e18c33d9807b28620
-    # via wealthfolio-broker-sync (pyproject.toml)
+    # via wealthfolio-companion (pyproject.toml)
 webencodings==0.6.1 \
     --hash=sha256:565f9ad031c702dae404e27a099e3e09186a3ab1b9520f06d215502b651fd910 \
     --hash=sha256:7fab6269c8bf237c657876b52058ccb182e861518d1c695c1a9aaa8c1c105d5b

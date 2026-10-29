@@ -33,7 +33,7 @@ CASE = json.loads((Path(__file__).parent / "contract" / "scalable" / "transactio
 def fake_sc(tmp_path, monkeypatch):
     ctl = tmp_path / "fake-sc"
     ctl.mkdir()
-    monkeypatch.setenv("BROKERSYNC_SC", str(FAKE_SC))
+    monkeypatch.setenv("COMPANION_SC", str(FAKE_SC))
     monkeypatch.setenv("FAKE_SC_DIR", str(ctl))
     monkeypatch.setattr(sc_mod, "PASS_ENV", (*sc_mod.PASS_ENV, "FAKE_SC_DIR"))
     monkeypatch.setattr(sc_mod, "EXTRA_WRITE", (str(ctl),))
@@ -111,7 +111,7 @@ def test_expired_session_in_a_scheduled_run_sends_the_link_and_waits(fake_sc, mo
 
 
 def test_missing_cli_is_a_clear_error(tmp_path, monkeypatch):
-    monkeypatch.setenv("BROKERSYNC_SC", str(tmp_path / "nowhere" / "sc"))
+    monkeypatch.setenv("COMPANION_SC", str(tmp_path / "nowhere" / "sc"))
     with pytest.raises(AdapterError, match="nicht installiert"):
         ScalableAdapter({}, {"files": {"session.json": "{}"}}).login()
 

@@ -1,5 +1,111 @@
 # Changelog
 
+## 0.1.0a1
+
+Wealthfolio Broker Sync is now **Wealthfolio Companion**, starting over at 0.1.0 (alpha). It does what Broker Sync 0.48.1 did - the sync, countries and sectors, ISINs, logos, the spending tracker and X-Ray - under the new name; an existing installation is not migrated automatically (see *Moving from Wealthfolio Broker Sync* below).
+
+- Repository `waldonso2/wealthfolio-companion`, container image `ghcr.io/waldonso2/wealthfolio-companion`, community-scripts slug `wealthfolio-companion` (`ct/wealthfolio-companion.sh`, `install/wealthfolio-companion-install.sh`).
+- Names in the LXC: `/opt`, `/etc` and `/run/wealthfolio-companion`, units `wealthfolio-companion`, `-run`, `-cert`, `-update`, service user `companion`, systemd credential `companion-key`; commands `wealthfolio-companion` (in the venv and the image), `companion-cli`, `companion-reset-password`, `companion-autoupdate`.
+- Environment variables `COMPANION_*` instead of `BROKERSYNC_*`; the image's secret is `companion-key`; metrics are `companion_*`.
+- The UI, notifications and documents say Wealthfolio Companion; the header and *Über* show the version with its stage (Alpha).
+- Versions follow PEP 440 pre-releases (0.1.0a1 < 0.1.0a2 < 0.1.0b1 < 0.1.0rc1 < 0.1.0) in the update check, the automatic update and `setup.sh`'s downgrade check; a pre-release says so in its GitHub release title but is never marked as one (releases/latest, which the update check and the install read, skips those).
+- Unchanged, so existing data keeps working: the data files and their encryption, the `[SYNC <broker>:<id>]` references in Wealthfolio, the X-Ray addon's storage (`broker-sync-xray`), `/data`, `/tls` and UID 10001 in the image.
+- `ct/wealthfolio-broker-sync.sh` installs nothing any more: an old container's `update` prints where this guide is and stops.
+
+### Moving from Wealthfolio Broker Sync
+
+An installation of Wealthfolio Broker Sync is not updated into Wealthfolio Companion: you install Wealthfolio Companion fresh and bring your data over with a backup and the old key. Nothing gets lost on the way: `restore` first checks that the backup opens with the key the new installation uses, and changes nothing otherwise - the old installation stays as it is until you remove it.
+
+**Before you start:** if you set a master passphrase, remove it on the page *Sicherheit* of the old installation first (you set it again afterwards): a fresh installation can't unlock a backup sealed with it.
+
+#### Proxmox VE (LXC)
+
+1. In the console of the **old** container, write a backup and the key, and stop the daily fetch so nothing new is booked there:
+
+   ```bash
+   (umask 077; brokersync-cli backup > /root/move.tar.gz)
+   (umask 077; if [ -f /etc/wealthfolio-broker-sync/key.cred ]; then systemd-creds decrypt --name=brokersync-key /etc/wealthfolio-broker-sync/key.cred - > /root/move.key; else cp /etc/wealthfolio-broker-sync/secret.key /root/move.key; fi)
+   systemctl disable --now wealthfolio-broker-sync-run.timer wealthfolio-broker-sync-update.timer
+   ```
+
+2. Install Wealthfolio Companion as a new container: in the Proxmox host shell
+
+   ```bash
+   bash -c "$(curl -fsSL https://raw.githubusercontent.com/waldonso2/wealthfolio-companion/main/ct/wealthfolio-companion.sh)"
+   ```
+
+   You don't need the setup code it shows: the backup brings your password along.
+
+3. In the Proxmox host shell, copy both files from the old container (`OLD`, its ID) to the new one (`NEW`):
+
+   ```bash
+   OLD=101 NEW=102   # your containers' IDs (pct list)
+   (umask 077; pct pull $OLD /root/move.tar.gz /root/move.tar.gz && pct pull $OLD /root/move.key /root/move.key)
+   pct push $NEW /root/move.tar.gz /root/move.tar.gz --perms 600 && pct push $NEW /root/move.key /root/move.key --perms 600
+   shred -u /root/move.key /root/move.tar.gz
+   ```
+
+4. In the console of the **new** container, stop the service, put the old key in place of the new one (`setup.sh` seals a root-only `secret.key` with systemd-creds), empty the new installation's data (it holds nothing yet), run the setup again and restore the backup:
+
+   ```bash
+   systemctl stop wealthfolio-companion wealthfolio-companion-run.timer
+   rm -f /etc/wealthfolio-companion/key.cred /etc/wealthfolio-companion/secret.key
+   install -m 600 /root/move.key /etc/wealthfolio-companion/secret.key
+   find /opt/wealthfolio-companion/data -mindepth 1 -delete
+   bash /opt/wealthfolio-companion/app/deploy/setup.sh
+   companion-cli restore < /root/move.tar.gz
+   systemctl start wealthfolio-companion wealthfolio-companion-run.timer
+   shred -u /root/move.key /root/move.tar.gz
+   ```
+
+   If `restore` says *Not restored, data/ unchanged*, the key doesn't fit the backup: check step 1 and run step 4 again.
+
+5. Open the new container's web UI (`https://<its address>:8443`) and sign in with your old password. Its certificate comes from the new container's own CA: confirm the browser warning once, or import `/ca.crt` again. Set the master passphrase again if you had one, and switch the automatic update on again on the page *Updates* if you used it.
+
+6. When everything is there, stop and remove the old container in Proxmox.
+
+#### Docker / Podman
+
+The old key and the old data volume stay as they are; only the image, the secret's name and the variables change.
+
+1. Make a backup first (the old image's command is `brokersync`):
+
+   ```bash
+   (umask 077; docker compose exec -T brokersync brokersync backup > before-move.tar.gz)
+   ```
+
+2. Change `docker-compose.yml` - keep the service, volume and `hostname` names (a new hostname would replace the UI's CA):
+
+   ```diff
+    services:
+      brokersync:
+   -    image: ghcr.io/waldonso2/wealthfolio-broker-sync:latest
+   +    image: ghcr.io/waldonso2/wealthfolio-companion:latest
+        environment:
+   -      BROKERSYNC_CERT_NAMES: "nas.fritz.box"
+   +      COMPANION_CERT_NAMES: "nas.fritz.box"
+        secrets:
+   -      - brokersync-key
+   +      - companion-key
+    secrets:
+   -  brokersync-key:
+   +  companion-key:
+        file: ./brokersync.key
+   ```
+
+   Every `BROKERSYNC_…` variable becomes `COMPANION_…` (`_TLS`, `_TRUST_PROXY`, `_ALLOWED_HOSTS`, `_RUN_AT`, `_METRICS_TOKEN`, `_LOG_FORMAT` …). With `docker run`, change the image the same way and mount the key as `/run/secrets/companion-key`.
+
+3. Start it:
+
+   ```bash
+   docker compose pull && docker compose up -d
+   docker compose logs brokersync
+   ```
+
+   Commands in the container are now `wealthfolio-companion …` (`docker compose exec brokersync wealthfolio-companion security-status`). Should the data not open, the log says so and nothing was changed: `before-move.tar.gz` restores the old state with the old image.
+
+## Wealthfolio Broker Sync (up to 0.48.1)
+
 ## 0.48.1
 
 - The update check follows a redirect within github.com to the first release tag, so it keeps finding new versions once the repository is renamed (Wealthfolio Companion); never another host, https only.

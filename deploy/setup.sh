@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Installs or updates the service from the unpacked source in
-# /opt/wealthfolio-broker-sync/app. Used by the install and the update script;
-# idempotent. Keeps the service's key outside data/ (/etc/wealthfolio-broker-sync,
+# /opt/wealthfolio-companion/app. Used by the install and the update script;
+# idempotent. Keeps the service's key outside data/ (/etc/wealthfolio-companion,
 # encrypted with systemd-creds where possible), creates the TLS certificate and
 # brings the data of older versions up to date (all of it encrypted).
 set -euo pipefail
@@ -9,20 +9,23 @@ set -euo pipefail
 # has 022, a systemd unit may have less. Secrets get their modes explicitly (mktemp, chmod, install -m).
 umask 022
 
-BASE=/opt/wealthfolio-broker-sync
+BASE=/opt/wealthfolio-companion
 APP="$BASE/app"
-USER_NAME=brokersync
+USER_NAME=companion
 
 id -u "$USER_NAME" >/dev/null 2>&1 || useradd --system --home-dir "$BASE" --shell /usr/sbin/nologin "$USER_NAME"
 install -d -m 700 -o "$USER_NAME" -g "$USER_NAME" "$BASE/data"
 chown -R "$USER_NAME:$USER_NAME" "$BASE/data"
 
-# No way back to an older version unless asked for (VERSION=... update sets BROKERSYNC_ALLOW_DOWNGRADE):
+# No way back to an older version unless asked for (VERSION=... update sets COMPANION_ALLOW_DOWNGRADE):
 # an older release may lack a fix, and data a newer version wrote may not open in it (#88).
 NEW_VERSION="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$APP/pyproject.toml")"
-if [[ -x "$BASE/venv/bin/brokersync" && "${BROKERSYNC_ALLOW_DOWNGRADE:-}" != 1 ]]; then
-  OLD_VERSION="$("$BASE/venv/bin/brokersync" --version 2>/dev/null || true)"
-  if [[ -n "$OLD_VERSION" && "$(printf '%s\n%s\n' "$OLD_VERSION" "$NEW_VERSION" | sort -V | tail -n 1)" != "$NEW_VERSION" ]]; then
+# The newest of the versions given, PEP 440 pre-releases in their order (0.1.0a1 < 0.1.0b1 < 0.1.0rc1 < 0.1.0):
+# for sort -V a tilde sorts before the end of a version.
+newest() { printf '%s\n' "$@" | sed -E 's/(a|b|rc)([0-9]+)$/~\1\2/' | sort -V | tail -n 1 | tr -d '~'; }
+if [[ -x "$BASE/venv/bin/wealthfolio-companion" && "${COMPANION_ALLOW_DOWNGRADE:-}" != 1 ]]; then
+  OLD_VERSION="$("$BASE/venv/bin/wealthfolio-companion" --version 2>/dev/null || true)"
+  if [[ -n "$OLD_VERSION" && "$(newest "$OLD_VERSION" "$NEW_VERSION")" != "$NEW_VERSION" ]]; then
     echo "Not going back from $OLD_VERSION to $NEW_VERSION - to do that on purpose: VERSION=$NEW_VERSION update" >&2
     exit 1
   fi
@@ -40,7 +43,7 @@ PIP=("$BASE/venv/bin/pip" install --quiet --disable-pip-version-check --no-cache
 if ! { python3 -m venv "$BASE/venv" &&
   "${PIP[@]}" --require-hashes --only-binary :all: -r "$APP/requirements.txt" &&
   "${PIP[@]}" --no-deps --no-build-isolation "$APP" &&
-  "$BASE/venv/bin/brokersync" --version >/dev/null; }; then
+  "$BASE/venv/bin/wealthfolio-companion" --version >/dev/null; }; then
   rm -rf "$BASE/venv"
   [[ -d "$BASE/venv.old" ]] && mv "$BASE/venv.old" "$BASE/venv"
   echo "Installing the Python packages failed - the previous version is back in place." >&2
@@ -51,10 +54,10 @@ rm -rf "$BASE/venv.old"
 
 # Scalable's official CLI (sc), used by the Scalable Capital adapter. Signature-
 # checked; a failure only affects Scalable, so it doesn't stop the install.
-"$BASE/venv/bin/brokersync" install-sc --dir "$BASE/bin" ||
+"$BASE/venv/bin/wealthfolio-companion" install-sc --dir "$BASE/bin" ||
   echo "Warning: the Scalable CLI could not be installed - Scalable Capital won't work until the next update." >&2
 
-ETC=/etc/wealthfolio-broker-sync
+ETC=/etc/wealthfolio-companion
 install -d -m 700 "$ETC" "$ETC/tls"
 
 new_key() {
@@ -70,8 +73,8 @@ encrypt_key() {
   if timeout 30 systemd-creds has-tpm2 >/dev/null 2>&1; then
     with=tpm2+host
   fi
-  timeout 60 systemd-creds encrypt --with-key="$with" --name=brokersync-key "$1" "$2" 2>/dev/null &&
-    timeout 60 systemd-creds decrypt --name=brokersync-key "$2" - 2>/dev/null | cmp -s - "$1" &&
+  timeout 60 systemd-creds encrypt --with-key="$with" --name=companion-key "$1" "$2" 2>/dev/null &&
+    timeout 60 systemd-creds decrypt --name=companion-key "$2" - 2>/dev/null | cmp -s - "$1" &&
     chmod 600 "$2" && echo "${with%+host}" >"$ETC/key-protection"
 }
 # store_key <file> <suffix>: $ETC/key.cred<suffix> (systemd-creds) or, where systemd-creds can't encrypt,
@@ -111,40 +114,40 @@ if [[ -f "$ETC/secret.key" && ! -f "$ETC/key.cred" ]]; then
   fi
 fi
 if [[ -f "$ETC/key.cred" ]]; then
-  KEY_LINE="LoadCredentialEncrypted=brokersync-key:$ETC/key.cred"
+  KEY_LINE="LoadCredentialEncrypted=companion-key:$ETC/key.cred"
   KEY_SOURCE=systemd-creds
   # Encrypted with the TPM (#94): the page Sicherheit says so; without one, a container backup holds the key.
   if [[ "$(cat "$ETC/key-protection" 2>/dev/null)" == tpm2 ]]; then
     KEY_SOURCE=systemd-creds-tpm2
   fi
 else
-  KEY_LINE="LoadCredential=brokersync-key:$ETC/secret.key"
+  KEY_LINE="LoadCredential=companion-key:$ETC/secret.key"
   KEY_SOURCE=systemd
 fi
-for unit in wealthfolio-broker-sync wealthfolio-broker-sync-run; do
+for unit in wealthfolio-companion wealthfolio-companion-run; do
   install -d -m 755 "/etc/systemd/system/$unit.service.d"
-  printf '[Service]\n%s\nEnvironment=BROKERSYNC_KEY_SOURCE=%s\n' "$KEY_LINE" "$KEY_SOURCE" \
+  printf '[Service]\n%s\nEnvironment=COMPANION_KEY_SOURCE=%s\n' "$KEY_LINE" "$KEY_SOURCE" \
     >"/etc/systemd/system/$unit.service.d/10-key.conf"
 done
 
 # TLS for the web UI: a certificate from the container's own CA (limited to its name and addresses, #92),
-# renewed when it runs out or an address changes - here and daily by wealthfolio-broker-sync-cert.timer.
+# renewed when it runs out or an address changes - here and daily by wealthfolio-companion-cert.timer.
 # More names or addresses: one per line in $ETC/tls/extra-names. A certificate of your own in $ETC/tls
 # (cert.pem, key.pem) is kept.
-"$BASE/venv/bin/brokersync" renew-cert --dir "$ETC/tls" --no-restart
+"$BASE/venv/bin/wealthfolio-companion" renew-cert --dir "$ETC/tls" --no-restart
 
 install -m 644 "$APP"/deploy/systemd/*.service "$APP"/deploy/systemd/*.timer /etc/systemd/system/
-install -m 755 "$APP/deploy/brokersync-cli" /usr/local/bin/brokersync-cli
-install -m 755 "$APP/deploy/brokersync-reset-password" /usr/local/bin/brokersync-reset-password
-install -m 755 "$APP/deploy/brokersync-autoupdate" /usr/local/bin/brokersync-autoupdate
+install -m 755 "$APP/deploy/companion-cli" /usr/local/bin/companion-cli
+install -m 755 "$APP/deploy/companion-reset-password" /usr/local/bin/companion-reset-password
+install -m 755 "$APP/deploy/companion-autoupdate" /usr/local/bin/companion-autoupdate
 systemctl daemon-reload
-systemctl enable -q --now wealthfolio-broker-sync-cert.timer || true
+systemctl enable -q --now wealthfolio-companion-cert.timer || true
 # Every minute; it installs nothing until the page Updates switches it on.
-systemctl enable -q --now wealthfolio-broker-sync-update.timer || true
+systemctl enable -q --now wealthfolio-companion-update.timer || true
 
 # Data of older versions: credentials, settings and database encrypted with the
 # key that now lives outside data/. Only then the old key file goes.
-if timeout 900 /usr/local/bin/brokersync-cli migrate; then
+if timeout 900 /usr/local/bin/companion-cli migrate; then
   if [[ -f "$BASE/data/secret.key" ]]; then
     remove "$BASE/data/secret.key"
   fi
@@ -154,16 +157,16 @@ if timeout 900 /usr/local/bin/brokersync-cli migrate; then
     NEW_KEY="$(mktemp -p "$ETC")"
     new_key >"$NEW_KEY"
     STAGED="$(store_key "$NEW_KEY" .new)"
-    if timeout 900 /usr/local/bin/brokersync-cli rotate-key <"$NEW_KEY"; then
+    if timeout 900 /usr/local/bin/companion-cli rotate-key <"$NEW_KEY"; then
       # Storing the key is the switch: rotate-key only staged the re-encrypted files, recover swaps them
       # in (every start of the service does too, should anything stop in between).
       mv -f "$STAGED" "${STAGED%.new}"
-      timeout 900 /usr/local/bin/brokersync-cli recover
+      timeout 900 /usr/local/bin/companion-cli recover
       touch "$ETC/key-rotated"
       echo "New key: everything re-encrypted; copies of the old key no longer open the data." >&2
     else
       remove "$STAGED"
-      timeout 900 /usr/local/bin/brokersync-cli recover || true # drops what a failed attempt staged
+      timeout 900 /usr/local/bin/companion-cli recover || true # drops what a failed attempt staged
       echo "Warning: the key was not replaced (locked by the master passphrase? unlock and run update again)." >&2
     fi
     remove "$NEW_KEY"
@@ -189,4 +192,4 @@ fi
 chown -R "$USER_NAME:$USER_NAME" "$BASE/data"
 chmod -R u=rwX,go= "$BASE/data"
 # Run by hand while the service is up (the update stops it first): restart it with the new files and key.
-systemctl try-restart wealthfolio-broker-sync || true
+systemctl try-restart wealthfolio-companion || true

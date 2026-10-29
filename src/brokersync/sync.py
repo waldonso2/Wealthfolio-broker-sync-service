@@ -174,7 +174,7 @@ class Syncer:
         self._consent_existing()
         self._wealthfolio = wealthfolio or WealthfolioClient
         # Seconds to give Wealthfolio to recalculate holdings before the check.
-        self.recalc_wait = float(os.environ.get("BROKERSYNC_RECALC_WAIT", "5"))
+        self.recalc_wait = float(os.environ.get("COMPANION_RECALC_WAIT", "5"))
         self._notifier = notifier
         self._pins: dict[str, str] = {}  # PINs typed at the login, for the current run only (#85)
         self._progress: dict = {}  # the broker being fetched, for the overview (#104)

@@ -1,20 +1,20 @@
 [Unit]
-Description=Wealthfolio Broker Sync (scheduled sync)
+Description=Wealthfolio Companion (scheduled sync)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=brokersync
-Group=brokersync
-Environment=BROKERSYNC_DATA=/opt/wealthfolio-broker-sync/data
-Environment=BROKERSYNC_RUNTIME=/run/wealthfolio-broker-sync
+User=companion
+Group=companion
+Environment=COMPANION_DATA=/opt/wealthfolio-companion/data
+Environment=COMPANION_RUNTIME=/run/wealthfolio-companion
 # The service's key: drop-in 10-key.conf from deploy/setup.sh.
-ExecStart=/opt/wealthfolio-broker-sync/venv/bin/brokersync run
+ExecStart=/opt/wealthfolio-companion/venv/bin/wealthfolio-companion run
 # A broker that hangs must not block every later run (#107): stopped after 45 minutes, the run is
 # marked as aborted when the next one starts (State.abort_stale_runs).
 TimeoutStartSec=45min
-RuntimeDirectory=wealthfolio-broker-sync
+RuntimeDirectory=wealthfolio-companion
 RuntimeDirectoryMode=0700
 RuntimeDirectoryPreserve=yes
 UMask=0077
@@ -46,4 +46,4 @@ RemoveIPC=true
 DevicePolicy=closed
 CapabilityBoundingSet=
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-ReadWritePaths=/opt/wealthfolio-broker-sync/data
+ReadWritePaths=/opt/wealthfolio-companion/data

@@ -1,4 +1,4 @@
-"""Performance report (KENNZAHLEN.md): measured, compared with the reference values, never failing.
+"""Performance report (METRICS.md): measured, compared with the reference values, never failing.
 
 Not collected by ``pytest -q`` (no ``test_`` prefix); the CI job ``performance`` runs it on its own:
 ``pytest tests/perf_service.py -q``. The report goes to ``$GITHUB_STEP_SUMMARY`` (the run's summary page)

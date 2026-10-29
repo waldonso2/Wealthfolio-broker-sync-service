@@ -139,7 +139,7 @@ def test_notifications_and_securities(tmp_path):
     r = client.post("/notifications", data={"csrf": token, "server": "https://ntfy.sh", "topic": topic,
                                             "public_url": "http://sync.local:8090", "test": "1"})
     assert "Testnachricht gesendet" in r.text
-    assert notifier.sent[-1][0] == "Wealthfolio Broker Sync"
+    assert notifier.sent[-1][0] == "Wealthfolio Companion"
     assert config_mod.load(tmp_path).ntfy_topic == topic
 
     token = csrf(client, "/securities")
@@ -402,18 +402,18 @@ def test_metrics_after_login_or_with_the_token_only(tmp_path, monkeypatch):
     st.finish_run(st.start_run("fake"), "ok", created=2)
     st.finish_run(st.start_run("fake"), "error", failed=1, message="DE89370400440532013000")
     text = client.get("/metrics").text
-    assert 'brokersync_runs_total{broker="fake",status="ok"} 1' in text
-    assert 'brokersync_runs_total{broker="fake",status="error"} 1' in text
-    assert 'brokersync_last_run_ok{broker="fake"} 0' in text
-    assert 'brokersync_last_run_failed_bookings{broker="fake"} 1' in text
-    assert "brokersync_last_run_duration_seconds" in text and "DE89" not in text
+    assert 'companion_runs_total{broker="fake",status="ok"} 1' in text
+    assert 'companion_runs_total{broker="fake",status="error"} 1' in text
+    assert 'companion_last_run_ok{broker="fake"} 0' in text
+    assert 'companion_last_run_failed_bookings{broker="fake"} 1' in text
+    assert "companion_last_run_duration_seconds" in text and "DE89" not in text
     client.post("/logout", data={"csrf": csrf(client, "/")})
     assert client.get("/metrics", follow_redirects=False).status_code == 303  # to the login
     token = "m" * 40
-    monkeypatch.setenv("BROKERSYNC_METRICS_TOKEN", token)
+    monkeypatch.setenv("COMPANION_METRICS_TOKEN", token)
     assert client.get("/metrics", headers={"Authorization": f"Bearer {token}"}).text.startswith("# HELP")
     assert client.get("/metrics", headers={"Authorization": "Bearer wrong"}, follow_redirects=False).status_code == 303
-    monkeypatch.setenv("BROKERSYNC_METRICS_TOKEN", "short")  # too short to count
+    monkeypatch.setenv("COMPANION_METRICS_TOKEN", "short")  # too short to count
     assert client.get("/metrics", headers={"Authorization": "Bearer short"},
                       follow_redirects=False).status_code == 303
 

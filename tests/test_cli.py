@@ -1,4 +1,4 @@
-"""The command line the systemd units call: ``brokersync run`` (timer), ``serve`` (UI), password reset."""
+"""The command line the systemd units call: ``wealthfolio-companion run`` (timer), ``serve`` (UI), password reset."""
 
 import pytest
 
@@ -10,7 +10,7 @@ from brokersync.vault import Vault, check_setup_code, hash_password, new_setup_c
 
 @pytest.fixture
 def data(tmp_path, monkeypatch):
-    monkeypatch.setenv("BROKERSYNC_DATA", str(tmp_path))
+    monkeypatch.setenv("COMPANION_DATA", str(tmp_path))
     return tmp_path
 
 
@@ -76,7 +76,7 @@ def test_setup_code_only_while_no_password_is_set(data, capsys):
     assert cli.main(["setup-code"]) == 0
     assert check_setup_code(vault, capsys.readouterr().out.strip().rsplit(" ", 1)[-1])
     vault.update(lambda d: d.update(ui_password_hash=hash_password("Kiefer-Ozelot-9182")))
-    assert cli.main(["setup-code"]) == 1 and "brokersync-reset-password" in capsys.readouterr().err
+    assert cli.main(["setup-code"]) == 1 and "companion-reset-password" in capsys.readouterr().err
 
 
 def test_a_setup_code_expires(data, monkeypatch):

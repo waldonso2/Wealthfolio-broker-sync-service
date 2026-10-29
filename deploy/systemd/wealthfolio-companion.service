@@ -1,26 +1,26 @@
 [Unit]
-Description=Wealthfolio Broker Sync (web UI)
+Description=Wealthfolio Companion (web UI)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=brokersync
-Group=brokersync
-Environment=BROKERSYNC_DATA=/opt/wealthfolio-broker-sync/data
-Environment=BROKERSYNC_RUNTIME=/run/wealthfolio-broker-sync
-Environment=BROKERSYNC_TLS=1
+User=companion
+Group=companion
+Environment=COMPANION_DATA=/opt/wealthfolio-companion/data
+Environment=COMPANION_RUNTIME=/run/wealthfolio-companion
+Environment=COMPANION_TLS=1
 # The service's key comes from the drop-in 10-key.conf that deploy/setup.sh
 # writes (LoadCredentialEncrypted= with systemd-creds, else LoadCredential=).
 # The TLS key is handed over the same way: the files stay root-only.
-LoadCredential=tls.crt:/etc/wealthfolio-broker-sync/tls/cert.pem
-LoadCredential=tls.key:/etc/wealthfolio-broker-sync/tls/key.pem
-LoadCredential=tls.ca:/etc/wealthfolio-broker-sync/tls/ca.pem
-ExecStart=/opt/wealthfolio-broker-sync/venv/bin/brokersync serve --host 0.0.0.0 --port 8443 --certfile %d/tls.crt --keyfile %d/tls.key --redirect-port 8090
+LoadCredential=tls.crt:/etc/wealthfolio-companion/tls/cert.pem
+LoadCredential=tls.key:/etc/wealthfolio-companion/tls/key.pem
+LoadCredential=tls.ca:/etc/wealthfolio-companion/tls/ca.pem
+ExecStart=/opt/wealthfolio-companion/venv/bin/wealthfolio-companion serve --host 0.0.0.0 --port 8443 --certfile %d/tls.crt --keyfile %d/tls.key --redirect-port 8090
 Restart=on-failure
 RestartSec=5
 # Shared with the timer, in RAM, kept until a restart: the unlocked master passphrase key.
-RuntimeDirectory=wealthfolio-broker-sync
+RuntimeDirectory=wealthfolio-companion
 RuntimeDirectoryMode=0700
 RuntimeDirectoryPreserve=yes
 UMask=0077
@@ -52,7 +52,7 @@ RemoveIPC=true
 DevicePolicy=closed
 CapabilityBoundingSet=
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-ReadWritePaths=/opt/wealthfolio-broker-sync/data
+ReadWritePaths=/opt/wealthfolio-companion/data
 
 [Install]
 WantedBy=multi-user.target

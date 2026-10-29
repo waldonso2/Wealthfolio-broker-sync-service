@@ -1,5 +1,5 @@
 [Unit]
-Description=Wealthfolio Broker Sync - renew the web UI's certificate daily (new address, running out)
+Description=Wealthfolio Companion - renew the web UI's certificate daily (new address, running out)
 
 [Timer]
 OnCalendar=*-*-* 04:00:00

@@ -1,7 +1,7 @@
 """The web UI's TLS certificate, from a small certificate authority of this container.
 
-``deploy/setup.sh`` (``brokersync make-cert``) keeps two things in
-``/etc/wealthfolio-broker-sync/tls`` (root only):
+``deploy/setup.sh`` (``wealthfolio-companion make-cert``) keeps two things in
+``/etc/wealthfolio-companion/tls`` (root only):
 
 - **The CA** (``ca.pem``, ``ca-key.pem``): valid 2 years. The user imports
   ``ca.pem`` once (page *Sicherheit*, ``/ca.crt``); from then on the browser trusts
@@ -12,7 +12,7 @@
   service never sees the key.
 - **The certificate** (``cert.pem``, ``key.pem``), signed by the CA, for the
   container's name and private addresses; renewed when it runs out or an
-  address changes - ``brokersync renew-cert`` daily (``wealthfolio-broker-sync-cert.timer``).
+  address changes - ``wealthfolio-companion renew-cert`` daily (``wealthfolio-companion-cert.timer``).
   More names or addresses (a Tailscale address, a DNS name) go one per line into
   ``extra-names`` there. A certificate the user put there (from another issuer) is kept.
 """
@@ -34,7 +34,7 @@ VALID_DAYS = 825  # what browsers accept for a certificate of a private CA
 RENEW_DAYS = 30
 CA_VALID_DAYS = 730
 CA_RENEW_DAYS = 60
-CA_NAME = "Wealthfolio Broker Sync CA"
+CA_NAME = "Wealthfolio Companion CA"
 # Addresses a certificate may name: private networks, and 100.64.0.0/10 (Tailscale, carrier-grade NAT).
 PRIVATE_NETWORKS = [ipaddress.ip_network(n) for n in (
     "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8", "100.64.0.0/10", "fc00::/7", "fe80::/10",
@@ -136,7 +136,7 @@ def _ensure_ca(directory: Path, names: list[str], ips: list[str]
                 return ca, ca_key, False
     key = ec.generate_private_key(ec.SECP256R1())
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, f"{CA_NAME} ({names[0]})"),
-                      x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Wealthfolio Broker Sync")])
+                      x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Wealthfolio Companion")])
     now = datetime.now(UTC)
     ca = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
           .serial_number(x509.random_serial_number()).not_valid_before(now - timedelta(minutes=5))

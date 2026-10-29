@@ -1,6 +1,6 @@
 # Secret scan (CI job "secrets", gitleaks): the default rules, minus the fabricated values the
 # tests use on purpose. Add a value here only if it is test data that can't be anything real.
-title = "wealthfolio-broker-sync"
+title = "wealthfolio-companion"
 
 [extend]
 useDefault = true

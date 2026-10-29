@@ -115,7 +115,7 @@ def test_app_confirmation_uses_the_banks_app(opts, cls):
     told = []
     a.on_user_action = told.append
     a.login()
-    assert told == [f"Bitte bestätige den Zugriff des Wealthfolio Broker Sync in der {cls.app}."]
+    assert told == [f"Bitte bestätige den Zugriff von Wealthfolio Companion in der {cls.app}."]
 
 
 @pytest.mark.parametrize("cls", PROFILES, ids=lambda c: c.key)

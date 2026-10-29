@@ -3,8 +3,8 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "wealthfolio-broker-sync"
-version = "0.48.1"
+name = "wealthfolio-companion"
+version = "0.1.0a1"
 description = "Fetches transactions from brokers and writes them, deduplicated, into a self-hosted Wealthfolio"
 readme = "README.md"
 license = "MIT"
@@ -33,7 +33,7 @@ dependencies = [
 dev = ["pytest>=8", "pytest-cov>=5", "respx>=0.21", "ruff>=0.6", "mypy>=1.11"]
 
 [project.scripts]
-brokersync = "brokersync.cli:main"
+wealthfolio-companion = "brokersync.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

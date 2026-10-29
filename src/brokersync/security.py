@@ -1,6 +1,6 @@
 """How the service protects what it stores: the checks on the page Sicherheit,
 the master passphrase (set, change, remove) and the migration of data from
-versions before 0.9.0 (``brokersync migrate``, run by ``deploy/setup.sh``).
+versions before 0.9.0 (``wealthfolio-companion migrate``, run by ``deploy/setup.sh``).
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ KEY_DETAILS = {
                         "(kein TPM); der Dienst bekommt ihn nur beim Start."),
     "systemd": N_("Außerhalb von data/, nur für root lesbar; der Dienst bekommt ihn beim Start (systemd-creds "
                   "konnte hier nicht verschlüsseln)."),
-    "file": N_("Aus BROKERSYNC_KEY_FILE."),
+    "file": N_("Aus COMPANION_KEY_FILE."),
     "container": N_("Als Secret des Containers außerhalb von data/ (kein TPM): Wer das Volume und das Secret kopiert, "
                     "kann die Daten öffnen - dagegen hilft die Master-Passphrase."),
     "data": N_("Liegt in data/ neben den verschlüsselten Daten - wer data/ kopiert, kann alles entschlüsseln. "
@@ -280,7 +280,7 @@ def rotate_host_key(data_dir: Path, material: bytes) -> None:
     """Re-encrypt everything for a new host key (``deploy/setup.sh`` hands it over).
 
     The new files are only staged next to the old ones: the switch is the key itself. ``setup.sh``
-    stores it after this returned, then ``brokersync recover`` swaps the files in - and so does every
+    stores it after this returned, then ``wealthfolio-companion recover`` swaps the files in - and so does every
     start of the service if anything stopped in between (``recover``). Until the key is stored the old
     one keeps opening everything."""
     d = Path(data_dir)

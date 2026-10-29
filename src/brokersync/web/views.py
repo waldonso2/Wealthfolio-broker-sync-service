@@ -9,16 +9,17 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from ..model import when
-from .i18n import translate
+from .i18n import N_, translate
 
 # Times are shown in German time; the container usually runs in UTC.
-TZ = ZoneInfo(os.environ.get("BROKERSYNC_TZ", "Europe/Berlin"))
+TZ = ZoneInfo(os.environ.get("COMPANION_TZ", "Europe/Berlin"))
 
 
 def _parse(value) -> datetime | date | None:
@@ -169,7 +170,7 @@ def broker_light(last: dict | None, reconcile: dict | None, unknown: int, gaps: 
 
 
 # Where an unknown booking is reported (#86): a new issue, pre-filled; the user reviews and sends it.
-REPORT_URL = "https://github.com/waldonso2/Wealthfolio-broker-sync-service/issues/new"
+REPORT_URL = "https://github.com/waldonso2/wealthfolio-companion/issues/new"
 
 
 def report_url(event: dict, broker_label: str, version: str) -> str:
@@ -183,3 +184,12 @@ def report_url(event: dict, broker_label: str, version: str) -> str:
     query = urlencode({"title": f"Unbekannte Buchung: {broker_label} {event.get('raw_type', '')}",
                        "body": body, "labels": "unknown-event"})
     return f"{REPORT_URL}?{query}"
+
+
+STAGES = {"a": N_("Alpha"), "b": N_("Beta"), "rc": N_("Release Candidate")}
+
+
+def stage(version: str) -> str:
+    """The pre-release stage of a PEP 440 version (``0.1.0a1`` → "Alpha"), "" for a release - shown next to it."""
+    m = re.search(r"\d(a|b|rc)\d+$", version)
+    return STAGES[m.group(1)] if m else ""
