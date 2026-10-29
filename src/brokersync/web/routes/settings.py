@@ -262,7 +262,7 @@ def updates_page(request: Request, ctx: Ctx):
     from ...container import active
 
     return ctx.render(request, "updates.html", cfg=ctx.cfg(), installed=__version__, container=active(),
-                      newest=json.loads(ctx.state.meta(meta_keys.UPDATE()) or "{}").get("version"),
+                      newest=updates.stored(ctx.state).get("version"),
                       last=json.loads(ctx.state.meta(meta_keys.AUTO_UPDATE()) or "null"),
                       lowest=updates.MIN_INTERVAL, highest=updates.MAX_INTERVAL)
 
