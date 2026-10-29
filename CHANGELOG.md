@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.46.2
+
+- Same type as Wealthfolio's web app by default (theme Classic, font setting "font-mono"): JetBrains Mono as the static weights 400-700 Wealthfolio bundles instead of a variable font, text at 0.875rem/1.25rem without tabular figures, the page title like its page header, section labels in cards (h3) and the labels of phone tables in uppercase with its letter-spacing, table heads in the text size.
+- The switch on *Dienste* has Wealthfolio's size (2.75 x 1.5rem); its touch target stays 44px high.
+
 ## 0.46.1
 
 - Looks like Wealthfolio's Classic theme: JetBrains Mono instead of Inter and Merriweather, semibold headings in the same font, sizes in rem on Wealthfolio's type scale (the browser's text size scales the whole UI), its card colour and shadow, pill buttons and fields 2.75rem high, switches in its primary colour, the overlap heatmap in its sage ramp.
