@@ -269,6 +269,15 @@ class WealthfolioClient:
         _raise(r)
         return r.json()
 
+    def settings(self) -> dict | None:
+        """``GET /settings`` (read only): the user's app settings (``font``, ``themeId``, ...); None if not offered."""
+        r = self._request("GET", "/settings")
+        if r.status_code in (404, 405):
+            return None
+        _raise(r)
+        body = r.json()
+        return body if isinstance(body, dict) else None
+
     def set_spending_accounts(self, account_ids: list[str]) -> None:
         """Tracks exactly these accounts and turns the tracker on; Wealthfolio categorizes new ones itself."""
         r = self._request("PUT", "/spending/settings", json={"enabled": True, "accountIds": account_ids})

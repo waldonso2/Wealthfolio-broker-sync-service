@@ -19,7 +19,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from .. import __version__, lookthrough, redact
+from .. import __version__, appearance, lookthrough, redact
 from .. import config as config_mod
 from ..adapters import BrokerAdapter
 from ..mapping import Accounts
@@ -117,10 +117,14 @@ class AppContext:
         except Exception:  # locked: no settings pages anyway
             patterns = False
         pages = [p for p in SETTINGS_PAGES if p[0] != "/transfers" or patterns]
+        try:
+            font = appearance.font(self.state)  # the font chosen in Wealthfolio
+        except Exception:  # locked: Wealthfolio's default
+            font = appearance.DEFAULT
         return self.templates.TemplateResponse(request, name, {
             "csrf": request.session["csrf"], "flash": flash, "version": __version__, "adapters": self.adapters,
             "nav_unknown": nav_unknown, "settings_pages": pages, "lang": language,
-            "reauth": not recent(request), **ctx,
+            "reauth": not recent(request), "font": font, **ctx,
         })
 
     @contextmanager
