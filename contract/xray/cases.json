@@ -1,0 +1,650 @@
+{
+ "schema": 1,
+ "limits": {
+  "stock": "0.05",
+  "country": "0.60",
+  "sector": "0.30",
+  "currency": "0.50",
+  "overlap": "0.50",
+  "effective": "30",
+  "cash": "100000"
+ },
+ "cases": [
+  {
+   "name": "a stock held directly and through two ETFs",
+   "holdings": [
+    {
+     "id": "w",
+     "name": "World ETF",
+     "value": "1000",
+     "lines": [
+      [
+       "US0378331005",
+       "APPLE INC",
+       "0.05",
+       "United States",
+       "IT",
+       "USD"
+      ],
+      [
+       "US5949181045",
+       "MICROSOFT CORP",
+       "0.04",
+       "United States",
+       "IT",
+       "USD"
+      ],
+      [
+       "DE0007164600",
+       "SAP SE",
+       "0.01",
+       "Germany",
+       "IT",
+       "EUR"
+      ]
+     ]
+    },
+    {
+     "id": "t",
+     "name": "Tech ETF",
+     "value": "500",
+     "lines": [
+      [
+       "US0378331005",
+       "Apple Inc.",
+       "0.2",
+       "United States",
+       "IT",
+       "USD"
+      ],
+      [
+       "US5949181045",
+       "Microsoft",
+       "0.2",
+       "United States",
+       "IT",
+       "USD"
+      ]
+     ]
+    },
+    {
+     "id": "s",
+     "name": "SAP SE",
+     "value": "200",
+     "lines": [
+      [
+       "DE0007164600",
+       "SAP SE",
+       "1",
+       "",
+       "",
+       "EUR"
+      ]
+     ]
+    }
+   ],
+   "cash": {
+    "Verrechnungskonto": "5000"
+   },
+   "base": "EUR",
+   "expect": {
+    "unify": {
+     "w": [
+      "US0378331005",
+      "US5949181045",
+      "DE0007164600"
+     ],
+     "t": [
+      "US0378331005",
+      "US5949181045"
+     ],
+     "s": [
+      "DE0007164600"
+     ]
+    },
+    "exposures": [
+     {
+      "key": "DE0007164600",
+      "name": "SAP SE",
+      "share": "0.1235294117647058823529411765",
+      "via": {
+       "s": "0.1176470588235294117647058824",
+       "w": "0.005882352941176470588235294118"
+      }
+     },
+     {
+      "key": "US0378331005",
+      "name": "APPLE INC",
+      "share": "0.08823529411764705882352941176",
+      "via": {
+       "t": "0.05882352941176470588235294118",
+       "w": "0.02941176470588235294117647059"
+      }
+     },
+     {
+      "key": "US5949181045",
+      "name": "MICROSOFT CORP",
+      "share": "0.08235294117647058823529411765",
+      "via": {
+       "t": "0.05882352941176470588235294118",
+       "w": "0.02352941176470588235294117647"
+      }
+     },
+     {
+      "key": "",
+      "name": "",
+      "share": "0.7058823529411764705882352941",
+      "via": {
+       "t": "0.1764705882352941176470588235",
+       "w": "0.5294117647058823529411764706"
+      }
+     }
+    ],
+    "overlap": {
+     "w:t": "0.09"
+    },
+    "own_share": {
+     "w": "0",
+     "t": "0"
+    },
+    "effective_count": "33.52668213457076566125290022",
+    "findings": [
+     {
+      "key": "stock:DE0007164600",
+      "value": "0.1235294117647058823529411765"
+     },
+     {
+      "key": "stock:US0378331005",
+      "value": "0.08823529411764705882352941176"
+     },
+     {
+      "key": "stock:US5949181045",
+      "value": "0.08235294117647058823529411765"
+     }
+    ]
+   }
+  },
+  {
+   "name": "share classes with one key add up; a fund covering 90 % leaves 10 % unassigned",
+   "holdings": [
+    {
+     "id": "f",
+     "name": "Fund",
+     "value": "100",
+     "lines": [
+      [
+       "US02079K3059",
+       "ALPHABET INC CLASS A",
+       "0.3",
+       "US",
+       "IT",
+       "USD"
+      ],
+      [
+       "US02079K3059",
+       "ALPHABET INC CLASS A",
+       "0.2",
+       "US",
+       "IT",
+       "USD"
+      ],
+      [
+       "DK0062498333",
+       "NOVO NORDISK",
+       "0.4",
+       "DK",
+       "Health Care",
+       "DKK"
+      ]
+     ]
+    }
+   ],
+   "cash": {},
+   "base": "EUR",
+   "expect": {
+    "unify": {
+     "f": [
+      "US02079K3059",
+      "US02079K3059",
+      "DK0062498333"
+     ]
+    },
+    "exposures": [
+     {
+      "key": "US02079K3059",
+      "name": "ALPHABET INC CLASS A",
+      "share": "0.5",
+      "via": {
+       "f": "0.5"
+      }
+     },
+     {
+      "key": "DK0062498333",
+      "name": "NOVO NORDISK",
+      "share": "0.4",
+      "via": {
+       "f": "0.4"
+      }
+     },
+     {
+      "key": "",
+      "name": "",
+      "share": "0.1",
+      "via": {
+       "f": "0.1"
+      }
+     }
+    ],
+    "overlap": {},
+    "own_share": {
+     "f": "0.9"
+    },
+    "effective_count": "2.439024390243902439024390244",
+    "findings": [
+     {
+      "key": "stock:US02079K3059",
+      "value": "0.5"
+     },
+     {
+      "key": "stock:DK0062498333",
+      "value": "0.4"
+     },
+     {
+      "key": "sector:IT",
+      "value": "0.5"
+     },
+     {
+      "key": "sector:Health Care",
+      "value": "0.4"
+     },
+     {
+      "key": "currency",
+      "value": "0.9"
+     },
+     {
+      "key": "effective",
+      "value": "2.439024390243902439024390244"
+     }
+    ]
+   }
+  },
+  {
+   "name": "a line without an ISIN takes the ISIN of the same company elsewhere (par value, class)",
+   "holdings": [
+    {
+     "id": "i",
+     "name": "Invesco Nasdaq",
+     "value": "300",
+     "lines": [
+      [
+       "~AAPL",
+       "APPLE INC USD0.00001",
+       "0.5",
+       "",
+       "IT",
+       "USD"
+      ],
+      [
+       "~XYZ",
+       "Unknown Holdings Corp CLASS B",
+       "0.5",
+       "",
+       "",
+       ""
+      ]
+     ]
+    },
+    {
+     "id": "p",
+     "name": "S&P ETF",
+     "value": "300",
+     "lines": [
+      [
+       "US0378331005",
+       "Apple Inc.",
+       "0.07",
+       "US",
+       "IT",
+       "USD"
+      ]
+     ]
+    }
+   ],
+   "cash": {},
+   "base": "EUR",
+   "expect": {
+    "unify": {
+     "i": [
+      "US0378331005",
+      "~UNKNOWN"
+     ],
+     "p": [
+      "US0378331005"
+     ]
+    },
+    "exposures": [
+     {
+      "key": "US0378331005",
+      "name": "APPLE INC USD0.00001",
+      "share": "0.285",
+      "via": {
+       "i": "0.25",
+       "p": "0.035"
+      }
+     },
+     {
+      "key": "~UNKNOWN",
+      "name": "Unknown Holdings Corp CLASS B",
+      "share": "0.25",
+      "via": {
+       "i": "0.25"
+      }
+     },
+     {
+      "key": "",
+      "name": "",
+      "share": "0.465",
+      "via": {
+       "p": "0.465"
+      }
+     }
+    ],
+    "overlap": {},
+    "own_share": {
+     "i": "0.5"
+    },
+    "effective_count": "6.957731779439902591755087841",
+    "findings": [
+     {
+      "key": "stock:US0378331005",
+      "value": "0.285"
+     },
+     {
+      "key": "stock:~UNKNOWN",
+      "value": "0.25"
+     },
+     {
+      "key": "effective",
+      "value": "6.957731779439902591755087841"
+     }
+    ]
+   }
+  },
+  {
+   "name": "two ETFs overlapping by 70 %, foreign currency over its limit, cash over the deposit guarantee",
+   "holdings": [
+    {
+     "id": "a",
+     "name": "A ETF",
+     "value": "600",
+     "lines": [
+      [
+       "US0378331005",
+       "APPLE",
+       "0.5",
+       "US",
+       "IT",
+       "USD"
+      ],
+      [
+       "US5949181045",
+       "MSFT",
+       "0.3",
+       "US",
+       "IT",
+       "USD"
+      ],
+      [
+       "DE0007164600",
+       "SAP",
+       "0.2",
+       "DE",
+       "IT",
+       "EUR"
+      ]
+     ]
+    },
+    {
+     "id": "b",
+     "name": "B ETF",
+     "value": "400",
+     "lines": [
+      [
+       "US0378331005",
+       "APPLE",
+       "0.6",
+       "US",
+       "IT",
+       "USD"
+      ],
+      [
+       "US5949181045",
+       "MSFT",
+       "0.2",
+       "US",
+       "IT",
+       "USD"
+      ],
+      [
+       "DK0062498333",
+       "NOVO",
+       "0.2",
+       "DK",
+       "Health Care",
+       "DKK"
+      ]
+     ]
+    }
+   ],
+   "cash": {
+    "Tagesgeld": "120000",
+    "Giro": "100"
+   },
+   "base": "EUR",
+   "expect": {
+    "unify": {
+     "a": [
+      "US0378331005",
+      "US5949181045",
+      "DE0007164600"
+     ],
+     "b": [
+      "US0378331005",
+      "US5949181045",
+      "DK0062498333"
+     ]
+    },
+    "exposures": [
+     {
+      "key": "US0378331005",
+      "name": "APPLE",
+      "share": "0.54",
+      "via": {
+       "a": "0.3",
+       "b": "0.24"
+      }
+     },
+     {
+      "key": "US5949181045",
+      "name": "MSFT",
+      "share": "0.26",
+      "via": {
+       "a": "0.18",
+       "b": "0.08"
+      }
+     },
+     {
+      "key": "DE0007164600",
+      "name": "SAP",
+      "share": "0.12",
+      "via": {
+       "a": "0.12"
+      }
+     },
+     {
+      "key": "DK0062498333",
+      "name": "NOVO",
+      "share": "0.08",
+      "via": {
+       "b": "0.08"
+      }
+     }
+    ],
+    "overlap": {
+     "a:b": "0.7"
+    },
+    "own_share": {
+     "a": "0.2",
+     "b": "0.2"
+    },
+    "effective_count": "2.631578947368421052631578947",
+    "findings": [
+     {
+      "key": "stock:US0378331005",
+      "value": "0.54"
+     },
+     {
+      "key": "stock:US5949181045",
+      "value": "0.26"
+     },
+     {
+      "key": "stock:DE0007164600",
+      "value": "0.12"
+     },
+     {
+      "key": "stock:DK0062498333",
+      "value": "0.08"
+     },
+     {
+      "key": "country:US",
+      "value": "0.80"
+     },
+     {
+      "key": "sector:IT",
+      "value": "0.92"
+     },
+     {
+      "key": "currency",
+      "value": "0.88"
+     },
+     {
+      "key": "overlap:a:b",
+      "value": "0.7"
+     },
+     {
+      "key": "effective",
+      "value": "2.631578947368421052631578947"
+     },
+     {
+      "key": "cash:Tagesgeld",
+      "value": "120000"
+     }
+    ]
+   }
+  },
+  {
+   "name": "names with umlauts and quotes; a fund without a list is a stock of its own",
+   "holdings": [
+    {
+     "id": "m",
+     "name": "Müller \"Welt\" ETF",
+     "value": "100",
+     "lines": [
+      [
+       "DE000A0D9PT0",
+       "MTU \"Aero\"",
+       "0.6",
+       "Deutschland",
+       "Industrie",
+       "EUR"
+      ]
+     ]
+    },
+    {
+     "id": "x",
+     "name": "UBS ETF without a list",
+     "value": "100",
+     "lines": [
+      [
+       "LU0000000000",
+       "UBS ETF without a list",
+       "1",
+       "",
+       "",
+       "EUR"
+      ]
+     ]
+    }
+   ],
+   "cash": {},
+   "base": "EUR",
+   "expect": {
+    "unify": {
+     "m": [
+      "DE000A0D9PT0"
+     ],
+     "x": [
+      "LU0000000000"
+     ]
+    },
+    "exposures": [
+     {
+      "key": "LU0000000000",
+      "name": "UBS ETF without a list",
+      "share": "0.5",
+      "via": {
+       "x": "0.5"
+      }
+     },
+     {
+      "key": "DE000A0D9PT0",
+      "name": "MTU \"Aero\"",
+      "share": "0.3",
+      "via": {
+       "m": "0.3"
+      }
+     },
+     {
+      "key": "",
+      "name": "",
+      "share": "0.2",
+      "via": {
+       "m": "0.2"
+      }
+     }
+    ],
+    "overlap": {},
+    "own_share": {},
+    "effective_count": "2.941176470588235294117647059",
+    "findings": [
+     {
+      "key": "stock:LU0000000000",
+      "value": "0.5"
+     },
+     {
+      "key": "stock:DE000A0D9PT0",
+      "value": "0.3"
+     },
+     {
+      "key": "effective",
+      "value": "2.941176470588235294117647059"
+     }
+    ]
+   }
+  },
+  {
+   "name": "an empty depot",
+   "holdings": [],
+   "cash": {},
+   "base": "EUR",
+   "expect": {
+    "unify": {},
+    "exposures": [],
+    "overlap": {},
+    "own_share": {},
+    "effective_count": "0",
+    "findings": []
+   }
+  }
+ ]
+}

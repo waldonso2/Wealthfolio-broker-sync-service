@@ -45,6 +45,10 @@ class SpendingUnsupported(WealthfolioError):
     """Wealthfolio without the spending tracker."""
 
 
+class StorageUnsupported(WealthfolioError):
+    """Wealthfolio without the addon storage (before 3.11)."""
+
+
 @dataclass(frozen=True)
 class DuplicateActivity:
     message: str
@@ -269,6 +273,25 @@ class WealthfolioClient:
         """Tracks exactly these accounts and turns the tracker on; Wealthfolio categorizes new ones itself."""
         r = self._request("PUT", "/spending/settings", json={"enabled": True, "accountIds": account_ids})
         _raise(r)
+
+    def _storage(self, method: str, addon_id: str, key: str, **kw) -> httpx.Response:
+        r = self._request(method, f"/addons/storage/{quote(addon_id, safe='')}/{quote(key, safe='')}", **kw)
+        if r.status_code in (404, 405):
+            raise StorageUnsupported("This Wealthfolio has no addon storage (from 3.11.0).")
+        _raise(r)
+        return r
+
+    def storage_get(self, addon_id: str, key: str) -> str | None:
+        """A value of an addon's storage (#146), None if not set."""
+        r = self._storage("GET", addon_id, key)
+        value = r.json() if r.content.strip() else None
+        return value if isinstance(value, str) else None
+
+    def storage_set(self, addon_id: str, key: str, value: str) -> None:
+        self._storage("PUT", addon_id, key, json={"value": value})
+
+    def storage_delete(self, addon_id: str, key: str) -> None:
+        self._storage("DELETE", addon_id, key)
 
     def search_activities(self, account_ids: list[str], date_from: date, date_to: date,
                           page_size: int = 500) -> list[dict]:

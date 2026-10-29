@@ -28,7 +28,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-from . import __version__, coverage, crypto, lookthrough, meta_keys, retired, spending, updates, xray
+from . import __version__, coverage, crypto, lookthrough, meta_keys, retired, spending, updates, xray, xray_addon
 from . import assets as assets_mod
 from . import config as config_mod
 from . import history as history_mod
@@ -46,7 +46,7 @@ from .reconcile import compare
 from .redact import redact
 from .state import State, masked
 from .vault import Vault
-from .wealthfolio import DuplicateActivity, WealthfolioClient, WealthfolioError, connect
+from .wealthfolio import DuplicateActivity, StorageUnsupported, WealthfolioClient, WealthfolioError, connect
 
 log = logging.getLogger(__name__)
 __all__ = ["BERLIN", "opening_id"]  # where the web UI and the tests take them from
@@ -316,6 +316,7 @@ class Syncer:
                         lookthrough.write_taxonomies(self.state, wf, depot)
                     except WealthfolioError:
                         log.exception("look-through: countries and sectors not written to Wealthfolio")
+                self._write_xray_addon(wf, depot, cfg)
             if not depot.positions and not depot.cash:  # Wealthfolio answered nothing: keep what was notified
                 return result
             if not self.state.funds():  # no list yet: every ETF would count as one stock, a false alarm
@@ -334,6 +335,31 @@ class Syncer:
             return None
         finally:
             sources.close()
+
+    def _write_xray_addon(self, wf: WealthfolioClient, depot: lookthrough.Depot, cfg: config_mod.Config) -> None:
+        """The funds' lists for the X-Ray addon (#146), or their removal once switched off; never fails the pass."""
+        key = meta_keys.XRAY_ADDON_STATUS()
+        on = cfg.service("xray")
+        if not on and not self.state.meta(key):
+            return  # never written: nothing to clear
+        if on and not depot.positions:
+            return  # Wealthfolio answered nothing: keep what the addon reads
+        status: dict = {"at": datetime.now(UTC).isoformat(timespec="seconds"), "ok": True}
+        try:
+            if on:
+                result = xray_addon.write(self.state, wf, depot, self.learned_isins(cfg), status["at"])
+            else:
+                result = xray_addon.clear(self.state, wf)
+            status |= {"written": result.written, "deleted": result.deleted, "skipped": result.skipped}
+        except StorageUnsupported:
+            status |= {"ok": False, "error": "Wealthfolio kennt den Addon-Speicher erst ab Version 3.11.0."}
+        except Exception as e:
+            log.exception("X-Ray addon: lists not written")
+            status |= {"ok": False, "error": redact(f"{type(e).__name__}: {e}")}
+        if not on and status["ok"]:
+            self.state.delete_meta(key)  # cleared: nothing of ours is left in the addon's storage
+        else:
+            self.state.set_meta(key, json.dumps(status))
 
     def remove_taxonomies(self) -> int:
         """*Aus Wealthfolio entfernen* on *Durchschau*: our countries and sectors out again (under the sync lock)."""
