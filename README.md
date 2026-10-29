@@ -16,6 +16,7 @@ Fetches your transactions from your brokers and banks automatically and books th
   - [Docker Compose](#docker-compose)
   - [Docker run](#docker-run)
   - [Podman](#podman)
+  - [Unraid](#unraid)
   - [Behind a reverse proxy](#behind-a-reverse-proxy)
 - [Updating](#updating)
 - [Backup and restore](#backup-and-restore)
@@ -52,7 +53,7 @@ flowchart LR
 
 - **Wealthfolio**, self-hosted (3.11 or newer for the X-Ray addon), and its password
 - in Wealthfolio, **two accounts** per broker: a cash account and a securities account ([why](docs/FUNKTIONEN.md#wie-gebucht-wird), German)
-- a **Proxmox VE** server (8 or 9) **or** a computer with **Docker** or **Podman** (amd64 or arm64)
+- a **Proxmox VE** server (8 or 9) **or** a computer with **Docker** or **Podman** (amd64 or arm64), for example an **Unraid** server
 - optionally the **ntfy** app on your phone ([Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy), [iOS](https://apps.apple.com/app/ntfy/id1625396347))
 
 ## Installation
@@ -232,6 +233,51 @@ The image runs under Podman the same way; rootless Podman maps the container's u
    ```
 
 4. Open `https://<this computer's IP address>:8443` and go on with [First setup](#first-setup).
+
+### Unraid
+
+Unraid runs the same image as a Docker container. There is no Community Applications template yet, so the container is created once in Unraid's terminal; afterwards it shows up on the *Docker* tab like any other container (start, stop, logs, autostart). The data lives in `appdata`.
+
+1. Open the terminal (the `>_` icon at the top right of the Unraid web UI) and create the folders and the key, owned by the container's user (keep a copy of the key outside the server, e.g. in your password manager):
+
+   ```bash
+   mkdir -p /mnt/user/appdata/brokersync/data /mnt/user/appdata/brokersync/tls
+   openssl rand -base64 32 > /mnt/user/appdata/brokersync/brokersync.key
+   chown -R 10001:10001 /mnt/user/appdata/brokersync
+   chmod 600 /mnt/user/appdata/brokersync/brokersync.key
+   ```
+
+2. Start the container (port 8443 for the UI; change the left-hand numbers if those ports are taken on your server):
+
+   ```bash
+   docker run -d --name brokersync --hostname brokersync --restart unless-stopped \
+     -p 8443:8443 -p 8090:8090 -e TZ=Europe/Berlin \
+     --read-only --tmpfs /tmp:size=64M,mode=1777 --cap-drop ALL --security-opt no-new-privileges:true \
+     -v /mnt/user/appdata/brokersync/data:/data -v /mnt/user/appdata/brokersync/tls:/tls \
+     -v /mnt/user/appdata/brokersync/brokersync.key:/run/secrets/brokersync-key:ro \
+     ghcr.io/waldonso2/wealthfolio-broker-sync:latest
+   ```
+
+3. Read the setup code from the log (or on the *Docker* tab: click the container's icon → *Logs*):
+
+   ```bash
+   docker logs brokersync
+   ```
+
+4. Open `https://<your Unraid server's IP address>:8443` and go on with [First setup](#first-setup). On the *Docker* tab, turn on *Autostart* for `brokersync`, so it starts with the array.
+
+**Updating on Unraid** – the *Docker* tab cannot update a container that was created without a template, so pull the new image and create the container again with the command from step 2 (the data in `appdata` stays):
+
+```bash
+docker pull ghcr.io/waldonso2/wealthfolio-broker-sync:latest
+docker stop brokersync && docker rm brokersync
+```
+
+**Backup on Unraid** – `appdata` is covered by the *Appdata Backup* plugin; that backup holds data **and** key, so keep it on an encrypted target or set the master passphrase. A backup of the data only:
+
+```bash
+(umask 077; docker exec brokersync brokersync backup > /mnt/user/appdata/brokersync-$(date +%F).tar.gz)
+```
 
 ### Behind a reverse proxy
 
