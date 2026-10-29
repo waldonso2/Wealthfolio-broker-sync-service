@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0a2
+
+- Proxmox install: the last step, showing the setup code, failed with exit code 208 (systemd-run got no stdin from the install engine) and offered to remove the finished container. It now runs with stdin from /dev/null, and a missing code never fails the install - the console then says to run `companion-cli setup-code` in the container.
+- Move guide: paste the commands into the Proxmox console one at a time (it joins pasted lines).
+
 ## 0.1.0a1
 
 Wealthfolio Broker Sync is now **Wealthfolio Companion**, starting over at 0.1.0 (alpha). It does what Broker Sync 0.48.1 did - the sync, countries and sectors, ISINs, logos, the spending tracker and X-Ray - under the new name; an existing installation is not migrated automatically (see *Moving from Wealthfolio Broker Sync* below).

@@ -64,6 +64,8 @@ An installation of Wealthfolio Broker Sync is not updated into Wealthfolio Compa
 
 ### Proxmox VE (LXC)
 
+Paste the commands one at a time and press Enter after each: the Proxmox console (noVNC/xterm.js, on phones especially) joins pasted lines into one.
+
 1. In the console of the **old** container, write a backup and the key, and stop the daily fetch so nothing new is booked there:
 
    ```bash
