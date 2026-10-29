@@ -24,6 +24,9 @@ def _parser() -> argparse.ArgumentParser:
     serve_cmd.add_argument("--certfile", help="TLS certificate: serve HTTPS")
     serve_cmd.add_argument("--keyfile", help="TLS key")
     serve_cmd.add_argument("--redirect-port", type=int, help="also listen with plain HTTP here, redirecting to HTTPS")
+    container = sub.add_parser("container", help="run in the container image: migrate, setup code, certificate, "
+                                                 "daily fetch and the web UI in one process (#148)")
+    container.add_argument("--host", default="0.0.0.0")  # noqa: S104 - published by the container's port mapping
     run = sub.add_parser("run", help="sync all enabled brokers once")
     run.add_argument("--broker", action="append", help="only this broker (repeatable)")
     sub.add_parser("reset-ui-password", help="forget the web UI password; prints the code to set a new one")
@@ -59,7 +62,7 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     setup_logging()
-    if args.cmd in ("serve", "run", "migrate", "recover", "backup", "restore"):
+    if args.cmd in ("serve", "container", "run", "migrate", "recover", "backup", "restore"):
         from .security import recover
 
         done = recover(data_dir())
@@ -80,6 +83,12 @@ def _serve(args) -> int:
     serve(data_dir(), host=args.host, port=args.port, certfile=args.certfile, keyfile=args.keyfile,
           redirect_port=args.redirect_port)
     return 0
+
+
+def _container(args) -> int:
+    from .container import main as container_main
+
+    return container_main(args)
 
 
 def _make_cert(args) -> int:
@@ -136,11 +145,11 @@ def _rotate_key(args) -> int:
 
 
 def _security_status(args) -> int:
-    import os
 
+    from .container import tls_enabled
     from .security import status
 
-    for c in status(data_dir(), secure=bool(os.environ.get("BROKERSYNC_TLS"))):
+    for c in status(data_dir(), secure=tls_enabled()):
         print(f"{'HINWEIS' if c.warn else 'OK' if c.ok else 'PROBLEM':8} {c.label}: {c.text}")
     return 0
 
@@ -268,7 +277,7 @@ def _update_done(args) -> int:
 COMMANDS = {"serve": _serve, "run": _run, "reset-ui-password": _setup_code, "setup-code": _setup_code,
             "install-sc": _install_sc, "make-cert": _make_cert, "renew-cert": _renew_cert, "migrate": _migrate,
             "rotate-key": _rotate_key, "security-status": _security_status, "backup": _backup, "restore": _restore,
-            "update-due": _update_due, "update-done": _update_done}
+            "update-due": _update_due, "update-done": _update_done, "container": _container}
 
 
 class JsonFormatter(logging.Formatter):

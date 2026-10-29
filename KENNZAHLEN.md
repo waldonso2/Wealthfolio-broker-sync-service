@@ -19,6 +19,8 @@ Lauf gemessen und auf der Zusammenfassungsseite des CI-Laufs gezeigt (Job `perfo
 | Sicherheit des Repositorys | ≥ 7 von 10 | OpenSSF Scorecard | `scorecard.yml`, Security → Code scanning | Bericht |
 | Sicherheit des Builds | Build L2 | SLSA | Build-Provenance in `release.yml` | erreicht |
 | Härtung der systemd-Units | ≤ 2,0 | `systemd-analyze security` | `deploy/` | Leitlinie |
+| Container: ohne Schlüssel kein Start, ohne Root, schreibgeschützt, nichts Lesbares in `/data` | besteht | CIS Docker Benchmark (Auszug) | CI-Job `docker` (`scripts/docker_smoke.sh`) | blockierend |
+| Container-Image signiert und mit Herkunftsnachweis | jedes Release | Sigstore cosign, SLSA | `release.yml`, Job `image` | erreicht |
 | Zeit bis zur Behebung einer Lücke | kritisch ≤ 7 Tage, hoch ≤ 30 Tage | übliche Fristen | Security Advisories, Dependabot | Leitlinie |
 
 ## Bedienbarkeit (UI)

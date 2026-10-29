@@ -74,7 +74,7 @@ def host_key_source(data_dir: Path) -> str:
     if cred and (Path(cred) / KEY_NAME).is_file():
         return os.environ.get("BROKERSYNC_KEY_SOURCE", "systemd")
     if os.environ.get("BROKERSYNC_KEY_FILE"):
-        return "file"
+        return "container" if os.environ.get("BROKERSYNC_CONTAINER") else "file"
     return "data"
 
 
@@ -83,7 +83,15 @@ def _host_material(data_dir: Path) -> bytes:
     if cred and (Path(cred) / KEY_NAME).is_file():
         return (Path(cred) / KEY_NAME).read_bytes().strip()
     if os.environ.get("BROKERSYNC_KEY_FILE"):
-        return Path(os.environ["BROKERSYNC_KEY_FILE"]).read_bytes().strip()
+        path = Path(os.environ["BROKERSYNC_KEY_FILE"])
+        if not path.is_file():
+            raise KeyMissing(f"Der Schlüssel des Dienstes fehlt: {path} gibt es nicht. Im Container als Secret "
+                             "brokersync-key übergeben (deploy/docker-compose.example.yml).")
+        material = path.read_bytes().strip()
+        if len(material) < 32:
+            raise KeyMissing(f"Der Schlüssel in {path} ist zu kurz (mindestens 32 Zeichen, z. B. openssl rand "
+                             "-base64 32).")
+        return material
     local = Path(data_dir) / "secret.key"
     if local.exists():
         return local.read_bytes().strip()

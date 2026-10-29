@@ -3,6 +3,9 @@
 <div class="card">
   <h1>{{ _("Updates") }}</h1>
   <p>{{ _("Installiert: Version {version}.", version=installed) }}{% if newest %} {{ _("Neueste Version auf GitHub: {version}.", version=newest) }}{% endif %}</p>
+  {% if container %}
+  <p>{{ _("Dieser Dienst läuft als Docker-Container: Eine neue Version ist ein neues Image. Zum Aktualisieren auf dem Rechner mit dem Container docker compose pull und danach docker compose up -d ausführen - die Daten bleiben im Volume, beim Start werden sie auf den neuen Stand gebracht.") }}</p>
+  {% else %}
   <p>{{ _("Eingeschaltet sieht der Container selbst nach, ob eine neue Version erschienen ist, und installiert sie wie der Befehl update in seiner Konsole: dieselben Prüfungen (jede Datei gegen die Prüfsummen des Releases), dieselbe Sicherung der Daten vorher. Danach kommt eine Nachricht über ntfy. Schlägt ein Update fehl, läuft die bisherige Version weiter; dieselbe Version wird nach einer Stunde noch einmal versucht. Während eines Abrufs wird nicht aktualisiert.") }}</p>
   <form method="post">
     <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -13,7 +16,8 @@
     {{ reauth_field("updates_pw", required=False) }}
     <div class="actions"><button>{{ _("Speichern") }}</button></div>
   </form>
-  {% if last %}
+  {% endif %}
+  {% if last and not container %}
   <h2>{{ _("Letztes automatisches Update") }}</h2>
   <p{% if not last.ok %} class="error"{% endif %}>{% if last.ok %}{{ _("{when}: Version {new} installiert (vorher {old}).", when=last.at | local, new=last.to, old=last["from"]) }}{% else %}{{ _("{when}: Update auf {new} fehlgeschlagen, Version {old} läuft weiter.", when=last.at | local, new=last.to, old=last["from"]) }}{% endif %}</p>
   {% endif %}

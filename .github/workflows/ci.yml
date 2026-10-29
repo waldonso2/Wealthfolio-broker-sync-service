@@ -97,6 +97,17 @@ jobs:
           /tmp/venv/bin/pip check
           /tmp/venv/bin/brokersync --version
 
+  docker:
+    # The container image (#148): built from the Dockerfile as published, then the smoke test - no key: no start;
+    # with the key, hardened as in deploy/docker-compose.example.yml: HTTPS, redirect, setup code, nothing readable.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: docker build -t brokersync:ci .
+      - run: scripts/docker_smoke.sh brokersync:ci
+
   workflows:
     # The workflows themselves: injection, permissions, cache poisoning (zizmor).
     uses: waldonso2/quality-kit/.github/workflows/workflows.yml@2070c7e1ee07901a7313f6a005be303aa44acc04 # v1

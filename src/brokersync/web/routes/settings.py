@@ -242,7 +242,9 @@ def appearance_save(request: Request, ctx: Ctx, language: str = Form("de")):
 # ── updates ─────────────────────────────────────────────────────────────────
 @router.get("/updates", response_class=HTMLResponse)
 def updates_page(request: Request, ctx: Ctx):
-    return ctx.render(request, "updates.html", cfg=ctx.cfg(), installed=__version__,
+    from ...container import active
+
+    return ctx.render(request, "updates.html", cfg=ctx.cfg(), installed=__version__, container=active(),
                       newest=json.loads(ctx.state.meta(meta_keys.UPDATE()) or "{}").get("version"),
                       last=json.loads(ctx.state.meta(meta_keys.AUTO_UPDATE()) or "null"),
                       lowest=updates.MIN_INTERVAL, highest=updates.MAX_INTERVAL)
