@@ -9,7 +9,7 @@ import httpx
 import pytest
 import respx
 
-from brokersync.wealthfolio import AuthFailed, Duplicate, WealthfolioClient, WealthfolioError
+from brokersync.wealthfolio import AuthFailed, DuplicateActivity, WealthfolioClient, WealthfolioError
 
 FIX = Path(__file__).parent / "fixtures" / "wealthfolio"
 BASE = "http://wf.local:8080"
@@ -71,8 +71,8 @@ def test_create_reports_duplicates_and_errors():
     ])
     wf = WealthfolioClient(BASE, "pw")
     assert wf.create_activity({"activityType": "DEPOSIT"})["id"] == "8f1c2d3e-0000-4000-8000-000000000001"
-    assert isinstance(wf.create_activity({"activityType": "DEPOSIT"}), Duplicate)
-    assert isinstance(wf.create_activity({"activityType": "DEPOSIT"}), Duplicate)  # another wording (SEC-09)
+    assert isinstance(wf.create_activity({"activityType": "DEPOSIT"}), DuplicateActivity)
+    assert isinstance(wf.create_activity({"activityType": "DEPOSIT"}), DuplicateActivity)  # another wording (SEC-09)
     with pytest.raises(WealthfolioError, match="Account not found"):
         wf.create_activity({"activityType": "DEPOSIT"})
 

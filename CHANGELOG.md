@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.44.2
+
+More fixes from the code review in #134:
+
+- A transaction whose activities were all already in Wealthfolio (an interrupted run) keeps their ids in the sync state instead of an empty list.
+- One activity without a readable date no longer stops the comparison with Wealthfolio; it is skipped and logged.
+- An empty answer from Finanzfluss (a changed page) no longer wipes the countries and sectors it gave before; it is logged.
+- A stale or planted unlock cache opens nothing: the data key is checked against the passphrase's check value.
+- Two login requests for the same broker at the same moment: the second is refused instead of sending a TAN twice.
+- N26 and Enable Banking stop at once when a page or continuation key comes again (N26 at most 200 pages).
+- The holdings check keeps its notified deviations when the UI writes at the same time.
+- `wealthfolio.Duplicate` is now `DuplicateActivity` (internal).
+
 ## 0.44.1
 
 Fixes from the code review in #134:

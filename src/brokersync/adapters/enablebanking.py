@@ -251,9 +251,11 @@ class EnableBankingAdapter(BrokerAdapter):
             params = {"date_from": start.isoformat(), **({"continuation_key": key} if key else {})}
             page = self._call("GET", f"/accounts/{uid}/transactions", params=params)
             raw += page.get("transactions") or []
-            key = page.get("continuation_key")
+            last, key = key, page.get("continuation_key")
             if not key:
                 break
+            if key == last:
+                raise AdapterError(f"{self.label}: die Bank liefert dieselbe Seite noch einmal - Abruf abgebrochen.")
         else:
             raise AdapterError(f"{self.label}: die Bank liefert immer weitere Seiten - Abruf abgebrochen.")
         booked = [t for t in raw if (t.get("status") or "BOOK").upper() not in ("PDNG", "PENDING")]

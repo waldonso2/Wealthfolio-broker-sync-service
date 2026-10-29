@@ -58,6 +58,14 @@ def broker_login_start(request: Request, ctx: Ctx, key: str, run: str = Form("")
 
 def start_login(request: Request, ctx: AppContext, key: str, run: bool):
     """Log in at the broker - only from a POST (the button, *Jetzt abrufen*, the next of *Alle abrufen*)."""
+    with ctx.login_step(key) as free:
+        if not free:
+            return redirect(request, "/broker", tr(request, "Die Anmeldung läuft gerade schon - bitte kurz warten."),
+                            "warn")
+        return _start_login(request, ctx, key, run)
+
+
+def _start_login(request: Request, ctx: AppContext, key: str, run: bool):
     if ctx.adapters[key].consent and not ctx.cfg().broker(key).consented:  # #112: never without the user's yes
         return redirect(request, f"/brokers/{key}", tr(request, "Bitte bestätige, dass du den Hinweis zur "
                                                                "Schnittstelle gelesen hast."), "error")
@@ -101,7 +109,14 @@ def _open_login(ctx: AppContext, key: str):
 
 @router.post("/brokers/{key}/login")
 def broker_login_finish(request: Request, ctx: Ctx, key: str, code: str = Form(""), run: str = Form("")):
-    want_run = run == "1"
+    with ctx.login_step(key) as free:
+        if not free:
+            return redirect(request, "/broker", tr(request, "Die Anmeldung läuft gerade schon - bitte kurz warten."),
+                            "warn")
+        return _finish_login(request, ctx, key, code, run == "1")
+
+
+def _finish_login(request: Request, ctx: AppContext, key: str, code: str, want_run: bool):
     adapter = _open_login(ctx, key)
     if adapter is None:
         return redirect(request, f"/brokers/{key}/login{'?run=1' if want_run else ''}",
@@ -123,6 +138,14 @@ def broker_login_finish(request: Request, ctx: Ctx, key: str, code: str = Form("
 @router.post("/brokers/{key}/login/skip")
 def broker_login_skip(request: Request, ctx: Ctx, key: str):
     """"Alle abrufen": leave this broker out and go on with the next login."""
+    with ctx.login_step(key) as free:
+        if not free:
+            return redirect(request, "/broker", tr(request, "Die Anmeldung läuft gerade schon - bitte kurz warten."),
+                            "warn")
+        return _skip_login(request, ctx, key)
+
+
+def _skip_login(request: Request, ctx: AppContext, key: str):
     old = ctx.pending.pop(key, None)
     if old is not None:
         ctx.finish_login(key, old)

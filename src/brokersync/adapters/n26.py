@@ -38,8 +38,8 @@ CLIENT = "Basic " + base64.b64encode(b"nativeweb:").decode()
 # The app confirmation: asked every POLL seconds, up to POLLS times per click on "bestätigt".
 POLL, POLLS = 5, 12
 PAGE = 200
-# At most this many pages of transactions: 200 000 bookings, far beyond any account.
-MAX_PAGES = 1000
+# At most this many pages of transactions: 40 000 bookings, far beyond any account.
+MAX_PAGES = 200
 FIRST_DAYS = 90  # without a start date
 
 
@@ -178,7 +178,10 @@ class N26Adapter(BrokerAdapter):
             raw += items
             if len(items) < PAGE:
                 break
-            params["lastId"] = items[-1]["id"]
+            last = items[-1].get("id")
+            if not last or last == params.get("lastId"):
+                raise AdapterError("N26 liefert dieselbe Seite noch einmal - Abruf abgebrochen.")
+            params["lastId"] = last
         else:
             raise AdapterError("N26 liefert immer weitere Seiten - Abruf abgebrochen.")
         booked = [t for t in raw if not t.get("pending")]

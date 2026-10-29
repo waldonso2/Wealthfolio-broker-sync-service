@@ -197,9 +197,12 @@ def data_key(data_dir: Path) -> bytes:
     if not ring.get("passphrase"):
         return _data_key(data_dir, None)
     pkey = _cached_pkey(data_dir)
-    if pkey is None:
+    key = _data_key(data_dir, pkey) if pkey is not None else None
+    # A stale or planted unlock cache (another passphrase) is no key (#134 L6): locked until unlocked anew. The
+    # cache stays: with another host key (a rotation not yet stored) it is still the right one.
+    if key is None or not _check_ok(key, ring["passphrase"]["check"]):
         raise Locked("Der Dienst ist gesperrt: Bitte in der Weboberfläche die Master-Passphrase eingeben.")
-    return _data_key(data_dir, pkey)
+    return key
 
 
 def data_key_for(data_dir: Path, ring: dict) -> bytes:

@@ -553,9 +553,9 @@ class State:
                                 rows)
 
     def set_reconcile(self, broker: str, deviations: list[dict], notified: list[dict] | None = None) -> None:
-        old = self.reconcile(broker)
-        keep = notified if notified is not None else (old or {}).get("notified", [])
-        with self._writing():
+        with self._writing():  # read under the lock too: a web thread's write of ``notified`` is not lost
+            old = self.reconcile(broker)
+            keep = notified if notified is not None else (old or {}).get("notified", [])
             self.db.execute("INSERT OR REPLACE INTO reconcile VALUES (?, ?, ?, ?)",
                             (broker, json.dumps([masked(d) for d in deviations]),
                              json.dumps([masked(d) for d in keep]), now()))

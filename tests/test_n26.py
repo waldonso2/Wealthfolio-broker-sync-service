@@ -95,3 +95,14 @@ def test_a_rejected_password_is_never_tried_again(app):
 
 def test_unofficial_interface_needs_the_users_yes():
     assert "keine offizielle Schnittstelle" in n26.N26Adapter.consent
+
+
+def test_a_page_that_comes_again_stops_the_fetch(monkeypatch):
+    """#134 M6: an answer that ignores lastId would else be fetched for ever."""
+    adapter = n26.N26Adapter(CREDS, None)
+    page = [{"id": f"t{i}", "visibleTS": 0, "amount": -1.0} for i in range(n26.PAGE)]
+    calls = []
+    monkeypatch.setattr(adapter, "_get", lambda path, **params: calls.append(params) or page)
+    with pytest.raises(AdapterError, match="dieselbe Seite"):
+        adapter.get_transactions(None)
+    assert len(calls) == 2
