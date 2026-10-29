@@ -1,7 +1,5 @@
 # Wealthfolio Companion
 
-> **Alpha** – version 0.1.0a1 (alpha). It works and is used every day, but names, pages and settings may still change before 0.1.0.
-
 Fetches your transactions from your brokers and banks automatically and books them, without duplicates, into your **self-hosted [Wealthfolio](https://wealthfolio.app)**. On top, it adds what Wealthfolio can't do on its own: the countries and sectors of your ETFs, ISINs, logos and a look-through into your ETFs (X-Ray). Set it up once, then everything runs by itself every morning.
 
 - **Trade Republic, Scalable Capital, comdirect, DKB, Deutsche Bank, N26**, any other bank with **FinTS** (Sparkasse, Volksbank …) and any bank with a **PSD2** interface (through Enable Banking, so that bank's data passes through Enable Banking) – [details per bank](docs/BANKS.md)
