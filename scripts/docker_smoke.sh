@@ -27,7 +27,7 @@ for _ in $(seq 1 60); do curl -fsk -o /dev/null https://127.0.0.1:18443/healthz 
 curl -fsk -o /dev/null https://127.0.0.1:18443/healthz
 [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18090/)" = 308 ]
 [ "$(curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1:18443/)" = 303 ]
-docker logs "$NAME" 2>&1 | grep -q "Setup code"
-docker exec "$NAME" wealthfolio-companion security-status | grep -q "Secret des Containers"
+grep -q "Setup code" <<<"$(docker logs "$NAME" 2>&1)"  # not a pipe: grep -q ends early, pipefail would see SIGPIPE
+grep -q "Secret des Containers" <<<"$(docker exec "$NAME" wealthfolio-companion security-status)"
 docker exec "$NAME" sh -c 'grep -lE "wealthfolio|password|brokers" /data/* 2>/dev/null' && { echo "readable data in /data"; exit 1; }
 echo "container smoke test passed"
