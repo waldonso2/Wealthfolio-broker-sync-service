@@ -66,10 +66,19 @@ def latest(http: httpx.Client) -> str | None:
     return None
 
 
+PRODUCT = "wealthfolio-companion"  # an answer stored by Wealthfolio Broker Sync (restored with its backup) has none
+
+
+def stored(state: State) -> dict:
+    """The last answer, if it was found for this product: Broker Sync's 0.4x versions would count as newer."""
+    stored = json.loads(state.meta(KEY) or "{}")
+    return stored if stored.get("product") == PRODUCT else {}
+
+
 def available(state: State, current: str) -> str | None:
     """The newer version found by the last check, if any."""
-    stored = json.loads(state.meta(KEY) or "{}").get("version")
-    return stored if stored and newer(stored, current) else None
+    found = stored(state).get("version")
+    return found if found and newer(found, current) else None
 
 
 def check(state: State, current: str, *, http: httpx.Client | None = None) -> str | None:
@@ -77,8 +86,8 @@ def check(state: State, current: str, *, http: httpx.Client | None = None) -> st
     first time (to notify once), else None. Never raises: no answer only means no hint."""
     if os.environ.get("COMPANION_UPDATE_CHECK", "1") == "0":
         return None
-    stored = json.loads(state.meta(KEY) or "{}")
-    if stored.get("checked") and datetime.now(UTC) - when(stored["checked"]) < EVERY:
+    last = stored(state)
+    if last.get("checked") and datetime.now(UTC) - when(last["checked"]) < EVERY:
         return None
     client = http or httpx.Client(timeout=10)
     try:
@@ -89,9 +98,9 @@ def check(state: State, current: str, *, http: httpx.Client | None = None) -> st
     finally:
         if http is None:
             client.close()
-    state.set_meta(KEY, json.dumps({"version": version or stored.get("version"),
+    state.set_meta(KEY, json.dumps({"version": version or last.get("version"), "product": PRODUCT,
                                     "checked": datetime.now(UTC).isoformat()}))
-    if version and newer(version, current) and version != stored.get("version"):
+    if version and newer(version, current) and version != last.get("version"):
         return version
     return None
 

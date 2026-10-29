@@ -52,7 +52,8 @@ def test_asked_once_a_day_and_a_new_version_reported_once(tmp_path, monkeypatch)
 def test_github_not_reachable_keeps_what_was_known(tmp_path, monkeypatch):
     monkeypatch.setenv("COMPANION_UPDATE_CHECK", "1")
     state = State(tmp_path)
-    state.set_meta(meta_keys.UPDATE(), json.dumps({"version": "0.27.0", "checked": "2020-01-01T00:00:00+00:00"}))
+    state.set_meta(meta_keys.UPDATE(), json.dumps(
+        {"version": "0.27.0", "product": updates.PRODUCT, "checked": "2020-01-01T00:00:00+00:00"}))
     assert updates.check(state, "0.26.1", http=github(None, [])) is None
     assert updates.available(state, "0.26.1") == "0.27.0"
 
@@ -80,7 +81,7 @@ def test_the_overview_shows_a_newer_release(tmp_path):
     first_password(client)
     assert "Update verfügbar" not in client.get("/broker").text
     State(tmp_path).set_meta(meta_keys.UPDATE(), json.dumps(
-        {"version": "99.0.0", "checked": datetime.now(UTC).isoformat()}))
+        {"version": "99.0.0", "product": updates.PRODUCT, "checked": datetime.now(UTC).isoformat()}))
     page = client.get("/broker").text
     assert "Update verfügbar: Version 99.0.0" in page
     assert f"{updates.RELEASES}/tag/v99.0.0" in page
@@ -167,3 +168,15 @@ def test_the_latest_release_may_be_a_pre_release():
     assert updates.latest(client("v0.1.0a2")) == "0.1.0a2"
     assert updates.latest(client("v0.1.0rc1")) == "0.1.0rc1"
     assert updates.latest(client("v0.1.0-beta")) is None
+
+
+def test_an_answer_stored_by_broker_sync_counts_for_nothing(tmp_path, monkeypatch):
+    """A backup of Wealthfolio Broker Sync brings its last answer (0.4x) along: it is no update of Companion, and the
+    next run asks GitHub again instead of waiting a day."""
+    monkeypatch.setenv("COMPANION_UPDATE_CHECK", "1")
+    state = State(tmp_path)
+    state.set_meta(meta_keys.UPDATE(), json.dumps({"version": "0.44.0", "checked": datetime.now(UTC).isoformat()}))
+    assert updates.available(state, "0.1.0a2") is None
+    calls: list = []
+    assert updates.check(state, "0.1.0a2", http=github("v0.1.0a3", calls)) == "0.1.0a3"
+    assert calls and updates.available(state, "0.1.0a2") == "0.1.0a3"

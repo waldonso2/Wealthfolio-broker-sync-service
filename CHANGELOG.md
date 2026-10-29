@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0a3
+
+- After a move from Wealthfolio Broker Sync the overview and *Updates* offered its old version (e.g. "Update available: version 0.44.0"): the last update answer came along with the backup and counted as newer than 0.1.0. Only an answer found for Wealthfolio Companion counts now; an old one is asked again at the next run. Nothing was ever installed from it - the updater asks GitHub itself.
+
 ## 0.1.0a2
 
 - Proxmox install: the last step, showing the setup code, failed with exit code 208 (systemd-run got no stdin from the install engine) and offered to remove the finished container. It now runs with stdin from /dev/null, and a missing code never fails the install - the console then says to run `companion-cli setup-code` in the container.
