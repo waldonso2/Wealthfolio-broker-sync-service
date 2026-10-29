@@ -1,0 +1,67 @@
+# Operations: Updates, Security, Backups, and Technical Details
+
+Back to the [README](../README.md).
+
+## Updates
+
+**Manual update:** Open the container console in Proxmox and run `update`. Settings and credentials are preserved. Before updating, the installer creates a backup of the encrypted data at `/opt/wealthfolio-broker-sync/backup-*.tar.gz` (the three most recent are retained). Installation and updates check every downloaded file against the release checksums in `SHA256SUMS`. If any checksum differs, or an unexpected file is present, the operation stops and the current version keeps running. To install a specific version, including an older one, run `VERSION=<version> update`. Without `VERSION`, updates never downgrade.
+
+**New-release notifications:** After a sync, the service checks GitHub once per day for the latest release (it only follows the `releases/latest` redirect; no data is sent). If a newer release exists, the *Broker* page shows it and ntfy sends one notification. Disable this with `Environment=BROKERSYNC_UPDATE_CHECK=0` via `systemctl edit wealthfolio-broker-sync-run`.
+
+**Automatic updates (optional, *Updates* page):** When enabled, the container checks for a new release at the configured interval (minimum one minute, maximum once per day) and installs it using the same `update` command described above, including checksum validation and a pre-update backup. ntfy reports the installed version, and the *Updates* page shows the latest result. If an update fails, the previous version continues running and the same version is not retried for an hour. Updates do not run during a sync. The container timer `wealthfolio-broker-sync-update.timer` runs every minute as root because it performs the same operation as `update`; when disabled, it installs nothing. Enabling or disabling it requires the UI password. Inspect its logs with `journalctl -u wealthfolio-broker-sync-update` in the console.
+
+## Security
+
+Stored data is encrypted. The **Security** page always shows what is protected and how; from the console, run `brokersync-cli security-status`.
+
+| Data | Protection |
+|---|---|
+| Credentials, sessions, tokens, Wealthfolio password, logo.dev key | AES-256-GCM (`data/secrets.enc`) |
+| Settings (accounts, securities, transfers with IBANs) | AES-256-GCM (`data/config.enc`) |
+| Sync database (bookings, holdings, runs) | SQLCipher, AES-256 (`data/state.db`) |
+| ntfy settings | AES-256-GCM (`data/notify.enc`), using only the service key so notifications can be sent while the service is locked |
+| Service key | **Not** in `data/`: encrypted with `systemd-creds` at `/etc/wealthfolio-broker-sync/key.cred` (root-only); systemd provides it at startup |
+| UI password | argon2id; 15-minute pause after five failed attempts, and the same pause after 30 failed attempts across all clients; at most two checks run simultaneously to limit memory exhaustion. The initial password requires the one-time setup code from the console |
+| UI | HTTPS on port 8443 using a certificate issued by the container's own CA. Import the CA once from the *Security* page to trust it in your browser. Its name constraints permit only local-network names; its key is root-only in `/etc/wealthfolio-broker-sync/tls/`. An existing certificate from another issuer (`cert.pem`/`key.pem`) is preserved. Secure cookies and strict security headers are also used |
+| Logs, notifications, and error messages | Credentials, tokens, IBANs, and account numbers are redacted in logs, ntfy messages, and UI errors. Request URLs are not logged. ntfy messages omit amounts unless *Details* is enabled |
+| Service | Dedicated user and systemd hardening (write access only to `data/`, no privilege escalation, restricted system calls; `systemd-analyze security`: 1.5); files readable only by the service; daily sync ends within 45 minutes |
+
+**Optional master passphrase (*Security* page):** Without it, someone who copies the entire container and its key (for example, a Proxmox backup) can decrypt the data. With it, they cannot: the effective key is derived from both the service key and the passphrase using argon2id. You must unlock the service in the UI after each container restart; until then it does not sync and sends an ntfy notification. **If you lose the passphrase, the data is lost** and the service must be set up again. Setting, changing, or removing the passphrase (and key rotation during updates) re-encrypts everything: first alongside the old files, then switches over atomically. If power is lost, the next start recovers either the old or new state, never a mixture.
+
+**Events:** The *Security* page lists logins (including failures), logouts, and changes to credentials, password, passphrase, and sync mode for the last 180 days, including the source address but no passwords or credentials. A login from an address never seen before triggers an ntfy notification.
+
+## Backup and restore
+
+Before updating, `update` backs up `data/` to `/opt/wealthfolio-broker-sync/backup-*.tar.gz`—encrypted data only, without the key. You can also create a backup manually from the container console:
+
+```bash
+(umask 077; brokersync-cli backup > /root/brokersync-$(date +%F).tar.gz)
+systemctl stop wealthfolio-broker-sync
+brokersync-cli restore < /root/brokersync-2026-10-15.tar.gz
+systemctl start wealthfolio-broker-sync
+```
+
+`restore` first verifies that the archive can be opened with this container's key (and the master passphrase, if configured). Otherwise, it changes nothing. The previous state is kept as `data/before-restore-*.tar.gz`. Update backups can also be restored this way.
+
+A backup is **complete only when paired with the key** from `/etc/wealthfolio-broker-sync`; without the key, `data/` is useless. The easiest full backup is a Proxmox backup of the entire container. It includes both key and data, so store it on an encrypted target or configure the master passphrase.
+
+**Sync mode (*Security* page):**
+- **Automatic** (default): broker and bank sessions remain saved and the sync runs every morning.
+- **Secure:** each sync starts with a fresh login—app approval, TAN, or device code. The service logs out immediately afterwards and deletes the session, so no reusable login remains.
+  - The scheduled run does not sync; it reminds you via ntfy.
+  - **Fetch all** walks you through the logins one by one (you can skip individual brokers) and then syncs all of them.
+  - The mode applies to all brokers.
+
+**Do not save PIN (DKB, Deutsche Bank):** Leave the PIN field empty in broker settings to be prompted for the PIN on every login. It remains in memory only until the sync ends and is never stored. Each sync then requires a login, even in automatic mode; the scheduled run cannot fetch this bank. To delete a previously saved PIN, use the checkbox below the PIN field.
+
+**Wealthfolio:** Prefer connecting to Wealthfolio over HTTPS; otherwise the Wealthfolio password travels over the network unencrypted. The *Security* page warns you about this.
+
+## Technical details
+
+For contributors: [ARCHITECTURE.md](../ARCHITECTURE.md) explains the structure and flow; [CLAUDE.md](../CLAUDE.md) describes the rules and how to add a broker.
+
+- Python service `brokersync` (FastAPI UI over HTTPS on port 8443; port 8090 redirects; `brokersync run` for the systemd timer) at `/opt/wealthfolio-broker-sync`. Encrypted data lives in `/opt/wealthfolio-broker-sync/data`; key and certificate in `/etc/wealthfolio-broker-sync`. Runs as the dedicated `brokersync` user. Commands requiring the service key use `brokersync-cli <command>`.
+- Wealthfolio is accessed through its REST API (`/api/v1`) using the Wealthfolio password.
+- Scalable's CLI `sc` is installed at `/opt/wealthfolio-broker-sync/bin/sc`; `brokersync install-sc` installs or updates it (the install and update processes call it).
+- Dependencies are installed only at the versions in `requirements.txt`, each checked against a hash; the community-scripts install engine is pinned to a reviewed revision. Report security issues privately; see [SECURITY.md](../SECURITY.md).
+- Releases: a new version becomes installable after the version in `pyproject.toml` is bumped and merged into `main`. The release workflow runs the full CI first, then creates the GitHub release used by installation and updates. Each release contains the source archive, `SHA256SUMS` (all files), and GitHub SLSA build provenance. Verify it with `gh attestation verify wealthfolio-broker-sync-<version>.tar.gz --repo waldonso2/Wealthfolio-broker-sync-service`. Published releases cannot be changed.

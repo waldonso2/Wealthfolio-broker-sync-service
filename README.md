@@ -2,7 +2,7 @@
 
 Fetches your transactions from your brokers and banks automatically and books them, without duplicates, into your **self-hosted [Wealthfolio](https://wealthfolio.app)**. On top, it adds what Wealthfolio can't do on its own: the countries and sectors of your ETFs, ISINs, logos and a look-through into your ETFs (X-Ray). Set it up once, then everything runs by itself every morning.
 
-- **Trade Republic, Scalable Capital, comdirect, DKB, Deutsche Bank, N26**, any other bank with **FinTS** (Sparkasse, Volksbank …) and any bank with a **PSD2** interface (through Enable Banking, so that bank's data passes through Enable Banking) – [details per bank](docs/BANKEN.md) (German)
+- **Trade Republic, Scalable Capital, comdirect, DKB, Deutsche Bank, N26**, any other bank with **FinTS** (Sparkasse, Volksbank …) and any bank with a **PSD2** interface (through Enable Banking, so that bank's data passes through Enable Banking) – [details per bank](docs/BANKS.md)
 - **No duplicates:** whatever is already in Wealthfolio, from a CSV or PDF import too, is recognised
 - **Read-only access** to the brokers; **everything encrypted** (AES-256), the key is not stored with the data
 - **Everything in the web UI**, with a notification on your phone (ntfy) when a TAN is due
@@ -52,7 +52,7 @@ flowchart LR
 ## Requirements
 
 - **Wealthfolio**, self-hosted (3.11 or newer for the X-Ray addon), and its password
-- in Wealthfolio, **two accounts** per broker: a cash account and a securities account ([why](docs/FUNKTIONEN.md#wie-gebucht-wird), German)
+- in Wealthfolio, **two accounts** per broker: a cash account and a securities account ([why](docs/FEATURES.md#booking-model))
 - a **Proxmox VE** server (8 or 9) **or** a computer with **Docker** or **Podman** (amd64 or arm64), for example an **Unraid** server
 - optionally the **ntfy** app on your phone ([Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy), [iOS](https://apps.apple.com/app/ntfy/id1625396347))
 
@@ -417,7 +417,7 @@ A backup holds only encrypted data, never the key. **It is complete only togethe
 
 ## First setup
 
-The UI starts in German; *Einstellungen → Darstellung* switches it to English (*Settings → Appearance*). The page names below are the English ones.
+The UI starts in German; select *Einstellungen → Darstellung* to switch it to English (*Settings → Appearance*). The page names below are the English ones.
 
 1. **Password:** set it with the setup code, which appears only in the console or the container's log.
 2. **Certificate:** confirm the browser's warning the first time. On the page *Security*, download the CA certificate and import it once; after that the connection counts as secure.
@@ -440,7 +440,7 @@ The UI starts in German; *Einstellungen → Darstellung* switches it to English 
 | What's inside my ETFs? | Page *X-Ray*, or in Wealthfolio with the X-Ray addon |
 | Forgot the password | LXC console: `brokersync-reset-password`; Docker: `docker exec -it brokersync brokersync reset-ui-password` |
 
-Everything else – reconciliation, X-Ray, costs and FIRE, the booking model, proxy, logs, metrics – is in [docs/FUNKTIONEN.md](docs/FUNKTIONEN.md) (German). Updates, security, backup and technical details are in [docs/BETRIEB.md](docs/BETRIEB.md) (German).
+Everything else—reconciliation, X-Ray, costs and FIRE, the booking model, proxy, logs, and metrics—is covered in [Features in Detail](docs/FEATURES.md). Updates, security, backups, and technical details are covered in [Operations](docs/OPERATIONS.md).
 
 ## Security in brief
 
