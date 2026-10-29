@@ -1,6 +1,7 @@
 # Wealthfolio Broker Sync next to Wealthfolio (waldonso2/wealthfolio-importer-addon#148).
 #
-#   openssl rand -base64 32 > brokersync.key && chmod 600 brokersync.key   # once; keep a copy - without it the data is lost
+#   openssl rand -base64 32 > brokersync.key   # once; keep a copy - without it the data is lost
+#   sudo chown 10001:10001 brokersync.key && sudo chmod 600 brokersync.key   # the container's user reads it
 #   docker compose -f docker-compose.example.yml up -d
 #   docker compose logs brokersync        # the one-time setup code for the first password
 #   https://<this computer>:8443          # the UI; in it, Wealthfolio's address is http://wealthfolio:8088
@@ -21,7 +22,7 @@ services:
       # BROKERSYNC_CERT_NAMES: "nas.fritz.box"
       # Behind a reverse proxy with its own TLS: plain HTTP on 8090 and the proxy's header believed.
       # BROKERSYNC_TLS: "off"
-      # BROKERSYNC_TRUST_PROXY: "1"
+      # BROKERSYNC_TRUST_PROXY: "172.18.0.5"   # the proxy's IP address as this container sees it
       # BROKERSYNC_ALLOWED_HOSTS: "brokersync.example.com"
       # BROKERSYNC_RUN_AT: "06:00"     # daily fetch, German time (plus up to 45 minutes)
     secrets:

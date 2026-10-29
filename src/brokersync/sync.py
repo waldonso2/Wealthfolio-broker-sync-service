@@ -28,7 +28,19 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-from . import __version__, coverage, crypto, lookthrough, meta_keys, retired, spending, updates, xray, xray_addon
+from . import (
+    __version__,
+    appearance,
+    coverage,
+    crypto,
+    lookthrough,
+    meta_keys,
+    retired,
+    spending,
+    updates,
+    xray,
+    xray_addon,
+)
 from . import assets as assets_mod
 from . import config as config_mod
 from . import history as history_mod
@@ -199,6 +211,7 @@ class Syncer:
         with run_lock(self.data_dir, wait=5):
             self.state.abort_stale_runs()
             cfg = config_mod.load(self.data_dir)
+            self._read_appearance(cfg)
             if cfg.safe_mode and not manual:
                 if cfg.service("sync"):
                     self._remind(cfg)
@@ -403,6 +416,17 @@ class Syncer:
             with connect(self._wealthfolio, cfg.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
                          cfg.wealthfolio_fingerprint) as wf:
                 return lookthrough.remove_taxonomies(wf)
+
+    def _read_appearance(self, cfg: config_mod.Config) -> None:
+        """The font chosen in Wealthfolio, for the UI (appearance.py); read only, never touches a broker's result."""
+        if not cfg.wealthfolio_url:
+            return
+        try:
+            with connect(self._wealthfolio, cfg.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
+                         cfg.wealthfolio_fingerprint) as wf:
+                appearance.refresh(self.state, wf)
+        except Exception:
+            log.exception("Wealthfolio's font not read")
 
     def _update_spending(self, cfg: config_mod.Config) -> bool:
         """The banks' cash accounts in Wealthfolio's spending tracker (#134); never touches a broker's result.

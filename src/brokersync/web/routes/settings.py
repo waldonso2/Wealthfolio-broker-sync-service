@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import re
 import secrets
 from decimal import Decimal
@@ -12,13 +13,14 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from ... import __version__, meta_keys, updates
+from ... import __version__, appearance, meta_keys, updates
 from ...notify import Notifier
 from ...wealthfolio import WealthfolioError, connect, is_certificate_error, normalize_fingerprint, server_fingerprint
 from .. import inputs
 from ..context import AppContext, Ctx, language, redirect, tr
 from ..i18n import N_
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -38,6 +40,14 @@ def _wealthfolio_form(request: Request, ctx: AppContext, url: str, fingerprint: 
                           plain=url.startswith("http://") and not _local(url))
     response.status_code = status
     return response
+
+
+def _read_font(ctx: AppContext, wf) -> None:
+    """The font chosen in Wealthfolio, for this UI (appearance.py); a failure only leaves the one read before."""
+    try:
+        appearance.refresh(ctx.state, wf)
+    except (WealthfolioError, ValueError):
+        log.warning("Wealthfolio's font not read")
 
 
 def _local(url: str) -> bool:
@@ -62,6 +72,8 @@ def wealthfolio_save(request: Request, ctx: Ctx, url: str = Form(...), password:
     try:  # "Nur testen" (#95): with what was typed, nothing saved
         with connect(ctx.make_wf, url, secret, pin) as wf:
             accounts = [a for a in wf.list_accounts() if a.is_active]
+            if not test:
+                _read_font(ctx, wf)
     except WealthfolioError as e:
         offer = ""
         if url.startswith("https://") and is_certificate_error(e):
