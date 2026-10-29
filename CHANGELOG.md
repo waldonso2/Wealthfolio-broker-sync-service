@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.47.0
+
+- Every service on *Dienste* has its own page `/services/<key>` (waldonso2/wealthfolio-importer-addon#151), all built the same way: name, switch and what it writes into Wealthfolio (with what is still missing and a link), its status, its settings, and *Jetzt ausführen* as a background job - the same step a run calls, under the sync lock. *Aus Wealthfolio entfernen* (countries & sectors, X-Ray in Wealthfolio) asks for a confirmation, switches the service off and removes only what it wrote. The gears on *Dienste* always lead there, and switching on a service that lacks something opens its page.
+- Broker-Sync: a traffic light and the last fetch per broker, the fetch mode with a link to *Sicherheit*, *Broker einrichten*.
+- Countries & sectors: the last write, names without a category, and per fund where its countries and sectors come from; the switch and *Aus Wealthfolio entfernen* moved here from the X-Ray settings, which link to it.
+- ISIN ergänzen: which securities got an ISIN and when (stored with the moment from now on), which still have none, *Jetzt ergänzen*, and a link to the manual mapping.
+- Logos: `/logos` became `/services/logos` (the old address redirects); the service's switch replaces the page's own checkbox; a malformed key comes back with 422 at its field.
+- Spending tracker: one checkbox list of every broker's cash account, saved at once; the field *Ausgaben auswerten* left the broker form, which links here.
+- X-Ray in Wealthfolio: last write, stale keys, funds with a list and those missing one with the reason, "Wealthfolio zu alt" before 3.11, *Jetzt ablegen*, and how to install the addon.
+- *Logos* is no longer listed under *Einstellungen* (it is a service now).
+
 ## 0.46.2
 
 - The UI uses the font chosen in Wealthfolio (Settings → Appearance), read from its API when the connection is saved and once per run: JetBrains Mono (Wealthfolio's default), Inter or Merriweather, the same files Wealthfolio bundles.

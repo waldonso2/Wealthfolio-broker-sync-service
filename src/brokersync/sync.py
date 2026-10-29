@@ -270,19 +270,27 @@ class Syncer:
         """Asset id -> ISIN of every position the sync learned (assets.py)."""
         return {a["asset_id"]: isin for key in cfg.brokers for isin, a in self.state.assets(key).items()}
 
-    def _complete_isins(self, cfg: config_mod.Config) -> None:
-        """Missing ISINs on the assets the sync knows (#140); never touches a broker's result."""
+    def complete_isins(self) -> int | None:
+        """*Jetzt ergänzen* on the service's page (#151): one pass now (under the sync lock)."""
+        with run_lock(self.data_dir, wait=5):
+            return self._complete_isins(config_mod.load(self.data_dir))
+
+    def _complete_isins(self, cfg: config_mod.Config) -> int | None:
+        """Missing ISINs on the assets the sync knows (#140); never touches a broker's result. How many were
+        set, None when it failed."""
         learned = self.learned_isins(cfg)
         if not learned:
-            return
+            return 0
         try:
             with connect(self._wealthfolio, cfg.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
                          cfg.wealthfolio_fingerprint) as wf:
                 done = assets_mod.complete_isins(self.state, wf, learned)
             if done:
                 log.info("ISIN set on %d Wealthfolio assets", done)
+            return done
         except Exception:
             log.exception("ISINs not completed")
+            return None
 
     def update_logos(self) -> logos_mod.Result | None:
         """The button on the page *Logos*: one pass now (under the sync lock)."""
@@ -365,7 +373,8 @@ class Syncer:
                 result = xray_addon.clear(self.state, wf)
             status |= {"written": result.written, "deleted": result.deleted, "skipped": result.skipped}
         except StorageUnsupported:
-            status |= {"ok": False, "error": "Wealthfolio kennt den Addon-Speicher erst ab Version 3.11.0."}
+            status |= {"ok": False, "unsupported": True,
+                       "error": "Wealthfolio kennt den Addon-Speicher erst ab Version 3.11.0."}
         except Exception as e:
             log.exception("X-Ray addon: lists not written")
             status |= {"ok": False, "error": redact(f"{type(e).__name__}: {e}")}
@@ -374,8 +383,34 @@ class Syncer:
         else:
             self.state.set_meta(key, json.dumps(status))
 
+    def write_xray_addon(self) -> dict | None:
+        """*Jetzt ablegen* / *Aus Wealthfolio entfernen* on the service's page (#151): the lists written now, or
+        cleared once the service is off (under the sync lock); the stored status, None once cleared."""
+        with run_lock(self.data_dir, wait=5):
+            cfg = config_mod.load(self.data_dir)
+            with connect(self._wealthfolio, cfg.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
+                         cfg.wealthfolio_fingerprint) as wf:
+                on = cfg.service("xray")
+                depot = lookthrough.read_depot(wf, self.learned_isins(cfg)) if on else lookthrough.Depot()
+                self._write_xray_addon(wf, depot, cfg)
+            return json.loads(self.state.meta(meta_keys.XRAY_ADDON_STATUS()) or "null")
+
+    def write_taxonomies(self) -> lookthrough.Written:
+        """*Jetzt eintragen* on the service's page (#151): countries and sectors now (under the sync lock)."""
+        with run_lock(self.data_dir, wait=5):
+            cfg = config_mod.load(self.data_dir)
+            with connect(self._wealthfolio, cfg.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
+                         cfg.wealthfolio_fingerprint) as wf:
+                return lookthrough.write_taxonomies(self.state, wf, lookthrough.read_depot(wf, self.learned_isins(cfg)))
+
+    def update_spending(self) -> bool:
+        """*Jetzt ausführen* on the service's page (#151): the tracked accounts now (under the sync lock)."""
+        with run_lock(self.data_dir, wait=5):
+            return self._update_spending(config_mod.load(self.data_dir))
+
     def remove_taxonomies(self) -> int:
-        """*Aus Wealthfolio entfernen* on *Durchschau*: our countries and sectors out again (under the sync lock)."""
+        """*Aus Wealthfolio entfernen* on the service's page: our countries and sectors out again (under the sync
+        lock)."""
         with run_lock(self.data_dir, wait=5):
             cfg = config_mod.load(self.data_dir)
             with connect(self._wealthfolio, cfg.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
@@ -393,8 +428,9 @@ class Syncer:
         except Exception:
             log.exception("Wealthfolio's font not read")
 
-    def _update_spending(self, cfg: config_mod.Config) -> None:
-        """The banks' cash accounts in Wealthfolio's spending tracker (#134); never touches a broker's result."""
+    def _update_spending(self, cfg: config_mod.Config) -> bool:
+        """The banks' cash accounts in Wealthfolio's spending tracker (#134); never touches a broker's result.
+        False when it failed."""
         if not cfg.service("spending"):  # switched off on *Dienste*: the accounts the sync added leave it
             cfg = replace(cfg, brokers={k: replace(b, spending=False) for k, b in cfg.brokers.items()})
         try:
@@ -403,6 +439,8 @@ class Syncer:
                 spending.update(self.state, wf, cfg)
         except Exception:
             log.exception("spending tracker not updated")
+            return False
+        return True
 
     def _check_update(self, cfg: config_mod.Config) -> None:
         """Once a day: a newer release is shown on the overview and notified once (updates.py)."""

@@ -481,6 +481,12 @@ class State:
         row = self.db.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
         return row[0] if row else None
 
+    def metas(self, key: meta_keys.MetaKey) -> dict[str, str]:
+        """Suffix -> value of every entry of ``key`` (``<prefix>:<suffix>``)."""
+        start = key("") + ":"
+        rows = self.db.execute("SELECT key, value FROM meta WHERE substr(key, 1, ?) = ?", (len(start), start))
+        return {k[len(start):]: v for k, v in rows}
+
     def set_meta(self, key: str, value: str) -> None:
         with self._writing():
             self.db.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, value))

@@ -24,8 +24,9 @@ axe_api = pytest.importorskip("axe_playwright_python.sync_playwright")
 # Every page a signed-in user reaches (the hidden ones aside, routes.HIDDEN).
 PAGES = ["/", "/broker", "/check", "/lookthrough", "/lookthrough/fire", "/unknown", "/settings", "/brokers",
          "/brokers/fake", "/brokers/fake/login",
-         "/brokers/fake/reset", "/setup/wealthfolio", "/notifications", "/securities", "/logos", "/security",
-         "/appearance", "/updates"]
+         "/brokers/fake/reset", "/setup/wealthfolio", "/notifications", "/securities", "/security",
+         "/appearance", "/updates", "/services/sync", "/services/taxonomies", "/services/isin", "/services/logos",
+         "/services/spending", "/services/xray"]
 PHONE = {"width": 375, "height": 740}
 DESKTOP = {"width": 1280, "height": 900}
 

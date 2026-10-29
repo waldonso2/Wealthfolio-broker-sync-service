@@ -105,8 +105,6 @@ EN: dict[str, str] = {
     "{what} Danach schaltet sich {name} ein.": "{what} {name} then switches on.",
     "Erst Wealthfolio verbinden.": "Connect Wealthfolio first.",
     "Erst einen Broker einrichten.": "Set up a broker first.",
-    "Erst bei einem Broker „Ausgaben auswerten“ einschalten.": "Turn on \"Analyse spending\" at a broker first.",
-    "Erst einen logo.dev-Schlüssel eintragen.": "Enter a logo.dev key first.",
     "Unbekannter Dienst.": "Unknown service.",
     "Broker-Sync ist ausgeschaltet - auf der Seite Dienste einschalten.":
         "Broker sync is off - switch it on on the page Services.",
@@ -140,7 +138,6 @@ EN: dict[str, str] = {
     "Überträge": "Transfers",
     "Auszahlungen auf eigene Konten erkennen": "Recognise withdrawals to your own accounts",
     "Logos": "Logos",
-    "Logos der Wertpapiere von logo.dev": "Logos of the securities from logo.dev",
     "Sicherheit": "Security",
     "Abrufmodus, Verschlüsselung, Master-Passphrase, Zertifikat":
         "Fetch mode, encryption, master passphrase, certificate",
@@ -400,14 +397,6 @@ EN: dict[str, str] = {
         "Empty = everything the broker delivers. Applies to the first fetch; after that every fetch reads from the "
         "last one (minus 7 days) – for a new period use “Fetch again from the start date” below.",
     "Automatisch abrufen": "Fetch automatically",
-    "Ausgaben auswerten": "Analyse spending",
-    "Nimmt das Verrechnungskonto ab dem nächsten Abruf in Wealthfolios Ausgaben-Tracker auf. Kategorien vergibt "
-    "Wealthfolio mit seinen Regeln (Ausgaben → Regeln) anhand von Empfänger und Verwendungszweck. Wealthfolio wertet "
-    "nur Konten vom Typ Bargeld aus; eigene Überträge und Wertpapierabrechnungen zählen dort als Sparen, nicht als "
-    "Ausgabe.":
-        "From the next fetch, adds the cash account to Wealthfolio's spending tracker. Wealthfolio assigns categories "
-        "with its own rules (Spending → Rules) from payee and reference. Wealthfolio only analyses accounts of type "
-        "Cash; own transfers and securities settlements count as saving there, not as spending.",
     "Beim Broker anmelden": "Log in at the broker",
     "Fehlen Buchungen aus der Zeit vor dem letzten Abruf (etwa nach einem geänderten Startdatum)? Der nächste Abruf "
     "holt dann noch einmal alles ab dem Startdatum; schon übernommene Buchungen werden nicht doppelt angelegt.":
@@ -592,20 +581,16 @@ EN: dict[str, str] = {
         "Every logo is set once. If you remove it in Wealthfolio, the service doesn't set it again.",
     "Hat logo.dev für eine ISIN kein Logo, fragt der Dienst erst nach 30 Tagen wieder.":
         "If logo.dev has no logo for an ISIN, the service only asks again after 30 days.",
-    "Logos von logo.dev holen": "Fetch logos from logo.dev",
     "logo.dev-Schlüssel (Publishable Key, <code>pk_…</code>)": "logo.dev key (publishable key, <code>pk_…</code>)",
     "Kostenlos nach Anmeldung bei logo.dev. Der Schlüssel liegt verschlüsselt im Tresor des Dienstes.":
         "Free after signing up at logo.dev. The key is kept encrypted in the service's vault.",
     "Schlüssel entfernen": "Remove the key",
-    "Speichern und Logos jetzt holen": "Save and fetch logos now",
-    "Letzter Durchlauf": "Last pass",
     "{when}: {set} gesetzt, {none} ohne Logo bei logo.dev, {failed} fehlgeschlagen":
         "{when}: {set} set, {none} without a logo at logo.dev, {failed} failed",
     ", {n} beim nächsten Abruf": ", {n} at the next fetch",
     'Logos von <a href="https://logo.dev" target="_blank" rel="noopener">Logo.dev</a>.':
         'Logos provided by <a href="https://logo.dev" target="_blank" rel="noopener">Logo.dev</a>.',
     "Der Schlüssel sieht nicht wie ein logo.dev-Schlüssel aus.": "The key doesn't look like a logo.dev key.",
-    "Erst einschalten und einen logo.dev-Schlüssel eintragen.": "Switch it on and enter a logo.dev key first.",
     "Ein Abruf läuft gerade - bitte gleich noch einmal.": "A fetch is running - please try again in a moment.",
     "Logos konnten nicht geholt werden - siehe Protokoll.": "Logos could not be fetched - see the log.",
     "{set} Logos gesetzt, {none} ohne Logo bei logo.dev, {failed} fehlgeschlagen.":
@@ -818,8 +803,6 @@ EN: dict[str, str] = {
     # 0.21.0
     "Kontenprüfung":
         "Account check",
-    "Logos holen":
-        "Fetching logos",
     "Passwort gespeichert. Die Seite Broker zeigt, was noch einzurichten ist.":
         "Password saved. The page Brokers shows what is left to set up.",
     "Dieses Passwort ist zu verbreitet und schnell erraten. Am besten eines aus einem Passwortmanager.":
@@ -1165,16 +1148,10 @@ EN: dict[str, str] = {
         "weekly per ETF. Only the ISIN or the product page is sent.",
     "Positionslisten jetzt abrufen": "Fetch holdings lists now",
     # Taxonomien in Wealthfolio (#139)
-    "Zuordnungen entfernen": "Remove assignments",
     "{n} Zuordnungen aus Wealthfolio entfernt.": "{n} assignments removed from Wealthfolio.",
-    "Länder und Sektoren der ETFs in Wealthfolio eintragen, damit seine eigenen Auswertungen durch die ETFs sehen. "
-    "Ersetzt nur Yahoos automatische Werte, nie deine eigenen Zuordnungen.":
-        "Enter the ETFs' countries and sectors in Wealthfolio, so its own analyses see through the ETFs. Replaces "
-        "only Yahoo's automatic values, never your own assignments.",
     "Zuletzt in Wealthfolio eingetragen {when}: {written} geändert, {manual} mit deinen eigenen Zuordnungen "
     "gelassen.":
         "Last entered in Wealthfolio {when}: {written} changed, {manual} left with your own assignments.",
-    "Ohne passende Kategorie: {names}.": "Without a matching category: {names}.",
     "Aus Wealthfolio entfernen": "Remove from Wealthfolio",
     # FIRE-Rechner (#139)
     "Lean FIRE (75 % der Ausgaben)": "Lean FIRE (75 % of expenses)",
@@ -1411,4 +1388,102 @@ EN: dict[str, str] = {
         "not part of it. The tracking difference is missing because no source provides it.",
     "Gebühren der Broker": "The brokers' fees",
     "Leer heißt unbekannt: dann wird nichts geschätzt.": "Empty means unknown: then nothing is estimated.",
+    # Service pages (#151)
+    "{written} Zuordnungen in Wealthfolio eingetragen, {manual} mit deinen eigenen gelassen.":
+        "{written} assignments entered in Wealthfolio, {manual} left with your own.",
+    "{n} ISINs in Wealthfolio ergänzt.": "{n} ISINs added in Wealthfolio.",
+    "Ausgaben-Tracker aktualisiert.": "Spending tracker updated.",
+    "Fondslisten abgelegt: {written} geschrieben, {deleted} gelöscht.":
+        "Fund lists stored: {written} written, {deleted} deleted.",
+    "Fondslisten aus Wealthfolio entfernt.": "Fund lists removed from Wealthfolio.",
+    "Erst unten ein Verrechnungskonto wählen.": "First choose a cash account below.",
+    "Erst unten einen logo.dev-Schlüssel eintragen.": "First enter a logo.dev key below.",
+    "ISINs konnten nicht ergänzt werden - siehe Protokoll.": "ISINs could not be added - see the log.",
+    "Der Ausgaben-Tracker wurde nicht aktualisiert - siehe Protokoll.":
+        "The spending tracker was not updated - see the log.",
+    "Die Fondslisten wurden nicht abgelegt: {error}": "The fund lists were not stored: {error}",
+    "Erst einschalten.": "Switch it on first.",
+    "Die Fondslisten wurden nicht entfernt: {error}": "The fund lists were not removed: {error}",
+    "Bitte zum Entfernen bestätigen.": "Please confirm the removal.",
+    "Unbekanntes Konto - bitte die Seite neu laden.": "Unknown account - please reload the page.",
+    "Broker und letzter Abruf": "Brokers and last fetch",
+    "Zustand": "State",
+    "Letzter Abruf": "Last fetch",
+    "{when}: {n} neu": "{when}: {n} new",
+    "Noch kein Broker eingerichtet.": "No broker set up yet.",
+    "Abrufmodus: {mode}": "Fetch mode: {mode}",
+    "Sicher – jeder Abruf mit deiner Anmeldung": "Safe – every fetch with your login",
+    "Automatisch – der Timer ruft täglich ab": "Automatic – the timer fetches daily",
+    "Abrufmodus ändern": "Change fetch mode",
+    "Jetzt ausführen": "Run now",
+    "Ohne passende Kategorie in Wealthfolio: {names}.": "Without a matching category in Wealthfolio: {names}.",
+    "Noch nichts in Wealthfolio eingetragen.": "Nothing entered in Wealthfolio yet.",
+    "Liste des Anbieters": "Issuer's list",
+    "Länderaufteilung des Anbieters": "Issuer's country breakdown",
+    "Finanzfluss": "Finanzfluss",
+    "Quelle der Länder und Sektoren je Fonds": "Source of countries and sectors per fund",
+    "Fonds": "Fund",
+    "Anbieter": "Issuer",
+    "Länder": "Countries",
+    "Sektoren": "Sectors",
+    "Noch kein Fonds mit Positionsliste - siehe X-Ray.": "No fund with a holdings list yet - see X-Ray.",
+    "Ersetzt nur Yahoos automatische Werte und die eigenen des Dienstes, nie deine eigenen Zuordnungen. Was keiner "
+    "Kategorie zuzuordnen ist, bleibt nicht zugeordnet.":
+        "Replaces only Yahoo's automatic values and the service's own, never your own assignments. What fits no "
+        "category stays unassigned.",
+    "Jetzt eintragen": "Enter now",
+    "Ja, die vom Dienst eingetragenen Länder und Sektoren entfernen und den Dienst ausschalten":
+        "Yes, remove the countries and sectors the service entered and switch the service off",
+    "Ergänzte ISINs": "Added ISINs",
+    "Ergänzt": "Added",
+    "Noch keine ISIN ergänzt.": "No ISIN added yet.",
+    "Ohne ISIN": "Without an ISIN",
+    "Die Positionen werden gerade aus Wealthfolio gelesen.": "The positions are being read from Wealthfolio.",
+    "Für diese Wertpapiere kennt der Dienst noch keine ISIN:": "The service knows no ISIN yet for these securities:",
+    "Jedes Wertpapier im Depot hat eine ISIN.": "Every security in the depot has an ISIN.",
+    "ISIN fehlt? Selbst zuordnen": "ISIN missing? Map it yourself",
+    "Jetzt ergänzen": "Add now",
+    "Vom Dienst in Wealthfolios Ausgaben-Tracker aufgenommen: {names}.":
+        "Added to Wealthfolio's spending tracker by the service: {names}.",
+    "Noch kein Konto vom Dienst aufgenommen.": "No account added by the service yet.",
+    "Kategorien vergibt Wealthfolio mit seinen Regeln (Ausgaben → Regeln) anhand von Empfänger und "
+    "Verwendungszweck. Wealthfolio wertet nur Konten vom Typ Bargeld aus; eigene Überträge und "
+    "Wertpapierabrechnungen zählen dort als Sparen, nicht als Ausgabe. Konten, die du in Wealthfolio selbst "
+    "gewählt hast, bleiben.":
+        "Wealthfolio assigns categories with its rules (Spending → Rules) by payee and purpose. Wealthfolio only "
+        "evaluates accounts of type cash; own transfers and securities settlements count as saving there, not as "
+        "spending. Accounts you chose in Wealthfolio yourself stay.",
+    "Verrechnungskonten im Ausgaben-Tracker": "Cash accounts in the spending tracker",
+    "{broker}: {account}": "{broker}: {account}",
+    "Noch kein Broker mit Verrechnungskonto.": "No broker with a cash account yet.",
+    "Wealthfolio zu alt: der Addon-Speicher kommt erst mit Wealthfolio 3.11.0.":
+        "Wealthfolio too old: the addon storage comes with Wealthfolio 3.11.0.",
+    "unverändert": "unchanged",
+    "{written} geschrieben, {deleted} gelöscht": "{written} written, {deleted} deleted",
+    "Noch nichts abgelegt.": "Nothing stored yet.",
+    "{n} alte Einträge werden beim nächsten Mal gelöscht.": "{n} old entries are deleted next time.",
+    "Fonds mit Liste: {n}": "Funds with a list: {n}",
+    "Fonds ohne Liste": "Funds without a list",
+    "Grund": "Reason",
+    "Addon installieren": "Install the addon",
+    "Das Addon rechnet X-Ray in Wealthfolio aus diesen Listen und den Werten deiner Positionen. <a "
+    "href=\"https://github.com/waldonso2/wealthfolio-companion-addon-xray/releases/latest\" target=\"_blank\" "
+    "rel=\"noopener noreferrer\">Neueste Version herunterladen</a> (die ZIP-Datei), dann in Wealthfolio: "
+    "Einstellungen → Add-ons → aus Datei installieren.":
+        "The addon computes X-Ray in Wealthfolio from these lists and the values of your positions. <a "
+        "href=\"https://github.com/waldonso2/wealthfolio-companion-addon-xray/releases/latest\" target=\"_blank\" "
+        "rel=\"noopener noreferrer\">Download the latest version</a> (the ZIP file), then in Wealthfolio: Settings "
+        "→ Add-ons → install from file.",
+    "Jetzt ablegen": "Store now",
+    "Ja, die abgelegten Fondslisten entfernen und den Dienst ausschalten":
+        "Yes, remove the stored fund lists and switch the service off",
+    "Länder und Sektoren der ETFs in Wealthfolio eintragen: Dienst Länder & Sektoren":
+        "Enter the ETFs' countries and sectors in Wealthfolio: service Countries & sectors",
+    "Fondslisten für das X-Ray-Addon: Dienst X-Ray in Wealthfolio":
+        "Fund lists for the X-Ray addon: service X-Ray in Wealthfolio",
+    "Dorthin": "Go there",
+    "Aktionen": "Actions",
+    "Noch kein Durchlauf.": "No pass yet.",
+    "Verrechnungskonto in Wealthfolios Ausgaben-Tracker: Dienst Ausgaben-Tracker":
+        "Cash account in Wealthfolio's spending tracker: service Spending tracker",
 }

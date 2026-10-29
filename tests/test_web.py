@@ -258,7 +258,7 @@ def test_navigation_groups_the_settings(tmp_path):
     assert 'class="count"' not in nav and 'class="subnav"' not in page
 
     index = client.get("/settings").text
-    for href in ("/setup/wealthfolio", "/brokers", "/notifications", "/securities", "/logos", "/security"):
+    for href in ("/setup/wealthfolio", "/brokers", "/notifications", "/securities", "/security"):
         assert f'href="{href}"' in index
     assert 'href="/settings" aria-current="page"' in index
     # Hidden for now (waldonso2/wealthfolio-importer-addon#84): not listed, not served; *Überträge* is listed
@@ -266,8 +266,8 @@ def test_navigation_groups_the_settings(tmp_path):
     assert 'href="/duplicates"' not in index and client.get("/duplicates").status_code == 404
     assert 'href="/transfers"' not in index
 
-    page = client.get("/logos").text
-    assert 'class="subnav"' in page and 'href="/logos" aria-current="page"' in page
+    page = client.get("/securities").text
+    assert 'class="subnav"' in page and 'href="/securities" aria-current="page"' in page
     assert 'href="/settings" aria-current="page"' in page
 
     State(tmp_path).add_unknown("fake", "x1", "ODD", "2026-01-02", {"eventType": "ODD"})

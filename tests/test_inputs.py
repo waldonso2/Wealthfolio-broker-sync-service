@@ -73,8 +73,8 @@ def test_forms_reject_bad_input_and_keep_the_config(tmp_path, hidden_pages):
     r = client.post("/brokers/fake", data={"csrf": token, "start_date": "01.01.2024"})
     assert "Startdatum" in r.text and config_mod.load(tmp_path).brokers.get("fake") is None
 
-    r = client.post("/logos", data={"csrf": token, "token": "pk_ok but spaces"})
-    assert "logo.dev-Schlüssel" in r.text
+    r = client.post("/services/logos/settings", data={"csrf": token, "token": "pk_ok but spaces"})
+    assert r.status_code == 422 and 'id="err-token"' in r.text and "logo.dev-Schlüssel" in r.text
 
 
 def test_oversized_requests_are_refused_before_reading(tmp_path):

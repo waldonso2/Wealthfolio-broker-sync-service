@@ -52,7 +52,6 @@ SETTINGS_PAGES = [
     ("/securities", N_("Wertpapiere"), N_("ISIN unter eigenem Symbol führen")),
     # Only while patterns are saved (waldonso2/wealthfolio-importer-addon#84): each one stays visible and deletable.
     ("/transfers", N_("Überträge"), N_("Auszahlungen auf eigene Konten erkennen")),
-    ("/logos", N_("Logos"), N_("Logos der Wertpapiere von logo.dev")),
     ("/updates", N_("Updates"), N_("Neue Versionen automatisch installieren")),
     ("/security", N_("Sicherheit"), N_("Abrufmodus, Verschlüsselung, Master-Passphrase, Zertifikat")),
     ("/appearance", N_("Darstellung"), N_("Sprache")),

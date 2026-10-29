@@ -73,13 +73,23 @@ def test_wealthfolio_without_the_tracker_never_fails_a_broker(tmp_path, caplog):
     assert r.status == "ok" and "spending tracker not updated" in caplog.text
 
 
-def test_the_broker_form_saves_the_switch(tmp_path):
+def test_the_service_page_saves_every_cash_account_at_once(tmp_path):
+    """#151: one list of all brokers' cash accounts on /services/spending; the broker form only links there."""
     client, _, _ = make(tmp_path)
     first_password(client)
     token = csrf(client, "/brokers/fake")
-    assert "Ausgaben auswerten" in client.get("/brokers/fake").text
-    data = {"csrf": token, "cash_account_id": "acc-cash", "portfolio_account_id": "acc-depot", "spending": "on"}
+    page = client.get("/brokers/fake").text
+    assert 'name="spending"' not in page and 'href="/services/spending"' in page
+    data = {"csrf": token, "cash_account_id": "acc-cash", "portfolio_account_id": "acc-depot"}
     client.post("/brokers/fake", data=data)
+    page = client.get("/services/spending").text
+    assert 'name="broker" value="fake"' in page
+    r = client.post("/services/spending/settings", data={"csrf": token, "broker": "nope"})
+    assert r.status_code == 422 and 'id="err-broker"' in r.text
+    assert not config_mod.load(tmp_path).broker("fake").spending
+    client.post("/services/spending/settings", data={"csrf": token, "broker": "fake"})
     assert config_mod.load(tmp_path).broker("fake").spending
-    client.post("/brokers/fake", data={k: v for k, v in data.items() if k != "spending"})
+    client.post("/brokers/fake", data=data)  # the broker form leaves it
+    assert config_mod.load(tmp_path).broker("fake").spending
+    client.post("/services/spending/settings", data={"csrf": token})
     assert not config_mod.load(tmp_path).broker("fake").spending

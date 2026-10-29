@@ -1,4 +1,4 @@
-"""Settings pages without a broker of their own: Wealthfolio, notifications, securities, logos, updates."""
+"""Settings pages without a broker of their own: Wealthfolio, notifications, securities, updates."""
 
 from __future__ import annotations
 
@@ -11,16 +11,14 @@ from decimal import Decimal
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ... import __version__, appearance, meta_keys, updates
-from ... import logos as logos_mod
 from ...notify import Notifier
-from ...sync import AlreadyRunning
 from ...wealthfolio import WealthfolioError, connect, is_certificate_error, normalize_fingerprint, server_fingerprint
 from .. import inputs
 from ..context import AppContext, Ctx, language, redirect, tr
-from ..i18n import N_, translate
+from ..i18n import N_
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -189,44 +187,9 @@ def securities_save(request: Request, ctx: Ctx, isin: str = Form(...), symbol: s
 
 
 # ── logos ───────────────────────────────────────────────────────────────────
-@router.get("/logos", response_class=HTMLResponse)
-def logos_page(request: Request, ctx: Ctx):
-    return ctx.render(request, "logos.html", cfg=ctx.cfg(), has_token=bool(ctx.vault.load().get("logo_dev_token")),
-                      last=logos_mod.last(ctx.state))
-
-
-@router.post("/logos")
-def logos_save(request: Request, ctx: Ctx, enabled: str = Form(""), token: str = Form(""),
-               remove_token: str = Form(""), fetch: str = Form("")):
-    c = ctx.update(lambda c: setattr(c, "logos_enabled", bool(enabled)))
-    if remove_token:
-        ctx.vault.update(lambda d: d.pop("logo_dev_token", None))
-    elif token.strip():
-        if len(token.strip()) > 200 or not re.fullmatch(r"[A-Za-z0-9_-]+", token.strip()):
-            return redirect(request, "/logos", tr(request, "Der Schlüssel sieht nicht wie ein logo.dev-Schlüssel aus."),
-                            "error")
-        ctx.vault.update(lambda d: d.__setitem__("logo_dev_token", token.strip()))
-    if not fetch:
-        return redirect(request, "/logos", tr(request, "Gespeichert."))
-    if not c.logos_enabled or not ctx.vault.load().get("logo_dev_token"):
-        return redirect(request, "/logos", tr(request, "Erst einschalten und einen logo.dev-Schlüssel eintragen."),
-                        "warn")
-    from .overview import start_job
-
-    def work(lang: str) -> tuple[str, str]:
-        try:
-            result = ctx.syncer.update_logos()
-        except AlreadyRunning:
-            return translate("Ein Abruf läuft gerade - bitte gleich noch einmal.", lang), "warn"
-        if result is None:
-            return translate("Logos konnten nicht geholt werden - siehe Protokoll.", lang), "error"
-        text = translate("{set} Logos gesetzt, {none} ohne Logo bei logo.dev, {failed} fehlgeschlagen.", lang,
-                         set=result.set, none=result.none, failed=result.failed)
-        if result.message:
-            text += f" {result.message}"
-        return text, "warn" if result.message or result.failed else "ok"
-
-    return start_job(request, ctx, N_("Logos holen"), work, "/logos")
+@router.get("/logos")
+def logos_page(request: Request):
+    return RedirectResponse("/services/logos", 303)  # the service's page now (#151)
 
 
 # ── appearance ─────────────────────────────────────────────────────────────

@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% block title %}{{ _(service) }}{% endblock %}
+{# One page per service (#151): head with the switch, status, settings, actions - in this order. #}
+{% block content %}
+<div class="card service">
+  <div class="grow">
+    <h1>{{ _(service) }}</h1>
+    <p class="muted">{{ _(text) }}</p>
+  </div>
+  <form method="post" action="/services/{{ key }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="back" value="page">
+    <button class="switch" role="switch" aria-checked="{{ 'true' if on else 'false' }}" aria-label="{{ _(service) }}"><span></span></button>
+  </form>
+</div>
+{% if lacking %}<div class="flash warn" role="status">{{ _(lacking[0]) }} <a href="{{ lacking[1] }}">{{ _("Dorthin") }}</a>{% if pending %} · {{ _("schaltet sich ein, sobald die Einstellungen gespeichert sind") }}{% endif %}</div>{% endif %}
+<div class="card">
+  <h2>{{ _("Status") }}</h2>
+  {% block status %}{% endblock %}
+</div>
+{% block settings %}{% endblock %}
+<div class="card">
+  <h2>{{ _("Aktionen") }}</h2>
+  {% block actions %}{% endblock %}
+</div>
+{% endblock %}

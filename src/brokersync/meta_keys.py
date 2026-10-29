@@ -54,8 +54,9 @@ TAXONOMIES_LAST = MetaKey("taxonomies:last", "json", False,
 AUTO_UPDATE = MetaKey("auto-update", "json", False,
                       "the last automatic update (deploy/brokersync-autoupdate): {from, to, ok, at}")
 UPDATE = MetaKey("update", "json", False, "the newest release GitHub named: {version, checked} (updates.py)")
-ISIN = MetaKey("isin", "text", False,
-               "the ISIN the sync set on a Wealthfolio asset, once (assets.complete_isins, #140)")
+ISIN = MetaKey("isin", "json", False,
+               "the ISIN the sync set on a Wealthfolio asset, once: {isin, at} - a bare ISIN before 0.47.0 "
+               "(assets.complete_isins, #140)")
 SPENDING = MetaKey("spending", "json", False,
                    "cash accounts the sync put into Wealthfolio's spending tracker: [account id] (spending.py, #134)")
 XRAY_ADDON_STATUS = MetaKey("xray-addon:status", "json", False,

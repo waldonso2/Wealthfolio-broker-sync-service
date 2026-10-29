@@ -1,0 +1,14 @@
+{# The actions of a service page (#151); import "with context" (csrf, key, on, busy). #}
+{% macro remove(what) %}
+<form method="post" action="/services/{{ key }}/remove">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label class="check"><input type="checkbox" name="confirm" value="1" required> {{ what }}</label>
+  <div class="actions"><button class="danger" {% if busy %}disabled{% endif %}>{{ _("Aus Wealthfolio entfernen") }}</button></div>
+</form>
+{% endmacro %}
+{% macro run(label) %}
+<form method="post" action="/services/{{ key }}/run" class="actions">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <button {% if busy or not on %}disabled{% endif %}>{{ label }}</button>{% if not on %}<span class="muted">{{ _("Erst einschalten.") }}</span>{% endif %}
+</form>
+{% endmacro %}

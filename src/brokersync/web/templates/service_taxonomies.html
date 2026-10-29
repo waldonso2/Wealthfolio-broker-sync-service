@@ -1,0 +1,24 @@
+{% extends "_service.html" %}
+{% block status %}
+{% if written %}<p>{{ _("Zuletzt in Wealthfolio eingetragen {when}: {written} geändert, {manual} mit deinen eigenen Zuordnungen gelassen.", when=written.at | local, written=written.written, manual=written.manual) }}</p>
+{% if written.unmatched %}<p class="muted">{{ _("Ohne passende Kategorie in Wealthfolio: {names}.", names=written.unmatched | join(", ")) }}</p>{% endif %}
+{% else %}<p class="muted">{{ _("Noch nichts in Wealthfolio eingetragen.") }}</p>{% endif %}
+{% if funds %}
+{% set SOURCE = {"lines": _("Liste des Anbieters"), "breakdown": _("Länderaufteilung des Anbieters"), "finanzfluss": _("Finanzfluss")} %}
+<div class="table"><table>
+  <caption class="sr-only">{{ _("Quelle der Länder und Sektoren je Fonds") }}</caption>
+  <thead><tr><th scope="col">{{ _("Fonds") }}</th><th scope="col">{{ _("Anbieter") }}</th><th scope="col">{{ _("Länder") }}</th><th scope="col">{{ _("Sektoren") }}</th></tr></thead>
+  <tbody>
+  {% for f in funds %}
+  <tr><td data-label="{{ _('Fonds') }}">{{ f.name }}</td><td data-label="{{ _('Anbieter') }}">{{ f.issuer or "–" }}</td>
+    <td data-label="{{ _('Länder') }}">{{ SOURCE[f.countries] }}</td><td data-label="{{ _('Sektoren') }}">{{ SOURCE[f.sectors] }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<p class="muted">{{ _("Noch kein Fonds mit Positionsliste - siehe X-Ray.") }}</p>{% endif %}
+<p class="muted">{{ _("Ersetzt nur Yahoos automatische Werte und die eigenen des Dienstes, nie deine eigenen Zuordnungen. Was keiner Kategorie zuzuordnen ist, bleibt nicht zugeordnet.") }}</p>
+{% endblock %}
+{% block actions %}{% from "_service_parts.html" import run, remove with context %}
+{{ run(_("Jetzt eintragen")) }}
+{{ remove(_("Ja, die vom Dienst eingetragenen Länder und Sektoren entfernen und den Dienst ausschalten")) }}
+{% endblock %}

@@ -22,6 +22,7 @@ booked a few seconds from the trade itself.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import date, datetime, timedelta
@@ -31,7 +32,7 @@ from typing import Any
 from . import meta_keys
 from .mapping import Accounts, SecurityMapping, is_cash_symbol
 from .model import Kind, Transaction, when
-from .state import State
+from .state import State, now
 from .wealthfolio import WealthfolioClient, WealthfolioError
 
 log = logging.getLogger(__name__)
@@ -271,6 +272,15 @@ def complete_isins(state: State, wf: WealthfolioClient, learned: dict[str, str])
         except WealthfolioError:
             log.exception("ISIN of %s not set", asset["id"])
             continue
-        state.set_meta(meta_keys.ISIN(asset["id"]), isin)
+        state.set_meta(meta_keys.ISIN(asset["id"]), json.dumps({"isin": isin, "at": now()}))
         done += 1
     return done
+
+
+def completed(state: State) -> dict[str, dict]:
+    """Asset id -> {isin, at} of every ISIN ``complete_isins`` set; ``at`` empty for one set before 0.47.0
+    (stored as the bare ISIN then)."""
+    out = {}
+    for asset_id, value in state.metas(meta_keys.ISIN).items():
+        out[asset_id] = json.loads(value) if value.startswith("{") else {"isin": value, "at": ""}
+    return out
