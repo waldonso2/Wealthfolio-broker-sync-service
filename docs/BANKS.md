@@ -169,7 +169,7 @@ The service reads your Scalable portfolio using **Scalable's official command-li
 | Distribution reversal | Reversal and original distribution cancel each other out. If the service had already imported it, *Review* shows it as “no longer at Scalable”; delete it in Wealthfolio |
 | Other reversals, individual securities transfers, ELTIFs, negative interest, fee refunds | **Not booked**; reported as unknown for manual review |
 
-Open orders are imported only after execution. The first full-history sync takes a few minutes because Scalable rate-limits details for buys and sells. If necessary, the service books what it has and fetches the remainder on the next run. If nothing arrives, the log (`journalctl -u wealthfolio-broker-sync -n 50`) reports counts by transaction type, without amounts or names. CSV imports are deduplicated as for Trade Republic. Scalable's CSV export does not include dividend tax; when the service recognises an imported dividend, it fills in the tax from Scalable's data (only the tax field changes; amount and comment remain unchanged).
+Open orders are imported only after execution. The first full-history sync takes a few minutes because Scalable rate-limits details for buys and sells. If necessary, the service books what it has and fetches the remainder on the next run. If nothing arrives, the log (`journalctl -u wealthfolio-companion -n 50`) reports counts by transaction type, without amounts or names. CSV imports are deduplicated as for Trade Republic. Scalable's CSV export does not include dividend tax; when the service recognises an imported dividend, it fills in the tax from Scalable's data (only the tax field changes; amount and comment remain unchanged).
 
 ## comdirect
 

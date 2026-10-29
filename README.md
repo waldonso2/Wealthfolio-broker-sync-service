@@ -1,4 +1,6 @@
-# Wealthfolio Broker Sync
+# Wealthfolio Companion
+
+> **Alpha** – version 0.1.0a1 (alpha). It works and is used every day, but names, pages and settings may still change before 0.1.0.
 
 Fetches your transactions from your brokers and banks automatically and books them, without duplicates, into your **self-hosted [Wealthfolio](https://wealthfolio.app)**. On top, it adds what Wealthfolio can't do on its own: the countries and sectors of your ETFs, ISINs, logos and a look-through into your ETFs (X-Ray). Set it up once, then everything runs by itself every morning.
 
@@ -36,7 +38,7 @@ flowchart LR
     A[ETF issuers<br/>iShares, Xtrackers, …]
   end
   subgraph home[Your home network]
-    C[Broker Sync<br/>companion: LXC or Docker]
+    C[Wealthfolio Companion<br/>LXC or Docker]
     W[(Wealthfolio)]
     X[X-Ray addon<br/>in Wealthfolio]
   end
@@ -47,7 +49,7 @@ flowchart LR
   W -->|lists + values of your positions| X
 ```
 
-**Broker Sync** is the companion to Wealthfolio: it talks to brokers, banks and ETF issuers and writes only through Wealthfolio's own API. Every service that writes something into Wealthfolio can be switched on and off on its own on the start page *Services*. The **[X-Ray addon](https://github.com/waldonso2/wealthfolio-companion-addon-xray)** shows the look-through into your ETFs right inside Wealthfolio. It makes no network requests itself and only reads what the companion stores there.
+**Wealthfolio Companion** is the companion to Wealthfolio: it talks to brokers, banks and ETF issuers and writes only through Wealthfolio's own API. Every service that writes something into Wealthfolio can be switched on and off on its own on the start page *Services*. The **[X-Ray addon](https://github.com/waldonso2/wealthfolio-companion-addon-xray)** shows the look-through into your ETFs right inside Wealthfolio. It makes no network requests itself and only reads what the companion stores there.
 
 ## Requirements
 
@@ -64,7 +66,7 @@ The image is published for `linux/amd64` and `linux/arm64`:
 
 | Registry | Image |
 |---|---|
-| GHCR | `ghcr.io/waldonso2/wealthfolio-broker-sync:latest` |
+| GHCR | `ghcr.io/waldonso2/wealthfolio-companion:latest` |
 
 ### Proxmox VE (LXC)
 
@@ -74,7 +76,7 @@ The recommended way: a native LXC container built with the community-scripts eng
 2. Paste and run the installer:
 
    ```bash
-   bash -c "$(curl -fsSL https://raw.githubusercontent.com/waldonso2/wealthfolio-broker-sync-service/main/ct/wealthfolio-broker-sync.sh)"
+   bash -c "$(curl -fsSL https://raw.githubusercontent.com/waldonso2/wealthfolio-companion/main/ct/wealthfolio-companion.sh)"
    ```
 
 3. Choose *Default Settings* (1 CPU, 512 MB RAM, 2 GB disk, Debian 13, unprivileged).
@@ -83,7 +85,7 @@ The recommended way: a native LXC container built with the community-scripts eng
 Forgot the setup code? Open the container's console and run:
 
 ```bash
-brokersync-cli setup-code
+companion-cli setup-code
 ```
 
 ### Docker Compose
@@ -93,18 +95,18 @@ brokersync-cli setup-code
 1. Create a folder for it and download the Compose file:
 
    ```bash
-   mkdir -p ~/brokersync && cd ~/brokersync
-   curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/waldonso2/wealthfolio-broker-sync-service/main/deploy/docker-compose.example.yml
+   mkdir -p ~/companion && cd ~/companion
+   curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/waldonso2/wealthfolio-companion/main/deploy/docker-compose.example.yml
    ```
 
 2. Create the service's key. The container's user must be able to read it, so it is owned by uid 10001:
 
    ```bash
-   openssl rand -base64 32 > brokersync.key
-   sudo chown 10001:10001 brokersync.key && sudo chmod 600 brokersync.key
+   openssl rand -base64 32 > companion.key
+   sudo chown 10001:10001 companion.key && sudo chmod 600 companion.key
    ```
 
-   **Keep a copy of this key somewhere safe** (for example in your password manager; `sudo cat brokersync.key` shows it). Without it the data can't be opened; with it and the data volume, it can – a master passphrase protects against that (see [Security in brief](#security-in-brief)).
+   **Keep a copy of this key somewhere safe** (for example in your password manager; `sudo cat companion.key` shows it). Without it the data can't be opened; with it and the data volume, it can – a master passphrase protects against that (see [Security in brief](#security-in-brief)).
 
 3. **Without Wealthfolio yet** – the file also starts Wealthfolio. Give it a secret key and the hash of the password you want for Wealthfolio (the `argon2` tool comes from your distribution's `argon2` package, e.g. `sudo apt install argon2`):
 
@@ -126,10 +128,10 @@ brokersync-cli setup-code
    ```bash
    cat > docker-compose.yml <<'EOF'
    services:
-     brokersync:
-       image: ghcr.io/waldonso2/wealthfolio-broker-sync:latest
-       container_name: brokersync
-       hostname: brokersync
+     companion:
+       image: ghcr.io/waldonso2/wealthfolio-companion:latest
+       container_name: companion
+       hostname: companion
        restart: unless-stopped
        ports:
          - "8443:8443"
@@ -137,10 +139,10 @@ brokersync-cli setup-code
        environment:
          TZ: Europe/Berlin
        secrets:
-         - brokersync-key
+         - companion-key
        volumes:
-         - brokersync-data:/data
-         - brokersync-tls:/tls
+         - companion-data:/data
+         - companion-tls:/tls
        read_only: true
        tmpfs:
          - /tmp:size=64M,mode=1777
@@ -148,11 +150,11 @@ brokersync-cli setup-code
        security_opt:
          - no-new-privileges:true
    secrets:
-     brokersync-key:
-       file: ./brokersync.key
+     companion-key:
+       file: ./companion.key
    volumes:
-     brokersync-data:
-     brokersync-tls:
+     companion-data:
+     companion-tls:
    EOF
    ```
 
@@ -165,12 +167,12 @@ brokersync-cli setup-code
 5. Read the setup code from the log:
 
    ```bash
-   docker compose logs brokersync
+   docker compose logs companion
    ```
 
 6. Open `https://<this computer's IP address>:8443` and go on with [First setup](#first-setup). In the UI, Wealthfolio's address is `http://wealthfolio:8088` when it runs from the same Compose file, else its own address.
 
-To have the computer's name in the UI's certificate as well, uncomment `BROKERSYNC_CERT_NAMES` in the Compose file and put in that name (several separated by commas). `BROKERSYNC_RUN_AT` moves the daily fetch (German time, plus up to 45 minutes; default 06:00).
+To have the computer's name in the UI's certificate as well, uncomment `COMPANION_CERT_NAMES` in the Compose file and put in that name (several separated by commas). `COMPANION_RUN_AT` moves the daily fetch (German time, plus up to 45 minutes; default 06:00).
 
 ### Docker run
 
@@ -179,26 +181,26 @@ The same container without Compose.
 1. Create a folder and the key, owned by the container's user (keep a copy, as above):
 
    ```bash
-   mkdir -p ~/brokersync && cd ~/brokersync
-   openssl rand -base64 32 > brokersync.key
-   sudo chown 10001:10001 brokersync.key && sudo chmod 600 brokersync.key
+   mkdir -p ~/companion && cd ~/companion
+   openssl rand -base64 32 > companion.key
+   sudo chown 10001:10001 companion.key && sudo chmod 600 companion.key
    ```
 
 2. Start the container:
 
    ```bash
-   docker run -d --name brokersync --hostname brokersync --restart unless-stopped \
+   docker run -d --name companion --hostname companion --restart unless-stopped \
      -p 8443:8443 -p 8090:8090 -e TZ=Europe/Berlin \
      --read-only --tmpfs /tmp:size=64M,mode=1777 --cap-drop ALL --security-opt no-new-privileges:true \
-     -v brokersync-data:/data -v brokersync-tls:/tls \
-     -v "$PWD/brokersync.key:/run/secrets/brokersync-key:ro" \
-     ghcr.io/waldonso2/wealthfolio-broker-sync:latest
+     -v companion-data:/data -v companion-tls:/tls \
+     -v "$PWD/companion.key:/run/secrets/companion-key:ro" \
+     ghcr.io/waldonso2/wealthfolio-companion:latest
    ```
 
 3. Read the setup code from the log:
 
    ```bash
-   docker logs brokersync
+   docker logs companion
    ```
 
 4. Open `https://<this computer's IP address>:8443` and go on with [First setup](#first-setup).
@@ -210,26 +212,26 @@ The image runs under Podman the same way; rootless Podman maps the container's u
 1. Create a folder and the key (keep a copy, as above):
 
    ```bash
-   mkdir -p ~/brokersync && cd ~/brokersync
-   openssl rand -base64 32 > brokersync.key
-   chmod 600 brokersync.key && podman unshare chown 10001:10001 brokersync.key
+   mkdir -p ~/companion && cd ~/companion
+   openssl rand -base64 32 > companion.key
+   chmod 600 companion.key && podman unshare chown 10001:10001 companion.key
    ```
 
 2. Start the container:
 
    ```bash
-   podman run -d --name brokersync --hostname brokersync --restart unless-stopped \
+   podman run -d --name companion --hostname companion --restart unless-stopped \
      -p 8443:8443 -p 8090:8090 -e TZ=Europe/Berlin \
      --read-only --tmpfs /tmp:size=64M,mode=1777 --cap-drop ALL --security-opt no-new-privileges \
-     -v brokersync-data:/data -v brokersync-tls:/tls \
-     -v "$PWD/brokersync.key:/run/secrets/brokersync-key:ro,Z" \
-     ghcr.io/waldonso2/wealthfolio-broker-sync:latest
+     -v companion-data:/data -v companion-tls:/tls \
+     -v "$PWD/companion.key:/run/secrets/companion-key:ro,Z" \
+     ghcr.io/waldonso2/wealthfolio-companion:latest
    ```
 
 3. Read the setup code from the log:
 
    ```bash
-   podman logs brokersync
+   podman logs companion
    ```
 
 4. Open `https://<this computer's IP address>:8443` and go on with [First setup](#first-setup).
@@ -241,42 +243,42 @@ Unraid runs the same image as a Docker container. There is no Community Applicat
 1. Open the terminal (the `>_` icon at the top right of the Unraid web UI) and create the folders and the key, owned by the container's user (keep a copy of the key outside the server, e.g. in your password manager):
 
    ```bash
-   mkdir -p /mnt/user/appdata/brokersync/data /mnt/user/appdata/brokersync/tls
-   openssl rand -base64 32 > /mnt/user/appdata/brokersync/brokersync.key
-   chown -R 10001:10001 /mnt/user/appdata/brokersync
-   chmod 600 /mnt/user/appdata/brokersync/brokersync.key
+   mkdir -p /mnt/user/appdata/companion/data /mnt/user/appdata/companion/tls
+   openssl rand -base64 32 > /mnt/user/appdata/companion/companion.key
+   chown -R 10001:10001 /mnt/user/appdata/companion
+   chmod 600 /mnt/user/appdata/companion/companion.key
    ```
 
 2. Start the container (port 8443 for the UI; change the left-hand numbers if those ports are taken on your server):
 
    ```bash
-   docker run -d --name brokersync --hostname brokersync --restart unless-stopped \
+   docker run -d --name companion --hostname companion --restart unless-stopped \
      -p 8443:8443 -p 8090:8090 -e TZ=Europe/Berlin \
      --read-only --tmpfs /tmp:size=64M,mode=1777 --cap-drop ALL --security-opt no-new-privileges:true \
-     -v /mnt/user/appdata/brokersync/data:/data -v /mnt/user/appdata/brokersync/tls:/tls \
-     -v /mnt/user/appdata/brokersync/brokersync.key:/run/secrets/brokersync-key:ro \
-     ghcr.io/waldonso2/wealthfolio-broker-sync:latest
+     -v /mnt/user/appdata/companion/data:/data -v /mnt/user/appdata/companion/tls:/tls \
+     -v /mnt/user/appdata/companion/companion.key:/run/secrets/companion-key:ro \
+     ghcr.io/waldonso2/wealthfolio-companion:latest
    ```
 
 3. Read the setup code from the log (or on the *Docker* tab: click the container's icon → *Logs*):
 
    ```bash
-   docker logs brokersync
+   docker logs companion
    ```
 
-4. Open `https://<your Unraid server's IP address>:8443` and go on with [First setup](#first-setup). On the *Docker* tab, turn on *Autostart* for `brokersync`, so it starts with the array.
+4. Open `https://<your Unraid server's IP address>:8443` and go on with [First setup](#first-setup). On the *Docker* tab, turn on *Autostart* for `companion`, so it starts with the array.
 
 **Updating on Unraid** – the *Docker* tab cannot update a container that was created without a template, so pull the new image and create the container again with the command from step 2 (the data in `appdata` stays):
 
 ```bash
-docker pull ghcr.io/waldonso2/wealthfolio-broker-sync:latest
-docker stop brokersync && docker rm brokersync
+docker pull ghcr.io/waldonso2/wealthfolio-companion:latest
+docker stop companion && docker rm companion
 ```
 
 **Backup on Unraid** – `appdata` is covered by the *Appdata Backup* plugin; that backup holds data **and** key, so keep it on an encrypted target or set the master passphrase. A backup of the data only:
 
 ```bash
-(umask 077; docker exec brokersync brokersync backup > /mnt/user/appdata/brokersync-$(date +%F).tar.gz)
+(umask 077; docker exec companion wealthfolio-companion backup > /mnt/user/appdata/companion-$(date +%F).tar.gz)
 ```
 
 ### Behind a reverse proxy
@@ -285,23 +287,23 @@ Behind a proxy, every request seems to come from the proxy's address, so five wr
 
 **Docker Compose**
 
-1. In `docker-compose.yml`, under `environment:` of `brokersync`, add these lines: `BROKERSYNC_TLS` switches the UI to plain HTTP on port 8090 (the proxy does TLS), `BROKERSYNC_TRUST_PROXY` is the proxy's IP address as the container sees it (several separated by commas), `BROKERSYNC_ALLOWED_HOSTS` the public name:
+1. In `docker-compose.yml`, under `environment:` of `companion`, add these lines: `COMPANION_TLS` switches the UI to plain HTTP on port 8090 (the proxy does TLS), `COMPANION_TRUST_PROXY` is the proxy's IP address as the container sees it (several separated by commas), `COMPANION_ALLOWED_HOSTS` the public name:
 
    ```yaml
-         BROKERSYNC_TLS: "off"
-         BROKERSYNC_TRUST_PROXY: "172.18.0.5"
-         BROKERSYNC_ALLOWED_HOSTS: "brokersync.example.com"
+         COMPANION_TLS: "off"
+         COMPANION_TRUST_PROXY: "172.18.0.5"
+         COMPANION_ALLOWED_HOSTS: "companion.example.com"
    ```
 
-2. Remove the `ports:` of `brokersync` when the proxy reaches it over a Docker network, so nobody bypasses the proxy.
-3. Point the proxy to `http://brokersync:8090` (or the computer's address and port 8090).
+2. Remove the `ports:` of `companion` when the proxy reaches it over a Docker network, so nobody bypasses the proxy.
+3. Point the proxy to `http://companion:8090` (or the computer's address and port 8090).
 4. Apply it:
 
    ```bash
    docker compose up -d
    ```
 
-With `docker run` or Podman, add the same values as `-e BROKERSYNC_TLS=off -e BROKERSYNC_TRUST_PROXY=… -e BROKERSYNC_ALLOWED_HOSTS=…`.
+With `docker run` or Podman, add the same values as `-e COMPANION_TLS=off -e COMPANION_TRUST_PROXY=… -e COMPANION_ALLOWED_HOSTS=…`.
 
 **Proxmox VE (LXC)**
 
@@ -310,18 +312,18 @@ The LXC keeps HTTPS on port 8443; point the proxy to `https://<container IP>:844
 1. In the container's console, write a drop-in – put in your proxy's IP address and the public name:
 
    ```bash
-   mkdir -p /etc/systemd/system/wealthfolio-broker-sync.service.d
-   cat > /etc/systemd/system/wealthfolio-broker-sync.service.d/20-proxy.conf <<'EOF'
+   mkdir -p /etc/systemd/system/wealthfolio-companion.service.d
+   cat > /etc/systemd/system/wealthfolio-companion.service.d/20-proxy.conf <<'EOF'
    [Service]
-   Environment=BROKERSYNC_TRUST_PROXY=192.168.1.10
-   Environment=BROKERSYNC_ALLOWED_HOSTS=brokersync.example.com
+   Environment=COMPANION_TRUST_PROXY=192.168.1.10
+   Environment=COMPANION_ALLOWED_HOSTS=companion.example.com
    EOF
    ```
 
 2. Restart the UI:
 
    ```bash
-   systemctl daemon-reload && systemctl restart wealthfolio-broker-sync
+   systemctl daemon-reload && systemctl restart wealthfolio-companion
    ```
 
 On every platform, enter the public address on the page *Notifications*, so the links in notifications open through the proxy.
@@ -338,7 +340,7 @@ Settings, credentials and data stay; the data is migrated at start.
    update
    ```
 
-   It backs up the encrypted data first (`/opt/wealthfolio-broker-sync/backup-*.tar.gz`, the last three are kept) and checks every downloaded file against the release's checksums (`SHA256SUMS`); if one doesn't match, it stops and the current version keeps running.
+   It backs up the encrypted data first (`/opt/wealthfolio-companion/backup-*.tar.gz`, the last three are kept) and checks every downloaded file against the release's checksums (`SHA256SUMS`); if one doesn't match, it stops and the current version keeps running.
 
 2. Or let the container update itself: page *Updates* (opt-in, asks for the UI password).
 
@@ -355,30 +357,30 @@ Settings, credentials and data stay; the data is migrated at start.
 1. Fetch the new image, then remove the container (the volumes stay):
 
    ```bash
-   docker pull ghcr.io/waldonso2/wealthfolio-broker-sync:latest
-   docker rm -f brokersync
+   docker pull ghcr.io/waldonso2/wealthfolio-companion:latest
+   docker rm -f companion
    ```
 
 2. Run the `docker run` command from [Docker run](#docker-run), step 2, again. With Podman, use `podman` in both steps and the command from [Podman](#podman), step 2.
 
 ## Backup and restore
 
-A backup holds only encrypted data, never the key. **It is complete only together with the key** (in Docker your `brokersync.key`, in the LXC `/etc/wealthfolio-broker-sync`): without it the data is worthless. `restore` first checks that the backup opens with this installation's key (and the master passphrase, if set); otherwise it changes nothing. The previous state is kept as `before-restore-*.tar.gz` in the data.
+A backup holds only encrypted data, never the key. **It is complete only together with the key** (in Docker your `companion.key`, in the LXC `/etc/wealthfolio-companion`): without it the data is worthless. `restore` first checks that the backup opens with this installation's key (and the master passphrase, if set); otherwise it changes nothing. The previous state is kept as `before-restore-*.tar.gz` in the data.
 
 **Proxmox VE (LXC)** – the easiest complete backup is Proxmox's backup of the whole container; it holds key and data, so keep it on an encrypted target or set the master passphrase. By hand, in the container's console:
 
 1. Back up:
 
    ```bash
-   (umask 077; brokersync-cli backup > /root/brokersync-$(date +%F).tar.gz)
+   (umask 077; companion-cli backup > /root/companion-$(date +%F).tar.gz)
    ```
 
-2. Restore – stop the UI, restore the file (put in its name; `ls /root/brokersync-*` lists them, `update`'s backups in `/opt/wealthfolio-broker-sync/` work too), start again:
+2. Restore – stop the UI, restore the file (put in its name; `ls /root/companion-*` lists them, `update`'s backups in `/opt/wealthfolio-companion/` work too), start again:
 
    ```bash
-   systemctl stop wealthfolio-broker-sync
-   brokersync-cli restore < /root/brokersync-2026-10-15.tar.gz
-   systemctl start wealthfolio-broker-sync
+   systemctl stop wealthfolio-companion
+   companion-cli restore < /root/companion-2026-10-15.tar.gz
+   systemctl start wealthfolio-companion
    ```
 
 **Docker Compose** – in the folder with `docker-compose.yml`:
@@ -386,15 +388,15 @@ A backup holds only encrypted data, never the key. **It is complete only togethe
 1. Back up:
 
    ```bash
-   (umask 077; docker compose exec -T brokersync brokersync backup > brokersync-$(date +%F).tar.gz)
+   (umask 077; docker compose exec -T companion wealthfolio-companion backup > companion-$(date +%F).tar.gz)
    ```
 
 2. Restore – stop the companion, restore the file (put in its name) in a one-off container, start again:
 
    ```bash
-   docker compose stop brokersync
-   docker compose run --rm -T brokersync restore < brokersync-2026-10-15.tar.gz
-   docker compose start brokersync
+   docker compose stop companion
+   docker compose run --rm -T companion restore < companion-2026-10-15.tar.gz
+   docker compose start companion
    ```
 
 **Docker run / Podman** (with Podman, `podman` instead of `docker`; with rootless Podman, put `:ro,Z` at the end of the key's `-v`):
@@ -402,17 +404,17 @@ A backup holds only encrypted data, never the key. **It is complete only togethe
 1. Back up:
 
    ```bash
-   (umask 077; docker exec brokersync brokersync backup > brokersync-$(date +%F).tar.gz)
+   (umask 077; docker exec companion wealthfolio-companion backup > companion-$(date +%F).tar.gz)
    ```
 
 2. Restore – stop the companion, restore the file (put in its name), start again:
 
    ```bash
-   docker stop brokersync
+   docker stop companion
    docker run --rm -i --read-only --tmpfs /tmp:size=64M,mode=1777 --cap-drop ALL \
-     -v brokersync-data:/data -v "$PWD/brokersync.key:/run/secrets/brokersync-key:ro" \
-     ghcr.io/waldonso2/wealthfolio-broker-sync:latest restore < brokersync-2026-10-15.tar.gz
-   docker start brokersync
+     -v companion-data:/data -v "$PWD/companion.key:/run/secrets/companion-key:ro" \
+     ghcr.io/waldonso2/wealthfolio-companion:latest restore < companion-2026-10-15.tar.gz
+   docker start companion
    ```
 
 ## First setup
@@ -438,7 +440,7 @@ The UI starts in German; select *Einstellungen → Darstellung* to switch it to 
 | "unknown transactions" | Under *Brokers → Unknown*, say what it is; the next fetch books it |
 | Deviation from Wealthfolio | *Brokers → Check*: book missing activities again or ignore them |
 | What's inside my ETFs? | Page *X-Ray*, or in Wealthfolio with the X-Ray addon |
-| Forgot the password | LXC console: `brokersync-reset-password`; Docker: `docker exec -it brokersync brokersync reset-ui-password` |
+| Forgot the password | LXC console: `companion-reset-password`; Docker: `docker exec -it companion wealthfolio-companion reset-ui-password` |
 
 Everything else—reconciliation, X-Ray, costs and FIRE, the booking model, proxy, logs, and metrics—is covered in [Features in Detail](docs/FEATURES.md). Updates, security, backups, and technical details are covered in [Operations](docs/OPERATIONS.md).
 

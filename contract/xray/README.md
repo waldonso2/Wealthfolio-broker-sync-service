@@ -1,6 +1,6 @@
-# Data contract: broker sync → X-Ray addon (schema 1)
+# Data contract: Wealthfolio Companion → X-Ray addon (schema 1)
 
-The broker sync service writes the funds' holdings lists into Wealthfolio's addon storage; the X-Ray addon
+Wealthfolio Companion writes the funds' holdings lists into Wealthfolio's addon storage; the X-Ray addon
 (`waldonso2/wealthfolio-companion-addon-xray`) reads them, takes the positions' values live from Wealthfolio and
 computes X-Ray in the browser. This copy (in the service) is leading; the addon keeps the same files, and CI compares
 them. The full specification is waldonso2/wealthfolio-importer-addon#146.

@@ -1,6 +1,6 @@
 # Security policy
 
-Wealthfolio Broker Sync holds bank and broker credentials. Please report a vulnerability
+Wealthfolio Companion holds bank and broker credentials. Please report a vulnerability
 **privately**, not as a public issue:
 
 - GitHub: *Security* → *Report a vulnerability* in this repository (private vulnerability reporting).
