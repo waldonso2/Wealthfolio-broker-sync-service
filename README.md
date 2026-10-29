@@ -52,7 +52,7 @@ flowchart LR
 ## Requirements
 
 - **Wealthfolio**, self-hosted (3.11 or newer for the X-Ray addon), and its password
-- in Wealthfolio, **two accounts** per broker: a cash account and a securities account ([why](docs/FEATURES.md#booking-model), German)
+- in Wealthfolio, **two accounts** per broker: a cash account and a securities account ([why](docs/FEATURES.md#booking-model))
 - a **Proxmox VE** server (8 or 9) **or** a computer with **Docker** or **Podman** (amd64 or arm64), for example an **Unraid** server
 - optionally the **ntfy** app on your phone ([Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy), [iOS](https://apps.apple.com/app/ntfy/id1625396347))
 
@@ -417,7 +417,7 @@ A backup holds only encrypted data, never the key. **It is complete only togethe
 
 ## First setup
 
-The UI starts ; *Einstellungen → Darstellung* switches it to English (*Settings → Appearance*). The page names below are the English ones.
+The UI starts in German; select *Einstellungen → Darstellung* to switch it to English (*Settings → Appearance*). The page names below are the English ones.
 
 1. **Password:** set it with the setup code, which appears only in the console or the container's log.
 2. **Certificate:** confirm the browser's warning the first time. On the page *Security*, download the CA certificate and import it once; after that the connection counts as secure.
