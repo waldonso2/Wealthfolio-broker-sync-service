@@ -1048,7 +1048,10 @@ def _fill_ters(state: State, depot: Depot, sources: Sources, deadline: float, on
         except SourceError as e:
             log.info("look-through: nothing from Finanzfluss for %s: %s", p["isin"], e)
             continue
-        found: dict = {"ff_regions": ff["regions"], "ff_sectors": ff["sectors"]}
+        # An empty answer (Finanzfluss changed its page?) never replaces what was read before (#134 D1).
+        found: dict = {k: ff[v] for k, v in (("ff_regions", "regions"), ("ff_sectors", "sectors")) if ff[v]}
+        if not found and ff["ter"] is None:
+            log.warning("look-through: Finanzfluss' page for %s gave nothing - has its layout changed?", p["isin"])
         if ff["ter"] is not None and not (st.get("ter") and st.get("ter_source") != "Finanzfluss"):
             found |= {"ter": str(ff["ter"]), "ter_source": "Finanzfluss", "ter_at": now()}
         set_status(state, p["id"], ter_asked=now(), **found)

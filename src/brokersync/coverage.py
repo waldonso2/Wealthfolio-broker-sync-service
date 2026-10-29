@@ -22,12 +22,15 @@ in Wealthfolio.
 
 from __future__ import annotations
 
+import logging
 import re
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime
 
 from .model import Kind, Transaction, when
+
+log = logging.getLogger(__name__)
 
 SYNC_REF = re.compile(r"\[SYNC ([^:\]\s]+):([^\]]+)\]")
 MISSING, PARTIAL, IGNORED, ORPHAN = "missing", "partial", "ignored", "orphan"
@@ -69,8 +72,9 @@ def check(broker: str, transactions: list[Transaction], synced: dict[str, tuple[
     gaps = [g for tx in transactions if (g := _gap(tx, synced.get(tx.id), tagged, by_id))]
     if full_history:
         listed = {tx.id for tx in transactions}
-        gaps += [_orphan(a, tx_id) for tx_id, acts in tagged.items() if tx_id not in listed for a in acts
-                 if not (since and when(a.get("date") or "") < since)]  # before the start date: not comparable
+        gaps += [_orphan(a, tx_id, moment) for tx_id, acts in tagged.items() if tx_id not in listed for a in acts
+                 if (moment := _moment(a)) is not None
+                 and not (since and moment < since)]  # before the start date: not comparable
     return sorted(gaps, key=lambda g: g.occurred_at)
 
 
@@ -91,7 +95,17 @@ def _gap(tx: Transaction, row: tuple[str, list[str]] | None, tagged: dict[str, l
     return None
 
 
-def _orphan(a: dict, tx_id: str) -> Gap:
+def _moment(a: dict) -> datetime | None:
+    """The activity's moment; None (and a log line) for one without a readable date (#134 M2): one odd activity
+    must not stop the whole comparison."""
+    try:
+        return when(a.get("date") or "")
+    except ValueError:
+        log.warning("activity %s without a readable date skipped", a.get("id"))
+        return None
+
+
+def _orphan(a: dict, tx_id: str, moment: datetime) -> Gap:
     """An activity of the sync whose transaction the broker no longer lists."""
-    return Gap(ORPHAN, a["id"], when(a.get("date") or "").isoformat(), a.get("activityType") or "",
+    return Gap(ORPHAN, a["id"], moment.isoformat(), a.get("activityType") or "",
                a.get("assetSymbol") or "", str(a.get("amount") or ""), a.get("currency") or "", tx_id)

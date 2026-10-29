@@ -61,6 +61,7 @@ def template_gettext(context, text: str, **params) -> Markup:
 EN: dict[str, str] = {
     # ── navigation, frame ──
     # Page Dienste (#145)
+    "Die Anmeldung läuft gerade schon - bitte kurz warten.": "The login is already in progress - please wait a moment.",
     "Dienste": "Services",
     "Was der Service in dein Wealthfolio schreibt. Jeder Dienst lässt sich einzeln ein- und ausschalten.":
         "What the service writes into your Wealthfolio. Each service can be switched on and off on its own.",

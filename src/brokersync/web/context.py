@@ -9,7 +9,8 @@ from __future__ import annotations
 import secrets
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Any
@@ -79,6 +80,9 @@ class AppContext:
     # Set while a sync started from the UI runs.
     running: threading.Event = field(default_factory=threading.Event)
     start_lock: threading.Lock = field(default_factory=threading.Lock)
+    # Brokers whose login step runs now (#134 M5): a second request at the same time never sends a TAN twice
+    # or finishes one login twice. Not a lock held for the step - the step may start the next broker's login.
+    login_busy: set[str] = field(default_factory=set)
     # PINs typed at a login that aren't stored (#85): kept in memory only until the run that follows.
     pins: dict[str, str] = field(default_factory=dict)
     # The long action going on in the background (#104; a UI text key) and the message it ended with.
@@ -104,7 +108,8 @@ class AppContext:
             settle(request, self)
         flash = request.session.pop("flash", None)
         if not flash and self.job_result and request.session.get("user"):
-            flash, self.job_result = self.job_result, None  # what a background job ended with (#104)
+            with self.start_lock:  # shown once, even to two pages at the same moment
+                flash, self.job_result = self.job_result, None  # what a background job ended with (#104)
         nav_unknown = self.state.unknown_count() if request.session.get("user") else 0
         language = self.language()
         try:
@@ -117,6 +122,19 @@ class AppContext:
             "nav_unknown": nav_unknown, "settings_pages": pages, "lang": language,
             "reauth": not recent(request), **ctx,
         })
+
+    @contextmanager
+    def login_step(self, key: str) -> Iterator[bool]:
+        """True while this request has the broker's login to itself, False if another one has it now."""
+        with self.start_lock:
+            free = key not in self.login_busy
+            self.login_busy.add(key)
+        try:
+            yield free
+        finally:
+            if free:
+                with self.start_lock:
+                    self.login_busy.discard(key)
 
     def event(self, request: Request, event: str, *, ok: bool = True, broker: str = "", detail: str = "") -> None:
         """One entry of the event log on *Sicherheit* (#102); ``event`` a key of ``EVENTS``. Never a secret."""

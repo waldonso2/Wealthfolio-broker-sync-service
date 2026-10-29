@@ -415,3 +415,15 @@ def test_the_error_pages_back_link_stays_on_this_site(tmp_path):
                           ("http://sync.local:8090/brokers", "/brokers"), ("/security", "/security")):
         r = client.post("/run", data={"csrf": "forged"}, headers={"referer": referer})
         assert r.status_code == 400 and f'href="{back}"' in r.text, referer
+
+
+def test_a_second_login_step_of_the_same_broker_at_once_is_refused(tmp_path):
+    """#134 M5: two requests at the same moment never send a TAN twice or finish one login twice."""
+    client, _, _ = make(tmp_path)
+    first_password(client)  # the app is built on the first request
+    ctx = client.app.inner.state.ctx
+    with ctx.login_step("fake") as first:
+        with ctx.login_step("fake") as second, ctx.login_step("other") as other:
+            assert (first, second, other) == (True, False, True)
+        assert "fake" in ctx.login_busy  # the refused one didn't free it
+    assert ctx.login_busy == set()

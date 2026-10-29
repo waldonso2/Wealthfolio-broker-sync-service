@@ -173,6 +173,9 @@ def test_with_a_passphrase_nothing_opens_without_it(tmp_path):
         crypto.unseal(crypto._data_key(tmp_path, None), (tmp_path / "secrets.enc").read_bytes(), "secrets")
     assert config_mod.load_notify(tmp_path).public_url == "http://sync.local:8090"  # host tier: readable
     assert not crypto.unlock(tmp_path, "falsch falsch falsch")
+    crypto._cache_pkey(tmp_path, b"p" * 32)  # a planted or stale unlock cache opens nothing (#134 L6)
+    with pytest.raises(crypto.Locked):
+        crypto.data_key(tmp_path)
     assert crypto.unlock(tmp_path, "eine sehr lange passphrase")
     assert State(tmp_path).runs("fake")
     security.change_passphrase(tmp_path, None)

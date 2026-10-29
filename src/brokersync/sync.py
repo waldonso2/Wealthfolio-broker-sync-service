@@ -46,7 +46,7 @@ from .reconcile import compare
 from .redact import redact
 from .state import State, masked
 from .vault import Vault
-from .wealthfolio import Duplicate, WealthfolioClient, WealthfolioError, connect
+from .wealthfolio import DuplicateActivity, WealthfolioClient, WealthfolioError, connect
 
 log = logging.getLogger(__name__)
 __all__ = ["BERLIN", "opening_id"]  # where the web UI and the tests take them from
@@ -906,11 +906,17 @@ class Syncer:
                     log.info("%s: tax not added to %s: %s", key, tx.id, e)
             return
         ids: list[str] = []
+        new = 0
+        ref = tx_ref(key, tx).strip()
         try:
             for p in payloads:
                 created = wf.create_activity(p)
-                if isinstance(created, Duplicate):
-                    continue  # this leg was created by an earlier, interrupted run
+                if isinstance(created, DuplicateActivity):
+                    # This leg was created by an earlier, interrupted run: keep its id (#134 M1).
+                    ids += [e["id"] for e in existing.existing
+                            if ref in (e.get("comment") or "") and e["id"] not in ids]
+                    continue
+                new += 1
                 ids.append(created.get("id", ""))
                 # A bank settlement later in this run (SECURITIES_CASH) can match the cash leg of a trade
                 # or payout booked now - not the legs of a transfer to an own account.
@@ -924,7 +930,7 @@ class Syncer:
             result.messages.append(f"{tx.datetime.date()} {tx.label or tx.kind} {tx.name}: {e}")
             return
         self.state.mark(key, tx.id, "imported", ids)
-        if ids:
+        if new:
             result.created += 1
         else:
             result.existing += 1

@@ -10,7 +10,7 @@ Activities are created one at a time (``POST /api/v1/activities``), like the
 addon does, so ``tax``, ``subtype`` and ``sourceGroupId`` arrive unchanged.
 Wealthfolio rejects an exact duplicate (same idempotency fingerprint) with
 "Duplicate activity detected"; ``create_activity`` reports that as
-``Duplicate`` instead of an error.
+``DuplicateActivity`` instead of an error.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ class SpendingUnsupported(WealthfolioError):
 
 
 @dataclass(frozen=True)
-class Duplicate:
+class DuplicateActivity:
     message: str
 
 
@@ -168,14 +168,14 @@ class WealthfolioClient:
             for a in r.json()
         ]
 
-    def create_activity(self, payload: dict) -> dict | Duplicate:
+    def create_activity(self, payload: dict) -> dict | DuplicateActivity:
         r = self._request("POST", "/activities", json=payload)
         if r.status_code >= 400:
             detail = _detail(r)
             # Wealthfolio's fingerprint check (409, "Duplicate activity detected"): any wording of it, not
             # only today's (SEC-09) - a real error never says "duplicate".
             if "duplicate" in detail.lower():
-                return Duplicate(detail)
+                return DuplicateActivity(detail)
             raise WealthfolioError(f"Wealthfolio rejected the activity ({payload.get('activityType')}): {detail}")
         return r.json()
 

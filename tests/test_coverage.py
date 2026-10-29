@@ -175,3 +175,13 @@ def test_the_check_page_lets_the_user_rebook_or_ignore(tmp_path):
     assert DIVIDEND not in State(tmp_path).synced("fake")
     [r] = syncer.run()
     assert r.created == 1
+
+
+def test_an_activity_without_a_readable_date_is_skipped_not_fatal():
+    """#134 M2: one odd activity must not stop the whole comparison."""
+    from brokersync.coverage import check
+
+    odd = [{"id": "x1", "date": "", "comment": "[SYNC fake:gone]"},
+           {"id": "x2", "date": "2026-03-01T00:00:00Z", "activityType": "DEPOSIT", "comment": "[SYNC fake:gone2]"}]
+    gaps = check("fake", [], {}, odd, full_history=True, since=None)
+    assert [g.ref for g in gaps] == ["x2"]

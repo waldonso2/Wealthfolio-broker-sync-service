@@ -138,3 +138,15 @@ def test_pending_bookings_wait_and_debits_are_negative():
           "status": "PDNG", "booking_date": "2026-09-29"}]]}
     txs = eb.BANKS[0].replay(recording).get_transactions(None)
     assert [(t.kind, t.signed, t.counterparty) for t in txs] == [(Kind.WITHDRAWAL, -12, "Bäckerei Muster")]
+
+
+def test_a_continuation_key_that_comes_again_stops_the_fetch(monkeypatch):
+    """#134 M6: a bank whose continuation key never moves on would else be asked for ever."""
+    adapter = eb.BANKS[0](CREDS, None)
+    calls = []
+    monkeypatch.setattr(adapter, "_account", lambda: "uid")
+    monkeypatch.setattr(adapter, "_call", lambda *a, **k: calls.append(k) or {"transactions": [],
+                                                                               "continuation_key": "same"})
+    with pytest.raises(AdapterError, match="dieselbe Seite"):
+        adapter.get_transactions(None)
+    assert len(calls) == 2

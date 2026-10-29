@@ -97,6 +97,10 @@ def test_lost_state_is_recovered_from_the_comments(tmp_path):
     [r] = syncer2.run()
     assert (r.created, r.existing) == (0, 3)
     assert len(wf.activities) == count
+    # Every leg came back as a duplicate: its ids are still stored (#134 M1), not an empty list.
+    present = {a["id"] for a in wf.activities}
+    synced = syncer2.state.synced("fake")
+    assert synced and all(ids and set(ids) <= present for status, ids in synced.values() if status == "imported")
 
 
 def test_activities_from_the_addons_csv_import_are_recognised(tmp_path):

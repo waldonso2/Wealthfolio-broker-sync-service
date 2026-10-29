@@ -966,3 +966,16 @@ def test_finanzfluss_breaks_down_a_fund_whose_list_names_no_countries_or_sectors
     assert "Exotisches" in r.unmatched
     assert lookthrough.status(state, "a-lg")["from_finanzfluss"] == ["regions", "industries_gics"]
     assert not lookthrough.status(state, "a-own").get("from_finanzfluss")
+
+
+def test_an_empty_finanzfluss_page_keeps_the_breakdown_read_before(tmp_path, caplog):
+    """#134 D1: Finanzfluss changing its page must not wipe the countries and sectors it gave last time."""
+    state = State(tmp_path)
+    depot = Depot(positions=[{"id": "a-ubs", "isin": "LU0000000000", "name": "UBS Example UCITS ETF",
+                              "currency": "EUR", "value": D(9)}])
+    lookthrough.set_status(state, "a-ubs", status="upload", ff_regions=[["US", "0.6"]], ff_sectors=[["IT", "0.2"]])
+    s, _ = issuers({"finanzfluss.de/informer/etf/lu0000000000/": httpx.Response(200, text="<html></html>")})
+    lookthrough.update(state, depot, s, force=True)
+    st = lookthrough.status(state, "a-ubs")
+    assert st["ff_regions"] == [["US", "0.6"]] and st["ff_sectors"] == [["IT", "0.2"]]
+    assert "gave nothing" in caplog.text
