@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.0a6
+
+Audit and hardening: secrets, web attack surface, workflows and supply chain, container and systemd units.
 
 - Security (#153): forms sent by another website through the browser are refused before any password check - a page elsewhere could else spend the login brake and lock the owner out for 15 minutes.
 - Security (#153): the stored Wealthfolio password is only sent to the address it was saved for; a new address needs it typed again (also for *Nur testen*). The ntfy token is dropped when the ntfy server changes, unless a new one is typed. logo.dev redirects only over https.
