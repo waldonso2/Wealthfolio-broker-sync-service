@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.0b1
+
+Features: DKB depot transactions booked, comdirect dividends with their tax, one rule for rate limits, more sector names mapped, asset classes for funds without one.
 
 - Countries & sectors (#166): Finanzfluss' industries Abfallwirtschaft, Bildung, Forsterzeugnisse, Kleidung & Accessoires, Konglomerate, Landwirtschaft, Med. Diagnostik & Forschung and Unternehmensdienste now go to their GICS sector (Industrials, Consumer Discretionary, Materials, Consumer Discretionary, Industrials, Consumer Staples, Health Care, Industrials). Names that are no country or sector (cash and derivatives, "Other", "unbekannt", the pseudo-code XE) are never assigned and listed apart on the service's page as deliberately unassigned; a real country Wealthfolio has no category for (CI, JE) stays listed as without a category.
 - Asset classes (waldonso2/wealthfolio-importer-addon#141, part): every run lists the positions Wealthfolio has no asset class for (its target allocation counts them as "Unknown") on *Prüfung*, with what to do. With *Länder & Sektoren* on, a fund without any asset class whose name Wealthfolio's own rules read as a bond fund or a physical precious-metal ETC gets FIXED_INCOME or COMMODITIES at 100 % with source AUTO, so Wealthfolio's quote provider replaces it; nothing else is inferred, an asset with any asset class (the user's above all) is never touched. The FIRDS fallback of the issue is not built.
