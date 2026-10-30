@@ -30,6 +30,15 @@ Stored data is encrypted. The **Security** page always shows what is protected a
 
 **Events:** The *Security* page lists logins (including failures), logouts, and changes to credentials, password, passphrase, and sync mode for the last 180 days, including the source address but no passwords or credentials. A login from an address never seen before triggers an ntfy notification.
 
+**Container image trust chain (Docker, Podman, Unraid):** `.github/workflows/release.yml` builds the image only for a new release, after the whole CI, and pushes it to `ghcr.io/waldonso2/wealthfolio-companion` as `v<version>` (and `latest`, which the documentation never uses). The same job signs the image's digest with cosign (keyless: a short-lived Sigstore certificate for the workflow's GitHub OIDC token, logged in Rekor) and attaches GitHub's SLSA build provenance (`https://slsa.dev/provenance/v1`) to it in the registry. `scripts/pull-verified-image.sh <version>` checks that chain before anything runs:
+
+1. The version must be a release version (`X.Y.Z`, `X.Y.ZaN`, `X.Y.ZbN`, `X.Y.ZrcN`); `latest` is refused.
+2. The tag `v<version>` is resolved to its digest once (anonymously, ghcr.io); everything after that uses `image@sha256:…` only, so a tag moved later changes nothing.
+3. `cosign verify` and `cosign verify-attestation --type slsaprovenance1` must both succeed for that digest with exactly this policy: certificate identity `https://github.com/waldonso2/wealthfolio-companion/.github/workflows/release.yml@refs/heads/main`, OIDC issuer `https://token.actions.githubusercontent.com`, repository `waldonso2/wealthfolio-companion`, ref `refs/heads/main`, trigger `push`. A signature from another repository, workflow, branch or issuer, a missing signature or provenance, or an unreachable registry ends the script with an error and no output.
+4. Only then it prints the reference (or writes it into `.env` as `COMPANION_IMAGE`). It never pulls, stops or replaces a container itself; the documented update commands pull the new image before the old container is removed or recreated, so a failed check or a registry outage leaves the running container as it is. The Compose file refuses to start without `COMPANION_IMAGE`; there is no default.
+
+cosign 3 is required (the documented install pins 3.0.6 with the SHA-256 of sigstore's own installer, the version the release workflow signs with); cosign fetches Sigstore's trust root itself (TUF). The script is downloaded from this repository's `main`; read it before running it if that matters to you. The Wealthfolio image in the example Compose file is Wealthfolio's own and is not covered by this check – pin and verify it as its project describes.
+
 ## Backup and restore
 
 Before updating, `update` backs up `data/` to `/opt/wealthfolio-companion/backup-*.tar.gz`—encrypted data only, without the key. You can also create a backup manually from the container console:

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Docker, Podman, Unraid (#150): the image is run only by a digest whose cosign signature and SLSA provenance were verified for this repository's `release.yml` on `main` - new `scripts/pull-verified-image.sh <version>` (resolves the tag once, refuses `latest`, fails closed and changes nothing on any error). The Compose example needs `COMPANION_IMAGE` (no tag, no default); the README's install, update and restore steps, the *Updates* page and the update notice use it; cosign 3.0.6 install pinned by SHA-256.
+
 ## 0.1.0a4
 
 - Documentation: ARCHITECTURE.md is English and describes the current architecture and data flow; the move guide from Wealthfolio Broker Sync is no longer part of the operations guide - it stays in this changelog (0.1.0a1), and the old installer's notice points there.

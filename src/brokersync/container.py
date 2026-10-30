@@ -12,7 +12,8 @@ What systemd does in the LXC happens here in one process:
 - the daily fetch (``wealthfolio-companion-run.timer`` in the LXC) as a thread: ``RUN_AT`` German time plus up to
   ``JITTER`` minutes, under the same sync lock as every other run.
 
-Updates are a new image (``docker compose pull``): the page *Updates* says so instead of offering to install.
+Updates are a new image (``pull-verified-image.sh``, then ``docker compose pull``): the page *Updates* says so
+instead of offering to install.
 """
 
 from __future__ import annotations

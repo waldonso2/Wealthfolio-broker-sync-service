@@ -109,4 +109,5 @@ def test_the_updates_page_says_how_a_container_is_updated(tmp_path, monkeypatch)
     client, _, _ = make(tmp_path)
     first_password(client)
     page = client.get("/updates").text
-    assert "docker compose pull" in page and 'name="auto_update"' not in page
+    assert "pull-verified-image.sh --env .env" in page and "docker compose pull" in page
+    assert 'name="auto_update"' not in page
