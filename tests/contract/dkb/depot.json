@@ -1,0 +1,162 @@
+{
+  "description": "Fabricated DKB depot transactions (MT536, #130): a buy before the giro history, a buy with price and a sale without, each settled by a giro booking; a free delivery, a corporate action and a reversal stay unknown",
+  "recording": {
+    "iban": "",
+    "accounts": [
+      {
+        "iban": "DE02120300000000202051"
+      }
+    ],
+    "balance": {
+      "amount": "1441.20",
+      "currency": "EUR"
+    },
+    "depot": {
+      "account": "0000777666",
+      "mt536": [
+        ":16R:GENL\n:28E:1/ONLY\n:13A::STAT//536\n:20C::SEME//NONREF\n:23G:NEWM\n:98C::PREP//20260920120000\n:69A::STAT//20260701/20260920\n:97A::SAFE//12030000/0000777666\n:22F::CODE//COMP\n:22F::STBA//SETT\n:17B::ACTI//Y\n:16S:GENL\n:16R:SUBSAFE\n:16R:FIN\n:35B:ISIN LU0000000001\n/DE/A0TEST\nTEST WORLD FONDS\n:16R:TRAN\n:16R:LINK\n:20C::RELA//000000000101\n:16S:LINK\n:16R:TRANSDET\n:36B::PSTA//UNIT/1,\n:19A::PSTA//NEUR100,\n:22F::TRAN//SETT\n:22H::REDE//RECE\n:22H::PAYM//APMT\n:98A::ESET//20260801\n:16S:TRANSDET\n:16S:TRAN\n:16R:TRAN\n:16R:LINK\n:20C::RELA//000000000102\n:16S:LINK\n:16R:TRANSDET\n:36B::PSTA//UNIT/2,5\n:19A::PSTA//NEUR251,9\n:90B::DEAL//ACTU/EUR100,76\n:22F::TRAN//SETT\n:22H::REDE//RECE\n:22H::PAYM//APMT\n:98A::ESET//20260903\n:98A::SETT//20260907\n:16S:TRANSDET\n:16S:TRAN\n:16S:FIN\n:16R:FIN\n:35B:ISIN DE0000000002\nTEST AKTIE\n:16R:TRAN\n:16R:TRANSDET\n:36B::PSTA//UNIT/7,\n:19A::PSTA//EUR699,\n:22F::TRAN//SETT\n:22H::REDE//DELI\n:22H::PAYM//APMT\n:98C::ESET//20260910153000\n:16S:TRANSDET\n:16S:TRAN\n:16R:TRAN\n:16R:TRANSDET\n:36B::PSTA//UNIT/7,\n:22F::TRAN//SETT\n:22H::REDE//RECE\n:22H::PAYM//FREE\n:98A::ESET//20260828\n:16S:TRANSDET\n:16S:TRAN\n:16R:TRAN\n:16R:TRANSDET\n:36B::PSTA//UNIT/1,\n:22F::TRAN//CORP\n:22H::REDE//RECE\n:22H::PAYM//FREE\n:98A::ESET//20260901\n:16S:TRANSDET\n:16S:TRAN\n:16R:TRAN\n:16R:TRANSDET\n:36B::PSTA//UNIT/7,\n:19A::PSTA//NEUR699,\n:22F::TRAN//SETT\n:22H::REDE//DELI\n:22H::PAYM//APMT\n:98A::ESET//20260911\n:25D::MOVE//REVE\n:16S:TRANSDET\n:16S:TRAN\n:16S:FIN\n:16S:SUBSAFE\n-"
+      ]
+    },
+    "transactions": [
+      {
+        "date": "2026-09-01",
+        "entry_date": "2026-09-01",
+        "amount": "2000.00",
+        "currency": "EUR",
+        "posting_text": "Gutschrift",
+        "purpose": "Lohn/Gehalt 08/2026",
+        "applicant_name": "Muster GmbH",
+        "applicant_iban": "DE89370400440532013000"
+      },
+      {
+        "date": "2026-09-07",
+        "entry_date": "2026-09-07",
+        "amount": "-253.40",
+        "currency": "EUR",
+        "posting_text": "Wertpapierabrechnung",
+        "purpose": "Kauf LU0000000001 TEST WORLD FONDS",
+        "applicant_name": "",
+        "applicant_iban": ""
+      },
+      {
+        "date": "2026-09-14",
+        "entry_date": "2026-09-14",
+        "amount": "695.10",
+        "currency": "EUR",
+        "posting_text": "Wertpapierabrechnung",
+        "purpose": "Verkauf DE0000000002 TEST AKTIE",
+        "applicant_name": "",
+        "applicant_iban": ""
+      }
+    ]
+  },
+  "since": "2026-08-25T00:00:00+02:00",
+  "expected": [
+    {
+      "id": "20260901-3c75c1d1e78d72d2-1",
+      "kind": "DEPOSIT",
+      "datetime": "2026-09-01T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "2000",
+      "label": "Gutschrift",
+      "counterparty": "Muster GmbH",
+      "counterparty_iban": "DE89370400440532013000",
+      "text": "Lohn/Gehalt 08/2026",
+      "signed": "2000",
+      "raw_type": "Gutschrift"
+    },
+    {
+      "id": "20260907-10be88603502b7a8-1",
+      "kind": "SECURITIES_CASH",
+      "datetime": "2026-09-07T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "253.4",
+      "label": "Wertpapierabrechnung",
+      "text": "Kauf LU0000000001 TEST WORLD FONDS",
+      "signed": "-253.4",
+      "raw_type": "Wertpapierabrechnung"
+    },
+    {
+      "id": "20260914-be4391951c2e62c4-1",
+      "kind": "SECURITIES_CASH",
+      "datetime": "2026-09-14T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "695.1",
+      "label": "Wertpapierabrechnung",
+      "text": "Verkauf DE0000000002 TEST AKTIE",
+      "signed": "695.1",
+      "raw_type": "Wertpapierabrechnung"
+    },
+    {
+      "id": "mt536-20260801-410aa00eea30f1a5-1",
+      "kind": "BUY",
+      "datetime": "2026-08-01T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "100",
+      "isin": "LU0000000001",
+      "name": "TEST WORLD FONDS",
+      "shares": "1",
+      "gross": "100",
+      "label": "Kauf",
+      "external_cash": true
+    },
+    {
+      "id": "mt536-20260903-13563b1f36a22ac0-1",
+      "kind": "BUY",
+      "datetime": "2026-09-03T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "253.4",
+      "isin": "LU0000000001",
+      "name": "TEST WORLD FONDS",
+      "shares": "2.5",
+      "gross": "251.9",
+      "fee": "1.5",
+      "label": "Kauf"
+    },
+    {
+      "id": "mt536-20260910-df042190f0cdc09c-1",
+      "kind": "SELL",
+      "datetime": "2026-09-10T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "695.1",
+      "isin": "DE0000000002",
+      "name": "TEST AKTIE",
+      "shares": "7",
+      "gross": "695.1",
+      "label": "Verkauf"
+    },
+    {
+      "id": "mt536-20260828-c2f26e76dbdc98f6-1",
+      "kind": "UNKNOWN",
+      "datetime": "2026-08-28T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "0",
+      "isin": "DE0000000002",
+      "name": "TEST AKTIE",
+      "label": "Eingang ohne Zahlung",
+      "raw_type": "MT536 Eingang ohne Zahlung"
+    },
+    {
+      "id": "mt536-20260901-af45a31147929119-1",
+      "kind": "UNKNOWN",
+      "datetime": "2026-09-01T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "0",
+      "isin": "DE0000000002",
+      "name": "TEST AKTIE",
+      "label": "Kapitalmaßnahme",
+      "raw_type": "MT536 Kapitalmaßnahme"
+    },
+    {
+      "id": "mt536-20260911-a81308e6d5e17b26-1",
+      "kind": "UNKNOWN",
+      "datetime": "2026-09-11T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "699",
+      "isin": "DE0000000002",
+      "name": "TEST AKTIE",
+      "label": "Storno",
+      "raw_type": "MT536 Storno"
+    }
+  ]
+}

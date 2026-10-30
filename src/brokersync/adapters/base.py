@@ -137,6 +137,8 @@ class BrokerAdapter(ABC):
         self.incomplete = False
         # Set by an adapter that reads a bank account's history: the first day it read this run.
         self.history_start: date | None = None
+        # Set by the sync: the earliest day of that history read in an earlier run (``meta history-start``).
+        self.history_read: date | None = None
         # Set by the sync when the user assigned a Wealthfolio account to the savings account
         # (``savings_label``): read it too, from ``savings_since`` (None: as far back as without a TAN).
         self.with_savings = False

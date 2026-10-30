@@ -130,6 +130,9 @@ class FintsAdapter(BrokerAdapter):
     interest_pattern: ClassVar[re.Pattern] = INTEREST
     fee_pattern: ClassVar[re.Pattern] = FEE
     savings_label = "Tagesgeld"
+    # Book the depot transactions (HKWDU, MT536) as trades (#130); else they are only described in the log.
+    # Off where depot trades come from elsewhere (Deutsche Bank: its CSV export) - they would be booked twice.
+    book_depot_movements: ClassVar[bool] = False
 
     # Replaced in tests with a fake; real runs use python-fints.
     client_factory = None
@@ -441,29 +444,47 @@ class FintsAdapter(BrokerAdapter):
         if self.with_savings:
             out = self._with_savings(out, account, today)
         # As far back as the bank answers without a TAN - not just this run's window: there is more to check.
-        self._depot_movements(min(start, today - timedelta(days=NO_TAN_DAYS)), today)
+        movements = self._depot_movements(min(start, today - timedelta(days=NO_TAN_DAYS)), today)
+        if movements and self.book_depot_movements:
+            out += self._book_movements(movements, out, today)
         return out
 
-    def _depot_movements(self, start: date, end: date) -> None:
-        """Diagnosis, nothing booked yet: the depot transactions (HKWDU, MT536) if the bank offers them -
-        what they would be booked as and the answer's layout, counts and field names only."""
+    def _book_movements(self, movements: list, giro: list[Transaction], today: date) -> list[Transaction]:
+        """The depot transactions as trades (``mt536.to_transactions``); a failure books none of them, never
+        stops the giro account's."""
+        from . import mt536
+
+        read = [d for d in (self.history_start, self.history_read) if d]
+        try:
+            txs = mt536.to_transactions(movements, giro, min(read) if read else None, today)
+        except Exception as e:
+            log.info("%s (FinTS): Depotumsätze nicht gebucht: %s: %s", self.label, type(e).__name__, e)
+            return []
+        log.info("%s (FinTS): Depotumsätze: %d gebucht oder geprüft, %d warten auf ihre Girobuchung", self.label,
+                 len(txs), len(movements) - len(txs))
+        return txs
+
+    def _depot_movements(self, start: date, end: date) -> list:
+        """The depot transactions (HKWDU, MT536) as ``mt536.Movement``s if the bank offers them without a
+        TAN; the log tells what they are and the answer's layout, counts and field names only."""
         try:
             if not self._client.bpd.find_segment_first("HIWDUS"):
-                return
+                return []
         except Exception:
-            return
+            return []
         from . import mt536
 
         if mt536.needs_tan(self._client):
             log.info("%s (FinTS): Depotumsätze verlangen eine Freigabe in der App - nicht abgerufen", self.label)
-            return
+            return []
         fetch = getattr(self._client, "get_depot_transactions", None) or (
             lambda account, a, b: mt536.fetch(self._client, account, a, b))
         try:
             depots = self._depot_accounts()
         except AdapterError as e:
             log.info("%s (FinTS): Depotumsätze: kein Depot gefunden: %s", self.label, e)
-            return
+            return []
+        out = []
         for account, what in depots:
             try:
                 texts = fetch(account, start, end)
@@ -479,12 +500,15 @@ class FintsAdapter(BrokerAdapter):
                 continue
             try:
                 movements = [m for t in texts for m in mt536.parse(t)]
-                log.info("%s (FinTS): Depotumsätze von %s seit %s (Test, nichts gebucht): %d - %s. Aufbau: %s",
-                         self.label, what, start.isoformat(), len(movements), mt536.summary(movements),
-                         mt536.structure(texts))
+                log.info("%s (FinTS): Depotumsätze von %s seit %s%s: %d - %s. Aufbau: %s",
+                         self.label, what, start.isoformat(), "" if self.book_depot_movements else " (nicht gebucht)",
+                         len(movements), mt536.summary(movements), mt536.structure(texts))
             except Exception as e:
                 log.info("%s (FinTS): Depotumsätze von %s nicht auswertbar: %s: %s", self.label, what,
                          type(e).__name__, e)
+                continue
+            out += movements
+        return out
 
     def _with_savings(self, giro_txs: list[Transaction], giro_account, today: date) -> list[Transaction]:
         """The savings account's bookings (on its own Wealthfolio account); transfers between the two
@@ -712,13 +736,22 @@ class _Balance:
         self.amount = _Amount(amount, currency)
 
 
+class _ReplayBpd:
+    def __init__(self, segments: set[str]):
+        self.segments = segments
+
+    def find_segment_first(self, name: str):
+        return name if name in self.segments else None
+
+
 class ReplayClient:
     """Answers like python-fints' client from a recording (contract tests).
 
     Recording: ``{"accounts": [{"iban"}], "transactions": [{"date", "entry_date",
     "amount", "currency", "posting_text", "purpose", "applicant_name",
-    "applicant_iban"}], "balance": {"amount", "currency"}}`` - dates ISO, amounts
-    as strings, always fabricated.
+    "applicant_iban"}], "balance": {"amount", "currency"}, "depot": {"account",
+    "mt536": [answer]}}`` - dates ISO, amounts as strings, always fabricated.
+    ``depot`` (optional) adds a depot without IBAN that answers HKWDU.
     """
 
     init_tan_response = None
@@ -745,8 +778,25 @@ class ReplayClient:
     def deconstruct(self, including_private=False) -> bytes:
         return b"replay"
 
+    @property
+    def bpd(self):
+        return _ReplayBpd({"HIWDUS"} if self.recording.get("depot") else set())
+
+    def _need_twostep_tan_for_segment(self, segment) -> bool:
+        return False
+
     def get_sepa_accounts(self):
-        return [_Account(a["iban"]) for a in self.recording.get("accounts", [])]
+        accounts = [_Account(a["iban"]) for a in self.recording.get("accounts", [])]
+        if self.recording.get("depot"):
+            depot = _Account("")
+            depot.iban, depot.accountnumber = None, self.recording["depot"]["account"]
+            accounts.append(depot)
+        return accounts
+
+    def get_depot_transactions(self, account, start, end):
+        depot = self.recording.get("depot") or {}
+        return [t.replace("\n", "\r\n") for t in depot.get("mt536", [])] \
+            if account.accountnumber == depot.get("account") else []
 
     def get_balance(self, account):
         b = self.recording.get("balance")
