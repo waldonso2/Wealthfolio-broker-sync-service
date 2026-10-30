@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# Installs or updates the service from the unpacked source in
-# /opt/wealthfolio-companion/app. Used by the install and the update script;
-# idempotent. Keeps the service's key outside data/ (/etc/wealthfolio-companion,
-# encrypted with systemd-creds where possible), creates the TLS certificate and
-# brings the data of older versions up to date (all of it encrypted).
+# Installs the service from a verified release; run by companion-update (#149), in two steps:
+#   setup.sh build       the release's venv ($COMPANION_VENV) from its tree ($COMPANION_APP) and Scalable's CLI -
+#                        before the switch, while the running version stays untouched
+#   setup.sh configure   after the switch (app/ and venv/ point to the new release): user, key, certificate, units,
+#                        commands, data migration. Idempotent.
+# Keeps the service's key outside data/ (/etc/wealthfolio-companion, encrypted with systemd-creds where possible),
+# creates the TLS certificate and brings the data of older versions up to date (all of it encrypted).
 set -euo pipefail
 # The program (venv, app, bin) must be readable by the service user, whoever calls this: the console's root
 # has 022, a systemd unit may have less. Secrets get their modes explicitly (mktemp, chmod, install -m).
 umask 022
 
 BASE=/opt/wealthfolio-companion
-APP="$BASE/app"
+APP="${COMPANION_APP:-$BASE/app}"
+VENV="${COMPANION_VENV:-$BASE/venv}"
 USER_NAME=companion
 
-id -u "$USER_NAME" >/dev/null 2>&1 || useradd --system --home-dir "$BASE" --shell /usr/sbin/nologin "$USER_NAME"
-install -d -m 700 -o "$USER_NAME" -g "$USER_NAME" "$BASE/data"
-chown -R "$USER_NAME:$USER_NAME" "$BASE/data"
-
+build() {
 # No way back to an older version unless asked for (VERSION=... update sets COMPANION_ALLOW_DOWNGRADE):
 # an older release may lack a fix, and data a newer version wrote may not open in it (#88).
 NEW_VERSION="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$APP/pyproject.toml")"
@@ -31,31 +31,32 @@ if [[ -x "$BASE/venv/bin/wealthfolio-companion" && "${COMPANION_ALLOW_DOWNGRADE:
   fi
 fi
 
-# Keep the old environment until the new one is complete: a failed install
-# (network, disk, a broken package) puts the previous version back instead of
-# leaving a service that can't start. The service is stopped meanwhile.
-rm -rf "$BASE/venv.old"
-[[ -d "$BASE/venv" ]] && mv "$BASE/venv" "$BASE/venv.old"
+# The release's own environment, next to its tree: the running version keeps its own until the switch.
 # Only the locked versions (requirements.txt, with hashes): a package that was changed on PyPI,
 # or a dependency nobody tested, is refused. The package itself is built with the locked
 # setuptools, nothing else is fetched.
-PIP=("$BASE/venv/bin/pip" install --quiet --disable-pip-version-check --no-cache-dir)
-if ! { python3 -m venv "$BASE/venv" &&
+rm -rf "$VENV"
+PIP=("$VENV/bin/pip" install --quiet --disable-pip-version-check --no-cache-dir)
+if ! { python3 -m venv "$VENV" &&
   "${PIP[@]}" --require-hashes --only-binary :all: -r "$APP/requirements.txt" &&
   "${PIP[@]}" --no-deps --no-build-isolation "$APP" &&
-  "$BASE/venv/bin/wealthfolio-companion" --version >/dev/null; }; then
-  rm -rf "$BASE/venv"
-  [[ -d "$BASE/venv.old" ]] && mv "$BASE/venv.old" "$BASE/venv"
-  echo "Installing the Python packages failed - the previous version is back in place." >&2
+  "$VENV/bin/wealthfolio-companion" --version >/dev/null; }; then
+  rm -rf "$VENV"
+  echo "Installing the Python packages failed - the running version stays." >&2
   echo "Free disk space: $(df -h "$BASE" | awk 'NR==2 {print $4}')" >&2
   exit 1
 fi
-rm -rf "$BASE/venv.old"
 
 # Scalable's official CLI (sc), used by the Scalable Capital adapter. Signature-
 # checked; a failure only affects Scalable, so it doesn't stop the install.
-"$BASE/venv/bin/wealthfolio-companion" install-sc --dir "$BASE/bin" ||
+"$VENV/bin/wealthfolio-companion" install-sc --dir "$BASE/bin" ||
   echo "Warning: the Scalable CLI could not be installed - Scalable Capital won't work until the next update." >&2
+}
+
+configure() {
+id -u "$USER_NAME" >/dev/null 2>&1 || useradd --system --home-dir "$BASE" --shell /usr/sbin/nologin "$USER_NAME"
+install -d -m 700 -o "$USER_NAME" -g "$USER_NAME" "$BASE/data"
+chown -R "$USER_NAME:$USER_NAME" "$BASE/data"
 
 ETC=/etc/wealthfolio-companion
 install -d -m 700 "$ETC" "$ETC/tls"
@@ -140,10 +141,23 @@ install -m 644 "$APP"/deploy/systemd/*.service "$APP"/deploy/systemd/*.timer /et
 install -m 755 "$APP/deploy/companion-cli" /usr/local/bin/companion-cli
 install -m 755 "$APP/deploy/companion-reset-password" /usr/local/bin/companion-reset-password
 install -m 755 "$APP/deploy/companion-autoupdate" /usr/local/bin/companion-autoupdate
+install -m 755 "$APP/deploy/companion-update" /usr/local/bin/companion-update
+# `update` in the console runs the installed, verified updater - not the engine's script from a branch (#146).
+# The engine's entry point is kept for going back to a version from before (companion-update's rollback).
+if [[ -f /usr/bin/update ]] && ! grep -q companion-update /usr/bin/update; then
+  cp -p /usr/bin/update /usr/bin/update.engine
+fi
+UPDATE_TMP="$(mktemp /usr/bin/.update.XXXXXX)"
+printf '#!/usr/bin/env bash\n# Written by Wealthfolio Companion (deploy/setup.sh): the installed, verified updater.\nexec /usr/local/bin/companion-update "$@"\n' >"$UPDATE_TMP"
+chmod 755 "$UPDATE_TMP"
+# A new inode (mv): the old `update` may be the script running right now.
+mv -f "$UPDATE_TMP" /usr/bin/update
 systemctl daemon-reload
 systemctl enable -q --now wealthfolio-companion-cert.timer || true
 # Every minute; it installs nothing until the page Updates switches it on.
 systemctl enable -q --now wealthfolio-companion-update.timer || true
+# At boot: undoes an update a power cut interrupted (only runs while update-pending exists).
+systemctl enable -q wealthfolio-companion-update-recover.service || true
 
 # Data of older versions: credentials, settings and database encrypted with the
 # key that now lives outside data/. Only then the old key file goes.
@@ -191,5 +205,13 @@ else
 fi
 chown -R "$USER_NAME:$USER_NAME" "$BASE/data"
 chmod -R u=rwX,go= "$BASE/data"
-# Run by hand while the service is up (the update stops it first): restart it with the new files and key.
-systemctl try-restart wealthfolio-companion || true
+}
+
+case "${1:-}" in
+build) build ;;
+configure) configure ;;
+*)
+  echo "usage: setup.sh build|configure - companion-update runs it (update in the console)" >&2
+  exit 2
+  ;;
+esac

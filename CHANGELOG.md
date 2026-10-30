@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Security: Proxmox install and update verify the release's SLSA build provenance before accepting `SHA256SUMS` - the attestation must come from `release.yml` on `main` (GitHub-hosted runner) and name the downloaded file's SHA-256. No GitHub login: the attestation comes from GitHub's public API and is verified offline with sigstore (`src/brokersync/provenance.py`, in a throwaway venv of the new hash-locked `requirements-verify.txt`; verifier and lock are taken from `main`, like the install script). Any failure stops the install or update; the old version keeps running.
+- Security (#146): after the one-line install nothing is fetched from a branch again. `update` in the container runs the installed, verified `companion-update`, which verifies the next release with the installed release's own verifier. Install and update verify the release archive's provenance too, before it is unpacked, and accept only a plain version string. docs/OPERATIONS.md describes the trust chain, its one anchor (the install script from `main`) and how to check the installer against a release first.
+- Security (#149): updates are staged and reversible - built in `/opt/wealthfolio-companion/releases/<version>-<id>` while the old version runs, then the data is backed up, the `current` symlink switched, and the service health-checked (`--version`, active, `/healthz`); on failure the previous release and its data are put back automatically (the automatic update reports it via ntfy). One update at a time (lock), never during a sync; an update interrupted by a reboot is undone at the next boot (`wealthfolio-companion-update-recover.service`). A container installed before this version switches to the new layout with its next `update`.
 
 ## 0.1.0a4
 

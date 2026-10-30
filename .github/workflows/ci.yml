@@ -85,7 +85,7 @@ jobs:
         with:
           persist-credentials: false
       - name: shellcheck
-        run: shellcheck ct/*.sh install/*.sh deploy/setup.sh deploy/companion-reset-password deploy/companion-cli deploy/companion-autoupdate scripts/*.sh
+        run: shellcheck ct/*.sh install/*.sh deploy/setup.sh deploy/companion-reset-password deploy/companion-cli deploy/companion-autoupdate deploy/companion-update scripts/*.sh
       - name: catalog JSON
         run: python3 -m json.tool json/wealthfolio-companion.json > /dev/null
       - name: install from the release tarball layout, like deploy/setup.sh

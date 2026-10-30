@@ -139,7 +139,7 @@ Operations that replace encrypted files use recoverable, staged transitions so a
 
 ## Installation, releases, and tests
 
-The Proxmox installer creates an LXC and installs the latest GitHub release. Docker and Podman use a published image running as an unprivileged user, with the service key mounted as a secret. Runtime dependencies are pinned and hash-checked. Release artifacts include a source archive and SHA256SUMS with SLSA build provenance, which install and update verify offline (`provenance.py`, a hash-locked throwaway venv from `requirements-verify.txt`, both fetched from `main`) before checking the files; CI validates the code and packaging before publication.
+The Proxmox installer creates an LXC and installs the latest GitHub release. Docker and Podman use a published image running as an unprivileged user, with the service key mounted as a secret. Runtime dependencies are pinned and hash-checked. Release artifacts include a source archive and SHA256SUMS with SLSA build provenance, which install and update verify offline (`provenance.py` in a hash-locked venv from `requirements-verify.txt`: on a new install fetched from `main`, the trust anchor; afterwards the installed release's own) before unpacking; `deploy/companion-update` stages each release in `releases/<version>-<id>`, switches the `current` symlink, health-checks and rolls back release and data on failure; CI validates the code and packaging before publication.
 
 Run the automated test suite with:
 

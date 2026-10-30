@@ -1,0 +1,301 @@
+#!/usr/bin/env bash
+# companion-update: installs a release of Wealthfolio Companion in the LXC (#149) - `update` in the console and the
+# automatic update (companion-autoupdate) run it, as root. Installed by setup.sh from a verified release, so after
+# the first install nothing it runs comes from a branch (#146): it verifies with the verifier of the installed release.
+#
+#   companion-update                  the latest release, if it is newer
+#   VERSION=<v> companion-update      that release, also an older one (setup.sh refuses a downgrade otherwise)
+#   companion-update --recover        finish an interrupted update: undo it (boot: wealthfolio-companion-update-recover)
+#   companion-update --deploy <dir> <v>   internal: put a verified tree <dir> in place (install/ and ct/ use it once)
+#
+# Order: valid version -> download into a private directory -> provenance + checksums -> unpack -> build the release
+# in releases/<v>-<time> (venv, verifier) -> back up the data -> switch the symlink `current` -> configure -> health
+# check -> commit, or roll back to the previous release with its data. One update at a time (flock); none while a
+# sync runs. Exit: 0 done or nothing to do, 1 failed (nothing changed, or rolled back), 75 busy.
+set -euo pipefail
+umask 022
+
+BASE="${COMPANION_BASE:-/opt/wealthfolio-companion}"
+RELEASES="$BASE/releases"
+PENDING="$BASE/update-pending"
+LOCK="${COMPANION_UPDATE_LOCK:-/run/wealthfolio-companion-update.lock}"
+HEALTH_TIMEOUT="${COMPANION_HEALTH_TIMEOUT:-120}"
+VERSION_FILE="${COMPANION_VERSION_FILE:-/root/.wealthfolio-companion}"
+ENTRY="${COMPANION_UPDATE_ENTRY:-/usr/bin/update}"
+SELF="${COMPANION_UPDATER:-/usr/local/bin/companion-update}"
+SERVICES=(wealthfolio-companion wealthfolio-companion-run.timer)
+
+# >>> release functions: the same in ct/wealthfolio-companion.sh, install/wealthfolio-companion-install.sh and
+# deploy/companion-update (test_packaging compares them). Nothing downloaded is unpacked, sourced or run before
+# fetch_release has verified it.
+# valid_version <v>: a PEP 440 release or pre-release (0.1.0, 0.1.0a5, 1.2.3rc1) - nothing else reaches a URL or path.
+valid_version() {
+  [[ "$1" =~ ^[0-9]+(\.[0-9]+){1,3}((a|b|rc)[0-9]+)?$ ]]
+}
+# latest_release: the version GitHub's releases/latest redirects to (no API, no token).
+latest_release() {
+  local url
+  url="$(curl -fsSI --proto '=https' -o /dev/null -w '%{redirect_url}' \
+    https://github.com/waldonso2/wealthfolio-companion/releases/latest)" || return 1
+  url="${url#https://github.com/waldonso2/wealthfolio-companion/releases/tag/v}"
+  valid_version "$url" || { echo "GitHub named no valid latest release." >&2; return 1; }
+  printf '%s\n' "$url"
+}
+# fetch_release <version> <dir> <python> <provenance.py>: into the new, private <dir>: SHA256SUMS and the release
+# archive, both proven by the release workflow's attestation (#165) - only then unpacked to <dir>/app, whose files
+# must be exactly those of SHA256SUMS (#88).
+fetch_release() {
+  local version="$1" dir="$2" python="$3" verifier="$4" name base ok=0
+  if ! valid_version "$version"; then
+    echo "Refused: '${version//[^A-Za-z0-9._-]/?}' is not a version." >&2
+    return 1
+  fi
+  name="wealthfolio-companion-$version.tar.gz"
+  base="https://github.com/waldonso2/wealthfolio-companion/releases/download/v$version"
+  (umask 077 && mkdir "$dir") || return 1
+  if ! curl -fsSL --proto '=https' "$base/SHA256SUMS" -o "$dir/SHA256SUMS" ||
+    ! curl -fsSL --proto '=https' "$base/$name" -o "$dir/$name"; then
+    echo "Downloading release $version failed." >&2
+    return 1
+  fi
+  XDG_CACHE_HOME="$dir" XDG_DATA_HOME="$dir" "$python" -I "$verifier" "$dir/SHA256SUMS" "$dir/$name" || return 1
+  mkdir "$dir/app" && tar -xzf "$dir/$name" -C "$dir/app" --strip-components=1 --no-same-owner || return 1
+  (cd "$dir/app" && sha256sum --quiet --strict -c ../SHA256SUMS) || ok=1
+  diff <(cd "$dir/app" && find . -type f | LC_ALL=C sort) <(cut -c67- "$dir/SHA256SUMS" | LC_ALL=C sort) >/dev/null ||
+    { echo "The release archive holds files SHA256SUMS doesn't list." >&2; ok=1; }
+  return "$ok"
+}
+# <<< release functions
+
+log() { echo "companion-update: $*" >&2; }
+
+# The release `current` points at (an id under releases/), "legacy" for an installation from before this layout
+# (real app/ and venv/ directories), or nothing (a new container).
+current_release() {
+  if [[ -L "$BASE/current" ]]; then
+    basename "$(readlink "$BASE/current")"
+  elif [[ -d "$BASE/venv" && ! -L "$BASE/venv" ]]; then
+    echo legacy
+  fi
+}
+
+# switch_to <id>: `current` -> releases/<id> in one rename; app/ and venv/ are fixed links through it. The
+# directories of a legacy installation are moved aside to releases/legacy (and back by switch_to legacy).
+switch_to() {
+  local id="$1" d
+  if [[ "$id" == legacy ]]; then
+    for d in app venv; do
+      if [[ -e "$RELEASES/legacy/$d" ]]; then
+        rm -f "$BASE/$d" && mv -T "$RELEASES/legacy/$d" "$BASE/$d" || return 1
+      fi
+    done
+    rm -f "$BASE/current"
+    return
+  fi
+  ln -sfn "releases/$id" "$BASE/current.new" && mv -Tf "$BASE/current.new" "$BASE/current" || return 1
+  for d in app venv; do
+    if [[ -e "$BASE/$d" && ! -L "$BASE/$d" ]]; then
+      mkdir -p "$RELEASES/legacy" && mv -T "$BASE/$d" "$RELEASES/legacy/$d" || return 1
+    fi
+    [[ -L "$BASE/$d" ]] || ln -s "current/$d" "$BASE/$d" || return 1
+  done
+}
+
+# restore_data <backup>: the data as it was before the update (a newer version may have migrated it). Repeatable:
+# an interrupted restore is finished by the next one; the replaced data stays once as data.failed.
+restore_data() {
+  local backup="$1" tmp
+  [[ -n "$backup" && -f "$backup" ]] || return 0
+  tmp="$(mktemp -d "$BASE/.restore.XXXXXX")"
+  tar -xzf "$backup" -C "$tmp"
+  if [[ -d "$BASE/data" ]]; then
+    rm -rf "$BASE/data.failed"
+    mv -T "$BASE/data" "$BASE/data.failed"
+  fi
+  mv -T "$tmp/data" "$BASE/data"
+  rm -rf "$tmp"
+}
+
+healthy() {
+  local version="$1" waited=0
+  [[ "$("$BASE/venv/bin/wealthfolio-companion" --version 2>/dev/null)" == "$version" ]] || return 1
+  while :; do
+    if systemctl is-active --quiet wealthfolio-companion &&
+      curl -fsSk --max-time 5 https://127.0.0.1:8443/healthz 2>/dev/null | grep -q '"ok":true'; then
+      return 0
+    fi
+    ((waited >= HEALTH_TIMEOUT)) && return 1
+    sleep 2
+    waited=$((waited + 2))
+  done
+}
+
+start_services() {
+  systemctl enable -q --now "${SERVICES[@]}"
+}
+
+# rollback <previous id> <backup>: the release and the data from before the update, configured and started again.
+rollback() {
+  local prev="$1" backup="$2"
+  systemctl stop "${SERVICES[@]}" 2>/dev/null || true
+  if [[ -z "$prev" ]]; then
+    log "Nothing to go back to (a new installation)."
+    rm -f "$PENDING"
+    return 1
+  fi
+  switch_to "$prev"
+  restore_data "$backup"
+  if [[ "$prev" == legacy ]]; then
+    # A version from before this layout: its own setup (in place) and the console's update of the engine again.
+    if [[ -f "$ENTRY.engine" ]]; then mv -f "$ENTRY.engine" "$ENTRY"; fi
+    rm -f "$SELF"
+    bash "$BASE/app/deploy/setup.sh" || log "Setting up the previous version failed - see above."
+  else
+    bash "$BASE/app/deploy/setup.sh" configure || log "Configuring the previous version failed - see above."
+  fi
+  rm -f "$PENDING"
+  start_services || true
+  log "Rolled back to $prev."
+}
+
+# recover: what an interrupted update left - unfinished downloads, restores and builds go; an update that
+# switched but never committed is undone (deterministic: it was never found healthy).
+recover() {
+  local d cur
+  rm -rf "$RELEASES"/.dl.* "$BASE"/.restore.* "$BASE/current.new"
+  cur="$(current_release)"
+  for d in "$RELEASES"/*/; do
+    d="${d%/}"
+    [[ -e "$d/.incomplete" && "$(basename "$d")" != "$cur" ]] && rm -rf "$d"
+  done
+  if [[ -f "$PENDING" ]]; then
+    local prev="" backup=""
+    # Only our own two keys, never evaluated.
+    prev="$(sed -n 's/^prev=\([A-Za-z0-9._-]*\)$/\1/p' "$PENDING")"
+    backup="$(sed -n 's|^backup=\(/[A-Za-z0-9._/-]*\)$|\1|p' "$PENDING")"
+    log "An update was interrupted - going back to ${prev:-nothing}."
+    rollback "$prev" "$backup" || true
+  fi
+}
+
+backup_data() {
+  local backup
+  [[ -d "$BASE/data" ]] || return 0
+  backup="$BASE/backup-$(date +%Y%m%d-%H%M%S).tar.gz"
+  # umask 077: the file is never readable by others, not even until a chmod.
+  (umask 077 && tar -czf "$backup" -C "$BASE" data)
+  find "$BASE" -maxdepth 1 -name 'backup-*.tar.gz' | sort -r | tail -n +4 | xargs -r rm -f
+  echo "$backup"
+}
+
+# deploy <verified tree> <version>: build, switch, check; commit or roll back. releases/<version>-<random>: a
+# release installed again (VERSION=<v> update) gets a directory of its own.
+deploy() {
+  local src="$1" version="$2" id dir prev backup
+  valid_version "$version" || { log "Refused: not a version."; return 1; }
+  mkdir -p "$RELEASES"
+  dir="$(mktemp -d "$RELEASES/$version-XXXXXX")"
+  id="$(basename "$dir")"
+  touch "$dir/.incomplete"
+  chmod 755 "$dir" # the service user reads the program
+  cp -a "$src" "$dir/app"
+  log "Building $version"
+  if ! COMPANION_APP="$dir/app" COMPANION_VENV="$dir/venv" bash "$dir/app/deploy/setup.sh" build ||
+    ! python3 -m venv "$dir/verify" ||
+    ! "$dir/verify/bin/pip" install --quiet --disable-pip-version-check --no-cache-dir --require-hashes \
+      --only-binary :all: -r "$dir/app/requirements-verify.txt"; then
+    rm -rf "$dir"
+    log "Building $version failed - nothing changed."
+    return 1
+  fi
+  rm -f "$dir/.incomplete"
+
+  prev="$(current_release)"
+  systemctl stop "${SERVICES[@]}" 2>/dev/null || true
+  if ! backup="$(backup_data)"; then
+    rm -rf "$dir"
+    start_services || true
+    log "Backing up the data failed - nothing changed."
+    return 1
+  fi
+  [[ -n "$backup" ]] && log "Backed up the data to $backup"
+  if [[ -n "$prev" ]]; then
+    printf 'prev=%s\nbackup=%s\n' "$prev" "$backup" >"$PENDING.tmp"
+    mv -f "$PENDING.tmp" "$PENDING"
+  fi
+  # From here on an interruption is undone by recover (the pending file says how).
+  if ! switch_to "$id" || ! bash "$BASE/app/deploy/setup.sh" configure || ! start_services || ! healthy "$version"; then
+    log "Version $version is not healthy - rolling back."
+    rollback "$prev" "$backup" || true
+    [[ -n "$prev" ]] && rm -rf "$dir"
+    return 1
+  fi
+  rm -f "$PENDING"
+  printf '%s\n' "$version" >"$VERSION_FILE"
+  # Only the running release stays (going back on purpose: VERSION=<v> update).
+  for d in "$RELEASES"/*/; do
+    d="${d%/}"
+    [[ "$(basename "$d")" == "$id" ]] || rm -rf "$d"
+  done
+  log "Installed $version."
+}
+
+STAGE=""
+update() {
+  local version installed
+  if systemctl is-active --quiet wealthfolio-companion-run.service; then
+    log "A sync is running - try again when it is done."
+    return 75
+  fi
+  version="${VERSION:-}"
+  if [[ -z "$version" ]]; then
+    version="$(latest_release)" || { log "The latest release could not be found."; return 1; }
+  fi
+  valid_version "$version" || { log "Refused: not a version."; return 1; }
+  installed="$("$BASE/venv/bin/wealthfolio-companion" --version 2>/dev/null || true)"
+  if [[ -z "${VERSION:-}" && "$version" == "$installed" ]]; then
+    log "Version $installed is the latest - nothing to do."
+    return 0
+  fi
+  [[ -n "${VERSION:-}" ]] && export COMPANION_ALLOW_DOWNGRADE=1
+  if [[ ! -x "$BASE/current/verify/bin/python" ]]; then
+    log "No verifier installed - run the update from the console once (it installs one)."
+    return 1
+  fi
+  mkdir -p "$RELEASES"
+  STAGE="$(mktemp -u "$RELEASES/.dl.XXXXXX")"
+  trap 'rm -rf "$STAGE"' EXIT
+  if ! fetch_release "$version" "$STAGE" "$BASE/current/verify/bin/python" "$BASE/app/src/brokersync/provenance.py"; then
+    log "Release $version could not be verified - nothing changed, $installed keeps running."
+    return 1
+  fi
+  deploy "$STAGE/app" "$version"
+}
+
+main() {
+  exec 9>"$LOCK"
+  if ! flock -n 9; then
+    log "Another update is running."
+    exit 75
+  fi
+  case "${1:-}" in
+  --recover) recover ;;
+  --deploy)
+    [[ $# == 3 ]] || { log "usage: companion-update --deploy <dir> <version>"; exit 2; }
+    recover
+    deploy "$2" "$3"
+    ;;
+  "")
+    recover
+    update
+    ;;
+  *)
+    log "usage: [VERSION=<v>] companion-update [--recover]"
+    exit 2
+    ;;
+  esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
