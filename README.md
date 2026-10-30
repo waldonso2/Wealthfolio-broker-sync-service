@@ -449,6 +449,7 @@ Everything else—reconciliation, X-Ray, costs and FIRE, the booking model, prox
 - Credentials, settings and the sync database are encrypted (AES-256-GCM and SQLCipher). The service's key lives outside the data: in Proxmox sealed with `systemd-creds`, in Docker as a secret.
 - **Master passphrase (optional):** with it, even a copy that includes the key opens nothing. Without the passphrase the data is lost.
 - Read-only access to the brokers; protection against lock-outs (no second wrong PIN or TAN); the UI only over HTTPS, with its own login and throttled failed attempts.
+- Proxmox installs and updates verify GitHub's SLSA provenance for the release checksums against this repository's release workflow before accepting the downloaded source files.
 - The page *Security* always shows what is protected and how. Please report vulnerabilities privately: [SECURITY.md](SECURITY.md).
 
 ## How it came about
