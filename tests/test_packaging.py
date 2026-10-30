@@ -127,6 +127,102 @@ def test_backups_are_never_readable_by_others():
                 assert "umask 077" in line, f"{path.name}: {line.strip()}"
 
 
+
+UNITS = ROOT / "deploy" / "systemd"
+SANDBOX = ("NoNewPrivileges=true", "ProtectSystem=strict", "ProtectHome=true", "PrivateTmp=true", "PrivateDevices=true",
+           "ProtectKernelTunables=true", "ProtectKernelModules=true", "ProtectKernelLogs=true",
+           "ProtectControlGroups=true", "ProtectClock=true", "ProtectHostname=true", "ProtectProc=invisible",
+           "RestrictSUIDSGID=true", "RestrictRealtime=true", "RestrictNamespaces=true", "LockPersonality=true",
+           "SystemCallArchitectures=native", "SystemCallFilter=@system-service", "SystemCallErrorNumber=EPERM",
+           "RemoveIPC=true", "CapabilityBoundingSet=\n", "UMask=0077")
+
+
+def _directives(name: str) -> list[str]:
+    return [line for line in (UNITS / name).read_text().splitlines() if line and not line.startswith(("#", "["))]
+
+
+def test_every_unit_is_sandboxed_as_far_as_its_job_allows():
+    """SEC-08 (#154): the hardening a later edit must not lose. The service user's units write only data/ (the
+    unlock cache is their RuntimeDirectory, temp files their PrivateTmp, the TLS files come as credentials) and
+    reach only IP networks; the certificate's renewal is root but sends no IP traffic; the updaters stay root
+    with a writable system, but without the kernel, raw sockets or the capabilities they never use."""
+    for name in ("wealthfolio-companion.service", "wealthfolio-companion-run.service"):
+        text = (UNITS / name).read_text() + "\n"
+        for option in (*SANDBOX, "DevicePolicy=closed", "SystemCallFilter=@sandbox",
+                       "RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX\n", "RuntimeDirectoryMode=0700"):
+            assert option in text, (name, option)
+        assert [d for d in _directives(name) if d.startswith(("ReadWritePaths=", "BindPaths="))] == [
+            "ReadWritePaths=/opt/wealthfolio-companion/data"], name
+        assert "User=companion" in text and "AmbientCapabilities" not in text
+    cert = (UNITS / "wealthfolio-companion-cert.service").read_text() + "\n"
+    for option in (*SANDBOX, "IPAddressDeny=any"):
+        assert option in cert, option
+    assert [d for d in _directives("wealthfolio-companion-cert.service") if d.startswith("ReadWritePaths=")] == [
+        "ReadWritePaths=/etc/wealthfolio-companion/tls"]
+    for name in ("wealthfolio-companion-update.service", "wealthfolio-companion-update-recover.service"):
+        text = (UNITS / name).read_text()
+        for option in ("PrivateTmp=true", "ProtectKernelTunables=true", "ProtectKernelModules=true",
+                       "ProtectKernelLogs=true", "ProtectControlGroups=true", "RestrictSUIDSGID=true",
+                       "LockPersonality=true", "SystemCallArchitectures=native",
+                       "RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6"):
+            assert option in text, (name, option)
+        dropped = re.search(r"^CapabilityBoundingSet=~(.*)$", text, re.MULTILINE).group(1).split()
+        assert {"CAP_SYS_ADMIN", "CAP_SYS_MODULE", "CAP_SYS_PTRACE", "CAP_SYS_RAWIO", "CAP_NET_ADMIN",
+                "CAP_NET_RAW", "CAP_BPF", "CAP_MKNOD"} <= set(dropped), name
+        # It writes /opt, /etc, /usr/bin and /root and may need the TPM (systemd-creds): never these.
+        for option in ("ProtectSystem=", "ProtectHome=", "PrivateDevices=", "DevicePolicy=", "ProtectClock="):
+            assert option not in text, (name, option)
+    # Both updaters carry the same sandbox.
+    def sandbox(name):
+        return [d for d in _directives(name) if d.split("=")[0].startswith(("Protect", "Private", "Restrict",
+                                                                           "Lock", "SystemCall", "Capability"))]
+    assert sandbox("wealthfolio-companion-update.service") == sandbox("wealthfolio-companion-update-recover.service")
+
+
+def test_systemd_rates_the_units_exposure():
+    """#107: systemd-analyze's exposure score, offline from the files, where systemd is installed (CI's Ubuntu)."""
+    import shutil
+    import subprocess
+
+    import pytest
+
+    if not shutil.which("systemd-analyze"):
+        pytest.skip("no systemd-analyze")
+    limits = {"wealthfolio-companion.service": 2.0, "wealthfolio-companion-run.service": 2.0,
+              "wealthfolio-companion-cert.service": 2.0,
+              # Root with a writable system by its job (above); measured 6.1.
+              "wealthfolio-companion-update.service": 6.5, "wealthfolio-companion-update-recover.service": 6.5}
+    for name, limit in limits.items():
+        done = subprocess.run(["systemd-analyze", "security", "--offline=true", "--no-pager", str(UNITS / name)],
+                              capture_output=True, text=True, timeout=60, check=False)
+        found = re.search(r"Overall exposure level for \S+: ([0-9.]+)", done.stdout)
+        if not found:
+            pytest.skip(f"systemd-analyze can't rate unit files offline here: {done.stderr.strip()[:200]}")
+        assert float(found.group(1)) <= limit, (name, found.group(1))
+
+
+def test_the_container_and_its_files_stay_least_privileged():
+    """SEC-08 (#154): an unprivileged LXC without devices or mounts; the program root's and readable, only data/
+    the service user's (0700), the key and TLS directory root-only (0700, files 0600)."""
+    ct = (ROOT / "ct" / f"{SLUG}.sh").read_text()
+    for var in ('var_unprivileged="${var_unprivileged:-1}"', 'var_fuse="${var_fuse:-no}"', 'var_tun="${var_tun:-no}"',
+                'var_gpu="${var_gpu:-no}"', 'var_nesting="${var_nesting:-1}"'):
+        assert var in ct, var
+    assert not re.search(r"\bmp[0-9]+=|var_mount_fs=|pct set", ct)
+    setup = (ROOT / "deploy" / "setup.sh").read_text()
+    assert 'useradd --system --home-dir "$BASE" --shell /usr/sbin/nologin "$USER_NAME"' in setup
+    assert 'install -d -m 700 -o "$USER_NAME" -g "$USER_NAME" "$BASE/data"' in setup
+    assert 'install -d -m 700 "$ETC" "$ETC/tls"' in setup
+    assert 'chmod 600 "$2"' in setup and 'install -m 600 "$1" "$ETC/secret.key$2"' in setup
+    # The last word on data/'s modes, after every step that wrote into it.
+    assert setup.rindex('chmod -R u=rwX,go= "$BASE/data"') > setup.rindex("companion-cli")
+    # The service user owns nothing but its data: the program it runs stays root's.
+    assert [line.strip() for line in setup.splitlines() if "chown" in line] == [
+        'chown -R "$USER_NAME:$USER_NAME" "$BASE/data"'] * 2
+    assert "\numask 022\n" in setup
+    updater = (ROOT / "deploy" / "companion-update").read_text()
+    assert 'chmod 755 "$dir"' in updater and "(umask 077 && tar -czf" in updater
+
 def test_setup_installs_only_the_locked_hashes():
     setup = (ROOT / "deploy" / "setup.sh").read_text()
     assert '--require-hashes --only-binary :all: -r "$APP/requirements.txt"' in setup

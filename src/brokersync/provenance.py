@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import sys
 import urllib.error
@@ -26,6 +27,10 @@ STATEMENT = "https://in-toto.io/Statement/v1"
 SLSA = "https://slsa.dev/provenance/v1"
 SUBJECT = "SHA256SUMS"
 MAX_BYTES = 4 * 1024 * 1024
+
+# Offline is how this verifier works, yet sigstore warns about it on every load; without a handler Python prints that
+# onto the updater's progress line. Only that one message goes - every other warning or error still shows.
+logging.getLogger("sigstore._internal.tuf").addFilter(lambda record: "offline mode" not in record.getMessage())
 
 
 class ProvenanceError(Exception):

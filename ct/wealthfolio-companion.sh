@@ -25,6 +25,12 @@ var_disk="${var_disk:-2}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
+# Trust boundary (docs/OPERATIONS.md, #154): unprivileged, no bind mount, device, FUSE or TUN. Nesting stays on (the
+# engine's default): Proxmox advises it for systemd 257 (Debian 13), and the units' namespace sandboxing needs it.
+var_nesting="${var_nesting:-1}"
+var_fuse="${var_fuse:-no}"
+var_tun="${var_tun:-no}"
+var_gpu="${var_gpu:-no}"
 
 header_info "$APP"
 variables

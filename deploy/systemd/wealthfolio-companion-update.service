@@ -5,8 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-# Root, without a sandbox: it runs the same update as `update` in the console (packages, units, the service's
-# key). It does nothing unless the page Updates switched it on; companion-autoupdate explains the steps.
+# Root, with a sandbox only of what it never needs (below): it runs the same update as `update` in the console
+# (packages, units, the service's key). It does nothing unless the page Updates switched it on;
+# companion-autoupdate explains the steps.
 User=root
 # Like the console: the service user must read the program the update installs (0077 made it root-only).
 UMask=0022
@@ -14,3 +15,20 @@ ExecStart=/usr/local/bin/companion-autoupdate
 # The install engine calls `clear`, which fails without a terminal type - as a service there is none.
 Environment=TERM=xterm
 TimeoutStartSec=30min
+# SEC-08 (#154): it must stay root with its file system writable (/opt, /etc, /usr/bin, /root, units, the user)
+# and reach GitHub/PyPI, but nothing it does loads modules, writes kernel tunables or cgroups, reads the kernel
+# log, needs raw/packet sockets, realtime, other ABIs or the capabilities below. Not set on purpose:
+# ProtectSystem/ProtectHome (it writes there), PrivateDevices/ProtectClock/DevicePolicy (systemd-creds may need
+# the TPM), NoNewPrivileges (root with every capability it keeps gains nothing by it).
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectHostname=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
+CapabilityBoundingSet=~CAP_SYS_ADMIN CAP_SYS_MODULE CAP_SYS_RAWIO CAP_SYS_PTRACE CAP_SYS_BOOT CAP_SYS_TIME CAP_SYS_PACCT CAP_SYS_TTY_CONFIG CAP_MKNOD CAP_NET_ADMIN CAP_NET_RAW CAP_MAC_ADMIN CAP_MAC_OVERRIDE CAP_AUDIT_CONTROL CAP_BPF CAP_PERFMON CAP_SYSLOG CAP_WAKE_ALARM CAP_BLOCK_SUSPEND CAP_LINUX_IMMUTABLE CAP_IPC_LOCK CAP_LEASE
