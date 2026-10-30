@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.0a6
+
+Audit and hardening: secrets, web attack surface, workflows and supply chain, container and systemd units.
+
+- Security (#153): forms sent by another website through the browser are refused before any password check - a page elsewhere could else spend the login brake and lock the owner out for 15 minutes.
+- Security (#153): the stored Wealthfolio password is only sent to the address it was saved for; a new address needs it typed again (also for *Nur testen*). The ntfy token is dropped when the ntfy server changes, unless a new one is typed. logo.dev redirects only over https.
+- Security (#152): broker settings have *Zugangsdaten löschen* - removes the broker's credentials and login session from the vault and switches its fetch off. The ntfy token is masked in the log like the vault's secrets; a damaged unlock cache counts as locked instead of failing every page.
+- Tests and docs (#152, #153): table-driven checks over every route (login, CSRF, public allow-list), secret-flow tests (pages, cookie, tracebacks, backup, encryption failures, argon2id cost); findings in docs/SECURITY-AUDIT-0.1.0a6.md.
+- Security (#151): least-privilege workflows - write scopes only on the jobs that need them, each commented (`core-watch.yml`'s `issues: write` moved to its job); the release jobs `publish` and `image` run in the environment `release` (protection is a repository setting), releases are queued, never cancelled; no step template-expands a value into a script. `CODEOWNERS` also covers the Dockerfile, the release verifier, `sc_install.py`, the locks and `pyproject.toml`. docs/SECURITY-OPERATIONS.md: workflow inventory, the GitHub settings read on 30.10.2026 (the required-checks list of `main` is empty, no pull-request or tag rule) and the owner's checklist.
+- Supply chain (#155): every release carries `sbom.cdx.json` (CycloneDX 1.6 of `requirements.txt`, purls and locked hashes), named in its build-provenance attestation; the image gets BuildKit's SBOM in the registry. pip-audit also checks `requirements-dev.txt`; a test fails on any pip install that bypasses the hash locks; Dependabot updates the Dockerfile's base image digest (both stages now name it in `FROM`). The dependency policy, exceptions table and the gap analysis of waldonso2/wealthfolio-importer-addon#150 (a takeover of the GitHub account still produces releases that verify) are in docs/SECURITY-OPERATIONS.md.
+- Security (SEC-08, #154): the root units are sandboxed as far as their job allows - the updaters (`wealthfolio-companion-update`, `-update-recover`) get a private `/tmp`, protected kernel tunables, modules, logs, cgroups and hostname, no SUID/SGID files, native system calls, Unix/netlink/IP sockets only and no `CAP_SYS_ADMIN`, `CAP_SYS_PTRACE`, `CAP_NET_RAW` and other capabilities they never use (`systemd-analyze security` 9.4 → 6.1); the certificate's renewal hides other processes and sends no IP traffic (2.1 → 1.7). `ct/` states the container's settings explicitly (unprivileged, nesting, no FUSE, TUN or GPU). Tests assert every unit's hardening, the scores where systemd is installed, and the modes of data, key and program. docs/OPERATIONS.md describes the trust boundary, every unit's privileges, file modes and the network the service needs.
+- The update no longer prints sigstore's "TUF repository is loaded in offline mode" notice onto its progress line; other warnings still show.
+
 ## 0.1.0a5
 
 Verified releases: the Proxmox install and every update, and the Docker image, are checked against this repository's signed release workflow before anything of them runs.

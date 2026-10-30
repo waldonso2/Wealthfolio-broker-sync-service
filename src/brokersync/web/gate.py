@@ -281,6 +281,8 @@ def _locked_app(gate: Gate, templates_dir: Path, static_dir: Path) -> FastAPI:
 
     @app.post("/unlock")
     def unlock(request: Request, passphrase: str = Form(...)):
+        if request.headers.get("sec-fetch-site") == "cross-site":  # like context.cross_site (#153)
+            return page(request, "Anfrage von einer anderen Website abgelehnt.", 403)
         client = request.client.host if request.client else "?"
         with gate.throttle.attempt(client) as a:
             if a.refused:

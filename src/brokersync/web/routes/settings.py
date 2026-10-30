@@ -54,21 +54,30 @@ def _local(url: str) -> bool:
     return (urlsplit(url).hostname or "") in ("localhost", "127.0.0.1", "::1")
 
 
+def _checked(url: str, password: str, fingerprint: str) -> tuple[str, str]:
+    """The form's address and fingerprint, checked; raises ``inputs.Invalid``."""
+    url = inputs.http_url(url, N_("Wealthfolio-Adresse"))
+    if len(password) > inputs.MAX_TEXT:  # not stripped: a password may start or end with a space
+        raise inputs.Invalid("{label}: höchstens {max_len} Zeichen.", label=N_("Passwort"), max_len=inputs.MAX_TEXT)
+    pin = normalize_fingerprint(fingerprint)
+    if fingerprint.strip() and not pin:
+        raise inputs.Invalid("{label}: 64 Hex-Zeichen (SHA-256), mit oder ohne Doppelpunkte.", label=N_("Fingerprint"))
+    return url, pin
+
+
 @router.post("/setup/wealthfolio")
 def wealthfolio_save(request: Request, ctx: Ctx, url: str = Form(...), password: str = Form(""),
                      no_password: str = Form(""), fingerprint: str = Form(""), test: str = Form("")):
     try:
-        url = inputs.http_url(url, N_("Wealthfolio-Adresse"))
-        if len(password) > inputs.MAX_TEXT:  # not stripped: a password may start or end with a space
-            raise inputs.Invalid("{label}: höchstens {max_len} Zeichen.", label=N_("Passwort"),
-                                 max_len=inputs.MAX_TEXT)
-        pin = normalize_fingerprint(fingerprint)
-        if fingerprint.strip() and not pin:
-            raise inputs.Invalid("{label}: 64 Hex-Zeichen (SHA-256), mit oder ohne Doppelpunkte.",
-                                 label=N_("Fingerprint"))
+        url, pin = _checked(url, password, fingerprint)
     except inputs.Invalid as e:
         return _wealthfolio_form(request, ctx, url, fingerprint, error=e.text(language(request)), status=422)
-    secret = None if no_password else (password or ctx.vault.load().get("wealthfolio_password"))
+    stored = ctx.vault.load().get("wealthfolio_password")
+    if stored and not password and not no_password and url != ctx.cfg().wealthfolio_url:
+        # The stored password only ever goes to the address it was saved for (#153): never to a new one.
+        return _wealthfolio_form(request, ctx, url, fingerprint, status=422, error=tr(
+            request, "Für eine neue Adresse bitte das Wealthfolio-Passwort noch einmal eingeben."))
+    secret = None if no_password else (password or stored)
     try:  # "Nur testen" (#95): with what was typed, nothing saved
         with connect(ctx.make_wf, url, secret, pin) as wf:
             accounts = [a for a in wf.list_accounts() if a.is_active]
@@ -143,9 +152,10 @@ def notifications_save(request: Request, ctx: Ctx, server: str = Form(...), topi
                         "error")
 
     def change(c) -> None:
+        old_server = c.ntfy_server
         c.ntfy_server, c.ntfy_topic, c.public_url, c.ntfy_details = server, topic, public_url, bool(details)
-        if forget_token:
-            c.ntfy_token = ""
+        if forget_token or (not token and server != old_server):
+            c.ntfy_token = ""  # a token belongs to its server: never sent to a new one (#153)
         elif token:
             c.ntfy_token = token
 

@@ -959,6 +959,18 @@ EN: dict[str, str] = {
         "Password of this UI (only when changing the credentials)",
     "Neu aufsetzen …":
         "Start over …",
+    "Zugangsdaten löschen":
+        "Delete credentials",
+    "Entfernt die gespeicherten Zugangsdaten und die Anmeldung bei {label} aus dem Tresor und schaltet den "
+    "automatischen Abruf aus. Die Buchungen in Wealthfolio und die Einstellungen bleiben.":
+        "Removes the stored credentials and the login at {label} from the vault and switches the automatic fetch "
+        "off. The bookings in Wealthfolio and the settings stay.",
+    "Zugangsdaten und Anmeldung gelöscht. Der automatische Abruf ist aus.":
+        "Credentials and login deleted. The automatic fetch is off.",
+    "Anfrage von einer anderen Website abgelehnt.":
+        "Request from another website refused.",
+    "Für eine neue Adresse bitte das Wealthfolio-Passwort noch einmal eingeben.":
+        "For a new address, please enter the Wealthfolio password again.",
     "Übertragsmuster":
         "Transfer patterns",
     "Aktion":

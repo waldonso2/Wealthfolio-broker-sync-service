@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from . import crypto
+from . import crypto, redact
 
 DEFAULT_DATA_DIR = "/opt/wealthfolio-companion/data"
 
@@ -128,7 +128,9 @@ NOTIFY_FIELDS = ("public_url", "ntfy_server", "ntfy_topic", "ntfy_token", "ntfy_
 
 
 def _read(path: Path, key: bytes, purpose: str) -> dict:
-    return json.loads(crypto.unseal(key, path.read_bytes(), purpose)) if path.exists() else {}
+    raw = json.loads(crypto.unseal(key, path.read_bytes(), purpose)) if path.exists() else {}
+    redact.register(raw.get("ntfy_token", ""))  # the one secret outside the vault: masked in the log too
+    return raw
 
 
 def load_notify(directory: Path) -> Config:

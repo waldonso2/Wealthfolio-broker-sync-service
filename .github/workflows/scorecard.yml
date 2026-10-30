@@ -9,14 +9,15 @@ on:
     - cron: "23 5 * * 1"
   workflow_dispatch:
 
+# read-all is what scorecard-action's own check of this workflow expects before it publishes; the job narrows it.
 permissions: read-all
 
 jobs:
   analysis:
     runs-on: ubuntu-latest
     permissions:
-      security-events: write
-      id-token: write
+      security-events: write # upload the SARIF
+      id-token: write # publish the results to OpenSSF
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
