@@ -448,7 +448,8 @@ class Syncer:
         if version and not cfg.auto_update:  # switched on, the updater installs it and says so itself
             from .container import active
 
-            how = "docker compose pull && docker compose up -d" if active() else "In der Konsole des Containers: update"
+            how = (f"./pull-verified-image.sh --env .env {version} && docker compose pull companion"
+                   " && docker compose up -d" if active() else "In der Konsole des Containers: update")
             self.notifier(cfg).send("Update verfügbar", f"Version {version} ist erschienen (installiert: "
                                     f"{__version__}). {how}", link=updates.RELEASES, tags="arrow_up")
 
