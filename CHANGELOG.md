@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- DKB (waldonso2/wealthfolio-importer-addon#130): depot purchases and sales from FinTS (HKWDU, MT536) are booked as `BUY`/`SELL` with their transfer pair, each with the amount of the giro booking that paid it, which is matched in the same run; a fee only where DKB sends a price (sales: fee and tax together). Trades a PDF/CSV import already booked are recognised; trades before the giro history read get `external_cash`; reversals, corporate actions and free deliveries go to *Unbekannt*. Ids `mt536-<day>-<hash>-<n>` (no depot number). Other FinTS banks still only log their depot transactions.
+
 ## 0.1.0a6
 
 Audit and hardening: secrets, web attack surface, workflows and supply chain, container and systemd units.

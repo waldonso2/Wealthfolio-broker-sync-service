@@ -14,7 +14,12 @@ Per movement (``TRANSDET``):
 - ``:22H::PAYM//APMT|FREE`` - against payment / free of payment,
 - ``:22F::TRAN//SETT|CORP|…`` - settlement, corporate action, …,
 - ``:98A::ESET//`` / ``:98C::ESET//`` - trade date, ``SETT`` - settlement date,
-- ``:25D::MOVE//REVE`` - a reversal.
+- ``:25D::MOVE//REVE`` - a reversal,
+- ``:90B::DEAL//ACTU/EUR…`` - the price per share, if the bank sends it.
+
+``to_transactions`` books them (DKB, #130): received/delivered against payment →
+BUY/SELL with their money on the giro account; reversals, corporate actions,
+free deliveries and anything incomplete are ``UNKNOWN``.
 
 ``structure`` describes an answer without values or numbers (tags, qualifiers and
 the standard codes above), so a bank's format can be checked from the log.
@@ -22,13 +27,23 @@ the standard codes above), so a bank's format can be checked from the log.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections import Counter
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+from typing import Any
+from zoneinfo import ZoneInfo
 
+from ..model import SAVINGS, Kind, Transaction
 from .mt535 import clauses
+
+BERLIN = ZoneInfo("Europe/Berlin")
+# The giro booking that settles a trade comes 1 day before to 6 days after the trade day; a trade without one
+# waits this long (it may not be booked yet), then counts on its posted amount.
+SETTLEMENT_DAYS = (-1, 6)
+UNSETTLED_DAYS = 7
 
 _SEGMENTS: dict = {}
 
@@ -114,6 +129,7 @@ class Movement:
     reversal: bool = False
     reference: str = ""
     text: str = ""
+    price: Decimal | None = None
 
     @property
     def what(self) -> str:
@@ -170,6 +186,9 @@ def _read(current: Movement, f: str) -> None:
             value = _number(m.group(3))
             current.amount = -value if value is not None and m.group(1) else value
             current.currency = m.group(2)
+    elif f.startswith(":90B::DEAL//ACTU/"):
+        m = re.match(r"[A-Z]{3}(\d+(?:,\d*)?)", f[17:])
+        current.price = _number(m.group(1)) if m else None
     elif f[:12] in _FIELDS:
         attribute, convert = _FIELDS[f[:12]]
         setattr(current, attribute, convert(f[12:]))
@@ -240,3 +259,89 @@ def summary(movements: list[Movement]) -> str:
     return (", ".join(f"{k} {v}" for k, v in kinds.most_common()) + "; mit "
             + ", ".join(f"{k} {v}/{n}" for k, v in complete.items())
             + ("; Beträge " + ", ".join(f"{k} {v}" for k, v in signs.items()) if signs else ""))
+
+
+def movement_id(m: Movement, seen: Counter) -> str:
+    """``mt536-<day>-<hash>-<n>``: a hash of what the bank says about the movement, a counter for identical
+    ones. No depot number. Never change it: every booked movement would look new."""
+    key = "|".join(str(x) for x in (m.trade_date, m.settle_date, m.isin, m.shares, m.amount, m.currency,
+                                     m.direction, m.payment, m.indicator, m.reversal, m.reference))
+    digest = hashlib.sha256(key.encode()).hexdigest()[:16]
+    seen[digest] += 1
+    day = m.trade_date or m.settle_date
+    return f"mt536-{day:%Y%m%d}-{digest}-{seen[digest]}" if day else f"mt536-0-{digest}-{seen[digest]}"
+
+
+def _trade_kind(m: Movement) -> Kind | None:
+    if m.reversal or m.indicator == "CORP" or m.payment != "APMT" or not m.isin or not m.shares or not m.amount \
+            or not (m.trade_date or m.settle_date):
+        return None
+    return {"RECE": Kind.BUY, "DELI": Kind.SELL}.get(m.direction)
+
+
+def _settlement(kind: Kind, m: Movement, day: date, base: Decimal, giro: list[Transaction],
+                used: set[str]) -> Transaction | None:
+    """The giro booking (``SECURITIES_CASH``) that paid a trade: right sign and currency, in the days around it,
+    costs (fee, for a sale also tax) at least 0 and under half the value; one naming the ISIN first."""
+    found = []
+    for t in giro:
+        if (t.kind != Kind.SECURITIES_CASH or t.account == SAVINGS or t.id in used or t.signed is None
+                or t.currency != (m.currency or "EUR") or (t.signed < 0) != (kind == Kind.BUY)):
+            continue
+        gap = (t.datetime.astimezone(BERLIN).date() - day).days
+        cost = abs(t.signed) - base if kind == Kind.BUY else base - abs(t.signed)
+        if SETTLEMENT_DAYS[0] <= gap <= SETTLEMENT_DAYS[1] and 0 <= cost < base / 2:
+            found.append(((m.isin or "") not in f"{t.label} {t.text}", cost, abs(gap), t.id, t))
+    return min(found, key=lambda c: c[:4])[4] if found else None
+
+
+def to_transactions(movements: list[Movement], giro: list[Transaction], history: date | None,
+                    today: date) -> list[Transaction]:
+    """Movements → transactions. A purchase or sale gets the amount of the giro booking that settled it (that
+    booking stays ``SECURITIES_CASH`` and is matched against the trade's cash leg in the same run), else the
+    posted amount; a fee only where a price says it (for a sale fee and tax together). Before ``history`` (the
+    giro account's first day read) its money never showed up there: ``external_cash``. A trade within the
+    history without its giro booking waits ``UNSETTLED_DAYS``. Everything else is ``UNKNOWN``."""
+    seen: Counter = Counter()
+    used: set[str] = set()
+    out = []
+    for m in movements:
+        tx_id = movement_id(m, seen)
+        day = m.trade_date or m.settle_date or today
+        when = datetime(day.year, day.month, day.day, 12, tzinfo=BERLIN).astimezone(UTC)
+        common: dict[str, Any] = dict(id=tx_id, datetime=when, currency=m.currency or "EUR", isin=m.isin,
+                                      name=m.name, label=m.what)
+        kind = _trade_kind(m)
+        if kind is None or m.shares is None or m.amount is None:
+            out.append(_unknown(m, common))
+            continue
+        shares = abs(m.shares)
+        value = shares * m.price if m.price else None
+        before = history is not None and day < history
+        paid = None if before else _settlement(kind, m, day, value or abs(m.amount), giro, used)
+        if paid is not None:
+            used.add(paid.id)
+        elif not before and (today - day).days < UNSETTLED_DAYS:
+            continue  # its giro booking may still come: the next run reads the movement again
+        net = abs(paid.signed) if paid is not None and paid.signed is not None else abs(m.amount)
+        fee = (net - value if kind == Kind.BUY else value - net) if value is not None else Decimal(0)
+        if not 0 <= fee < net:
+            fee = Decimal(0)  # a price that doesn't fit the money: no fee rather than a wrong one
+        gross = net - fee if kind == Kind.BUY else net + fee
+        out.append(Transaction(kind=kind, net=net, shares=shares, gross=gross, fee=fee, external_cash=before,
+                               **common))
+    return out
+
+
+def _unknown(m: Movement, common: dict[str, Any]) -> Transaction:
+    """Listed on *Unbekannt*: what the bank says, without depot number or reference."""
+    raw = {"buchungstext": m.what, "isin": m.isin or "", "Bezeichnung": m.name,
+           "stück": str(m.shares) if m.shares is not None else "",
+           "betrag": str(m.amount) if m.amount is not None else "",
+           "handelstag": m.trade_date.isoformat() if m.trade_date else "",
+           "hinweis": " ".join(f"{k}//{v}" for k, v in (("REDE", m.direction), ("PAYM", m.payment),
+                                                          ("TRAN", m.indicator)) if v)
+                      + (" MOVE//REVE" if m.reversal else "")}
+    net = abs(m.amount) if m.amount is not None else Decimal(0)
+    return Transaction(kind=Kind.UNKNOWN, net=net, raw_type=f"MT536 {m.what}",
+                       raw={k: v for k, v in raw.items() if v}, **common)
