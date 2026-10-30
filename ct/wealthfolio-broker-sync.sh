@@ -10,7 +10,7 @@ this installation into it, step by step:
 Wealthfolio Broker Sync heißt jetzt Wealthfolio Companion - ein neues Produkt, das bei 0.1.0 neu beginnt.
 `update` installiert es nicht: Wealthfolio Companion neu installieren und eine Sicherung dieser Installation
 dort wiederherstellen, Schritt für Schritt (englisch):
-  https://github.com/waldonso2/wealthfolio-companion/blob/main/docs/OPERATIONS.md#moving-from-wealthfolio-broker-sync
+  https://github.com/waldonso2/wealthfolio-companion/blob/main/CHANGELOG.md#moving-from-wealthfolio-broker-sync
 
 Nothing was changed here. / Hier wurde nichts geändert.
 MSG

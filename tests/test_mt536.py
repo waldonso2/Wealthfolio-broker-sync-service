@@ -151,7 +151,7 @@ def test_the_dkb_logs_its_depot_transactions_without_booking_them(monkeypatch, c
     a = DkbAdapter(PROFILES[DkbAdapter])
     a.login()
     caplog.set_level(logging.INFO, logger="brokersync.adapters.fints")
-    txs = a.get_transactions(datetime(2026, 8, 1, tzinfo=UTC))
+    txs = a.get_transactions(datetime.now(UTC) - timedelta(days=3))  # within the 89 days, whatever today is
     first = datetime.now(fints_mod.BERLIN).date() - timedelta(days=fints_mod.NO_TAN_DAYS)
     assert ("movements", "0000999888", first) in a._client.calls  # the last 89 days, not just the run's window
     assert f"Depotumsätze von „maxblue Depot“ (Art 30) seit {first} (Test, nichts gebucht): 4 - " in caplog.text

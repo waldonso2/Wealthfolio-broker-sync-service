@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0a4
+
+- Documentation: ARCHITECTURE.md is English and describes the current architecture and data flow; the move guide from Wealthfolio Broker Sync is no longer part of the operations guide - it stays in this changelog (0.1.0a1), and the old installer's notice points there.
+- Tests: regression cases for matching bank settlements (`ExistingIndex.find_settlement`); a DKB depot test no longer depends on today's date.
+
 ## 0.1.0a3
 
 - After a move from Wealthfolio Broker Sync the overview and *Updates* offered its old version (e.g. "Update available: version 0.44.0"): the last update answer came along with the backup and counted as newer than 0.1.0. Only an answer found for Wealthfolio Companion counts now; an old one is asked again at the next run. Nothing was ever installed from it - the updater asks GitHub itself.
