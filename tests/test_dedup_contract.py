@@ -58,3 +58,42 @@ def test_another_transactions_activity_of_the_sync_is_never_a_match():
     assert index.find("[SYNC x:2]", payload) is None
     index.existing.append({**first, "id": "i1", "comment": "Bäckerei"})  # an import of it still matches
     assert index.find("[SYNC x:2]", payload) == "i1"
+
+
+def test_settlement_matching_uses_direction_and_each_activity_only_once():
+    from datetime import UTC, datetime
+    from decimal import Decimal
+
+    from brokersync.dedup import ExistingIndex
+
+    when = datetime(2026, 3, 1, 12, tzinfo=UTC)
+    index = ExistingIndex([
+        {"id": "out", "accountId": "cash", "activityType": "TRANSFER_OUT",
+         "date": "2026-03-01T12:00:00Z", "amount": "125.00", "comment": ""},
+        {"id": "in", "accountId": "cash", "activityType": "TRANSFER_IN",
+         "date": "2026-03-01T12:00:00Z", "amount": "125.00", "comment": ""},
+    ])
+
+    assert index.find_settlement("cash", Decimal("-125.00"), when, 2) == "out"
+    assert index.find_settlement("cash", Decimal("-125.00"), when, 2) is None
+    assert index.find_settlement("cash", Decimal("125.00"), when, 2) == "in"
+    assert index.find_settlement("cash", Decimal("125.00"), when, 2) is None
+
+
+def test_settlement_matching_rejects_wrong_account_amount_and_date_window():
+    from datetime import UTC, datetime
+    from decimal import Decimal
+
+    from brokersync.dedup import ExistingIndex
+
+    when = datetime(2026, 3, 1, 12, tzinfo=UTC)
+    index = ExistingIndex([
+        {"id": "late", "accountId": "cash", "activityType": "TRANSFER_OUT",
+         "date": "2026-03-04T12:00:00Z", "amount": "125.00", "comment": ""},
+        {"id": "amount", "accountId": "cash", "activityType": "TRANSFER_OUT",
+         "date": "2026-03-01T12:00:00Z", "amount": "124.00", "comment": ""},
+        {"id": "account", "accountId": "other-cash", "activityType": "TRANSFER_OUT",
+         "date": "2026-03-01T12:00:00Z", "amount": "125.00", "comment": ""},
+    ])
+
+    assert index.find_settlement("cash", Decimal("-125.00"), when, 2) is None
