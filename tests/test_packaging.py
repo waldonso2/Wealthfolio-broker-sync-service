@@ -305,3 +305,28 @@ def test_the_release_verifier_stands_alone_and_is_locked():
     assert "requirements-verify.in" in (ROOT / "scripts" / "lock.sh").read_text()
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
     assert re.search(r"subject-path: \|\n.*\.tar\.gz\n\s+SHA256SUMS\n", release)
+
+
+def test_every_pip_install_is_hash_locked():
+    """#155: no install path around the lock - every pip install of the scripts, the image and the workflows takes a
+    lock file with hashes and wheels only, or is this package itself without dependencies and build isolation."""
+    files = [ROOT / "Dockerfile", *ROOT.glob("ct/*.sh"), *ROOT.glob("install/*.sh"), *(ROOT / "deploy").iterdir(),
+             *ROOT.glob(".github/workflows/*.yml")]
+    seen = 0
+    for path in files:
+        if not path.is_file():
+            continue
+        for command in re.sub(r"\\\n", " ", path.read_text()).splitlines():
+            if command.lstrip().startswith("#") or re.match(r"\s*PIP=\(", command):
+                continue
+            if re.search(r'pip"? install|"\$\{PIP\[@\]\}"', command):
+                seen += 1
+                locked = "--require-hashes" in command and "--only-binary :all:" in command and " -r " in command
+                assert locked or "--no-deps --no-build-isolation" in command, f"{path.name}: {command.strip()}"
+    assert seen >= 10
+
+
+def test_the_image_base_is_pinned_by_digest_in_every_stage():
+    """#155: Dependabot (docker) reads the FROM lines - both stages name the same base image by its digest."""
+    bases = re.findall(r"^FROM (\S+)", (ROOT / "Dockerfile").read_text(), re.M)
+    assert len(bases) == 2 and len(set(bases)) == 1 and re.search(r"@sha256:[0-9a-f]{64}$", bases[0])

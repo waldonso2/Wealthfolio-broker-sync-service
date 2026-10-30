@@ -1,10 +1,10 @@
 version: 2
 updates:
-  # requirements.txt / requirements-dev.txt / requirements-verify.txt: the locked runtime, CI and release-verifier
-  # versions (scripts/lock.sh).
+  # requirements.txt / requirements-dev.txt / requirements-verify.txt (and their .in files): the locked runtime, CI and
+  # release-verifier versions (scripts/lock.sh, hashes); Dependabot finds the requirements*.txt/.in files of the root.
   # Security updates and a weekly round of version updates. pytr is updated by hand (its diff is
   # reviewed, the contract case re-run): only its version updates are ignored, a security update
-  # still comes as a pull request (#97).
+  # still comes as a pull request (#97). The policy: docs/OPERATIONS.md, "Supply chain" (#155).
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
@@ -15,6 +15,18 @@ updates:
     ignore:
       - dependency-name: "pytr"
         update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+
+  # The Dockerfile's base image (python:3.13-slim-trixie, pinned by digest): a new digest of the same tag is
+  # Debian's and Python's patch round; a new Python minor or Debian release is moved by hand (#155).
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
