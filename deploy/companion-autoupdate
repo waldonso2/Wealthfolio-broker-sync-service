@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The container's updater (wealthfolio-companion-update.timer, root, every minute). Switched on and timed on
 # the page Updates: it asks the service (companion-cli update-due) whether GitHub is due and whether a newer
-# release is out, then runs the same update as `update` in the console - unattended (PHS_SILENT=1), with its
-# check of every file against the release's SHA256SUMS - and reports how it went (companion-cli update-done).
+# release is out, then runs the same updater as `update` in the console (companion-update: verified, staged,
+# health-checked, rolled back on failure) and reports how it went (companion-cli update-done).
 set -euo pipefail
 
 STATE=/var/lib/wealthfolio-companion-update
@@ -13,6 +13,10 @@ now="$(date +%s)"
 
 # A fetch going on keeps its files: the update replaces the program under it.
 systemctl is-active --quiet wealthfolio-companion-run.service && exit 0
+# An update from the console is running: not now (companion-update would refuse anyway).
+exec 9>"${COMPANION_UPDATE_LOCK:-/run/wealthfolio-companion-update.lock}"
+flock -n 9 || exit 0
+exec 9>&-
 
 last="$(cat "$STATE/checked" 2>/dev/null || echo 0)"
 answer="$(/usr/local/bin/companion-cli update-due --since "$((now - last))")" || exit 0
@@ -29,7 +33,12 @@ fi
 
 old="$("$BIN" --version)"
 echo "Installing version $version (installed: $old)"
-if PHS_SILENT=1 /usr/bin/update && [[ "$("$BIN" --version)" == "$version" ]]; then
+rc=0
+/usr/local/bin/companion-update || rc=$?
+# 75: busy (an update from the console, or a sync started meanwhile) - the next minute asks again.
+((rc == 75)) && exit 0
+# A failed update was rolled back by companion-update: $BIN is the previous version again.
+if ((rc == 0)) && [[ "$("$BIN" --version)" == "$version" ]]; then
   rm -f "$STATE/failed"
   /usr/local/bin/companion-cli update-done --from "$old" --to "$version"
 else

@@ -1,0 +1,18 @@
+[Unit]
+Description=Wealthfolio Companion - undo an update that was interrupted (power cut, reboot)
+# Only while an update has switched to a new release without finding it healthy (companion-update writes the file
+# before the switch and removes it at the commit or the rollback).
+ConditionPathExists=/opt/wealthfolio-companion/update-pending
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Root, without a sandbox, like the updater: it puts the previous release and its data back and restarts the service.
+User=root
+UMask=0022
+ExecStart=/usr/local/bin/companion-update --recover
+TimeoutStartSec=30min
+
+[Install]
+WantedBy=multi-user.target

@@ -9,3 +9,5 @@ mypy
 pip-audit
 playwright
 axe-playwright-python
+# sigstore: the tests of the release verifier (src/brokersync/provenance.py).
+-r requirements-verify.in

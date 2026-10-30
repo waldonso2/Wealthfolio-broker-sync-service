@@ -69,16 +69,19 @@ EN: dict[str, str] = {
     "Daten öffnen - dagegen hilft die Master-Passphrase.":
         "As the container's secret outside data/ (no TPM): whoever copies the volume and the secret can open "
         "the data - the master passphrase protects against that.",
-    "Dieser Dienst läuft als Docker-Container: Eine neue Version ist ein neues Image. Zum Aktualisieren auf dem"
-    " Rechner mit dem Container docker compose pull und danach docker compose up -d ausführen - die Daten "
-    "bleiben im Volume, beim Start werden sie auf den neuen Stand gebracht.":
-        "This service runs as a Docker container: a new version is a new image. To update, run docker compose "
-        "pull and then docker compose up -d on the computer with the container - the data stays in the volume "
-        "and is brought up to date at the start.",
-    "Installiert ist {current}. Zum Aktualisieren das neue Image holen: <code>docker compose pull</code>, dann "
-    "<code>docker compose up -d</code>.":
-        "Installed is {current}. To update, get the new image: <code>docker compose pull</code>, then "
-        "<code>docker compose up -d</code>.",
+    "Dieser Dienst läuft als Docker-Container: Eine neue Version ist ein neues Image. Zum Aktualisieren "
+    "auf dem Rechner mit dem Container ./pull-verified-image.sh --env .env &lt;Version&gt; ausführen "
+    "(prüft Signatur und Herkunft des Images), danach docker compose pull companion und docker compose "
+    "up -d - die Daten bleiben im Volume, beim Start werden sie auf den neuen Stand gebracht.":
+        "This service runs as a Docker container: a new version is a new image. To update, run "
+        "./pull-verified-image.sh --env .env &lt;version&gt; on the computer with the container (it checks "
+        "the image's signature and provenance), then docker compose pull companion and docker compose up -d "
+        "- the data stays in the volume and is brought up to date at the start.",
+    "Installiert ist {current}. Zum Aktualisieren das neue Image prüfen: <code>./pull-verified-image.sh "
+    "--env .env {new}</code>, dann <code>docker compose pull companion</code> und <code>docker compose "
+    "up -d</code>.":
+        "Installed is {current}. To update, check the new image: <code>./pull-verified-image.sh --env .env "
+        "{new}</code>, then <code>docker compose pull companion</code> and <code>docker compose up -d</code>.",
     # Page Dienste (#145)
     "Die Anmeldung läuft gerade schon - bitte kurz warten.": "The login is already in progress - please wait a moment.",
     "Dienste": "Services",

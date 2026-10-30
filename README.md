@@ -15,6 +15,7 @@ Fetches your transactions from your brokers and banks automatically and books th
 - [Requirements](#requirements)
 - [Installation](#installation)
   - [Proxmox VE (LXC)](#proxmox-ve-lxc)
+  - [Verified image (Docker, Podman, Unraid)](#verified-image-docker-podman-unraid)
   - [Docker Compose](#docker-compose)
   - [Docker run](#docker-run)
   - [Podman](#podman)
@@ -66,7 +67,7 @@ The image is published for `linux/amd64` and `linux/arm64`:
 
 | Registry | Image |
 |---|---|
-| GHCR | `ghcr.io/waldonso2/wealthfolio-companion:latest` |
+| GHCR | `ghcr.io/waldonso2/wealthfolio-companion@sha256:…` – the digest of a release, checked as in [Verified image](#verified-image-docker-podman-unraid) |
 
 ### Proxmox VE (LXC)
 
@@ -79,6 +80,8 @@ The recommended way: a native LXC container built with the community-scripts eng
    bash -c "$(curl -fsSL https://raw.githubusercontent.com/waldonso2/wealthfolio-companion/main/ct/wealthfolio-companion.sh)"
    ```
 
+   This one script comes from the repository's `main` branch over HTTPS; everything it installs is a release whose build provenance and checksums are verified first, and later updates never fetch a script from a branch again. To check the installer itself against a release first, see [Release verification](docs/OPERATIONS.md#security).
+
 3. Choose *Default Settings* (1 CPU, 512 MB RAM, 2 GB disk, Debian 13, unprivileged).
 4. When it finishes, it prints the address of the UI (for example `https://192.168.1.51:8443`) and the setup code. Open the address and go on with [First setup](#first-setup).
 
@@ -88,11 +91,41 @@ Forgot the setup code? Open the container's console and run:
 companion-cli setup-code
 ```
 
+### Verified image (Docker, Podman, Unraid)
+
+Every release's image is signed with [cosign](https://github.com/sigstore/cosign) by this repository's release workflow and carries its SLSA build provenance. `pull-verified-image.sh` resolves the release's version to the image's digest once, checks the signature and the provenance of exactly that digest, and only then prints the reference `ghcr.io/waldonso2/wealthfolio-companion@sha256:…`. The steps below run only that reference, never a tag; if a check fails, nothing is printed and nothing changes.
+
+1. Install cosign 3.0.6 (the checksums are those of sigstore's own installer; on Unraid repeat this after a reboot, its system files live in RAM):
+
+   ```bash
+   case "$(uname -m)" in
+     x86_64) A=amd64 S=c956e5dfcac53d52bcf058360d579472f0c1d2d9b69f55209e256fe7783f4c74 ;;
+     aarch64) A=arm64 S=bedac92e8c3729864e13d4a17048007cfafa79d5deca993a43a90ffe018ef2b8 ;;
+   esac
+   curl -fsSLo cosign "https://github.com/sigstore/cosign/releases/download/v3.0.6/cosign-linux-$A"
+   echo "$S  cosign" | sha256sum -c - && sudo install -m 755 cosign /usr/local/bin/cosign; rm -f cosign
+   ```
+
+2. Download the script into the companion's folder (on Unraid `/mnt/user/appdata/companion`):
+
+   ```bash
+   mkdir -p ~/companion && cd ~/companion
+   curl -fsSLo pull-verified-image.sh https://raw.githubusercontent.com/waldonso2/wealthfolio-companion/main/scripts/pull-verified-image.sh
+   chmod +x pull-verified-image.sh
+   ```
+
+3. Check the newest release's image – the platforms below use `$IMAGE` in the same terminal:
+
+   ```bash
+   VERSION="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/waldonso2/wealthfolio-companion/releases/latest)"; VERSION="${VERSION##*/v}"
+   IMAGE="$(./pull-verified-image.sh "$VERSION")" && echo "$IMAGE"
+   ```
+
 ### Docker Compose
 
 `deploy/docker-compose.example.yml` starts the companion, optionally together with Wealthfolio. The container runs as an unprivileged user (uid 10001) with a read-only file system and no capabilities; its key comes from a file mounted as a Compose secret and is never stored in the image or the data volume.
 
-1. Create a folder for it and download the Compose file:
+1. In the folder of [Verified image](#verified-image-docker-podman-unraid), download the Compose file:
 
    ```bash
    mkdir -p ~/companion && cd ~/companion
@@ -129,7 +162,7 @@ companion-cli setup-code
    cat > docker-compose.yml <<'EOF'
    services:
      companion:
-       image: ghcr.io/waldonso2/wealthfolio-companion:latest
+       image: ${COMPANION_IMAGE:?run ./pull-verified-image.sh --env .env <version> first}
        container_name: companion
        hostname: companion
        restart: unless-stopped
@@ -158,10 +191,11 @@ companion-cli setup-code
    EOF
    ```
 
-4. Start it:
+4. Write the verified image into `.env` (Compose refuses to start without it) and start:
 
    ```bash
-   docker compose up -d
+   VERSION="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/waldonso2/wealthfolio-companion/releases/latest)"; VERSION="${VERSION##*/v}"
+   ./pull-verified-image.sh --env .env "$VERSION" && docker compose up -d
    ```
 
 5. Read the setup code from the log:
@@ -176,7 +210,7 @@ To have the computer's name in the UI's certificate as well, uncomment `COMPANIO
 
 ### Docker run
 
-The same container without Compose.
+The same container without Compose, with `$IMAGE` from [Verified image](#verified-image-docker-podman-unraid).
 
 1. Create a folder and the key, owned by the container's user (keep a copy, as above):
 
@@ -186,7 +220,7 @@ The same container without Compose.
    sudo chown 10001:10001 companion.key && sudo chmod 600 companion.key
    ```
 
-2. Start the container:
+2. Start the container from the verified image:
 
    ```bash
    docker run -d --name companion --hostname companion --restart unless-stopped \
@@ -194,7 +228,7 @@ The same container without Compose.
      --read-only --tmpfs /tmp:size=64M,mode=1777 --cap-drop ALL --security-opt no-new-privileges:true \
      -v companion-data:/data -v companion-tls:/tls \
      -v "$PWD/companion.key:/run/secrets/companion-key:ro" \
-     ghcr.io/waldonso2/wealthfolio-companion:latest
+     "$IMAGE"
    ```
 
 3. Read the setup code from the log:
@@ -217,7 +251,7 @@ The image runs under Podman the same way; rootless Podman maps the container's u
    chmod 600 companion.key && podman unshare chown 10001:10001 companion.key
    ```
 
-2. Start the container:
+2. Start the container from the verified image (`$IMAGE`, [Verified image](#verified-image-docker-podman-unraid)):
 
    ```bash
    podman run -d --name companion --hostname companion --restart unless-stopped \
@@ -225,7 +259,7 @@ The image runs under Podman the same way; rootless Podman maps the container's u
      --read-only --tmpfs /tmp:size=64M,mode=1777 --cap-drop ALL --security-opt no-new-privileges \
      -v companion-data:/data -v companion-tls:/tls \
      -v "$PWD/companion.key:/run/secrets/companion-key:ro,Z" \
-     ghcr.io/waldonso2/wealthfolio-companion:latest
+     "$IMAGE"
    ```
 
 3. Read the setup code from the log:
@@ -249,7 +283,7 @@ Unraid runs the same image as a Docker container. There is no Community Applicat
    chmod 600 /mnt/user/appdata/companion/companion.key
    ```
 
-2. Start the container (port 8443 for the UI; change the left-hand numbers if those ports are taken on your server):
+2. Start the container from the verified image (`$IMAGE`, [Verified image](#verified-image-docker-podman-unraid); port 8443 for the UI; change the left-hand numbers if those ports are taken on your server):
 
    ```bash
    docker run -d --name companion --hostname companion --restart unless-stopped \
@@ -257,7 +291,7 @@ Unraid runs the same image as a Docker container. There is no Community Applicat
      --read-only --tmpfs /tmp:size=64M,mode=1777 --cap-drop ALL --security-opt no-new-privileges:true \
      -v /mnt/user/appdata/companion/data:/data -v /mnt/user/appdata/companion/tls:/tls \
      -v /mnt/user/appdata/companion/companion.key:/run/secrets/companion-key:ro \
-     ghcr.io/waldonso2/wealthfolio-companion:latest
+     "$IMAGE"
    ```
 
 3. Read the setup code from the log (or on the *Docker* tab: click the container's icon → *Logs*):
@@ -268,11 +302,12 @@ Unraid runs the same image as a Docker container. There is no Community Applicat
 
 4. Open `https://<your Unraid server's IP address>:8443` and go on with [First setup](#first-setup). On the *Docker* tab, turn on *Autostart* for `companion`, so it starts with the array.
 
-**Updating on Unraid** – the *Docker* tab cannot update a container that was created without a template, so pull the new image and create the container again with the command from step 2 (the data in `appdata` stays):
+**Updating on Unraid** – the *Docker* tab cannot update a container that was created without a template (and would follow a tag), so check and pull the new image, then create the container again with the command from step 2 (the data in `appdata` stays). If the check or the pull fails, the running container stays:
 
 ```bash
-docker pull ghcr.io/waldonso2/wealthfolio-companion:latest
-docker stop companion && docker rm companion
+cd /mnt/user/appdata/companion
+VERSION="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/waldonso2/wealthfolio-companion/releases/latest)"; VERSION="${VERSION##*/v}"
+IMAGE="$(./pull-verified-image.sh "$VERSION")" && docker pull "$IMAGE" && docker rm -f companion
 ```
 
 **Backup on Unraid** – `appdata` is covered by the *Appdata Backup* plugin; that backup holds data **and** key, so keep it on an encrypted target or set the master passphrase. A backup of the data only:
@@ -340,25 +375,27 @@ Settings, credentials and data stay; the data is migrated at start.
    update
    ```
 
-   It backs up the encrypted data first (`/opt/wealthfolio-companion/backup-*.tar.gz`, the last three are kept) and checks every downloaded file against the release's checksums (`SHA256SUMS`); if one doesn't match, it stops and the current version keeps running.
+   It verifies the release's build provenance and checksums before unpacking anything, builds it next to the running version, backs up the encrypted data (`/opt/wealthfolio-companion/backup-*.tar.gz`, the last three are kept), switches over and checks that the service answers - otherwise it puts the previous version and its data back. If anything doesn't verify, nothing changes.
 
 2. Or let the container update itself: page *Updates* (opt-in, asks for the UI password).
 
 **Docker Compose**
 
-1. In the folder with `docker-compose.yml`:
+1. In the folder with `docker-compose.yml`, check the new release's image, write it into `.env` and start it (if the check fails, nothing changes and the running container stays):
 
    ```bash
-   docker compose pull && docker compose up -d
+   VERSION="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/waldonso2/wealthfolio-companion/releases/latest)"; VERSION="${VERSION##*/v}"
+   ./pull-verified-image.sh --env .env "$VERSION" && docker compose pull companion && docker compose up -d
    ```
 
 **Docker run / Podman**
 
-1. Fetch the new image, then remove the container (the volumes stay):
+1. Check and fetch the new image, then remove the container (the volumes stay; if the check or the pull fails, the running container stays):
 
    ```bash
-   docker pull ghcr.io/waldonso2/wealthfolio-companion:latest
-   docker rm -f companion
+   cd ~/companion
+   VERSION="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/waldonso2/wealthfolio-companion/releases/latest)"; VERSION="${VERSION##*/v}"
+   IMAGE="$(./pull-verified-image.sh "$VERSION")" && docker pull "$IMAGE" && docker rm -f companion
    ```
 
 2. Run the `docker run` command from [Docker run](#docker-run), step 2, again. With Podman, use `podman` in both steps and the command from [Podman](#podman), step 2.
@@ -413,7 +450,7 @@ A backup holds only encrypted data, never the key. **It is complete only togethe
    docker stop companion
    docker run --rm -i --read-only --tmpfs /tmp:size=64M,mode=1777 --cap-drop ALL \
      -v companion-data:/data -v "$PWD/companion.key:/run/secrets/companion-key:ro" \
-     ghcr.io/waldonso2/wealthfolio-companion:latest restore < companion-2026-10-15.tar.gz
+     "$(docker inspect -f '{{.Config.Image}}' companion)" restore < companion-2026-10-15.tar.gz
    docker start companion
    ```
 
@@ -449,6 +486,7 @@ Everything else—reconciliation, X-Ray, costs and FIRE, the booking model, prox
 - Credentials, settings and the sync database are encrypted (AES-256-GCM and SQLCipher). The service's key lives outside the data: in Proxmox sealed with `systemd-creds`, in Docker as a secret.
 - **Master passphrase (optional):** with it, even a copy that includes the key opens nothing. Without the passphrase the data is lost.
 - Read-only access to the brokers; protection against lock-outs (no second wrong PIN or TAN); the UI only over HTTPS, with its own login and throttled failed attempts.
+- Proxmox installs and updates accept a release only with the build provenance of this repository's release workflow and matching checksums - no GitHub login needed; updates are staged, health-checked and rolled back on failure.
 - The page *Security* always shows what is protected and how. Please report vulnerabilities privately: [SECURITY.md](SECURITY.md).
 
 ## How it came about

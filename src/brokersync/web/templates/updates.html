@@ -4,7 +4,7 @@
   <h1>{{ _("Updates") }}</h1>
   <p>{{ _("Installiert: Version {version}.", version=installed) }}{% if newest %} {{ _("Neueste Version auf GitHub: {version}.", version=newest) }}{% endif %}</p>
   {% if container %}
-  <p>{{ _("Dieser Dienst läuft als Docker-Container: Eine neue Version ist ein neues Image. Zum Aktualisieren auf dem Rechner mit dem Container docker compose pull und danach docker compose up -d ausführen - die Daten bleiben im Volume, beim Start werden sie auf den neuen Stand gebracht.") }}</p>
+  <p>{{ _("Dieser Dienst läuft als Docker-Container: Eine neue Version ist ein neues Image. Zum Aktualisieren auf dem Rechner mit dem Container ./pull-verified-image.sh --env .env &lt;Version&gt; ausführen (prüft Signatur und Herkunft des Images), danach docker compose pull companion und docker compose up -d - die Daten bleiben im Volume, beim Start werden sie auf den neuen Stand gebracht.") }}</p>
   {% else %}
   <p>{{ _("Eingeschaltet sieht der Container selbst nach, ob eine neue Version erschienen ist, und installiert sie wie der Befehl update in seiner Konsole: dieselben Prüfungen (jede Datei gegen die Prüfsummen des Releases), dieselbe Sicherung der Daten vorher. Danach kommt eine Nachricht über ntfy. Schlägt ein Update fehl, läuft die bisherige Version weiter; dieselbe Version wird nach einer Stunde noch einmal versucht. Während eines Abrufs wird nicht aktualisiert.") }}</p>
   <form method="post">

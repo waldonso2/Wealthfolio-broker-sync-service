@@ -1,0 +1,4 @@
+# The release verifier (src/brokersync/provenance.py): install and update build a throwaway venv from
+# requirements-verify.txt (scripts/lock.sh, with hashes) and check the release's provenance with it before
+# anything of the release runs. Not a dependency of the service.
+sigstore

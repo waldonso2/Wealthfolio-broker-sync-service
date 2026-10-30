@@ -2,14 +2,18 @@
 #
 #   openssl rand -base64 32 > companion.key   # once; keep a copy - without it the data is lost
 #   sudo chown 10001:10001 companion.key && sudo chmod 600 companion.key   # the container's user reads it
+#   ./pull-verified-image.sh --env .env <version>   # COMPANION_IMAGE=ghcr.io/...@sha256:... into .env, only after
+#                                                   # cosign verified signature and provenance (README: Verified image)
 #   docker compose -f docker-compose.example.yml up -d
 #   docker compose logs companion        # the one-time setup code for the first password
 #   https://<this computer>:8443          # the UI; in it, Wealthfolio's address is http://wealthfolio:8088
 #
-# Update: docker compose pull && docker compose up -d (the data stays in the volume, it is migrated at start).
+# Update: ./pull-verified-image.sh --env .env <new version> && docker compose pull companion && docker compose up -d
+# (the data stays in the volume, it is migrated at start). A failed check changes nothing: the running container stays.
 services:
   companion:
-    image: ghcr.io/waldonso2/wealthfolio-companion:latest
+    # Only the digest scripts/pull-verified-image.sh verified - never a tag; Compose refuses to start without it.
+    image: ${COMPANION_IMAGE:?run ./pull-verified-image.sh --env .env <version> first}
     container_name: companion
     hostname: companion            # the name in the UI's certificate
     restart: unless-stopped
@@ -41,6 +45,7 @@ services:
       - wealthfolio
 
   wealthfolio:
+    # Wealthfolio's own image, published by its project - not covered by the companion's signature check.
     image: wealthfolio/wealthfolio:latest
     container_name: wealthfolio
     restart: unless-stopped
