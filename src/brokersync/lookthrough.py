@@ -1173,7 +1173,15 @@ ALIASES = {"communication": "communication services", "telecommunication service
            # GICS 2023 names the issuers use, where Wealthfolio's taxonomy still has the earlier ones
            "airlines": "passenger airlines", "automobile components": "auto components",
            "ground transportation": "road & rail", "marine transportation": "marine",
-           "personal care products": "personal products"}
+           "personal care products": "personal products",
+           "abfallwirtschaft": "environmental & facilities services",
+           "bildung": "education services",
+           "forsterzeugnisse": "forest products",
+           "kleidung & accessoires": "apparel, accessories & luxury goods",
+           "konglomerate": "industrial conglomerates",
+           "landwirtschaft": "agricultural products",
+           "med. diagnostik & forschung": "life sciences tools & services",
+           "unternehmensdienste": "commercial services & supplies"}
 # A country as ISO 3166-1 alpha-2, as Wealthfolio keys its regions (``country_US``): the issuers' spellings that
 # aren't Wealthfolio's English name - German ones (iShares' German download, DWS, VanEck) and English variants.
 # A two-letter code (Vanguard) is taken as it is. Names Wealthfolio has, in English, need no entry.
@@ -1217,6 +1225,8 @@ def _bp(lines: list[list[str]], attr: int, categories: dict[str, str], unmatched
         name = _norm(line[attr])
         if not name:
             continue
+        if attr == 4 and name == _norm("Barmittel & Derivate"):
+            continue  # asset-class bucket, not an industry
         category = categories.get(aliases.get(name, name))
         if category is None:
             unmatched.add(line[attr].strip())
