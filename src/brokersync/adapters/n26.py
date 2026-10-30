@@ -26,8 +26,9 @@ from typing import ClassVar
 
 import httpx
 
+from .. import ratelimit
 from ..model import CashBalance, Kind, Position, Transaction
-from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
+from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField, rate_limited
 from .fints import BERLIN
 
 log = logging.getLogger(__name__)
@@ -91,13 +92,13 @@ class N26Adapter(BrokerAdapter):
         self.session.pop("mfa_token", None)
 
     def _get(self, path: str, **params) -> dict | list:
+        headers = {"Authorization": f"Bearer {self.session['access_token']}", "device-token": self._device()}
         try:
-            r = self.http.get(path, params=params, headers={"Authorization": f"Bearer {self.session['access_token']}",
-                                                            "device-token": self._device()})
+            r = ratelimit.with_backoff(lambda: self.http.get(path, params=params, headers=headers))
         except httpx.HTTPError as e:
             raise AdapterError(f"N26 antwortet nicht ({type(e).__name__}).") from e
-        if r.status_code == 429:
-            raise AdapterError("N26 begrenzt gerade die Abrufe - der nächste Abruf versucht es wieder.")
+        if ratelimit.limited(r):
+            raise rate_limited(self.label, r)
         if r.status_code in (401, 403):
             self.session.pop("access_token", None)
             raise AdapterError("N26 hat die Anmeldung beendet - bitte neu anmelden.")

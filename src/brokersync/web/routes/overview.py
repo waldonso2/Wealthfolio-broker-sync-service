@@ -88,7 +88,7 @@ def _brokers(ctx: AppContext, c: config_mod.Config, secrets_: dict) -> list[dict
         cash_off = [d for d in (reconcile or {}).get("deviations", []) if d.get("kind") == "cash"]
         saldo = None if not balances or reconcile is None else ("off" if cash_off else "ok")
         light, reasons = views.broker_light(asdict(last) if last else None, reconcile, unknown, gaps, b.enabled,
-                                            lang=lang)
+                                            lang=lang, limited_until=ctx.state.meta(meta_keys.RATE_LIMIT(key)))
         brokers.append({
             "key": key,
             "label": adapter.label,

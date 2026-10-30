@@ -47,7 +47,7 @@ from . import history as history_mod
 from . import logos as logos_mod
 from . import repair as repair_mod
 from .adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
-from .adapters.base import safety_state
+from .adapters.base import RateLimited, safety_state
 from .adapters.fints import NO_TAN_DAYS
 from .dedup import ExistingIndex
 from .history import BERLIN, opening_id
@@ -177,6 +177,7 @@ class Syncer:
         self.recalc_wait = float(os.environ.get("COMPANION_RECALC_WAIT", "5"))
         self._notifier = notifier
         self._pins: dict[str, str] = {}  # PINs typed at the login, for the current run only (#85)
+        self._manual = False  # the current run was started in the UI (a rate limit doesn't hold it back, #149)
         self._progress: dict = {}  # the broker being fetched, for the overview (#104)
         self._logo_source = logo_source or logos_mod.LogoDev
         self._fund_sources = fund_sources or lookthrough.Sources
@@ -218,6 +219,7 @@ class Syncer:
                 self._update_funds(cfg)  # the issuers' lists are no broker: they stay daily in safe mode too
                 return []
             self._pins = dict(pins or {})
+            self._manual = manual
             # "Automatisch abrufen" off: the timer and the general button skip
             # the broker, a request for exactly this broker still runs it.
             keys = [key for key, bcfg in cfg.brokers.items()
@@ -468,13 +470,32 @@ class Syncer:
         except AlreadyRunning:
             pass
 
+    def _waiting(self, key: str) -> datetime | None:
+        """Until when the broker asked us to wait (#149), None when that is over."""
+        until = self.state.meta(meta_keys.RATE_LIMIT(key))
+        moment = when(until) if until else None
+        return moment if moment and moment > datetime.now(UTC) else None
+
     def _run_broker(self, cfg: config_mod.Config, key: str) -> BrokerResult:
+        label = self.adapters[key].label
+        if not self._manual and (until := self._waiting(key)):
+            # A scheduled run doesn't ask a broker that limits the requests before the time it named; the last
+            # run (status "limited") stays what the overview shows. A fetch the user starts still tries.
+            log.info("%s: rate limited until %s, skipped", key, until.isoformat())
+            return BrokerResult(key, "skipped", messages=[f"{label}: Abruflimit bis {until.isoformat()}"])
         run_id = self.state.start_run(key)
         result = BrokerResult(key, "ok")
-        label = self.adapters[key].label
         notifier = self.notifier(cfg)
         try:
             self._sync_broker(cfg, key, result)
+            self.state.delete_meta(meta_keys.RATE_LIMIT(key))
+        except RateLimited as e:
+            # Not "ok": nothing of the run counts as a success, so the next one reads from before it.
+            result.status = "limited"
+            result.messages.append(str(e))
+            if not self.state.meta(meta_keys.RATE_LIMIT(key)):  # once per episode, until a run gets through
+                notifier.send(f"{label}: Abruflimit", str(e), link=self.link(cfg, "/broker"), tags="hourglass")
+            self.state.set_meta(meta_keys.RATE_LIMIT(key), e.until.astimezone(UTC).isoformat())
         except AuthRequired as e:
             result.status = "needs_auth"
             result.messages.append(str(e))

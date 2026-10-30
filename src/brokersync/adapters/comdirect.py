@@ -51,8 +51,9 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from .. import ratelimit
 from ..model import CashBalance, Kind, Position, Transaction
-from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
+from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField, rate_limited
 
 log = logging.getLogger(__name__)
 BERLIN = ZoneInfo("Europe/Berlin")
@@ -311,10 +312,14 @@ class ComdirectAdapter(BrokerAdapter):
 
     def get(self, path: str, **params) -> dict:
         self._ensure_token()
+        headers = self._headers(self.session["access_token"])
         try:
-            r = self.http.get(f"{API}/api{path}", params=params, headers=self._headers(self.session["access_token"]))
+            # Reads only (bookings, depot): token, session, validation and activation never come through here.
+            r = ratelimit.with_backoff(lambda: self.http.get(f"{API}/api{path}", params=params, headers=headers))
         except httpx.HTTPError as e:
             raise AdapterError(f"comdirect nicht erreichbar: {e}") from e
+        if ratelimit.limited(r):
+            raise rate_limited(self.label, r)
         if r.status_code == 401:
             self._clear_tokens()
             raise AuthRequired(Challenge("confirm", "Die comdirect-Sitzung ist abgelaufen. Bitte neu anmelden."))

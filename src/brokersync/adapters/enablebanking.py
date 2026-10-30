@@ -34,8 +34,9 @@ import httpx
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
+from .. import ratelimit
 from ..model import CashBalance, Position, Transaction
-from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
+from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField, rate_limited
 from .fints import BERLIN, NO_TAN_DAYS, to_transactions
 
 log = logging.getLogger(__name__)
@@ -153,10 +154,17 @@ class EnableBankingAdapter(BrokerAdapter):
             raise AdapterError("Application-ID und privater Schlüssel fehlen - bitte in den Broker-Einstellungen "
                                "eintragen.")
         token = self._bearer or jwt(app_id, key)
+
+        def send() -> httpx.Response:
+            return self.http.request(method, path, headers={"Authorization": f"Bearer {token}"}, **kwargs)
+
         try:
-            r = self.http.request(method, path, headers={"Authorization": f"Bearer {token}"}, **kwargs)
+            # Only reads are tried again: POST /auth and POST /sessions start or finish a login at the bank.
+            r = ratelimit.with_backoff(send) if method == "GET" else send()
         except httpx.HTTPError as e:
             raise AdapterError(f"Enable Banking antwortet nicht ({type(e).__name__}).") from e
+        if ratelimit.limited(r):
+            raise rate_limited(self.label, r)
         if r.status_code in (401, 403) and path.startswith("/accounts/"):
             self.session.pop("session_id", None)  # consent withdrawn or ended: the next run asks for a login
             raise AdapterError("Die Bank hat den Zugriff beendet - bitte neu anmelden.")
