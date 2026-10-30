@@ -93,7 +93,8 @@ class LogoDev:
 
 def _only_logo_dev(request: httpx.Request) -> None:
     host = request.url.host
-    if host != "logo.dev" and not host.endswith(".logo.dev"):
+    # https only: the key is in the URL, a redirect to http would show it on the way.
+    if request.url.scheme != "https" or (host != "logo.dev" and not host.endswith(".logo.dev")):
         raise httpx.UnsupportedProtocol(f"Weiterleitung zu {host} abgelehnt")
 
 

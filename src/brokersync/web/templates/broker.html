@@ -77,6 +77,18 @@
   </form>
 </div>
 {% endif %}
+{% if has_access %}
+<div class="card">
+  <h2>{{ _("Zugangsdaten löschen") }}</h2>
+  <p>{{ _("Entfernt die gespeicherten Zugangsdaten und die Anmeldung bei {label} aus dem Tresor und schaltet den automatischen Abruf aus. Die Buchungen in Wealthfolio und die Einstellungen bleiben.", label=adapter.label) }}</p>
+  <form method="post" action="/brokers/{{ key }}/forget">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% if reauth %}<label for="forget_pw">{{ _("Passwort der Oberfläche (zur Bestätigung)") }}</label>
+    <input type="password" id="forget_pw" name="ui_password" autocomplete="current-password" required>{% endif %}
+    <div class="actions"><button class="danger">{{ _("Zugangsdaten löschen") }}</button></div>
+  </form>
+</div>
+{% endif %}
 <div class="card">
   <h2>{{ _("Neu aufsetzen") }}</h2>
   <p>{{ _("Löscht alle Buchungen, die der Dienst für {label} in Wealthfolio angelegt hat (Kommentar „[SYNC {key}:…]“), und vergisst, was schon übernommen wurde. Der nächste Abruf holt dann alles ab dem Startdatum neu – nach den aktuellen Regeln. CSV-/PDF-Importe, von Hand angelegte Buchungen und eingetragene Anfangsbestände bleiben.", label=adapter.label, key=key) }}</p>

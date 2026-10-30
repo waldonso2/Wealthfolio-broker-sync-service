@@ -61,6 +61,7 @@ def _broker_form(request: Request, ctx: AppContext, key: str, b: config_mod.Brok
     stored = ctx.vault.broker(key).get("credentials", {})
     response = ctx.render(request, "broker.html", key=key, adapter=adapter, b=b, accounts=accounts, wf_error=error,
                           stored={k: bool(v) for k, v in stored.items()}, plain=plain, errors=errors or {},
+                          has_access=bool(ctx.vault.broker(key)),
                           today=date.today().isoformat(),
                           statement_rows=len(ctx.state.statement_rows(key)) if adapter.statement_label else 0)
     if errors:
@@ -142,6 +143,31 @@ def _credentials(request: Request, adapter, form, old: dict, errors: dict[str, s
         if f.ask and form.get(f"forget_{f.name}"):
             creds[f.name] = ""  # typed at every login from now on, never stored (#85)
     return creds
+
+
+@router.post("/brokers/{key}/forget")
+def broker_forget(request: Request, ctx: Ctx, key: str, ui_password: str = Form("")):
+    """Delete the broker's credentials and session from the vault (#152); its config and bookings stay, the
+    automatic fetch is switched off."""
+    if key not in ctx.adapters:
+        return redirect(request, "/brokers", tr(request, "Unbekannter Broker."), "error")
+    if error := ctx.reconfirm(request, ui_password):
+        return redirect(request, f"/brokers/{key}", error, "error")
+    old = ctx.pending.pop(key, None)
+    if old is not None:
+        old.close()
+    ctx.pins.pop(key, None)
+    ctx.vault.update(lambda d: d.get("brokers", {}).pop(key, None))
+
+    def off(c: config_mod.Config) -> None:
+        if key in c.brokers:
+            c.brokers[key].enabled = False
+
+    ctx.update(off)
+    ctx.event(request, "credentials", broker=key, detail="deleted")
+    log.info("%s: credentials and session deleted", key)
+    return redirect(request, f"/brokers/{key}", tr(request, "Zugangsdaten und Anmeldung gelöscht. Der automatische "
+                                                            "Abruf ist aus."))
 
 
 @router.post("/brokers/{key}/refetch")

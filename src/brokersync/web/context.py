@@ -279,7 +279,15 @@ def redirect(request: Request, url: str, flash: str | None = None, level: str = 
     return RedirectResponse(url, 303)
 
 
+def cross_site(request: Request) -> bool:
+    """A form another website sent through the user's browser (``Sec-Fetch-Site``). Refused before any password
+    check: a page elsewhere could else spend the brake's attempts and lock the owner out (#153)."""
+    return request.method == "POST" and request.headers.get("sec-fetch-site") == "cross-site"
+
+
 async def csrf_guard(request: Request) -> None:
+    if cross_site(request):
+        raise HTTPException(403, tr(request, "Anfrage von einer anderen Website abgelehnt."))
     # Starlette caches the parsed form, so the endpoints can still read it.
     if request.method == "POST" and request.url.path not in PUBLIC:
         form = await request.form()

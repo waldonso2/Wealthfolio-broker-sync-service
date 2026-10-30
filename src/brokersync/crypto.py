@@ -149,7 +149,10 @@ def _cached_pkey(data_dir: Path) -> bytes | None:
     rt = _runtime()
     if rt:
         f = rt / "unlock.key"
-        return bytes.fromhex(f.read_text().strip()) if f.exists() else None
+        try:
+            return bytes.fromhex(f.read_text().strip()) if f.exists() else None
+        except (OSError, ValueError):  # damaged: locked until unlocked anew, never an error on every page
+            return None
     return _memory.get(_cache_id(data_dir))
 
 
