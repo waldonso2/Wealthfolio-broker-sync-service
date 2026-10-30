@@ -185,12 +185,19 @@ def test_install_and_update_check_the_release_against_its_checksums(tmp_path):
                                    cwd=app, capture_output=True, text=True, check=True).stdout)
     (tmp_path / ".wealthfolio-companion").write_text("0.1.0a1\n")
 
-    def verify() -> int:
-        script = f'curl() {{ [[ "$*" == *"/v0.1.0a1/SHA256SUMS"* ]] && cp "{sums}" "${{@: -1}}"; }}\n{func}\n' \
-                 f'verify_release "{app}"'
-        return subprocess.run(["bash", "-c", script], env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}).returncode
+    def verify(attestation_status: int = 0) -> int:
+        script = f'curl() {{ [[ "$*" == *"/v0.1.0a1/SHA256SUMS"* ]] && cp "{sums}" "${{@: -1}}"; }}\n' \
+                 'gh() { [[ "$1" == attestation && "$2" == verify && "$3" == "$sums" ]] || return 2; ' \
+                 '[[ " $* " == *" --repo waldonso2/wealthfolio-companion "* && ' \
+                 '" $* " == *" --signer-workflow github.com/waldonso2/wealthfolio-companion/.github/workflows/release.yml "* && ' \
+                 '" $* " == *" --source-ref refs/heads/main "* && " $* " == *" --deny-self-hosted-runners "* ]] || return 2; ' \
+                 'return "${GH_ATTESTATION_STATUS:-0}"; }\n' \
+                 f'{func}\nverify_release "{app}"'
+        env = {"HOME": str(tmp_path), "PATH": "/usr/bin:/bin", "GH_ATTESTATION_STATUS": str(attestation_status)}
+        return subprocess.run(["bash", "-c", script], env=env).returncode
 
     assert verify() == 0
+    assert verify(attestation_status=1) == 1  # missing, invalid or untrusted provenance
     (app / "build" / "lib").mkdir(parents=True)
     (app / "build" / "lib" / "mod.py").write_text("x = 1\n")
     (app / "src" / "pkg.egg-info").mkdir()
