@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Security (#151): least-privilege workflows - write scopes only on the jobs that need them, each commented (`core-watch.yml`'s `issues: write` moved to its job); the release jobs `publish` and `image` run in the environment `release` (protection is a repository setting), releases are queued, never cancelled; no step template-expands a value into a script. `CODEOWNERS` also covers the Dockerfile, the release verifier, `sc_install.py`, the locks and `pyproject.toml`. docs/SECURITY-OPERATIONS.md: workflow inventory, the GitHub settings read on 30.10.2026 (the required-checks list of `main` is empty, no pull-request or tag rule) and the owner's checklist.
+- Supply chain (#155): every release carries `sbom.cdx.json` (CycloneDX 1.6 of `requirements.txt`, purls and locked hashes), named in its build-provenance attestation; the image gets BuildKit's SBOM in the registry. pip-audit also checks `requirements-dev.txt`; a test fails on any pip install that bypasses the hash locks; Dependabot updates the Dockerfile's base image digest (both stages now name it in `FROM`). The dependency policy, exceptions table and the gap analysis of waldonso2/wealthfolio-importer-addon#150 (a takeover of the GitHub account still produces releases that verify) are in docs/SECURITY-OPERATIONS.md.
+
 ## 0.1.0a5
 
 Verified releases: the Proxmox install and every update, and the Docker image, are checked against this repository's signed release workflow before anything of them runs.

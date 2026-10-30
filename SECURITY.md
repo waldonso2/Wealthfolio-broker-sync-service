@@ -34,7 +34,7 @@ What the service uses, and what it deliberately does not (evaluated in #33):
 | Brute force | `web/gate.Throttle`: 15 minutes after 5 wrong passwords (login, unlock) | a library (slowapi) isn't needed for one login form; everything else needs a session |
 | Input validation | `web/inputs.py`: URLs (http/https only), dates, ISIN/IBAN check digits, MIC, symbols, lengths; request bodies over 6 MB refused before reading | Pydantic models would add little for a dozen HTML forms; FastAPI still types each field |
 | Secrets in the environment | none: no `.env`, no `python-dotenv` | secrets live in the encrypted vault, the key in systemd credentials |
-| Supply chain | `requirements.txt` with hashes, Dependabot, gitleaks in CI, actions pinned to SHAs | |
+| Supply chain | `requirements.txt` with hashes, Dependabot, pip-audit, an SBOM per release, gitleaks in CI, actions pinned to SHAs | policy and GitHub settings: [docs/SECURITY-OPERATIONS.md](docs/SECURITY-OPERATIONS.md) |
 
 Node libraries (helmet, cors, bcryptjs, zod, express-rate-limit) don't apply: the Wealthfolio addon has no
 server, stores no passwords and makes no network requests.

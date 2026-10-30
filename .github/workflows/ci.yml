@@ -61,7 +61,8 @@ jobs:
         continue-on-error: true
 
   audit:
-    # Known vulnerabilities in the locked runtime versions: a finding fails the build.
+    # Known vulnerabilities in every lock (runtime, release verifier, CI tools - the latter build the SBOM): a finding
+    # fails the build, also weekly (schedule). An accepted one: docs/OPERATIONS.md "Exceptions" (#155).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -73,6 +74,7 @@ jobs:
       - run: "pip install --require-hashes --only-binary :all: -r requirements-dev.txt"
       - run: pip-audit -r requirements.txt --require-hashes --disable-pip --progress-spinner off
       - run: pip-audit -r requirements-verify.txt --require-hashes --disable-pip --progress-spinner off
+      - run: pip-audit -r requirements-dev.txt --require-hashes --disable-pip --progress-spinner off
 
   dependency-review:
     # A pull request that adds a dependency with a known vulnerability is flagged.

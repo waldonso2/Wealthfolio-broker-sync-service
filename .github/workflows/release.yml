@@ -8,6 +8,13 @@ name: Release
 # release archive itself, lists every file's SHA-256 (SHA256SUMS - the update checks the source
 # archive it deploys against it) and attests both with GitHub's build provenance (SLSA), so
 # `gh attestation verify` shows they come from this workflow and this commit.
+#
+# #151/#155: every job reads only, except publish and image. No job here runs code of a pull request (push to main
+# only). Tools are installed only in jobs without write access (sbom): any step of a job with `id-token: write` could
+# sign an attestation as this workflow, so publish runs nothing it installed itself - the runner's git, python3
+# (standard library) and gh, and pinned Actions; the SBOM reaches it as data (an artifact of this run). publish and
+# image run in the environment `release` (its protection - only main, reviewers - is a repository setting,
+# docs/OPERATIONS.md "GitHub settings").
 
 on:
   push:
@@ -16,21 +23,48 @@ on:
 permissions:
   contents: read
 
+# Two pushes to main in a row: the second waits, it never cancels a release half way.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml
 
-  publish:
+  sbom:
+    # The release's SBOM (#155): CycloneDX 1.6 JSON of requirements.txt - every runtime package with version, purl and
+    # the locked hashes - made by cyclonedx-py from the hash-locked requirements-dev.txt, read only.
     needs: ci
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: "pip install --require-hashes --only-binary :all: -r requirements-dev.txt"
+      - run: cyclonedx-py requirements --pyproject pyproject.toml --mc-type application --output-reproducible --of JSON -o sbom.cdx.json requirements.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom
+          path: sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [ci, sbom]
+    runs-on: ubuntu-latest
+    environment: release
     outputs:
       version: ${{ steps.v.outputs.version }}
       created: ${{ steps.v.outputs.exists == 'false' }}
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
-      artifact-metadata: write
+      contents: write # create the tag and the release
+      id-token: write # Sigstore certificate of this workflow for the attestation
+      attestations: write # store the attestation
+      artifact-metadata: write # storage record of the attested files
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -44,18 +78,27 @@ jobs:
           if git rev-parse "v$VERSION" >/dev/null 2>&1; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
       - name: Release notes
         if: steps.v.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
         run: |
-          awk -v v="## ${{ steps.v.outputs.version }}" '$0 ~ "^## " { p = index($0, v) == 1 } p' CHANGELOG.md > notes.md
+          awk -v v="## $VERSION" '$0 ~ "^## " { p = index($0, v) == 1 } p' CHANGELOG.md > notes.md
           cat notes.md
       - name: Archive and checksums
         if: steps.v.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
         run: |
-          NAME="wealthfolio-companion-${{ steps.v.outputs.version }}"
+          NAME="wealthfolio-companion-$VERSION"
           git archive --format=tar.gz --prefix="$NAME/" -o "$NAME.tar.gz" HEAD
           mkdir rel && git archive --format=tar HEAD | tar -x -C rel
           (cd rel && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > SHA256SUMS
           sha256sum "$NAME.tar.gz" >> SHA256SUMS.archive
           wc -l SHA256SUMS
+      - name: SBOM
+        if: steps.v.outputs.exists == 'false'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sbom
       - name: Build provenance
         if: steps.v.outputs.exists == 'false'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -63,6 +106,7 @@ jobs:
           subject-path: |
             wealthfolio-companion-${{ steps.v.outputs.version }}.tar.gz
             SHA256SUMS
+            sbom.cdx.json
       - name: Create release
         if: steps.v.outputs.exists == 'false'
         env:
@@ -78,7 +122,7 @@ jobs:
             *rc[0-9]*) TITLE="$TITLE (release candidate)" ;;
           esac
           gh release create "v$VERSION" --title "$TITLE" --notes-file notes.md --target "$GITHUB_SHA" \
-            "wealthfolio-companion-$VERSION.tar.gz" SHA256SUMS SHA256SUMS.archive
+            "wealthfolio-companion-$VERSION.tar.gz" SHA256SUMS SHA256SUMS.archive sbom.cdx.json
 
   image:
     # The container image (#148), only for a new version: amd64 and arm64 on ghcr.io, tags v<version> and latest,
@@ -86,10 +130,11 @@ jobs:
     needs: publish
     if: needs.publish.outputs.created == 'true'
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: read
-      packages: write
-      id-token: write
+      packages: write # push the image to ghcr.io
+      id-token: write # cosign (keyless) and the attestation
       attestations: write
       artifact-metadata: write
     env:
@@ -112,6 +157,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: false
+          # BuildKit's SPDX SBOM of the image as an attestation next to it in the registry (#155).
+          sbom: true
           tags: |
             ${{ env.IMAGE }}:v${{ needs.publish.outputs.version }}
             ${{ env.IMAGE }}:latest

@@ -9,5 +9,7 @@ mypy
 pip-audit
 playwright
 axe-playwright-python
+# cyclonedx-bom: the release's SBOM of requirements.txt (cyclonedx-py, release.yml).
+cyclonedx-bom
 # sigstore: the tests of the release verifier (src/brokersync/provenance.py).
 -r requirements-verify.in
