@@ -51,6 +51,9 @@ XRAY_ACCEPTED = MetaKey("xray:accepted", "json", False, "cluster risks the user 
 XRAY_NOTIFIED = MetaKey("xray:notified", "json", False, "cluster risks notified via ntfy: [key]")
 TAXONOMIES_LAST = MetaKey("taxonomies:last", "json", False,
                           "look-through: the last write of countries and sectors to Wealthfolio: {written, manual, at}")
+ASSET_CLASSES = MetaKey("asset-classes", "json", False,
+                        "positions without an asset class in Wealthfolio, and those given one from the fund's name: "
+                        "{missing: [{id, name, isin}], named: {asset id: {name, class}}, at} (#141)")
 AUTO_UPDATE = MetaKey("auto-update", "json", False,
                       "the last automatic update (deploy/companion-autoupdate): {from, to, ok, at}")
 UPDATE = MetaKey("update", "json", False, "the newest release GitHub named: {version, checked} (updates.py)")
@@ -69,5 +72,5 @@ WEALTHFOLIO_APPEARANCE = MetaKey("wealthfolio:appearance", "json", False,
 ALL = (ASSETS_LEARNED, CASH_ASSETS_REPAIRED, REFETCH, SAVINGS_ACCOUNT, DIVIDEND_TAX, HISTORY_START, POSITIONS,
        RETIRED_NOTICE, LOGO, LOGOS_LAST, PROGRESS, CHECKLIST_HIDDEN, UPDATE, AUTO_UPDATE, FUND, FUNDS_LAST,
        XRAY_ACCEPTED, XRAY_NOTIFIED, TAXONOMIES_LAST, SPENDING, ISIN, FUNDS_PROGRESS, XRAY_ADDON_STATUS,
-       XRAY_ADDON_STALE, WEALTHFOLIO_APPEARANCE)
+       XRAY_ADDON_STALE, WEALTHFOLIO_APPEARANCE, ASSET_CLASSES)
 BROKER_KEYS = tuple(k for k in ALL if k.per_broker)

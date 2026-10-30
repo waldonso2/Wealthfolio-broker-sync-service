@@ -120,7 +120,8 @@ def _taxonomies(request: Request, ctx: AppContext, c: config_mod.Config) -> dict
         countries = "finanzfluss" if "regions" in ff else ("breakdown" if st.get("regions") else "lines")
         funds.append({"name": f["name"], "issuer": lookthrough.issuer({"name": f["name"]}, st), "countries": countries,
                       "sectors": "finanzfluss" if any(t != "regions" for t in ff) else "lines"})
-    return {"written": json.loads(ctx.state.meta(meta_keys.TAXONOMIES_LAST()) or "null"), "funds": funds}
+    return {"written": json.loads(ctx.state.meta(meta_keys.TAXONOMIES_LAST()) or "null"), "funds": funds,
+            "classes": json.loads(ctx.state.meta(meta_keys.ASSET_CLASSES()) or "null")}
 
 
 def _isin(request: Request, ctx: AppContext, c: config_mod.Config) -> dict:

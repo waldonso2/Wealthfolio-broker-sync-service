@@ -126,3 +126,18 @@ def test_an_old_wealthfolio_is_named_on_the_xray_page(tmp_path):
     client.post("/services/xray", data={"csrf": token, "back": "page"})
     client.post("/services/xray/run", data={"csrf": token})
     assert "Wealthfolio zu alt" in client.get("/services/xray").text
+
+
+def test_positions_without_asset_class_are_shown_on_pruefung_and_the_services_page(tmp_path):
+    """wealthfolio-importer-addon#141 stage 1: what Wealthfolio counts as "Unknown", with what to do."""
+    import json
+
+    client, _, _ = _client(tmp_path)
+    State(tmp_path).set_meta(meta_keys.ASSET_CLASSES(), json.dumps({
+        "missing": [{"id": "a", "name": "Example World ETF", "isin": "IE0000000001"}],
+        "named": {"b": {"name": "Example Govt Bond ETF", "class": "FIXED_INCOME"}}, "at": "2026-10-30T06:41:00+00:00"}))
+    page = client.get("/check").text
+    assert "Ohne Anlageklasse in Wealthfolio: 1" in page and "Example World ETF" in page and "IE0000000001" in page
+    page = client.get("/services/taxonomies").text
+    assert "Anlageklasse aus dem Fondsnamen" in page and "Example Govt Bond ETF" in page
+    assert 'href="/check#asset-classes"' in page

@@ -53,7 +53,7 @@ def check_page(request: Request, ctx: Ctx):
         entry["issues"] = open_gaps + len(missing) + audit_issues
         brokers.append(entry)
     return ctx.render(request, "check.html", wf_error=error, source=audit.source, effect=audit.cash_effect,
-                      brokers=brokers,
+                      brokers=brokers, classes=json.loads(state.meta(meta_keys.ASSET_CLASSES()) or "null"),
                       audited_at=datetime.fromtimestamp(ctx.audits_at, UTC) if ctx.audits_at else None,
                       auditing=ctx.running.is_set() and ctx.job == N_("Kontenprüfung"))
 

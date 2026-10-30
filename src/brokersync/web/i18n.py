@@ -1473,6 +1473,22 @@ EN: dict[str, str] = {
     "Abrufmodus ändern": "Change fetch mode",
     "Jetzt ausführen": "Run now",
     "Ohne passende Kategorie in Wealthfolio: {names}.": "Without a matching category in Wealthfolio: {names}.",
+    "Bewusst nicht zugeordnet (kein Land und keine Branche): {names}.":
+        "Deliberately not assigned (no country and no sector): {names}.",
+    "Anlageklasse aus dem Fondsnamen (wie Wealthfolio selbst; ersetzt Wealthfolio, sobald ein Kursanbieter die "
+    "echte Aufteilung liefert): {names}.":
+        "Asset class from the fund's name (as Wealthfolio does itself; Wealthfolio replaces it once a quote provider "
+        "gives the real breakdown): {names}.",
+    "{n} Positionen ohne Anlageklasse in Wealthfolio": "{n} positions without an asset class in Wealthfolio",
+    "Ohne Anlageklasse in Wealthfolio: {n}": "Without an asset class in Wealthfolio: {n}",
+    "Wealthfolio zählt sie in der Zielallokation unter „Unknown“. Es holt die Aufteilung selbst, sobald das "
+    "Wertpapier einen Ticker mit Kursanbieter hat (Wertpapier in Wealthfolio bearbeiten); sonst ordne die "
+    "Anlageklasse dort von Hand zu.":
+        "Wealthfolio counts them as \u201cUnknown\u201d in the target allocation. It fetches the breakdown itself "
+        "once the security has a ticker with a quote provider (edit the security in Wealthfolio); otherwise assign "
+        "the asset class there by hand.",
+    "Positionen ohne Anlageklasse": "Positions without an asset class",
+    "Geprüft {when}.": "Checked {when}.",
     "Noch nichts in Wealthfolio eingetragen.": "Nothing entered in Wealthfolio yet.",
     "Liste des Anbieters": "Issuer's list",
     "Länderaufteilung des Anbieters": "Issuer's country breakdown",

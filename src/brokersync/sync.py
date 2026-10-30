@@ -337,6 +337,10 @@ class Syncer:
                         lookthrough.write_taxonomies(self.state, wf, depot)
                     except WealthfolioError:
                         log.exception("look-through: countries and sectors not written to Wealthfolio")
+                try:  # read only unless the service is on (#141)
+                    lookthrough.asset_classes(self.state, wf, depot, cfg.lookthrough_write)
+                except WealthfolioError:
+                    log.exception("look-through: asset classes not checked")
                 self._write_xray_addon(wf, depot, cfg)
             if not depot.positions and not depot.cash:  # Wealthfolio answered nothing: keep what was notified
                 return result
@@ -401,7 +405,10 @@ class Syncer:
             cfg = config_mod.load(self.data_dir)
             with connect(self._wealthfolio, cfg.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
                          cfg.wealthfolio_fingerprint) as wf:
-                return lookthrough.write_taxonomies(self.state, wf, lookthrough.read_depot(wf, self.learned_isins(cfg)))
+                depot = lookthrough.read_depot(wf, self.learned_isins(cfg))
+                written = lookthrough.write_taxonomies(self.state, wf, depot)
+                lookthrough.asset_classes(self.state, wf, depot, write=True)
+                return written
 
     def update_spending(self) -> bool:
         """*Jetzt ausführen* on the service's page (#151): the tracked accounts now (under the sync lock)."""

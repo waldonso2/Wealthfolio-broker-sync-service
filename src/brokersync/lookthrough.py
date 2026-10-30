@@ -1173,7 +1173,23 @@ ALIASES = {"communication": "communication services", "telecommunication service
            # GICS 2023 names the issuers use, where Wealthfolio's taxonomy still has the earlier ones
            "airlines": "passenger airlines", "automobile components": "auto components",
            "ground transportation": "road & rail", "marine transportation": "marine",
-           "personal care products": "personal products"}
+           "personal care products": "personal products",
+           # Finanzfluss' industries without a GICS sector of their own (#166): each to the GICS industry it
+           # belongs to (rolled up to the sector) - waste management is Commercial Services & Supplies
+           # (Industrials), education Diversified Consumer Services (Consumer Discretionary), agriculture
+           # Agricultural Products & Services (Consumer Staples), medical diagnostics & research Life Sciences
+           # Tools & Services (Health Care)
+           "abfallwirtschaft": "environmental & facilities services", "bildung": "education services",
+           "forsterzeugnisse": "paper & forest products",
+           "kleidung & accessoires": "apparel accessories & luxury goods",
+           "konglomerate": "industrial conglomerates", "landwirtschaft": "agricultural products",
+           "med. diagnostik & forschung": "life sciences tools & services",
+           "unternehmensdienste": "commercial & professional services"}
+# Names that are no country or sector at all - cash, derivatives, "other", unknown, XE (no ISO code): never given
+# a category, and listed apart from the names Wealthfolio merely lacks a category for (#166).
+NO_CATEGORY = frozenset({"barmittel & derivate", "barmittel und/oder derivate", "cash und/oder derivate",
+                         "cash and/or derivatives", "cash", "derivate", "derivatives", "other", "others", "sonstige",
+                         "andere", "unbekannt", "unknown", "xe", "-"})
 # A country as ISO 3166-1 alpha-2, as Wealthfolio keys its regions (``country_US``): the issuers' spellings that
 # aren't Wealthfolio's English name - German ones (iShares' German download, DWS, VanEck) and English variants.
 # A two-letter code (Vanguard) is taken as it is. Names Wealthfolio has, in English, need no entry.
@@ -1207,6 +1223,7 @@ class Written:
     written: int = 0  # taxonomies of assets replaced
     manual: int = 0  # left alone: the user assigned them
     unmatched: list[str] = field(default_factory=list)  # names Wealthfolio has no category for
+    deliberate: list[str] = field(default_factory=list)  # names that are no country or sector (NO_CATEGORY)
 
 
 def _bp(lines: list[list[str]], attr: int, categories: dict[str, str], unmatched: set[str]) -> list[tuple[str, int]]:
@@ -1217,7 +1234,7 @@ def _bp(lines: list[list[str]], attr: int, categories: dict[str, str], unmatched
         name = _norm(line[attr])
         if not name:
             continue
-        category = categories.get(aliases.get(name, name))
+        category = None if name in NO_CATEGORY else categories.get(aliases.get(name, name))
         if category is None:
             unmatched.add(line[attr].strip())
             continue
@@ -1270,9 +1287,11 @@ def write_taxonomies(state: State, wf, depot: Depot) -> Written:
                 set_status(state, p["id"], from_finanzfluss=used)  # shown at the fund's card
         except WealthfolioError:  # one fund Wealthfolio refuses never keeps the others out
             log.exception("look-through: countries and sectors of %s not written", p["id"])
-    result.unmatched = sorted(unmatched)[:20]
+    result.deliberate = sorted(n for n in unmatched if _norm(n) in NO_CATEGORY)[:20]
+    result.unmatched = sorted(n for n in unmatched if _norm(n) not in NO_CATEGORY)[:20]
     state.set_meta(meta_keys.TAXONOMIES_LAST(), json.dumps({"written": result.written, "manual": result.manual,
-                                                            "unmatched": result.unmatched, "at": now()}))
+                                                            "unmatched": result.unmatched,
+                                                            "deliberate": result.deliberate, "at": now()}))
     return result
 
 
@@ -1311,6 +1330,52 @@ def _write_asset(wf, asset_id: str, constituents: list[list[str]], categories: d
                                                 "weight": w, "source": SOURCE} for c, w in new])
         result.written += 1
     return used
+
+
+# ── asset classes (waldonso2/wealthfolio-importer-addon#141) ────────────────
+ASSET_CLASSES = "asset_classes"
+# Wealthfolio's own fund-name rules (auto_classification.rs: is_bond_fund_name, is_physical_precious_metal_name),
+# upper case: what it would assign itself if it found the fund at a quote provider. Nothing else is inferred - a
+# fund's name without these words gets no class (an equity fund is never assumed).
+BOND_WORDS = (" BOND", "BOND ", "BONDS", "FIXED INCOME", "TREASURY", "T-BILL", "T-NOTE", "T-BOND", " GILT", "GILTS",
+              "GOVERNMENT BOND", "GOVT BOND", "SOVEREIGN", "BUNDESREPUBLIK", "BUNDESOBLIGATION")
+METALS = ("GOLD", "SILVER", "PLATINUM", "PALLADIUM")
+PHYSICAL = ("PHYSICAL", "BULLION", " ETC", " ETC/", " ETP")
+
+
+def name_class(name: str) -> str | None:
+    """The asset class a fund's name names: FIXED_INCOME, COMMODITIES (physical precious metal) or None."""
+    n = name.upper()
+    if any(w in n for w in BOND_WORDS):
+        return "FIXED_INCOME"
+    return "COMMODITIES" if any(w in n for w in METALS) and any(w in n for w in PHYSICAL) else None
+
+
+def asset_classes(state: State, wf, depot: Depot, write: bool) -> dict:
+    """Positions Wealthfolio has no asset class for (its allocation counts them as "Unknown"), kept for *Prüfung*
+    and the service's page. With ``write`` a fund whose name names its class (``name_class``) gets it with 100 %
+    and ``source: AUTO``, so Wealthfolio replaces it with a quote provider's real breakdown; an asset with any
+    asset class - the user's above all - is never touched."""
+    known = {str(c.get("id")) for c in wf.taxonomy_categories(ASSET_CLASSES)} if write else set()
+    before = json.loads(state.meta(meta_keys.ASSET_CLASSES()) or "{}").get("named", {})
+    missing, named = [], {}
+    for p in depot.positions:
+        current = [a for a in wf.asset_assignments(p["id"]) if a.get("taxonomyId") == ASSET_CLASSES]
+        if current:
+            if p["id"] in before and [(a.get("categoryId"), a.get("source")) for a in current] == [
+                    (before[p["id"]]["class"], "AUTO")]:
+                named[p["id"]] = before[p["id"]]  # still ours from the name: keep showing where it came from
+            continue
+        cls = name_class(p["name"]) if is_fund(p, status(state, p["id"])) else None
+        if write and cls in known:
+            wf.replace_assignments(p["id"], ASSET_CLASSES, [{"assetId": p["id"], "taxonomyId": ASSET_CLASSES,
+                                                              "categoryId": cls, "weight": 10000, "source": "AUTO"}])
+            named[p["id"]] = {"name": p["name"], "class": cls}
+            continue
+        missing.append({"id": p["id"], "name": p["name"], "isin": p["isin"]})
+    found = {"missing": missing, "named": named, "at": now()}
+    state.set_meta(meta_keys.ASSET_CLASSES(), json.dumps(found))
+    return found
 
 
 def remove_taxonomies(wf) -> int:
