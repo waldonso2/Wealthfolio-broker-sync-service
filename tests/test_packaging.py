@@ -253,7 +253,6 @@ def test_the_old_script_name_only_explains_the_move():
     assert "Nothing was changed here." in done.stderr and "Hier wurde nichts geändert." in done.stderr
     # The guide it links to exists.
     assert "### Moving from Wealthfolio Broker Sync" in (ROOT / "CHANGELOG.md").read_text()
-    assert "## Moving from Wealthfolio Broker Sync" in (ROOT / "docs" / "OPERATIONS.md").read_text()
 
 
 def test_the_updater_takes_pre_releases():
@@ -276,7 +275,7 @@ def test_a_pre_release_is_named_but_never_marked_as_one():
 
 
 def test_setup_takes_a_moved_key_left_as_secret_key(tmp_path):
-    """The move from Wealthfolio Broker Sync (docs/OPERATIONS.md): the old key put root-only into $ETC/secret.key, the
+    """The move from Wealthfolio Broker Sync (CHANGELOG 0.1.0a1): the old key put root-only into $ETC/secret.key, the
     new installation's key.cred removed - setup.sh seals that key with systemd-creds and hands it to the services."""
     import subprocess
 
