@@ -30,5 +30,9 @@ SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
 RemoveIPC=true
+ProtectProc=invisible
 CapabilityBoundingSet=
+# Netlink for the addresses (hostname -I), AF_UNIX for systemctl; it sends no IP traffic at all. (Inside an
+# unprivileged LXC systemd may lack BPF firewalling: it warns and starts the unit without the IP filter.)
 RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
+IPAddressDeny=any

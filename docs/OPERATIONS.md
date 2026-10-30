@@ -34,7 +34,50 @@ Stored data is encrypted. The **Security** page always shows what is protected a
 | UI password | argon2id; 15-minute pause after five failed attempts, and the same pause after 30 failed attempts across all clients; at most two checks run simultaneously to limit memory exhaustion. The initial password requires the one-time setup code from the console |
 | UI | HTTPS on port 8443 using a certificate issued by the container's own CA. Import the CA once from the *Security* page to trust it in your browser. Its name constraints permit only local-network names; its key is root-only in `/etc/wealthfolio-companion/tls/`. An existing certificate from another issuer (`cert.pem`/`key.pem`) is preserved. Secure cookies and strict security headers are also used |
 | Logs, notifications, and error messages | Credentials, tokens, IBANs, and account numbers are redacted in logs, ntfy messages, and UI errors. Request URLs are not logged. ntfy messages omit amounts unless *Details* is enabled |
-| Service | Dedicated user and systemd hardening (write access only to `data/`, no privilege escalation, restricted system calls; `systemd-analyze security`: 1.5); files readable only by the service; daily sync ends within 45 minutes |
+| Service | Dedicated user and systemd hardening (write access only to `data/`, no privilege escalation, restricted system calls; `systemd-analyze security`: 1.5; see *Container, services and network*); files readable only by the service; daily sync ends within 45 minutes |
+
+### Container, services and network (Proxmox LXC)
+
+**Trust boundary.** The Proxmox host is trusted completely: its root can read the container's disk and memory, and with them the key and the data (only the master passphrase protects against that, or against a stolen container backup). The container is what the service protects itself from the network and from its own programs:
+
+| Container setting (`ct/wealthfolio-companion.sh`, the pinned engine's defaults) | Value |
+|---|---|
+| Unprivileged (`var_unprivileged=1`) | Yes: root in the container is an unprivileged, mapped user on the host |
+| Nesting (`var_nesting=1`) | On: Proxmox advises it for systemd 257 (Debian 13), and the units' sandboxing (mount namespaces) needs it. It lets the container mount its own `/proc` and `/sys`, still inside its user namespace |
+| keyctl | On: the engine sets it for every unprivileged container; the service does not use the kernel keyring |
+| FUSE, TUN, GPU, `mknod`, extra mount types | Off |
+| Bind mounts, host paths, devices, Proxmox API or sockets, Docker socket | None |
+| Start at boot | Yes |
+
+**Services inside the container.** The service user `companion` owns nothing but `data/`; its program under `/opt/wealthfolio-companion` (`releases/`, `current`, `app`, `venv`, `bin/sc`) is root's and only readable for it. Secrets reach it as systemd credentials (the service key, the UI's TLS key), so their files stay root-only.
+
+| Unit | Runs as | May write | Network | `systemd-analyze security` |
+|---|---|---|---|---|
+| `wealthfolio-companion.service` (UI) | `companion` | `data/`, `/run/wealthfolio-companion` (unlock cache, RAM), a private `/tmp` | IPv4/IPv6; listens on 8443 and 8090 | 1.5 |
+| `wealthfolio-companion-run.service` (daily sync) | `companion` | the same | IPv4/IPv6, outbound | 1.5 |
+| `wealthfolio-companion-cert.service` | root (writes the root-only TLS files) | `/etc/wealthfolio-companion/tls` | no IP traffic (`IPAddressDeny=any`; netlink for its addresses, `systemctl` to restart the UI) | 1.7 |
+| `wealthfolio-companion-update.service`, `-update-recover.service` | root | the system (it installs releases, units, commands) | outbound HTTPS | 6.1 |
+
+The `companion` units and the certificate's renewal have no capabilities, `NoNewPrivileges`, `ProtectSystem=strict` (read-only except the paths above), `ProtectHome`, `PrivateTmp`, `PrivateDevices`, protected kernel tunables, modules, logs, cgroups, clock and hostname, `ProtectProc=invisible`, no namespaces, SUID/SGID or realtime, native system calls of `@system-service` only (plus `@sandbox`: the Landlock sandbox Scalable's `sc` runs in) and `UMask=0077`. Not set, on purpose: `PrivateNetwork`/`IPAddressAllow` on the sync and UI (brokers, Wealthfolio and issuers can be anywhere), `MemoryDenyWriteExecute` and `PrivateUsers` (not proven with every library and inside an unprivileged LXC). The updaters stay root with a writable system - that is their job - but get a private `/tmp`, protected kernel tunables, modules, logs, cgroups and hostname, no SUID/SGID files, native system calls, Unix/netlink/IP sockets only and no `CAP_SYS_ADMIN`, `CAP_SYS_MODULE`, `CAP_SYS_PTRACE`, `CAP_SYS_RAWIO`, `CAP_NET_ADMIN`, `CAP_NET_RAW`, `CAP_BPF`, `CAP_MKNOD` and similar; they keep devices (`systemd-creds` may use a TPM) and the file system. They only install releases that passed *Release verification*. `tests/test_packaging.py` asserts these settings and, where systemd is installed, the scores; in the container, `systemd-analyze security <unit>` shows them.
+
+| Path | Owner, mode |
+|---|---|
+| `/opt/wealthfolio-companion` and the program in it | root, 0755 (readable, not writable by the service) |
+| `/opt/wealthfolio-companion/data` | `companion`, 0700; files 0600 |
+| `/opt/wealthfolio-companion/backup-*.tar.gz` (before each update) | root, 0600 |
+| `/etc/wealthfolio-companion` (key, `tls/`) | root, 0700; `key.cred`/`secret.key` and the TLS key 0600 |
+| `/run/wealthfolio-companion` | `companion`, 0700, in RAM |
+| `/var/lib/wealthfolio-companion-update` (the automatic update's state) | root, 0700 |
+| Logs | journald (`journalctl -u wealthfolio-companion`), secrets redacted |
+
+**Network.** Inbound: TCP 8443 (the UI, HTTPS) and 8090 (only a redirect to 8443); the service listens on nothing else. The Debian template's own SSH server may answer on 22 (root logins by password only if you enabled SSH root access when creating the container); `ss -tlnp` in the container lists what listens. The UI answers only to the container's addresses and known names. Outbound, all HTTPS unless you configure otherwise:
+
+- the brokers and banks you set up (their APIs and FinTS servers, Enable Banking for PSD2 banks, Trade Republic through pytr, Scalable through `sc`), your Wealthfolio (its address and port), your ntfy server if set up;
+- the ETF issuers' sites and Finanzfluss (the ISINs of your funds), logo.dev only when logos are on;
+- GitHub: the daily update check (`github.com`), the `sc` download, and for an update the release files (`github.com` and its download hosts), the attestation (`api.github.com`) and the locked Python packages (`pypi.org`, `files.pythonhosted.org`);
+- DNS.
+
+*Settings → About* lists the same destinations. The container gets an address on the bridge chosen at creation (the LAN by default) and nothing is forwarded to it from the Internet: keep it that way. For access from outside, use a VPN or a reverse proxy (README, *Behind a reverse proxy*), never a port forward to 8443. With the Proxmox firewall on for the container, allow inbound 8443/8090 from your LAN only, outbound DNS and 443 (plus the ports of Wealthfolio and ntfy if they differ).
 
 **Optional master passphrase (*Security* page):** Without it, someone who copies the entire container and its key (for example, a Proxmox backup) can decrypt the data. With it, they cannot: the effective key is derived from both the service key and the passphrase using argon2id. You must unlock the service in the UI after each container restart; until then it does not sync and sends an ntfy notification. **If you lose the passphrase, the data is lost** and the service must be set up again. Setting, changing, or removing the passphrase (and key rotation during updates) re-encrypts everything: first alongside the old files, then switches over atomically. If power is lost, the next start recovers either the old or new state, never a mixture.
 

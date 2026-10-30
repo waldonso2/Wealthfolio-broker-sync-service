@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Security (SEC-08, #154): the root units are sandboxed as far as their job allows - the updaters (`wealthfolio-companion-update`, `-update-recover`) get a private `/tmp`, protected kernel tunables, modules, logs, cgroups and hostname, no SUID/SGID files, native system calls, Unix/netlink/IP sockets only and no `CAP_SYS_ADMIN`, `CAP_SYS_PTRACE`, `CAP_NET_RAW` and other capabilities they never use (`systemd-analyze security` 9.4 → 6.1); the certificate's renewal hides other processes and sends no IP traffic (2.1 → 1.7). `ct/` states the container's settings explicitly (unprivileged, nesting, no FUSE, TUN or GPU). Tests assert every unit's hardening, the scores where systemd is installed, and the modes of data, key and program. docs/OPERATIONS.md describes the trust boundary, every unit's privileges, file modes and the network the service needs.
+- The update no longer prints sigstore's "TUF repository is loaded in offline mode" notice onto its progress line; other warnings still show.
+
 ## 0.1.0a5
 
 Verified releases: the Proxmox install and every update, and the Docker image, are checked against this repository's signed release workflow before anything of them runs.

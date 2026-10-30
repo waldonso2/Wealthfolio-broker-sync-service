@@ -117,3 +117,14 @@ def test_offline_unless_asked(monkeypatch, online, offline):
     with pytest.raises(RuntimeError):
         provenance.verify({"SHA256SUMS": SUMS}, ANSWER)
     assert asked == [offline]
+
+
+def test_only_sigstores_offline_notice_is_silenced(caplog):
+    """The offline load's notice glued itself onto the updater's spinner line (0.1.0a5); real warnings still show."""
+    import logging
+
+    with caplog.at_level(logging.INFO):
+        provenance.verify({"SHA256SUMS": SUMS}, ANSWER)
+        logging.getLogger("sigstore._internal.tuf").warning("TUF metadata could not be read")
+    assert [r.getMessage() for r in caplog.records if r.name.startswith("sigstore")] == [
+        "TUF metadata could not be read"]
