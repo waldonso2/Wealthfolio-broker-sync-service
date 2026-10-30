@@ -14,3 +14,7 @@ regexes = [
   '''^Geh3im-Broker-PIN$''',      # a broker credential in tests/test_events.py (must not reach the event log)
   '''^pk_test-logo-key-123$''',   # logo.dev key in tests/test_logos.py
 ]
+# GitHub's public attestation answer for a real release (certificates, signatures, log ids - nothing secret).
+paths = [
+  '''^tests/fixtures/provenance/''',
+]

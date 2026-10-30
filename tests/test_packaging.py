@@ -168,7 +168,9 @@ def _verify_release_function(path: Path) -> str:
 
 def test_install_and_update_check_the_release_against_its_checksums(tmp_path):
     """#88: what the release workflow lists in SHA256SUMS is what install and update accept - a changed or
-    an added file stops them; what pip leaves behind (build/, *.egg-info) doesn't."""
+    an added file stops them; what pip leaves behind (build/, *.egg-info) doesn't. #165: SHA256SUMS counts only
+    when the verifier from main (its own hash-locked venv) proves its provenance - anything failing there stops
+    them too (fail closed)."""
     import subprocess
 
     func = _verify_release_function(ROOT / "ct" / "wealthfolio-companion.sh")
@@ -185,12 +187,32 @@ def test_install_and_update_check_the_release_against_its_checksums(tmp_path):
                                    cwd=app, capture_output=True, text=True, check=True).stdout)
     (tmp_path / ".wealthfolio-companion").write_text("0.1.0a1\n")
 
-    def verify() -> int:
-        script = f'curl() {{ [[ "$*" == *"/v0.1.0a1/SHA256SUMS"* ]] && cp "{sums}" "${{@: -1}}"; }}\n{func}\n' \
-                 f'verify_release "{app}"'
-        return subprocess.run(["bash", "-c", script], env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}).returncode
+    log = tmp_path / "calls"
+    # Fakes: curl serves SHA256SUMS of v0.1.0a1 and the verifier's files from main; python3 -m venv makes a venv
+    # whose pip and python log their arguments and exit with $PIP / $PROVENANCE.
+    fakes = (
+        f'curl() {{ echo "curl $*" >> "{log}"; [[ "$*" == *"/v0.1.0a1/SHA256SUMS"* ]] && cp "{sums}" "${{@: -1}}" && '
+        'return; [[ "$*" == *"/main/"* && -z "$NO_MAIN" ]] && echo x > "${@: -1}"; }\n'
+        f'python3() {{ mkdir -p "$3/bin"; for t in pip python; do printf \'#!/bin/sh\\necho "%s $*" >> "{log}"\\n'
+        'exit "${%s:-0}"\\n\' "$t" "$( [ $t = pip ] && echo PIP || echo PROVENANCE )" > "$3/bin/$t"; '
+        'chmod +x "$3/bin/$t"; done; }\n')
+
+    def verify(**env: str) -> int:
+        log.write_text("")
+        script = f'{fakes}{func}\nverify_release "{app}"'
+        return subprocess.run(["bash", "-c", script],
+                              env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin", **env}).returncode
 
     assert verify() == 0
+    calls = log.read_text()
+    main = "https://raw.githubusercontent.com/waldonso2/wealthfolio-companion/main"
+    assert f"{main}/src/brokersync/provenance.py" in calls and f"{main}/requirements-verify.txt" in calls
+    assert re.search(r"^pip install .*--require-hashes --only-binary :all: -r \S+/requirements-verify.txt$",
+                     calls, re.M)
+    assert re.search(r"^python -I \S+/provenance.py \S+/SHA256SUMS$", calls, re.M)
+    assert verify(PROVENANCE="1") == 1  # no attestation, another signer, another digest
+    assert verify(PIP="1") == 1  # the verifier can't be installed
+    assert verify(NO_MAIN="1") == 1  # the verifier can't be downloaded
     (app / "build" / "lib").mkdir(parents=True)
     (app / "build" / "lib" / "mod.py").write_text("x = 1\n")
     (app / "src" / "pkg.egg-info").mkdir()
@@ -301,3 +323,16 @@ def test_setup_takes_a_moved_key_left_as_secret_key(tmp_path):
     assert not (etc / "secret.key").exists()
     assert (etc / "key.cred").read_text() == "companion-key:old-key-of-broker-sync-32-characters-long\n"
     assert done.stdout.split()[-2:] == [f"LoadCredentialEncrypted=companion-key:{etc}/key.cred", "systemd-creds"]
+
+
+def test_the_release_verifier_stands_alone_and_is_locked():
+    """#165: install and update run provenance.py on its own, in a venv of requirements-verify.txt only."""
+    source = (ROOT / "src" / "brokersync" / "provenance.py").read_text()
+    assert not re.search(r"^\s*(from|import) (brokersync|\.)", source, re.M)
+    lock = (ROOT / "requirements-verify.txt").read_text()
+    assert re.search(r"^sigstore==\S+ \\", lock, re.M)
+    blocks = re.split(r"\n(?=[A-Za-z0-9])", lock.strip())
+    assert all("--hash=sha256:" in b for b in blocks if "==" in b)
+    assert "requirements-verify.in" in (ROOT / "scripts" / "lock.sh").read_text()
+    release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    assert re.search(r"subject-path: \|\n.*\.tar\.gz\n\s+SHA256SUMS\n", release)

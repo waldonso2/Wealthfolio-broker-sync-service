@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Security: Proxmox install and update verify the release's SLSA build provenance before accepting `SHA256SUMS` - the attestation must come from `release.yml` on `main` (GitHub-hosted runner) and name the downloaded file's SHA-256. No GitHub login: the attestation comes from GitHub's public API and is verified offline with sigstore (`src/brokersync/provenance.py`, in a throwaway venv of the new hash-locked `requirements-verify.txt`; verifier and lock are taken from `main`, like the install script). Any failure stops the install or update; the old version keeps running.
+
 ## 0.1.0a4
 
 - Documentation: ARCHITECTURE.md is English and describes the current architecture and data flow; the move guide from Wealthfolio Broker Sync is no longer part of the operations guide - it stays in this changelog (0.1.0a1), and the old installer's notice points there.

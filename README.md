@@ -340,7 +340,7 @@ Settings, credentials and data stay; the data is migrated at start.
    update
    ```
 
-   It backs up the encrypted data first (`/opt/wealthfolio-companion/backup-*.tar.gz`, the last three are kept) and checks every downloaded file against the release's checksums (`SHA256SUMS`); if one doesn't match, it stops and the current version keeps running.
+   It backs up the encrypted data first (`/opt/wealthfolio-companion/backup-*.tar.gz`, the last three are kept) verifies the release's build provenance and checks every downloaded file against the release's checksums (`SHA256SUMS`); if anything doesn't match, it stops and the current version keeps running.
 
 2. Or let the container update itself: page *Updates* (opt-in, asks for the UI password).
 
@@ -449,6 +449,7 @@ Everything else—reconciliation, X-Ray, costs and FIRE, the booking model, prox
 - Credentials, settings and the sync database are encrypted (AES-256-GCM and SQLCipher). The service's key lives outside the data: in Proxmox sealed with `systemd-creds`, in Docker as a secret.
 - **Master passphrase (optional):** with it, even a copy that includes the key opens nothing. Without the passphrase the data is lost.
 - Read-only access to the brokers; protection against lock-outs (no second wrong PIN or TAN); the UI only over HTTPS, with its own login and throttled failed attempts.
+- Proxmox installs and updates accept a release only with the build provenance of this repository's release workflow and matching checksums - no GitHub login needed.
 - The page *Security* always shows what is protected and how. Please report vulnerabilities privately: [SECURITY.md](SECURITY.md).
 
 ## How it came about
