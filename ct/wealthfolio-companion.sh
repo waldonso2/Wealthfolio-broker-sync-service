@@ -41,6 +41,14 @@ verify_release() {
     rm -f "$sums"
     return 1
   fi
+  # SHA256SUMS is itself a release artifact: trust it only after GitHub verifies the
+  # SLSA provenance emitted by this repository's release workflow on main.
+  if ! gh attestation verify "$sums" --repo waldonso2/wealthfolio-companion \
+    --signer-workflow github.com/waldonso2/wealthfolio-companion/.github/workflows/release.yml \
+    --source-ref refs/heads/main --deny-self-hosted-runners; then
+    rm -f "$sums"
+    return 1
+  fi
   ok=0
   (cd "$dir" && sha256sum --quiet --strict -c "$sums") || ok=1
   diff <(cd "$dir" && find . -type f ! -path './build/*' ! -path '*.egg-info/*' | LC_ALL=C sort) \
@@ -65,6 +73,12 @@ function update_script() {
     export COMPANION_ALLOW_DOWNGRADE=1
   fi
   if [[ -n "${VERSION:-}" ]] || check_for_gh_release "wealthfolio-companion" "waldonso2/wealthfolio-companion"; then
+    # Older installations predate the GitHub CLI dependency used to verify release provenance.
+    if ! command -v gh >/dev/null 2>&1; then
+      msg_info "Installing GitHub CLI for release verification"
+      apt-get update
+      apt-get install -y gh
+    fi
     msg_info "Stopping Service"
     systemctl stop wealthfolio-companion-run.timer wealthfolio-companion
     msg_ok "Stopped Service"
@@ -80,7 +94,7 @@ function update_script() {
     if ! verify_release /opt/wealthfolio-companion/app; then
       # Nothing of the new files ran: the previous version (its venv) is still installed.
       systemctl start wealthfolio-companion wealthfolio-companion-run.timer
-      msg_error "Update stopped: the downloaded files don't match the release's SHA256SUMS. The previous version keeps running."
+      msg_error "Update stopped: release provenance or file checksums could not be verified. The previous version keeps running."
       exit 1
     fi
 
