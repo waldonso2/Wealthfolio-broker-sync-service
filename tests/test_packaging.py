@@ -167,14 +167,17 @@ def _verify_release_function(path: Path) -> str:
 
 
 def test_install_and_update_check_the_release_against_its_checksums(tmp_path):
-    """#88: what the release workflow lists in SHA256SUMS is what install and update accept - a changed or
-    an added file stops them; what pip leaves behind (build/, *.egg-info) doesn't."""
+    """Release checksums require trusted GitHub provenance; changed or added files still fail."""
     import subprocess
 
     func = _verify_release_function(ROOT / "ct" / "wealthfolio-companion.sh")
     assert func == _verify_release_function(ROOT / "install" / "wealthfolio-companion-install.sh")
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
     assert "find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > SHA256SUMS" in release
+    installer = (ROOT / "install" / "wealthfolio-companion-install.sh").read_text()
+    updater = (ROOT / "ct" / "wealthfolio-companion.sh").read_text()
+    assert "apt install -y gh python3 python3-venv" in installer
+    assert "apt-get install -y gh" in updater and "command -v gh" in updater
     app = tmp_path / "app"
     app.mkdir()
     for name, content in {"setup.sh": "echo hi\n", "src/pkg/mod.py": "x = 1\n", "with space.txt": "y\n"}.items():
