@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal as D
 
@@ -561,3 +562,36 @@ def test_an_equal_deposit_after_one_synced_before_is_booked(tmp_path):
     [r] = syncer.run()
     assert r.created == 1
     assert [a["activityType"] for a in wf.activities].count("DEPOSIT") == 2
+
+
+class NetDividendBroker(FakeBroker):
+    """The fake broker as an adapter that books its dividend net, without the tax (comdirect before #52)."""
+
+    def get_transactions(self, since):
+        return [t if t.kind != Kind.DIVIDEND else replace(t, tax=D(0), gross=None)
+                for t in super().get_transactions(since)]
+
+
+class LaterTaxBroker(FakeBroker):
+    own_tax_backfill = True
+
+
+def test_own_dividends_get_the_tax_the_adapter_learned_later_once(tmp_path):
+    wf = FakeWealthfolio()
+    syncer, _ = setup(tmp_path, wf)
+    syncer.adapters["fake"] = NetDividendBroker
+    [r] = syncer.run()
+    assert r.status == "ok" and r.created == 3
+    [div] = [a for a in wf.activities if a["activityType"] == "DIVIDEND"]
+    before = dict(div)
+    assert not D(div.get("tax") or 0)
+    syncer.adapters["fake"] = LaterTaxBroker
+    [r] = syncer.run()
+    # Only the tax changed: amount and comment (the duplicate fingerprint) stay, nothing new booked.
+    assert (r.status, r.created) == ("ok", 0) and len(wf.updated) == 1
+    assert div["tax"] == "1.32"
+    assert {k: v for k, v in div.items() if k not in ("tax", "_fp")} == \
+        {k: v for k, v in before.items() if k not in ("tax", "_fp")}
+    assert syncer.state.flag("own-dividend-tax:fake")
+    syncer.run()
+    assert len(wf.updated) == 1

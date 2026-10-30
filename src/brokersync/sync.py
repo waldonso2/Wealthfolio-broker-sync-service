@@ -109,6 +109,7 @@ class RunContext:
     adapter: BrokerAdapter
     # plan_window
     backfill: bool = False
+    own_tax: bool = False
     full: bool = False
     refetch: bool = False
     since: datetime | None = None
@@ -554,6 +555,8 @@ class Syncer:
             self._compare(cfg, key, run.transactions, run.synced, run.activities, run.full, run.since)
             if run.tax_backfill:
                 self._backfill_tax(run, wf)
+            if run.own_tax:
+                self._backfill_own_tax(run, wf)
             self._learn_assets(run, wf)
             self._check_holdings(run, wf)
         self._commit_flags(run)
@@ -587,7 +590,9 @@ class Syncer:
         run.full = adapter_cls.full_history
         # "Ab Startdatum neu abrufen" in the broker settings: once from the start date again.
         run.refetch = not run.full and self.state.flag(refetch_flag(key))
-        run.since = self._start(bcfg) if run.full or run.backfill or run.refetch else self._since(key, bcfg)
+        run.own_tax = adapter_cls.own_tax_backfill and not self.state.flag(meta_keys.OWN_DIVIDEND_TAX(key))
+        run.since = (self._start(bcfg) if run.full or run.backfill or run.refetch or run.own_tax
+                     else self._since(key, bcfg))
         # The savings account (Tagesgeld), if the user assigned one: read from the start date until a run
         # read it without failures, then with the cash account.
         run.savings = bcfg.savings_account_id if adapter_cls.savings_label else ""
@@ -686,6 +691,26 @@ class Syncer:
             log.info("%s: added the tax to %d imported dividends", run.key, added)
         if not tax_errors and not run.result.failed and not run.adapter.incomplete:
             self.state.set_flag(tax_flag(run.key))
+
+    def _backfill_own_tax(self, run: RunContext, wf: WealthfolioClient) -> None:
+        """Once per broker (``own_tax_backfill``): the tax on the sync's own dividends booked before the adapter
+        could read it - only the ``tax`` field, so amount and comment (the fingerprint) stay."""
+        by_id = {a["id"]: a for a in run.activities}
+        added, errors = 0, 0
+        for tx in run.transactions:
+            status, ids = run.synced.get(tx.id, ("", []))
+            if status != "imported":
+                continue
+            for activity in (by_id[i] for i in ids if i in by_id):
+                try:
+                    added += self._add_dividend_tax(wf, tx, activity, own=tx_ref(run.key, tx))
+                except WealthfolioError as e:
+                    errors += 1
+                    log.info("%s: tax not added to %s: %s", run.key, tx.id, e)
+        if added:
+            log.info("%s: added the tax to %d dividends booked before", run.key, added)
+        if not errors and not run.result.failed:
+            self.state.set_flag(meta_keys.OWN_DIVIDEND_TAX(run.key))
 
     def _learn_assets(self, run: RunContext, wf: WealthfolioClient) -> None:
         """The Wealthfolio asset of every ISIN, from the sync's activities and, for positions, from imports."""
@@ -810,16 +835,18 @@ class Syncer:
             self.state.resolve_unknown(key, e["tx_id"])
 
     @staticmethod
-    def _add_dividend_tax(wf: WealthfolioClient, tx: Transaction, activity: dict) -> int:
+    def _add_dividend_tax(wf: WealthfolioClient, tx: Transaction, activity: dict, own: str = "") -> int:
         """Put the broker's tax on a dividend an import booked without it (Scalable's CSV has none).
 
         Only the ``tax`` field changes: amount (net) and comment stay, and tax is not part of
         Wealthfolio's duplicate fingerprint, so a re-import still finds the activity. The
-        sync's own activities and dividends that carry a tax already are left alone.
+        sync's own activities and dividends that carry a tax already are left alone - unless ``own`` names the
+        sync's reference of ``tx``: then only the activity carrying it (``_backfill_own_tax``).
         """
         if tx.kind != Kind.DIVIDEND or tx.tax <= 0 or activity.get("activityType") != "DIVIDEND":
             return 0
-        if "[SYNC " in (activity.get("comment") or ""):
+        comment = activity.get("comment") or ""
+        if (own not in comment) if own else ("[SYNC " in comment):
             return 0
         try:
             if Decimal(str(activity.get("tax") or 0)) != 0:

@@ -289,3 +289,51 @@ def test_a_reversed_dividend_is_reported():
                "remittanceInfo": "STORNO DIVIDENDE TEST AG ISIN DE0000000001"}
     [tx] = cd.to_transactions([booking], [], {}, today=date(2026, 3, 5))
     assert tx.kind == Kind.UNKNOWN and tx.raw_type == "DIVIDENDE_STORNO" and tx.id == "acc-R-STORNO"
+
+
+def remittance(*lines: str) -> str:
+    """comdirect's posting text: each line of 35 characters behind its two-digit number."""
+    return "".join(f"{i:02d}{line:<35}" for i, line in enumerate(lines, 1))
+
+
+def dividend(*lines: str, amount="73.07", unit="EUR", isin="DE000TEST001") -> dict:
+    return {"reference": "R-DIV", "bookingStatus": "BOOKED", "bookingDate": "2026-04-02",
+            "transactionType": {"key": "INTEREST_DIVIDENDS", "text": "Zinsen / Dividenden"},
+            "amount": {"value": amount, "unit": unit},
+            "remittanceInfo": remittance("Dividendengutschrift", f"{isin} TEST AG", *lines)}
+
+
+DOMESTIC = ("Brutto 100,00 EUR", "Kapitalertragsteuer 23,74 EUR", "Solidaritaetszuschl. 1,30 EUR",
+            "Kirchensteuer 1,89 EUR")
+FOREIGN = ("Bruttodividende 20,00 USD", "Quellensteuer 15 % 3,00 USD", "Devisenkurs EUR/USD 1,0850",
+           "KapESt 0,78 EUR", "SolZ 0,04 EUR")
+
+
+@pytest.mark.parametrize(("lines", "net", "tax"), [
+    (DOMESTIC, "73.07", "26.93"),
+    # Abbreviated labels, amounts without currency (= the booking's), thousands separator.
+    (("BRUTTO 1.250,00", "KAPST 312,50", "SOLZ 17,18"), "920.32", "329.68"),
+    # Foreign: gross and withholding in USD at the rate given (18,43 - 2,76 - 0,78 - 0,04 EUR).
+    (FOREIGN, "14.85", "3.58"),
+    # Only withholding tax (the saver's allowance covers the German taxes).
+    (("Brutto 10,00 USD", "Quellensteuer 1,50 USD", "Devisenkurs 1,2500"), "6.80", "1.20"),
+])
+def test_the_tax_of_a_dividend_is_read_from_its_posting_text(lines, net, tax):
+    [tx] = cd.to_transactions([dividend(*lines, amount=net)], [], {}, today=date(2026, 4, 5))
+    assert tx.kind == Kind.DIVIDEND and tx.id == "acc-R-DIV" and tx.net == D(net)
+    assert tx.tax == D(tax) and tx.gross == D(net) + D(tax)
+
+
+@pytest.mark.parametrize(("lines", "net"), [
+    ((), "12.34"),  # nothing but the net amount (the usual case)
+    (DOMESTIC[1:], "73.07"),  # no gross: nothing to check against
+    (DOMESTIC, "73.08"),  # doesn't add up to the booked amount
+    (("Brutto 100,00 EUR",), "100.00"),  # no tax at all
+    (FOREIGN[:2] + FOREIGN[3:], "14.85"),  # USD without an exchange rate
+    (("Brutto 20,00 USD", "Quellensteuer 3,00 CHF", "Devisenkurs EUR/USD 1,0850"), "15.67"),  # a third currency
+    ((*DOMESTIC, "Kirchensteuer 0,00 EUR"), "73.07"),  # a label twice: ambiguous
+    (("Brutto 100,00 EUR", "Kapitalertragsteuer 25,00 %"), "75.00"),  # a rate is no amount
+])
+def test_a_dividend_whose_tax_cant_be_read_reliably_stays_net(lines, net):
+    [tx] = cd.to_transactions([dividend(*lines, amount=net)], [], {}, today=date(2026, 4, 5))
+    assert tx.kind == Kind.DIVIDEND and tx.net == D(net) and tx.tax == 0 and tx.gross is None

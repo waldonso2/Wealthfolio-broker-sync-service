@@ -206,7 +206,7 @@ The service reads both your current account **and securities portfolio** through
 | comdirect event | Wealthfolio |
 |---|---|
 | Buy/sell (portfolio transaction) | Buy/sell in the securities account with quantity and market value; amount is taken from the related securities transaction on the current account, with the difference treated as a fee. The API does not separate fees and tax on sales, so both are included in the fee. A deposit (buy) or withdrawal (sell) is booked on the cash account, with a transfer between accounts in between |
-| Dividend/income (interest/dividend; security identified by ISIN or WKN in description) | Dividend with net amount in the securities account; cash transferred to the cash account |
+| Dividend/income (interest/dividend; security identified by ISIN or WKN in description) | Dividend with net amount in the securities account; cash transferred to the cash account. The tax (withholding tax plus capital gains tax, solidarity surcharge and church tax) is added only when the description names the gross amount and each tax and they add up to the net amount - foreign amounts converted at the exchange rate named there. Otherwise the dividend is booked net without tax; nothing is estimated. Dividends booked by an earlier version get their tax added once (only the tax field changes) |
 | Dividend whose security cannot be identified | **Not booked**; reported as unknown |
 | All other current-account transactions (transfers, card payments, fees, interest, etc.) | **Not booked** |
 | Portfolio transfer, or buy/sell with no matching cash transaction after 10 days | **Not booked**; reported as unknown. Add the holding under *Review* |
