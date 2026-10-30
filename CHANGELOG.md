@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Security (#153): forms sent by another website through the browser are refused before any password check - a page elsewhere could else spend the login brake and lock the owner out for 15 minutes.
+- Security (#153): the stored Wealthfolio password is only sent to the address it was saved for; a new address needs it typed again (also for *Nur testen*). The ntfy token is dropped when the ntfy server changes, unless a new one is typed. logo.dev redirects only over https.
+- Security (#152): broker settings have *Zugangsdaten löschen* - removes the broker's credentials and login session from the vault and switches its fetch off. The ntfy token is masked in the log like the vault's secrets; a damaged unlock cache counts as locked instead of failing every page.
+- Tests and docs (#152, #153): table-driven checks over every route (login, CSRF, public allow-list), secret-flow tests (pages, cookie, tracebacks, backup, encryption failures, argon2id cost); findings in docs/SECURITY-AUDIT-0.1.0a6.md.
+
 ## 0.1.0a5
 
 Verified releases: the Proxmox install and every update, and the Docker image, are checked against this repository's signed release workflow before anything of them runs.
