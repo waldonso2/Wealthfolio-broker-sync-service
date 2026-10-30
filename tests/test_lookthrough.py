@@ -979,3 +979,20 @@ def test_an_empty_finanzfluss_page_keeps_the_breakdown_read_before(tmp_path, cap
     st = lookthrough.status(state, "a-ubs")
     assert st["ff_regions"] == [["US", "0.6"]] and st["ff_sectors"] == [["IT", "0.2"]]
     assert "gave nothing" in caplog.text
+
+
+
+def test_german_finanzfluss_sector_aliases():
+    unknown = set()
+    lines = [["", "", "0.1", "", n, ""] for n in ("Abfallwirtschaft", "Bildung", "Forsterzeugnisse", "Kleidung & Accessoires", "Konglomerate", "Landwirtschaft", "Med. Diagnostik & Forschung", "Unternehmensdienste")]
+    lines.append(["", "", "0.2", "", "Barmittel & Derivate", ""])
+    categories = {lookthrough._norm(n): str(i) for i, n in enumerate(("Environmental & Facilities Services", "Education Services", "Forest Products", "Apparel, Accessories & Luxury Goods", "Industrial Conglomerates", "Agricultural Products", "Life Sciences Tools & Services", "Commercial Services & Supplies"))}
+    mapped = lookthrough._bp(lines, 4, categories, unknown)
+    assert len(mapped) == 8 and sum(w for _, w in mapped) == 8000
+    assert not unknown
+
+
+def test_unknown_finanzfluss_labels_stay_unmatched():
+    unknown = set()
+    mapped = lookthrough._bp([["", "", "0.2", "", n, ""] for n in ("CI", "JE", "XE", "Other", "unbekannt")], 4, {}, unknown)
+    assert not mapped and unknown == {"CI", "JE", "XE", "Other", "unbekannt"}
