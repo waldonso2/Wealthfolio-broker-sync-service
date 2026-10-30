@@ -22,9 +22,13 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import ClassVar
+from zoneinfo import ZoneInfo
 
+import httpx
+
+from .. import ratelimit
 from ..model import CashBalance, Position, Transaction
 
 
@@ -69,6 +73,26 @@ class AuthRequired(Exception):
 
 class AdapterError(Exception):
     """The broker could not be read (down, changed API, wrong credentials)."""
+
+
+class RateLimited(AdapterError):
+    """The broker limits the requests (HTTP 429/503) even after ``ratelimit.with_backoff``: this broker's run
+    stops, nothing of it is marked synced, and the next scheduled run waits until ``until`` (#149)."""
+
+    def __init__(self, message: str, until: datetime):
+        super().__init__(message)
+        self.until = until
+
+
+def rate_limited(label: str, response: httpx.Response | None = None, now: datetime | None = None) -> RateLimited:
+    """The ``RateLimited`` for an answer that is still 429/503 (or a throttle without one, e.g. a websocket's):
+    when to try again from its Retry-After, else after ``ratelimit.NEXT_TRY``."""
+    seconds = ratelimit.NEXT_TRY if response is None else ratelimit.retry_after(
+        response, ratelimit.NEXT_TRY, ratelimit.MAX_NEXT, now)
+    until = (now or datetime.now(UTC)) + timedelta(seconds=seconds)
+    shown = until.astimezone(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
+    code = "" if response is None else f" (HTTP {response.status_code})"
+    return RateLimited(f"{label} begrenzt gerade die Abrufe{code} - nächster Versuch ab {shown}.", until)
 
 
 class BrokerAdapter(ABC):

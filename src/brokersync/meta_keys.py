@@ -32,6 +32,8 @@ SAVINGS_ACCOUNT = MetaKey("savings-account", "text", True,
 DIVIDEND_TAX = MetaKey("dividend-tax", "flag", True,
                        "dividends matched before were re-read once to add their tax to imports")
 HISTORY_START = MetaKey("history-start", "text", True, "the earliest giro day ever read (ISO date)")
+RATE_LIMIT = MetaKey("rate-limit", "text", True,
+                     "the broker limited the requests: scheduled runs wait until this moment (ISO, UTC; #149)")
 POSITIONS = MetaKey("positions", "json", True,
                     "the broker's positions of the last check: [{isin, name, shares, ...}] (page Prüfung)")
 RETIRED_NOTICE = MetaKey("retired-notice", "json", True,
@@ -67,7 +69,7 @@ WEALTHFOLIO_APPEARANCE = MetaKey("wealthfolio:appearance", "json", False,
                                  "the font the user chose in Wealthfolio: {font: mono|sans|serif, at} (appearance.py)")
 
 ALL = (ASSETS_LEARNED, CASH_ASSETS_REPAIRED, REFETCH, SAVINGS_ACCOUNT, DIVIDEND_TAX, HISTORY_START, POSITIONS,
-       RETIRED_NOTICE, LOGO, LOGOS_LAST, PROGRESS, CHECKLIST_HIDDEN, UPDATE, AUTO_UPDATE, FUND, FUNDS_LAST,
+       RATE_LIMIT, RETIRED_NOTICE, LOGO, LOGOS_LAST, PROGRESS, CHECKLIST_HIDDEN, UPDATE, AUTO_UPDATE, FUND, FUNDS_LAST,
        XRAY_ACCEPTED, XRAY_NOTIFIED, TAXONOMIES_LAST, SPENDING, ISIN, FUNDS_PROGRESS, XRAY_ADDON_STATUS,
        XRAY_ADDON_STALE, WEALTHFOLIO_APPEARANCE)
 BROKER_KEYS = tuple(k for k in ALL if k.per_broker)

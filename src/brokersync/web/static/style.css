@@ -143,7 +143,7 @@ button.link { background: none; border: none; color: var(--muted); padding: 0; m
 .flash.ok { border-color: var(--ok); color: var(--ok); } .flash.warn { border-color: var(--warn); color: var(--warn); }
 .flash.error { border-color: var(--error); color: var(--error); }
 .status { font-size: 0.75rem; font-weight: 600; padding: 2px 0.5rem; border-radius: 9999px; border: 1px solid; white-space: nowrap; }
-.status.ok { color: var(--ok); } .status.needs_auth, .status.running, .status.aborted, .status.warn { color: var(--warn); }
+.status.ok { color: var(--ok); } .status.needs_auth, .status.running, .status.aborted, .status.limited, .status.warn { color: var(--warn); }
 .status.error { color: var(--error); } .status.off { color: var(--muted); }
 
 /* Traffic light */

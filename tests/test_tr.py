@@ -562,7 +562,7 @@ def ws(monkeypatch):
     return made, opts
 
 
-def test_timeline_pages_until_since_and_fetches_the_details_in_batches(ws):
+def test_timeline_pages_until_since_and_fetches_the_details_in_batches(ws, _no_rate_limit_waits):
     made, _ = ws
     since = datetime(2026, 9, 5, tzinfo=UTC)
     a = TradeRepublicAdapter(CREDS, {"cookies": "valid"})
@@ -579,6 +579,9 @@ def test_timeline_pages_until_since_and_fetches_the_details_in_batches(ws):
     assert sorted(api.details) == sorted({e["id"] for e in RECORDING["events"]
                                           if e["timestamp"] >= "2026-09-05" and e.get("action")})
     assert api.max_in_flight <= 3
+    # A short pause between two groups (#149), none before the first.
+    groups = -(-len(api.details) // 3)
+    assert len(_no_rate_limit_waits) == groups - 1 and all(0.25 <= w <= 0.5 for w in _no_rate_limit_waits)
     assert "00000000-0000-4000-8000-000000000014" not in api.details  # address change: no detail view
     assert len(api.unsubscribed) == len(api.details) + len(api.requested)
     a.close()
@@ -619,7 +622,7 @@ def test_a_silent_websocket_is_an_error_not_a_hang(ws, monkeypatch):
 
 
 def test_too_many_attempts_and_other_errors_do_not_block_the_pin(api, monkeypatch):
-    for error, message in ((Exception("TOO_MANY_REQUESTS"), "Zu viele Anmeldeversuche"),
+    for error, message in ((Exception("TOO_MANY_REQUESTS"), "Trade Republic begrenzt gerade die Abrufe"),
                            (ConnectionError("network down"), "Trade Republic: network down")):
         monkeypatch.setattr(FakeApi, "initiate_weblogin", lambda self, e=error: (_ for _ in ()).throw(e))
         a = TradeRepublicAdapter(CREDS)

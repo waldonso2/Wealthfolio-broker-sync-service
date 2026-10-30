@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Rate limits (waldonso2/wealthfolio-importer-addon#149): one shared rule for HTTP 429/503 (`ratelimit.py`). N26, comdirect and Enable Banking read through a short limit (up to three more tries after `Retry-After` or 2/5/15 s, each at most 60 s) instead of failing the broker; logins, token and TAN requests are never repeated. A broker that stays limited (also Trade Republic's `TOO_MANY_REQUESTS` and Scalable after its own waits) ends its run as *Abruflimit*, books nothing of it, and scheduled runs wait until the time it named (default 15 minutes, at most a day); ntfy tells it once, the broker card shows it in yellow with the next try. Trade Republic's detail requests are spaced by a short pause.
+
 ## 0.1.0a6
 
 Audit and hardening: secrets, web attack surface, workflows and supply chain, container and systemd units.
