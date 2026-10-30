@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import random
 import tempfile
 from contextlib import suppress
 from datetime import UTC, datetime
@@ -36,14 +37,17 @@ from decimal import Decimal
 from pathlib import Path
 from typing import ClassVar
 
+from .. import ratelimit
 from ..model import CashBalance, Kind, Position, Transaction
-from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
+from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField, rate_limited
 
 SKIPPED_STATUS = {"CANCELED", "CANCELLED", "FAILED", "REJECTED", "PENDING"}
 # Seconds to wait for a websocket answer.
 TIMEOUT = 30
 # Detail requests in flight at once.
 BATCH = 20
+# Seconds between two groups of details (plus up to as much jitter), so TR isn't asked in one burst (#149).
+TR_PAUSE = 0.25
 
 
 def _dec(x) -> Decimal | None:
@@ -292,7 +296,10 @@ class TradeRepublicAdapter(BrokerAdapter):
             self.session["pin_rejected"] = True
             raise AdapterError("Trade Republic hat Telefonnummer oder PIN abgelehnt.") from e
         if "TOO_MANY_REQUESTS" in text or "Too many attempts" in text:
-            raise AdapterError("Zu viele Anmeldeversuche bei Trade Republic - bitte später erneut versuchen.") from e
+            # pytr shows TR's throttle as a TradeRepublicError (an "E" answer on the websocket) naming
+            # TOO_MANY_REQUESTS, or a login error: stop, the next scheduled run waits (#149). Details are not
+            # tried again - a transaction without its details would be booked wrongly.
+            raise rate_limited(self.label) from e
         if isinstance(e, AuthRequired | AdapterError):
             raise e
         raise AdapterError(f"Trade Republic: {text or type(e).__name__}") from e
@@ -349,6 +356,8 @@ class TradeRepublicAdapter(BrokerAdapter):
                   if (e.get("action") or {}).get("type") == "timelineDetail"
                   and (e.get("action") or {}).get("payload") == e["id"]]
         for i in range(0, len(wanted), BATCH):
+            if i:
+                ratelimit.sleep(TR_PAUSE * (1 + random.random()))  # noqa: S311 - jitter, no secret
             batch = wanted[i:i + BATCH]
             pending = {await self._api.timeline_detail_v2(e["id"]): e for e in batch}
             while pending:

@@ -2,6 +2,7 @@
 {% block status %}
 {% if written %}<p>{{ _("Zuletzt in Wealthfolio eingetragen {when}: {written} geändert, {manual} mit deinen eigenen Zuordnungen gelassen.", when=written.at | local, written=written.written, manual=written.manual) }}</p>
 {% if written.unmatched %}<p class="muted">{{ _("Ohne passende Kategorie in Wealthfolio: {names}.", names=written.unmatched | join(", ")) }}</p>{% endif %}
+{% if written.deliberate %}<p class="muted">{{ _("Bewusst nicht zugeordnet (kein Land und keine Branche): {names}.", names=written.deliberate | join(", ")) }}</p>{% endif %}
 {% else %}<p class="muted">{{ _("Noch nichts in Wealthfolio eingetragen.") }}</p>{% endif %}
 {% if funds %}
 {% set SOURCE = {"lines": _("Liste des Anbieters"), "breakdown": _("Länderaufteilung des Anbieters"), "finanzfluss": _("Finanzfluss")} %}
@@ -16,6 +17,8 @@
   </tbody>
 </table></div>
 {% else %}<p class="muted">{{ _("Noch kein Fonds mit Positionsliste - siehe X-Ray.") }}</p>{% endif %}
+{% if classes and classes.named %}<p class="muted">{{ _("Anlageklasse aus dem Fondsnamen (wie Wealthfolio selbst; ersetzt Wealthfolio, sobald ein Kursanbieter die echte Aufteilung liefert): {names}.", names=classes.named.values() | map(attribute="name") | sort | join(", ")) }}</p>{% endif %}
+{% if classes and classes.missing %}<p class="muted"><a href="/check#asset-classes">{{ _("{n} Positionen ohne Anlageklasse in Wealthfolio", n=classes.missing | length) }}</a></p>{% endif %}
 <p class="muted">{{ _("Ersetzt nur Yahoos automatische Werte und die eigenen des Dienstes, nie deine eigenen Zuordnungen. Was keiner Kategorie zuzuordnen ist, bleibt nicht zugeordnet.") }}</p>
 {% endblock %}
 {% block actions %}{% from "_service_parts.html" import run, remove with context %}

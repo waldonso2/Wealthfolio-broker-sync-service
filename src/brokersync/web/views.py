@@ -132,12 +132,14 @@ STALE_DAYS = 2
 
 
 def broker_light(last: dict | None, reconcile: dict | None, unknown: int, gaps: int, enabled: bool,
-                 now: datetime | None = None, lang: str = "de") -> tuple[str, list[tuple[str, str]]]:
+                 now: datetime | None = None, lang: str = "de",
+                 limited_until: str | None = None) -> tuple[str, list[tuple[str, str]]]:
     """The overview's traffic light for a broker and the reasons behind it (#83), each with where it leads:
     "login", "unknown", "check" or "" (nothing to open). The reasons are in ``lang`` (#87).
 
     red: the last run failed or needs a login; yellow: something to look at (deviations, unknown or missing
-    bookings, failed activities, no run for a while); green: nothing to do; grey: never fetched.
+    bookings, failed activities, a rate limit - ``limited_until``, no run for a while); green: nothing to do;
+    grey: never fetched.
     """
     if not last:
         return "grey", [(translate("Noch nie abgerufen", lang), "")]
@@ -161,6 +163,10 @@ def broker_light(last: dict | None, reconcile: dict | None, unknown: int, gaps: 
         reasons.append((translate("{n} fehlt in Wealthfolio", lang, n=gaps), "check"))
     if status == "aborted":
         reasons.append((translate("Letzter Abruf abgebrochen", lang), ""))
+    if status == "limited":  # the broker limited the requests (#149): scheduled runs wait until then
+        reasons.append((translate("Abruflimit beim Anbieter - nächster Versuch ab {time}", lang,
+                                  time=local_time(limited_until, lang=lang)) if limited_until
+                        else translate("Abruflimit beim Anbieter", lang), ""))
     started = _parse(last.get("started_at"))
     if enabled and isinstance(started, datetime) and status != "running":
         age = (now or datetime.now(UTC)) - (started if started.tzinfo else started.replace(tzinfo=UTC))

@@ -22,9 +22,23 @@ The service reads your **DKB current account** over FinTS (HBCI), the same inter
 | Card payment, direct debit, outgoing transfer | Withdrawal (`WITHDRAWAL`), i.e. an expense |
 | Outgoing transfer to your own account | Transfer (`TRANSFER_OUT`, with a matching entry on the selected account) if a transfer rule matches; see *Everyday use* |
 | Credit interest / account fee on statement | Interest (`INTEREST`) / fee (`FEE`) |
-| Securities settlement, investment income, dividend | **Not booked here**; see below |
+| Securities settlement, investment income, dividend | **Not booked here**; matched against the trade, see below |
 
-**Securities:** DKB does not provide securities transactions through FinTS. Import securities settlement PDFs into Wealthfolio instead; they follow the same two-account model, with transfers to or from the cash account. To avoid duplicates, the service does not book the related current-account transactions again. It checks whether the matching transfer already exists (same amount, no more than six days apart). If not, you receive a notification; after importing the settlement, the next sync recognises it. DKB does provide **portfolio holdings** through FinTS. After each sync, the service compares them with the DKB securities account in Wealthfolio. If a position is missing, add it as an opening position on the *Review* page.
+**Securities:** The service reads the DKB depot's transactions over FinTS (MT536) and books purchases and sales itself, in the same two-account model as a PDF import: a buy or sale on the DKB securities account with its transfer pair to or from the cash account.
+
+| Depot transaction | Wealthfolio |
+|---|---|
+| Purchase (received against payment) | Buy (`BUY`) with a transfer from the cash account |
+| Sale (delivered against payment) | Sell (`SELL`) with a transfer to the cash account |
+| Reversal, corporate action, delivery in or out without payment | **Not booked**; listed on *Unknown* to complete by hand |
+
+- **Amount:** a trade gets the amount of the current-account booking that paid it (debit for a purchase, credit for a sale, from one day before to six days after the trade day). That booking is then recognised in the same sync and not booked again. A trade without such a booking waits up to seven days for it; after that it is booked with the amount DKB posted in the depot.
+- **Fee:** only when DKB sends a price: the difference between the booking and shares × price. For a sale it holds fees and taxes together. Without a price the fee stays 0 – nothing is guessed.
+- **Already imported:** a trade already in Wealthfolio from a PDF or CSV import (same share count and amount, same day) is recognised and not booked again.
+- **Older trades:** DKB delivers the last 89 days. A trade from before the first day of the current-account history the service has read gets its money from outside (a deposit before a purchase, a withdrawal after a sale), as its booking was never read.
+- **Approval:** if DKB asks for an approval for depot transactions, they are not fetched and nothing is booked from them (a note in the log); a rejected PIN stops everything as usual. A failure reading them never stops the current-account sync.
+
+Securities-related current-account transactions without a matching trade (e.g. a dividend) are still checked against what a PDF import booked (same amount, no more than six days apart); if nothing matches you receive a notification, and after importing the settlement the next sync recognises it. DKB also provides **portfolio holdings** through FinTS. After each sync, the service compares them with the DKB securities account in Wealthfolio. If a position is missing, add it as an opening position on the *Review* page.
 
 **Savings account:** If you select a separate Wealthfolio account for savings in broker settings, the service also reads its transactions and balance. Interest, deposits, and withdrawals are booked to that account. Transfers between the current and savings accounts are booked once as transfers between those accounts, not as a withdrawal and deposit. The service discovers the savings account automatically; if that fails, enter its IBAN with the credentials. On the first sync, savings transactions are fetched from the configured start date.
 
@@ -192,7 +206,7 @@ The service reads both your current account **and securities portfolio** through
 | comdirect event | Wealthfolio |
 |---|---|
 | Buy/sell (portfolio transaction) | Buy/sell in the securities account with quantity and market value; amount is taken from the related securities transaction on the current account, with the difference treated as a fee. The API does not separate fees and tax on sales, so both are included in the fee. A deposit (buy) or withdrawal (sell) is booked on the cash account, with a transfer between accounts in between |
-| Dividend/income (interest/dividend; security identified by ISIN or WKN in description) | Dividend with net amount in the securities account; cash transferred to the cash account |
+| Dividend/income (interest/dividend; security identified by ISIN or WKN in description) | Dividend with net amount in the securities account; cash transferred to the cash account. The tax (withholding tax plus capital gains tax, solidarity surcharge and church tax) is added only when the description names the gross amount and each tax and they add up to the net amount - foreign amounts converted at the exchange rate named there. Otherwise the dividend is booked net without tax; nothing is estimated. Dividends booked by an earlier version get their tax added once (only the tax field changes) |
 | Dividend whose security cannot be identified | **Not booked**; reported as unknown |
 | All other current-account transactions (transfers, card payments, fees, interest, etc.) | **Not booked** |
 | Portfolio transfer, or buy/sell with no matching cash transaction after 10 days | **Not booked**; reported as unknown. Add the holding under *Review* |

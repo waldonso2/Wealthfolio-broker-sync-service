@@ -48,7 +48,10 @@ class FakeWealthfolio:
                                        {"id": "country_DE", "name": "Germany", "parentId": "R3010"}],
                            "industries_gics": [{"id": "45", "name": "Information Technology", "parentId": None},
                                                {"id": "4510", "name": "Software & Services", "parentId": "45"},
-                                               {"id": "20", "name": "Industrials", "parentId": None}]}
+                                               {"id": "20", "name": "Industrials", "parentId": None}],
+                           "asset_classes": [{"id": "EQUITY", "name": "Equity", "parentId": None},
+                                             {"id": "FIXED_INCOME", "name": "Fixed Income", "parentId": None},
+                                             {"id": "COMMODITIES", "name": "Commodities", "parentId": None}]}
         self.assignments: list[dict] = []
         self.spending: dict | None = {"enabled": False, "accountIds": [], "excludedCategoryIds": []}  # None: no tracker
         # Addon storage (#146) per (addon id, key); None: a Wealthfolio before 3.11. ``storage_fail``: keys whose

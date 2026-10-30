@@ -31,7 +31,11 @@ SAVINGS_ACCOUNT = MetaKey("savings-account", "text", True,
                           "the savings account (Wealthfolio id) a run read without failures")
 DIVIDEND_TAX = MetaKey("dividend-tax", "flag", True,
                        "dividends matched before were re-read once to add their tax to imports")
+OWN_DIVIDEND_TAX = MetaKey("own-dividend-tax", "flag", True,
+                           "the sync's own dividends got the tax the adapter learned to read later (#52)")
 HISTORY_START = MetaKey("history-start", "text", True, "the earliest giro day ever read (ISO date)")
+RATE_LIMIT = MetaKey("rate-limit", "text", True,
+                     "the broker limited the requests: scheduled runs wait until this moment (ISO, UTC; #149)")
 POSITIONS = MetaKey("positions", "json", True,
                     "the broker's positions of the last check: [{isin, name, shares, ...}] (page Prüfung)")
 RETIRED_NOTICE = MetaKey("retired-notice", "json", True,
@@ -51,6 +55,9 @@ XRAY_ACCEPTED = MetaKey("xray:accepted", "json", False, "cluster risks the user 
 XRAY_NOTIFIED = MetaKey("xray:notified", "json", False, "cluster risks notified via ntfy: [key]")
 TAXONOMIES_LAST = MetaKey("taxonomies:last", "json", False,
                           "look-through: the last write of countries and sectors to Wealthfolio: {written, manual, at}")
+ASSET_CLASSES = MetaKey("asset-classes", "json", False,
+                        "positions without an asset class in Wealthfolio, and those given one from the fund's name: "
+                        "{missing: [{id, name, isin}], named: {asset id: {name, class}}, at} (#141)")
 AUTO_UPDATE = MetaKey("auto-update", "json", False,
                       "the last automatic update (deploy/companion-autoupdate): {from, to, ok, at}")
 UPDATE = MetaKey("update", "json", False, "the newest release GitHub named: {version, checked} (updates.py)")
@@ -67,7 +74,8 @@ WEALTHFOLIO_APPEARANCE = MetaKey("wealthfolio:appearance", "json", False,
                                  "the font the user chose in Wealthfolio: {font: mono|sans|serif, at} (appearance.py)")
 
 ALL = (ASSETS_LEARNED, CASH_ASSETS_REPAIRED, REFETCH, SAVINGS_ACCOUNT, DIVIDEND_TAX, HISTORY_START, POSITIONS,
+       RATE_LIMIT, OWN_DIVIDEND_TAX,
        RETIRED_NOTICE, LOGO, LOGOS_LAST, PROGRESS, CHECKLIST_HIDDEN, UPDATE, AUTO_UPDATE, FUND, FUNDS_LAST,
        XRAY_ACCEPTED, XRAY_NOTIFIED, TAXONOMIES_LAST, SPENDING, ISIN, FUNDS_PROGRESS, XRAY_ADDON_STATUS,
-       XRAY_ADDON_STALE, WEALTHFOLIO_APPEARANCE)
+       XRAY_ADDON_STALE, WEALTHFOLIO_APPEARANCE, ASSET_CLASSES)
 BROKER_KEYS = tuple(k for k in ALL if k.per_broker)

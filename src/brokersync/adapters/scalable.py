@@ -61,7 +61,7 @@ from zoneinfo import ZoneInfo
 
 from .. import sandbox
 from ..model import CashBalance, Kind, Position, Transaction
-from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField
+from .base import AdapterError, AuthRequired, BrokerAdapter, Challenge, CredentialField, RateLimited, rate_limited
 
 log = logging.getLogger(__name__)
 BERLIN = ZoneInfo("Europe/Berlin")
@@ -133,10 +133,6 @@ class ScError(AdapterError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
-
-
-class RateLimited(AdapterError):
-    """Scalable still rate-limits after waiting."""
 
 
 def _rate_limited(e: ScError) -> bool:
@@ -578,7 +574,7 @@ class ScalableAdapter(BrokerAdapter):
                 if not _rate_limited(e):
                     raise self._translate(e) from e
                 if wait is None:
-                    raise RateLimited(f"Scalable: {e}") from e
+                    raise rate_limited(self.label) from e  # the shared rule (#149): the next run waits
                 m = RETRY_AFTER.search(str(e))
                 pause = min(int(m.group(1)), 300) if m else wait
                 log.info("scalable: rate limited (%s), waiting %ds (attempt %d)", args[1] if len(args) > 1 else args[0],

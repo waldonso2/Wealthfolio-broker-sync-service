@@ -158,6 +158,23 @@
 <div class="card"><p>{{ _("Noch kein Broker mit zwei Wealthfolio-Konten eingerichtet.") }}</p></div>
 {% endfor %}
 
+{% if classes and classes.missing %}
+<div class="card" id="asset-classes">
+  <h2>{{ _("Ohne Anlageklasse in Wealthfolio: {n}", n=classes.missing | length) }}</h2>
+  <p class="muted">{{ _("Wealthfolio zählt sie in der Zielallokation unter „Unknown“. Es holt die Aufteilung selbst, sobald das Wertpapier einen Ticker mit Kursanbieter hat (Wertpapier in Wealthfolio bearbeiten); sonst ordne die Anlageklasse dort von Hand zu.") }}</p>
+  <div class="table"><table>
+    <caption class="sr-only">{{ _("Positionen ohne Anlageklasse") }}</caption>
+    <thead><tr><th scope="col">{{ _("Wertpapier") }}</th><th scope="col">ISIN</th></tr></thead>
+    <tbody>
+    {% for p in classes.missing %}
+    <tr><td data-label="{{ _('Wertpapier') }}">{{ p.name }}</td><td data-label="ISIN">{{ p.isin or "–" }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="muted">{{ _("Geprüft {when}.", when=classes.at | local) }}</p>
+</div>
+{% endif %}
+
 <details class="card"><summary>{{ _("Was wird geprüft?") }}</summary>
   <ul class="muted">
     <li>{{ _("<strong>Fehlt in Wealthfolio:</strong> Vom Dienst gebucht, in Wealthfolio aber nicht mehr da – oder die Import-Buchung, der er sie zugeordnet hatte, ist weg. <em>Ignorieren</em>, wenn sie zu Recht fehlt.") }}</li>

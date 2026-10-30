@@ -135,6 +135,8 @@ The UI supports German and English. Translation keys are maintained in the inter
 
 Errors are isolated by broker. Authentication challenges are reported as needs_auth; adapter or Wealthfolio failures are reported as errors and logged with sensitive details redacted. A failed individual activity leaves the transaction incomplete so a later run can retry it. If holdings cannot be read, the transaction sync can still succeed while reconciliation is skipped.
 
+Rate limits (HTTP 429/503) follow one rule, `ratelimit.py`: idempotent reads (N26, comdirect, Enable Banking `GET`) go through `with_backoff` - up to three more tries after `Retry-After` or 2/5/15 s (each wait at most 60 s, with jitter); a login, token, password or refresh grant, TAN or challenge request is never repeated. A broker still limited after that raises `RateLimited` (Trade Republic when pytr reports `TOO_MANY_REQUESTS`, Scalable after its own longer waits outside the detail queries): the run ends with status `limited`, nothing of it is marked synced, the next try is stored in `meta` `rate-limit:<broker>` and scheduled runs skip the broker until then (a fetch started in the UI still tries), ntfy tells it once, and the broker card shows it in yellow. Scalable's detail queries keep their own handling (`incomplete`); the look-through and logo passes stop their requests on a 429 for the pass.
+
 Operations that replace encrypted files use recoverable, staged transitions so an interrupted key or passphrase change can recover the previous or new state rather than leave a mixed set of files. Updates back up encrypted data first, verify downloaded release files against checksums, and restore the previous running version if installation fails.
 
 ## Installation, releases, and tests

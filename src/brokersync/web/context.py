@@ -42,7 +42,7 @@ REAUTH_SECONDS = 15 * 60
 ACCOUNTS_SECONDS = 60
 # Keys of UI texts (#87), translated where they are shown (``_(label)`` in the templates).
 STATUS_LABEL = {"ok": N_("OK"), "needs_auth": N_("Anmeldung nötig"), "error": N_("Fehler"), "running": N_("läuft"),
-                "aborted": N_("abgebrochen")}
+                "aborted": N_("abgebrochen"), "limited": N_("Abruflimit")}
 
 # The pages under *Einstellungen*: (path, title, what it is for, group, icon of ``_icons.html``), grouped like
 # Wealthfolio's settings (a sidebar on wide screens, the list of /settings on phones). The header shows the

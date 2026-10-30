@@ -32,6 +32,16 @@ def _no_scalable_pause(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_rate_limit_waits(monkeypatch):
+    # The shared backoff (#149) waits through ``ratelimit.sleep``: record the waits instead of waiting.
+    from brokersync import ratelimit
+
+    waits: list[float] = []
+    monkeypatch.setattr(ratelimit, "sleep", waits.append)
+    return waits
+
+
+@pytest.fixture(autouse=True)
 def _fast_key_derivation(monkeypatch, tmp_path_factory):
     # argon2id with its real cost (64 MiB) for every login would make the suite slow; the
     # parameters themselves are checked in test_security. No /run in tests: the unlock cache is per process.

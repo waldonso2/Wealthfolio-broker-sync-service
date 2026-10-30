@@ -979,3 +979,74 @@ def test_an_empty_finanzfluss_page_keeps_the_breakdown_read_before(tmp_path, cap
     st = lookthrough.status(state, "a-ubs")
     assert st["ff_regions"] == [["US", "0.6"]] and st["ff_sectors"] == [["IT", "0.2"]]
     assert "gave nothing" in caplog.text
+
+
+# Wealthfolio's GICS categories the #166 names map to (ids as in its seed), each under its sector.
+GICS_166 = [("15", "Materials", None), ("151050", "Paper & Forest Products", "15"),
+            ("20201050", "Environmental & Facilities Services", "20"),
+            ("2020", "Commercial & Professional Services", "20"),
+            ("201050", "Industrial Conglomerates", "20"), ("25", "Consumer Discretionary", None),
+            ("25302010", "Education Services", "25"), ("25203010", "Apparel, Accessories & Luxury Goods", "25"),
+            ("30", "Consumer Staples", None), ("30202010", "Agricultural Products", "30"),
+            ("35", "Health Care", None), ("352030", "Life Sciences Tools & Services", "35")]
+
+
+@pytest.mark.parametrize(("name", "sector"), [
+    ("Abfallwirtschaft", "20"), ("Bildung", "25"), ("Forsterzeugnisse", "15"), ("Kleidung & Accessoires", "25"),
+    ("Konglomerate", "20"), ("Landwirtschaft", "30"), ("Med. Diagnostik & Forschung", "35"),
+    ("Unternehmensdienste", "20")])
+def test_finanzfluss_industries_without_a_sector_of_their_own_find_their_gics_sector(tmp_path, name, sector):
+    """#166: each industry goes to the GICS industry it belongs to, rolled up to its sector."""
+    state = State(tmp_path)
+    lookthrough.set_status(state, "a-ff", ff_regions=[], ff_sectors=[[name, "0.6"]])
+    fake, wf = _wf()
+    fake.categories["industries_gics"] += [{"id": i, "name": n, "parentId": p} for i, n, p in GICS_166]
+    depot = Depot(positions=[{"id": "a-ff", "isin": "", "name": "F", "currency": "EUR", "value": D(1)}])
+    r = lookthrough.write_taxonomies(state, wf, depot)
+    assert [(a["categoryId"], a["weight"]) for a in fake.assignments] == [(sector, 6000)]
+    assert r.unmatched == [] and r.deliberate == []
+
+
+def test_cash_other_unknown_and_pseudo_codes_stay_unassigned_and_are_named_apart(tmp_path):
+    """#166: what is no country or sector is never given a category and is listed as deliberate; a real country
+    Wealthfolio has no category for (Côte d'Ivoire, Jersey) stays a plain "without a category"."""
+    state = State(tmp_path)
+    state.set_fund("a-w", "W", [["US0000000002", "A", "0.5", "US", "Information Technology", "USD"],
+                                ["CI0000000001", "B", "0.1", "CI", "Other", "XOF"],
+                                ["JE0000000001", "C", "0.1", "JE", "unbekannt", "GBP"],
+                                ["-", "CASH", "0.1", "XE", "Barmittel & Derivate", "EUR"]])
+    depot = Depot(positions=[{"id": "a-w", "isin": "", "name": "W", "currency": "EUR", "value": D(1)}])
+    fake, wf = _wf()
+    fake.categories["industries_gics"].append({"id": "x", "name": "Other", "parentId": None})  # never taken
+    r = lookthrough.write_taxonomies(state, wf, depot)
+    assert sorted((a["categoryId"], a["weight"]) for a in fake.assignments) == [("45", 5000), ("country_US", 5000)]
+    assert r.unmatched == ["CI", "JE"] and r.deliberate == ["Barmittel & Derivate", "Other", "XE", "unbekannt"]
+    assert json.loads(state.meta(meta_keys.TAXONOMIES_LAST()))["deliberate"] == r.deliberate
+
+
+def test_a_fund_without_asset_class_gets_the_one_its_name_names_never_a_guessed_one(tmp_path):
+    """wealthfolio-importer-addon#141: only Wealthfolio's own name rules, only with no asset class at all,
+    as AUTO; everything else is listed for *Prüfung*."""
+    state = State(tmp_path)
+    pos = [("a-bond", "iShares Core Euro Govt Bond UCITS ETF"), ("a-gold", "Xtrackers Physical Gold ETC"),
+           ("a-world", "iShares Core MSCI World UCITS ETF"), ("a-miners", "VanEck Gold Miners UCITS ETF"),
+           ("a-user", "Amundi Euro Government Bond UCITS ETF"), ("a-stock", "Bondholder Corp")]
+    depot = Depot(positions=[{"id": i, "isin": "", "name": n, "currency": "EUR", "value": D(1)} for i, n in pos])
+    fake, wf = _wf()
+    fake.assignments.append({"id": "u1", "assetId": "a-user", "taxonomyId": "asset_classes", "categoryId": "EQUITY",
+                             "weight": 10000, "source": "MANUAL"})
+    found = lookthrough.asset_classes(state, wf, depot, write=False)  # read only: nothing written
+    assert len(fake.assignments) == 1 and found["named"] == {}
+    assert [p["id"] for p in found["missing"]] == ["a-bond", "a-gold", "a-world", "a-miners", "a-stock"]
+    found = lookthrough.asset_classes(state, wf, depot, write=True)
+    mine = sorted((a["assetId"], a["categoryId"], a["weight"], a["source"]) for a in fake.assignments)
+    assert mine == [("a-bond", "FIXED_INCOME", 10000, "AUTO"), ("a-gold", "COMMODITIES", 10000, "AUTO"),
+                    ("a-user", "EQUITY", 10000, "MANUAL")]  # the user's own stays
+    assert [p["id"] for p in found["missing"]] == ["a-world", "a-miners", "a-stock"]
+    again = lookthrough.asset_classes(state, wf, depot, write=True)  # still shown as taken from the name
+    assert sorted(again["named"]) == ["a-bond", "a-gold"] and len(fake.assignments) == 3
+    # Wealthfolio's provider replaces ours: no longer "from the name"
+    for a in fake.assignments:
+        if a["assetId"] == "a-bond":
+            a["categoryId"] = "EQUITY"
+    assert sorted(lookthrough.asset_classes(state, wf, depot, write=True)["named"]) == ["a-gold"]

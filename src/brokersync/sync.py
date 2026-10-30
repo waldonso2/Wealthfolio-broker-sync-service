@@ -47,7 +47,7 @@ from . import history as history_mod
 from . import logos as logos_mod
 from . import repair as repair_mod
 from .adapters import ADAPTERS, AdapterError, AuthRequired, BrokerAdapter
-from .adapters.base import safety_state
+from .adapters.base import RateLimited, safety_state
 from .adapters.fints import NO_TAN_DAYS
 from .dedup import ExistingIndex
 from .history import BERLIN, opening_id
@@ -109,6 +109,7 @@ class RunContext:
     adapter: BrokerAdapter
     # plan_window
     backfill: bool = False
+    own_tax: bool = False
     full: bool = False
     refetch: bool = False
     since: datetime | None = None
@@ -177,6 +178,7 @@ class Syncer:
         self.recalc_wait = float(os.environ.get("COMPANION_RECALC_WAIT", "5"))
         self._notifier = notifier
         self._pins: dict[str, str] = {}  # PINs typed at the login, for the current run only (#85)
+        self._manual = False  # the current run was started in the UI (a rate limit doesn't hold it back, #149)
         self._progress: dict = {}  # the broker being fetched, for the overview (#104)
         self._logo_source = logo_source or logos_mod.LogoDev
         self._fund_sources = fund_sources or lookthrough.Sources
@@ -218,6 +220,7 @@ class Syncer:
                 self._update_funds(cfg)  # the issuers' lists are no broker: they stay daily in safe mode too
                 return []
             self._pins = dict(pins or {})
+            self._manual = manual
             # "Automatisch abrufen" off: the timer and the general button skip
             # the broker, a request for exactly this broker still runs it.
             keys = [key for key, bcfg in cfg.brokers.items()
@@ -337,6 +340,10 @@ class Syncer:
                         lookthrough.write_taxonomies(self.state, wf, depot)
                     except WealthfolioError:
                         log.exception("look-through: countries and sectors not written to Wealthfolio")
+                try:  # read only unless the service is on (#141)
+                    lookthrough.asset_classes(self.state, wf, depot, cfg.lookthrough_write)
+                except WealthfolioError:
+                    log.exception("look-through: asset classes not checked")
                 self._write_xray_addon(wf, depot, cfg)
             if not depot.positions and not depot.cash:  # Wealthfolio answered nothing: keep what was notified
                 return result
@@ -401,7 +408,10 @@ class Syncer:
             cfg = config_mod.load(self.data_dir)
             with connect(self._wealthfolio, cfg.wealthfolio_url, self.vault.load().get("wealthfolio_password"),
                          cfg.wealthfolio_fingerprint) as wf:
-                return lookthrough.write_taxonomies(self.state, wf, lookthrough.read_depot(wf, self.learned_isins(cfg)))
+                depot = lookthrough.read_depot(wf, self.learned_isins(cfg))
+                written = lookthrough.write_taxonomies(self.state, wf, depot)
+                lookthrough.asset_classes(self.state, wf, depot, write=True)
+                return written
 
     def update_spending(self) -> bool:
         """*Jetzt ausführen* on the service's page (#151): the tracked accounts now (under the sync lock)."""
@@ -461,13 +471,32 @@ class Syncer:
         except AlreadyRunning:
             pass
 
+    def _waiting(self, key: str) -> datetime | None:
+        """Until when the broker asked us to wait (#149), None when that is over."""
+        until = self.state.meta(meta_keys.RATE_LIMIT(key))
+        moment = when(until) if until else None
+        return moment if moment and moment > datetime.now(UTC) else None
+
     def _run_broker(self, cfg: config_mod.Config, key: str) -> BrokerResult:
+        label = self.adapters[key].label
+        if not self._manual and (until := self._waiting(key)):
+            # A scheduled run doesn't ask a broker that limits the requests before the time it named; the last
+            # run (status "limited") stays what the overview shows. A fetch the user starts still tries.
+            log.info("%s: rate limited until %s, skipped", key, until.isoformat())
+            return BrokerResult(key, "skipped", messages=[f"{label}: Abruflimit bis {until.isoformat()}"])
         run_id = self.state.start_run(key)
         result = BrokerResult(key, "ok")
-        label = self.adapters[key].label
         notifier = self.notifier(cfg)
         try:
             self._sync_broker(cfg, key, result)
+            self.state.delete_meta(meta_keys.RATE_LIMIT(key))
+        except RateLimited as e:
+            # Not "ok": nothing of the run counts as a success, so the next one reads from before it.
+            result.status = "limited"
+            result.messages.append(str(e))
+            if not self.state.meta(meta_keys.RATE_LIMIT(key)):  # once per episode, until a run gets through
+                notifier.send(f"{label}: Abruflimit", str(e), link=self.link(cfg, "/broker"), tags="hourglass")
+            self.state.set_meta(meta_keys.RATE_LIMIT(key), e.until.astimezone(UTC).isoformat())
         except AuthRequired as e:
             result.status = "needs_auth"
             result.messages.append(str(e))
@@ -526,6 +555,8 @@ class Syncer:
             self._compare(cfg, key, run.transactions, run.synced, run.activities, run.full, run.since)
             if run.tax_backfill:
                 self._backfill_tax(run, wf)
+            if run.own_tax:
+                self._backfill_own_tax(run, wf)
             self._learn_assets(run, wf)
             self._check_holdings(run, wf)
         self._commit_flags(run)
@@ -559,7 +590,9 @@ class Syncer:
         run.full = adapter_cls.full_history
         # "Ab Startdatum neu abrufen" in the broker settings: once from the start date again.
         run.refetch = not run.full and self.state.flag(refetch_flag(key))
-        run.since = self._start(bcfg) if run.full or run.backfill or run.refetch else self._since(key, bcfg)
+        run.own_tax = adapter_cls.own_tax_backfill and not self.state.flag(meta_keys.OWN_DIVIDEND_TAX(key))
+        run.since = (self._start(bcfg) if run.full or run.backfill or run.refetch or run.own_tax
+                     else self._since(key, bcfg))
         # The savings account (Tagesgeld), if the user assigned one: read from the start date until a run
         # read it without failures, then with the cash account.
         run.savings = bcfg.savings_account_id if adapter_cls.savings_label else ""
@@ -581,6 +614,8 @@ class Syncer:
             run.tax_backfill = not self.state.flag(tax_flag(key))
             adapter.known_ids = {t for t, (status, _) in run.synced.items()
                                  if not (run.tax_backfill and status == "existing")}
+            stored = self.state.meta(meta_keys.HISTORY_START(key))
+            adapter.history_read = date.fromisoformat(stored) if stored else None
             done = {t: history_mod.completion(t, c) for (_, t), c in self.state.completions(key).items()}
             # A completed unknown booking replaces the adapter's own (same id).
             run.transactions = ([t for t in adapter.get_transactions(run.since) if t.id not in done]
@@ -656,6 +691,26 @@ class Syncer:
             log.info("%s: added the tax to %d imported dividends", run.key, added)
         if not tax_errors and not run.result.failed and not run.adapter.incomplete:
             self.state.set_flag(tax_flag(run.key))
+
+    def _backfill_own_tax(self, run: RunContext, wf: WealthfolioClient) -> None:
+        """Once per broker (``own_tax_backfill``): the tax on the sync's own dividends booked before the adapter
+        could read it - only the ``tax`` field, so amount and comment (the fingerprint) stay."""
+        by_id = {a["id"]: a for a in run.activities}
+        added, errors = 0, 0
+        for tx in run.transactions:
+            status, ids = run.synced.get(tx.id, ("", []))
+            if status != "imported":
+                continue
+            for activity in (by_id[i] for i in ids if i in by_id):
+                try:
+                    added += self._add_dividend_tax(wf, tx, activity, own=tx_ref(run.key, tx))
+                except WealthfolioError as e:
+                    errors += 1
+                    log.info("%s: tax not added to %s: %s", run.key, tx.id, e)
+        if added:
+            log.info("%s: added the tax to %d dividends booked before", run.key, added)
+        if not errors and not run.result.failed:
+            self.state.set_flag(meta_keys.OWN_DIVIDEND_TAX(run.key))
 
     def _learn_assets(self, run: RunContext, wf: WealthfolioClient) -> None:
         """The Wealthfolio asset of every ISIN, from the sync's activities and, for positions, from imports."""
@@ -780,16 +835,18 @@ class Syncer:
             self.state.resolve_unknown(key, e["tx_id"])
 
     @staticmethod
-    def _add_dividend_tax(wf: WealthfolioClient, tx: Transaction, activity: dict) -> int:
+    def _add_dividend_tax(wf: WealthfolioClient, tx: Transaction, activity: dict, own: str = "") -> int:
         """Put the broker's tax on a dividend an import booked without it (Scalable's CSV has none).
 
         Only the ``tax`` field changes: amount (net) and comment stay, and tax is not part of
         Wealthfolio's duplicate fingerprint, so a re-import still finds the activity. The
-        sync's own activities and dividends that carry a tax already are left alone.
+        sync's own activities and dividends that carry a tax already are left alone - unless ``own`` names the
+        sync's reference of ``tx``: then only the activity carrying it (``_backfill_own_tax``).
         """
         if tx.kind != Kind.DIVIDEND or tx.tax <= 0 or activity.get("activityType") != "DIVIDEND":
             return 0
-        if "[SYNC " in (activity.get("comment") or ""):
+        comment = activity.get("comment") or ""
+        if (own not in comment) if own else ("[SYNC " in comment):
             return 0
         try:
             if Decimal(str(activity.get("tax") or 0)) != 0:

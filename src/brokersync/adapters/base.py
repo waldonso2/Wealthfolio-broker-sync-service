@@ -22,9 +22,13 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import ClassVar
+from zoneinfo import ZoneInfo
 
+import httpx
+
+from .. import ratelimit
 from ..model import CashBalance, Position, Transaction
 
 
@@ -71,6 +75,26 @@ class AdapterError(Exception):
     """The broker could not be read (down, changed API, wrong credentials)."""
 
 
+class RateLimited(AdapterError):
+    """The broker limits the requests (HTTP 429/503) even after ``ratelimit.with_backoff``: this broker's run
+    stops, nothing of it is marked synced, and the next scheduled run waits until ``until`` (#149)."""
+
+    def __init__(self, message: str, until: datetime):
+        super().__init__(message)
+        self.until = until
+
+
+def rate_limited(label: str, response: httpx.Response | None = None, now: datetime | None = None) -> RateLimited:
+    """The ``RateLimited`` for an answer that is still 429/503 (or a throttle without one, e.g. a websocket's):
+    when to try again from its Retry-After, else after ``ratelimit.NEXT_TRY``."""
+    seconds = ratelimit.NEXT_TRY if response is None else ratelimit.retry_after(
+        response, ratelimit.NEXT_TRY, ratelimit.MAX_NEXT, now)
+    until = (now or datetime.now(UTC)) + timedelta(seconds=seconds)
+    shown = until.astimezone(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
+    code = "" if response is None else f" (HTTP {response.status_code})"
+    return RateLimited(f"{label} begrenzt gerade die Abrufe{code} - nächster Versuch ab {shown}.", until)
+
+
 class BrokerAdapter(ABC):
     key: ClassVar[str]
     label: ClassVar[str]
@@ -82,6 +106,10 @@ class BrokerAdapter(ABC):
     # it (from the start date) and the comparison with Wealthfolio also finds
     # synced activities the broker no longer lists (brokersync.coverage).
     full_history: ClassVar[bool] = False
+    # True if a later version of the adapter reads the tax of dividends it booked without one before
+    # (comdirect, wealthfolio-importer-addon#52): once, the sync reads from the start date again and puts
+    # the tax on its own dividends (``Syncer._backfill_own_tax``).
+    own_tax_backfill: ClassVar[bool] = False
     # A file the user exports from the broker and uploads (broker settings), for what the interface
     # doesn't deliver (the Deutsche Bank's depot transactions): what to call it, empty if there is none.
     statement_label: ClassVar[str] = ""
@@ -113,6 +141,8 @@ class BrokerAdapter(ABC):
         self.incomplete = False
         # Set by an adapter that reads a bank account's history: the first day it read this run.
         self.history_start: date | None = None
+        # Set by the sync: the earliest day of that history read in an earlier run (``meta history-start``).
+        self.history_read: date | None = None
         # Set by the sync when the user assigned a Wealthfolio account to the savings account
         # (``savings_label``): read it too, from ``savings_since`` (None: as far back as without a TAN).
         self.with_savings = False
