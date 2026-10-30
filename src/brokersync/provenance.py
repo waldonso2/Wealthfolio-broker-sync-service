@@ -1,16 +1,18 @@
 """Checks a release's SHA256SUMS against the build provenance of this repository's release workflow (#165).
 
-Install and update run this file on its own (``python -I provenance.py SHA256SUMS``) in a throwaway venv built
-from ``requirements-verify.txt``, before anything of the downloaded release runs - so it imports nothing of
-the service. No GitHub login: the attestation comes from GitHub's public API, and Sigstore's trusted root is
-the one shipped in the pinned ``sigstore`` package (offline - no TUF download). Exit status 0 only when an
-attestation signed by ``release.yml`` on ``main`` (GitHub-hosted runner) names exactly this file's SHA-256.
+Install and update run this file on its own (``python -I provenance.py SHA256SUMS [ARCHIVE]``) in a venv built
+from ``requirements-verify.txt``, before anything of the downloaded release is unpacked or runs - so it imports
+nothing of the service. No GitHub login: the attestation comes from GitHub's public API, and Sigstore's trusted
+root is the one shipped in the pinned ``sigstore`` package (offline - no TUF download). Exit status 0 only when
+one attestation signed by ``release.yml`` on ``main`` (GitHub-hosted runner) names every given file - by its
+file name and exactly its SHA-256.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -48,26 +50,30 @@ def fetch(digest: str) -> bytes:
         raise ProvenanceError(f"GitHub's API could not be reached: {e}") from None
 
 
-def _subject_ok(payload: bytes, digest: str) -> bool:
+def _subjects_ok(payload: bytes, digests: dict[str, str]) -> bool:
     statement = json.loads(payload)
+    named = {(s.get("name"), s.get("digest", {}).get("sha256")) for s in statement.get("subject", [])}
     return (statement.get("_type") == STATEMENT and statement.get("predicateType") == SLSA
-            and any(s.get("name") == SUBJECT and s.get("digest", {}).get("sha256") == digest
-                    for s in statement.get("subject", [])))
+            and all((name, digest) in named for name, digest in digests.items()))
 
 
-def verify(sums: bytes, answer: bytes, verifier=None) -> None:
-    """Raises ProvenanceError unless one attestation in GitHub's `answer` proves `sums`."""
+def verify(files: dict[str, bytes], answer: bytes, verifier=None) -> None:
+    """Raises ProvenanceError unless one attestation in GitHub's `answer` proves every file (name -> content)."""
     from sigstore.models import Bundle
     from sigstore.verify import Verifier, policy
 
     if len(answer) > MAX_BYTES:
         raise ProvenanceError("GitHub's answer is too large")
-    digest = hashlib.sha256(sums).hexdigest()
+    if not files:
+        raise ProvenanceError("nothing to verify")
+    digests = {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}
     try:
         attestations = json.loads(answer)["attestations"]
     except (ValueError, KeyError, TypeError):
         raise ProvenanceError("GitHub's answer holds no attestations") from None
-    verifier = verifier or Verifier.production(offline=True)
+    # COMPANION_VERIFY_ONLINE=1: the trusted root refreshed through Sigstore's TUF repository (signed from the root
+    # shipped in the package) - for when Sigstore has rotated its keys since this verifier was released.
+    verifier = verifier or Verifier.production(offline=os.environ.get("COMPANION_VERIFY_ONLINE") != "1")
     wanted = policy.AllOf([policy.Identity(identity=IDENTITY, issuer=ISSUER),
                            policy.OIDCRunnerEnvironment("github-hosted")])
     reasons = []
@@ -77,26 +83,28 @@ def verify(sums: bytes, answer: bytes, verifier=None) -> None:
         try:
             bundle = Bundle.from_json(json.dumps(item["bundle"]))
             kind, payload = verifier.verify_dsse(bundle, wanted)
-            if kind == "application/vnd.in-toto+json" and _subject_ok(payload, digest):
+            if kind == "application/vnd.in-toto+json" and _subjects_ok(payload, digests):
                 return
-            reasons.append("statement doesn't name this file")
+            reasons.append("statement doesn't name these files")
         except Exception as e:  # any failure only means: not this one
             reasons.append(f"{type(e).__name__}: {e}")
-    raise ProvenanceError(f"no attestation of {IDENTITY} for {SUBJECT} (sha256:{digest}): "
+    listed = ", ".join(f"{name} (sha256:{digest})" for name, digest in digests.items())
+    raise ProvenanceError(f"no attestation of {IDENTITY} for {listed}: "
                           + ("; ".join(reasons) or "none listed"))
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 1:
-        print("usage: provenance.py SHA256SUMS", file=sys.stderr)
+    if not argv or Path(argv[0]).name != SUBJECT:
+        print(f"usage: provenance.py {SUBJECT} [FILE...]", file=sys.stderr)
         return 2
-    sums = Path(argv[0]).read_bytes()
+    files = {Path(p).name: Path(p).read_bytes() for p in argv}
     try:
-        verify(sums, fetch(hashlib.sha256(sums).hexdigest()))
+        # Looked up by SHA256SUMS' digest: the release workflow attests it together with the archive.
+        verify(files, fetch(hashlib.sha256(files[SUBJECT]).hexdigest()))
     except ProvenanceError as e:
         print(f"Release provenance NOT verified: {e}", file=sys.stderr)
         return 1
-    print(f"Release provenance verified: {SUBJECT} comes from {IDENTITY}")
+    print(f"Release provenance verified: {', '.join(files)} come from {IDENTITY}")
     return 0
 
 
