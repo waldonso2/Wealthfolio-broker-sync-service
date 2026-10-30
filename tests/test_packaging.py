@@ -436,7 +436,7 @@ def test_the_documented_actions_allow_list_covers_every_action_the_workflows_use
     text = (ROOT / "docs" / "SECURITY-OPERATIONS.md").read_text()
     listed = re.search(r"the list `([^`]+)`", text).group(1)
     allowed = [x.strip().removesuffix("@*") for x in listed.split(",")]
-    used = set(re.findall(r"uses: *([\w.-]+/[\w.-]+)", "".join(
+    used = set(re.findall(r"uses: *([A-Za-z][\w-]*/[\w.-]+)", "".join(
         p.read_text() for p in (ROOT / ".github" / "workflows").glob("*.yml"))))
     used |= {"zizmorcore/zizmor-action", "actions/dependency-review-action"}  # inside quality-kit v1
     for action in sorted(used):
