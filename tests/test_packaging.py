@@ -167,14 +167,17 @@ def _verify_release_function(path: Path) -> str:
 
 
 def test_install_and_update_check_the_release_against_its_checksums(tmp_path):
-    """#88: what the release workflow lists in SHA256SUMS is what install and update accept - a changed or
-    an added file stops them; what pip leaves behind (build/, *.egg-info) doesn't."""
+    """Release checksums require trusted GitHub provenance; changed or added files still fail."""
     import subprocess
 
     func = _verify_release_function(ROOT / "ct" / "wealthfolio-companion.sh")
     assert func == _verify_release_function(ROOT / "install" / "wealthfolio-companion-install.sh")
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
     assert "find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > SHA256SUMS" in release
+    installer = (ROOT / "install" / "wealthfolio-companion-install.sh").read_text()
+    updater = (ROOT / "ct" / "wealthfolio-companion.sh").read_text()
+    assert "apt install -y gh python3 python3-venv" in installer
+    assert "apt-get install -y gh" in updater and "command -v gh" in updater
     app = tmp_path / "app"
     app.mkdir()
     for name, content in {"setup.sh": "echo hi\n", "src/pkg/mod.py": "x = 1\n", "with space.txt": "y\n"}.items():
@@ -185,12 +188,19 @@ def test_install_and_update_check_the_release_against_its_checksums(tmp_path):
                                    cwd=app, capture_output=True, text=True, check=True).stdout)
     (tmp_path / ".wealthfolio-companion").write_text("0.1.0a1\n")
 
-    def verify() -> int:
-        script = f'curl() {{ [[ "$*" == *"/v0.1.0a1/SHA256SUMS"* ]] && cp "{sums}" "${{@: -1}}"; }}\n{func}\n' \
-                 f'verify_release "{app}"'
-        return subprocess.run(["bash", "-c", script], env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}).returncode
+    def verify(attestation_status: int = 0) -> int:
+        script = f'curl() {{ [[ "$*" == *"/v0.1.0a1/SHA256SUMS"* ]] && cp "{sums}" "${{@: -1}}"; }}\n' \
+                 'gh() { [[ "$1" == attestation && "$2" == verify && "$3" == "$sums" ]] || return 2; ' \
+                 '[[ " $* " == *" --repo waldonso2/wealthfolio-companion "* && ' \
+                 '" $* " == *" --signer-workflow github.com/waldonso2/wealthfolio-companion/.github/workflows/release.yml "* && ' \
+                 '" $* " == *" --source-ref refs/heads/main "* && " $* " == *" --deny-self-hosted-runners "* ]] || return 2; ' \
+                 'return "${GH_ATTESTATION_STATUS:-0}"; }\n' \
+                 f'{func}\nverify_release "{app}"'
+        env = {"HOME": str(tmp_path), "PATH": "/usr/bin:/bin", "GH_ATTESTATION_STATUS": str(attestation_status)}
+        return subprocess.run(["bash", "-c", script], env=env).returncode
 
     assert verify() == 0
+    assert verify(attestation_status=1) == 1  # missing, invalid or untrusted provenance
     (app / "build" / "lib").mkdir(parents=True)
     (app / "build" / "lib" / "mod.py").write_text("x = 1\n")
     (app / "src" / "pkg.egg-info").mkdir()

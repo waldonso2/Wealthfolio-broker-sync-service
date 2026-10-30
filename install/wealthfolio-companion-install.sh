@@ -13,7 +13,7 @@ network_check
 update_os
 
 msg_info "Installing Dependencies"
-$STD apt install -y python3 python3-venv
+$STD apt install -y gh python3 python3-venv
 msg_ok "Installed Dependencies"
 
 # verify_release <dir>: the source archive just deployed must match the SHA256SUMS the release workflow
@@ -27,6 +27,14 @@ verify_release() {
     rm -f "$sums"
     return 1
   fi
+  # SHA256SUMS is itself a release artifact: trust it only after GitHub verifies the
+  # SLSA provenance emitted by this repository's release workflow on main.
+  if ! gh attestation verify "$sums" --repo waldonso2/wealthfolio-companion \
+    --signer-workflow github.com/waldonso2/wealthfolio-companion/.github/workflows/release.yml \
+    --source-ref refs/heads/main --deny-self-hosted-runners; then
+    rm -f "$sums"
+    return 1
+  fi
   ok=0
   (cd "$dir" && sha256sum --quiet --strict -c "$sums") || ok=1
   diff <(cd "$dir" && find . -type f ! -path './build/*' ! -path '*.egg-info/*' | LC_ALL=C sort) \
@@ -37,7 +45,7 @@ verify_release() {
 
 fetch_and_deploy_gh_release "wealthfolio-companion" "waldonso2/wealthfolio-companion" "tarball" "latest" "/opt/wealthfolio-companion/app"
 if ! verify_release /opt/wealthfolio-companion/app; then
-  msg_error "The downloaded files don't match the release's SHA256SUMS - installation stopped."
+  msg_error "Release provenance or file checksums could not be verified - installation stopped."
   exit 1
 fi
 
