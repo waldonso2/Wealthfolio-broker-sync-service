@@ -82,6 +82,10 @@ class BrokerAdapter(ABC):
     # it (from the start date) and the comparison with Wealthfolio also finds
     # synced activities the broker no longer lists (brokersync.coverage).
     full_history: ClassVar[bool] = False
+    # True if a later version of the adapter reads the tax of dividends it booked without one before
+    # (comdirect, wealthfolio-importer-addon#52): once, the sync reads from the start date again and puts
+    # the tax on its own dividends (``Syncer._backfill_own_tax``).
+    own_tax_backfill: ClassVar[bool] = False
     # A file the user exports from the broker and uploads (broker settings), for what the interface
     # doesn't deliver (the Deutsche Bank's depot transactions): what to call it, empty if there is none.
     statement_label: ClassVar[str] = ""

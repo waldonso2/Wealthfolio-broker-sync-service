@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- comdirect (waldonso2/wealthfolio-importer-addon#52): a dividend gets its tax - withholding tax plus Kapitalertragsteuer, Soli and Kirchensteuer - when its posting text names the gross amount and every tax and they add up to the booked net amount (foreign amounts at the exchange rate named there); otherwise it stays net without tax, nothing is estimated. The amount stays the net payout. Dividends synced before get the tax once: one run reads from the start date again and changes only the `tax` field of the sync's own dividends (flag `own-dividend-tax`).
+
 ## 0.1.0a6
 
 Audit and hardening: secrets, web attack surface, workflows and supply chain, container and systemd units.

@@ -31,7 +31,10 @@ The user enables the API in the comdirect online banking (persönlicher Bereich
   are added as opening positions on the page *Prüfung*.
 - **Dividends** come as giro bookings (``Zinsen / Dividenden``) and are booked
   on the depot when the posting text names the security (ISIN, or a WKN of a
-  position); otherwise they are reported.
+  position); otherwise they are reported. The booking's amount is the net
+  payout; its tax (withholding plus German taxes) is taken from the posting
+  text only when gross and every tax are named there and add up to that net
+  amount (``dividend_tax``) - else the dividend stays net, without tax.
 
 Only GET endpoints of ``banking`` and ``brokerage`` are called besides the login;
 the order, quote and transfer endpoints are never used (AC 7 of #35).
@@ -46,7 +49,7 @@ import secrets
 import time
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import ClassVar
+from typing import ClassVar, Literal
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -82,6 +85,20 @@ ISIN = re.compile(r"\b([A-Z]{2}[A-Z0-9]{9}[0-9])\b")
 WKN = re.compile(r"\b([A-Z0-9]{6})\b")
 INTEREST = re.compile(r"zins", re.IGNORECASE)
 DIVIDEND = re.compile(r"dividend|ertrag|aussch[uü]ttung|ausschuettung", re.IGNORECASE)
+
+# A dividend's posting text, e.g. "Brutto 20,00 USD Quellensteuer 15% 3,00 USD Devisenkurs EUR/USD 1,0850
+# Kapitalertragsteuer 0,78 EUR": a label, at most 20 other characters (a rate like "15 %"), then the amount
+# with two decimals and an optional currency. Each label may appear once - else nothing is taken.
+_AMOUNT = (r"[^\d]{0,20}?(?:\d+(?:,\d+)?\s?%\s*)?"
+           r"(?<![\d,.])(\d{1,3}(?:\.\d{3})*,\d{2})(?![\d%]|\s%)(?:\s?((?-i:[A-Z]{3}))\b)?")
+_GROSS = re.compile(r"\bBrutto(?:betrag|dividende|ertrag)?\b" + _AMOUNT, re.IGNORECASE)
+_TAXES = (
+    re.compile(r"\b(?:Quellensteuer|QuSt)\b" + _AMOUNT, re.IGNORECASE),
+    re.compile(r"\b(?:Kapitalertrags?steuer|KapESt|KapSt|KESt)\b" + _AMOUNT, re.IGNORECASE),
+    re.compile(r"\b(?:Solidarit(?:ae|ä)tszuschlag|Solidarit(?:ae|ä)tszuschl\.|SolZ|Soli)" + _AMOUNT, re.IGNORECASE),
+    re.compile(r"\b(?:Kirchensteuer|KiSt)\b" + _AMOUNT, re.IGNORECASE),
+)
+_FX = re.compile(r"\b(?:Devisenkurs|Umrechnungskurs)\s+(?:EUR\s?/\s?((?-i:[A-Z]{3}))\s+)?(\d+,\d+)\b", re.IGNORECASE)
 
 
 def _dec(v) -> Decimal | None:
@@ -210,12 +227,66 @@ def to_transactions(bookings: list[dict], depot_transactions: list[dict], wkn_to
         when = _noon(_day(b.get("bookingDate")) or _day(b.get("valutaDate")) or today)
         security = _security(text, wkn_to_isin)
         if security:
+            tax = dividend_tax(text, value, currency)
             out.append(Transaction(id=_account_id(b), kind=Kind.DIVIDEND, datetime=when, currency=currency, net=value,
-                                   isin=security, name=names.get(security, security), label="Dividende", text=text))
+                                   isin=security, name=names.get(security, security),
+                                   gross=value + tax if tax else None, tax=tax or Decimal(0), label="Dividende",
+                                   text=text))
         else:
             out.append(_unknown(_account_id(b), when, "DIVIDENDE_OHNE_WERTPAPIER",
                                 {"betrag": f"{value} {currency}", "buchungstext": text[:140]}, currency))
     return sorted(out, key=lambda t: (t.datetime, t.id))
+
+
+def _amount(text: str) -> Decimal:
+    return Decimal(text.replace(".", "").replace(",", "."))
+
+
+def _once(pattern: re.Pattern[str], text: str) -> re.Match[str] | Literal[False] | None:
+    """The only match, None without one, False when there are several (ambiguous)."""
+    found = list(pattern.finditer(text))
+    return found[0] if len(found) == 1 else (None if not found else False)
+
+
+def dividend_tax(text: str, net: Decimal, currency: str) -> Decimal | None:
+    """The tax of a dividend from its posting text: gross minus ``net``, when the text names the gross amount
+    and every tax it lists (withholding, Kapitalertragsteuer, Soli, Kirchensteuer) adds up with ``net`` to it.
+
+    Amounts in another currency need the text's exchange rate (EUR/XXX, the booking currency EUR); each
+    converted amount may be off by a cent of rounding. Anything missing, repeated or not adding up: None -
+    the tax is never guessed.
+    """
+    gross = _once(_GROSS, text)
+    fx = _once(_FX, text)
+    if not gross or fx is False:
+        return None
+    rate = _amount(fx.group(2)) if fx else None
+    pair = fx.group(1).upper() if fx and fx.group(1) else None
+    converted = 0
+
+    def in_booking(m: re.Match[str]) -> Decimal | None:
+        nonlocal converted
+        value, unit = _amount(m.group(1)), (m.group(2) or currency).upper()
+        if unit == currency:
+            return value
+        if currency != "EUR" or not rate or (pair and pair != unit):
+            return None
+        converted += 1
+        return (value / rate).quantize(Decimal("0.01"))
+
+    total = in_booking(gross)
+    taxes = Decimal(0)
+    for pattern in _TAXES:
+        m = _once(pattern, text)
+        if m is False:
+            return None
+        value = in_booking(m) if m else Decimal(0)
+        if value is None:
+            return None
+        taxes += value
+    if total is None or not taxes or abs(total - taxes - net) > Decimal("0.01") * converted:
+        return None
+    return total - net
 
 
 def _settlement(bookings: list[dict], used: set[str], buy: bool, business: date, gross: Decimal, isin: str,
@@ -266,6 +337,7 @@ class ComdirectAdapter(BrokerAdapter):
         CredentialField("iban", "IBAN des Girokontos", help="Leer lassen, wenn du nur ein Girokonto hast."),
     ]
     reports_positions = True
+    own_tax_backfill = True
 
     # Replaced in tests with an httpx.MockTransport.
     transport: ClassVar[httpx.BaseTransport | None] = None

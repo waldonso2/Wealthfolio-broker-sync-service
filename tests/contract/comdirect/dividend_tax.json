@@ -1,0 +1,184 @@
+{
+  "description": "Fabricated comdirect dividends (#52): a domestic one whose posting text names gross, Kapitalertragsteuer, Soli and Kirchensteuer, a foreign one in USD with withholding tax and the exchange rate - both booked net with their tax -, and one naming only the security, booked net without tax.",
+  "recording": {
+    "today": "2026-05-20",
+    "balances": [
+      {
+        "accountId": "ACC-TEST-CA",
+        "account": {
+          "accountId": "ACC-TEST-CA",
+          "accountDisplayId": "0000000001",
+          "currency": "EUR",
+          "accountType": {
+            "key": "CA",
+            "text": "Girokonto"
+          },
+          "iban": "DE00TEST00000000000001"
+        },
+        "balance": {
+          "value": "1234.56",
+          "unit": "EUR"
+        },
+        "balanceEUR": {
+          "value": "1234.56",
+          "unit": "EUR"
+        }
+      }
+    ],
+    "bookings": [
+      {
+        "reference": "TESTDIV0001",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-05-06",
+        "valutaDate": "2026-05-06",
+        "amount": {
+          "value": "73.07",
+          "unit": "EUR"
+        },
+        "transactionType": {
+          "key": "INTEREST_DIVIDENDS",
+          "text": "Zinsen / Dividenden"
+        },
+        "remittanceInfo": "01Dividendengutschrift               02WKN TEST02 TEST AKTIE AG           03Brutto 100,00 EUR                  04Kapitalertragsteuer 23,74 EUR      05Solidaritaetszuschl. 1,30 EUR      06Kirchensteuer 1,89 EUR             "
+      },
+      {
+        "reference": "TESTDIV0002",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-05-14",
+        "valutaDate": "2026-05-14",
+        "amount": {
+          "value": "14.85",
+          "unit": "EUR"
+        },
+        "transactionType": {
+          "key": "INTEREST_DIVIDENDS",
+          "text": "Zinsen / Dividenden"
+        },
+        "remittanceInfo": "01Dividendengutschrift               02US00TEST0005 TEST CORP             03Bruttodividende 20,00 USD          04Quellensteuer 15 % 3,00 USD        05Devisenkurs EUR/USD 1,0850         06KapESt 0,78 EUR                    07SolZ 0,04 EUR                      "
+      },
+      {
+        "reference": "TESTDIV0003",
+        "bookingStatus": "BOOKED",
+        "bookingDate": "2026-05-15",
+        "valutaDate": "2026-05-15",
+        "amount": {
+          "value": "12.34",
+          "unit": "EUR"
+        },
+        "transactionType": {
+          "key": "INTEREST_DIVIDENDS",
+          "text": "Zinsen / Dividenden"
+        },
+        "remittanceInfo": "01Ertragsgutschrift                  02WKN A0TEST TEST FONDS WORLD        "
+      }
+    ],
+    "depots": [
+      {
+        "depotId": "DEPOT-TEST-1",
+        "depotDisplayId": "0000001",
+        "clientId": "user",
+        "defaultSettlementAccountId": "ACC-TEST-CA",
+        "settlementAccountIds": [
+          "ACC-TEST-CA"
+        ]
+      }
+    ],
+    "positions": [
+      {
+        "depotId": "DEPOT-TEST-1",
+        "positionId": "POS-1",
+        "wkn": "A0TEST",
+        "quantity": {
+          "value": "10",
+          "unit": "XXX"
+        },
+        "currentValue": {
+          "value": "1015.00",
+          "unit": "EUR"
+        },
+        "instrument": {
+          "wkn": "A0TEST",
+          "isin": "IE00TEST0001",
+          "name": "TEST Fonds World"
+        }
+      },
+      {
+        "depotId": "DEPOT-TEST-1",
+        "positionId": "POS-2",
+        "wkn": "TEST02",
+        "quantity": {
+          "value": "50",
+          "unit": "XXX"
+        },
+        "currentValue": {
+          "value": "2500.00",
+          "unit": "EUR"
+        },
+        "instrument": {
+          "wkn": "TEST02",
+          "isin": "DE000TEST002",
+          "name": "TEST Aktie AG"
+        }
+      },
+      {
+        "depotId": "DEPOT-TEST-1",
+        "positionId": "POS-3",
+        "wkn": "TEST05",
+        "quantity": {
+          "value": "20",
+          "unit": "XXX"
+        },
+        "currentValue": {
+          "value": "1800.00",
+          "unit": "EUR"
+        },
+        "instrument": {
+          "wkn": "TEST05",
+          "isin": "US00TEST0005",
+          "name": "TEST Corp"
+        }
+      }
+    ],
+    "depot_transactions": []
+  },
+  "since": null,
+  "expected": [
+    {
+      "id": "acc-TESTDIV0001",
+      "kind": "DIVIDEND",
+      "datetime": "2026-05-06T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "73.07",
+      "isin": "DE000TEST002",
+      "name": "TEST Aktie AG",
+      "gross": "100",
+      "tax": "26.93",
+      "label": "Dividende",
+      "text": "Dividendengutschrift WKN TEST02 TEST AKTIE AG Brutto 100,00 EUR Kapitalertragsteuer 23,74 EUR Solidaritaetszuschl. 1,30 EUR Kirchensteuer 1,89 EUR"
+    },
+    {
+      "id": "acc-TESTDIV0002",
+      "kind": "DIVIDEND",
+      "datetime": "2026-05-14T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "14.85",
+      "isin": "US00TEST0005",
+      "name": "TEST Corp",
+      "gross": "18.43",
+      "tax": "3.58",
+      "label": "Dividende",
+      "text": "Dividendengutschrift US00TEST0005 TEST CORP Bruttodividende 20,00 USD Quellensteuer 15 % 3,00 USD Devisenkurs EUR/USD 1,0850 KapESt 0,78 EUR SolZ 0,04 EUR"
+    },
+    {
+      "id": "acc-TESTDIV0003",
+      "kind": "DIVIDEND",
+      "datetime": "2026-05-15T10:00:00+00:00",
+      "currency": "EUR",
+      "net": "12.34",
+      "isin": "IE00TEST0001",
+      "name": "TEST Fonds World",
+      "label": "Dividende",
+      "text": "Ertragsgutschrift WKN A0TEST TEST FONDS WORLD"
+    }
+  ]
+}

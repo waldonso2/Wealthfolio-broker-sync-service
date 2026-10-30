@@ -31,6 +31,8 @@ SAVINGS_ACCOUNT = MetaKey("savings-account", "text", True,
                           "the savings account (Wealthfolio id) a run read without failures")
 DIVIDEND_TAX = MetaKey("dividend-tax", "flag", True,
                        "dividends matched before were re-read once to add their tax to imports")
+OWN_DIVIDEND_TAX = MetaKey("own-dividend-tax", "flag", True,
+                           "the sync's own dividends got the tax the adapter learned to read later (#52)")
 HISTORY_START = MetaKey("history-start", "text", True, "the earliest giro day ever read (ISO date)")
 POSITIONS = MetaKey("positions", "json", True,
                     "the broker's positions of the last check: [{isin, name, shares, ...}] (page Prüfung)")
@@ -67,6 +69,7 @@ WEALTHFOLIO_APPEARANCE = MetaKey("wealthfolio:appearance", "json", False,
                                  "the font the user chose in Wealthfolio: {font: mono|sans|serif, at} (appearance.py)")
 
 ALL = (ASSETS_LEARNED, CASH_ASSETS_REPAIRED, REFETCH, SAVINGS_ACCOUNT, DIVIDEND_TAX, HISTORY_START, POSITIONS,
+       OWN_DIVIDEND_TAX,
        RETIRED_NOTICE, LOGO, LOGOS_LAST, PROGRESS, CHECKLIST_HIDDEN, UPDATE, AUTO_UPDATE, FUND, FUNDS_LAST,
        XRAY_ACCEPTED, XRAY_NOTIFIED, TAXONOMIES_LAST, SPENDING, ISIN, FUNDS_PROGRESS, XRAY_ADDON_STATUS,
        XRAY_ADDON_STALE, WEALTHFOLIO_APPEARANCE)
